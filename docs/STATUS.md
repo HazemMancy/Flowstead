@@ -69,4 +69,4 @@ _Last updated: 2026-10-20_
 - DWSIM's rigorous PR VLLE flash did not find the water phase in benchmark 04; Flowstead uses DWSIM's free-water flash instead (D17). Glycol/amine systems still use rigorous VLLE and need checking case by case.
 - DWSIM absolute enthalpy uses a different reference state from HYSYS. Compare duties and ΔH, not absolute H (`docs/engine-spike.md`).
 - The brief's amber/green value colours fail 4.5:1 as text. Darker text variants are used (D14).
-- The Room schema JSON (`android/app/schemas/`) is generated in CI and still needs committing.
+- Room schema v2 is committed (`android/app/schemas/`); v1 was never exported, so the 1→2 migration is covered by code review only.
