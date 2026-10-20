@@ -75,6 +75,27 @@ public sealed class DwsimEngine
         ["MeOH"] = "Methanol", ["EtOH"] = "Ethanol", ["MDEA"] = "Methyl DiEthanolAmine", ["DEA"] = "Diethanolamine",
     };
 
+    /// <summary>Every compound DWSIM has loaded, sorted by name. DWSIM units converted to SI here.</summary>
+    public List<CompoundRecord> CompoundCatalogue()
+    {
+        static double? V(double x) => double.IsFinite(x) && x != 0 ? x : null;
+        return _automation.AvailableCompounds.Values
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new CompoundRecord(
+                c.Name, c.CAS_Number ?? "", c.Formula ?? "", c.SMILES ?? "", c.CurrentDB ?? c.OriginalDB ?? "",
+                V(c.Molar_Weight),
+                V(c.Normal_Boiling_Point),
+                V(c.TemperatureOfFusion),
+                V(c.Critical_Temperature),
+                V(c.Critical_Pressure),
+                V(c.Critical_Volume) / 1000.0,                         // DWSIM m³/kmol
+                V(c.Critical_Compressibility),
+                c.Acentric_Factor is var w && double.IsFinite(w) && (w != 0 || c.Name == "Argon") ? w : null,
+                V(c.Dipole_Moment),
+                V(c.IG_Enthalpy_of_Formation_25C) * c.Molar_Weight))   // DWSIM kJ/kg × kg/kmol = J/mol
+            .ToList();
+    }
+
     public List<CompoundInfo> SearchCompounds(SearchCompoundsParams p)
     {
         var q = p.Query.Trim();

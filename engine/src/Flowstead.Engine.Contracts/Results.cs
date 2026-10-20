@@ -60,6 +60,27 @@ public sealed record PhaseResult
 
 public sealed record CompoundInfo(string Name, string Cas, string Formula, double MolecularWeight, double NormalBoilingPointK, string Database);
 
+/// <summary>
+/// One compound of DWSIM's databases with its constants in SI (K, Pa, m³/mol, J/mol, kg/kmol).
+/// Null where the database has no value (DWSIM stores 0 for "unknown").
+/// </summary>
+public sealed record CompoundRecord(
+    string Name,
+    string Cas,
+    string Formula,
+    string Smiles,
+    string Database,
+    double? MolecularWeight,
+    double? NormalBoilingPointK,
+    double? MeltingPointK,
+    double? CriticalTemperatureK,
+    double? CriticalPressurePa,
+    double? CriticalVolumeM3PerMol,
+    double? CriticalCompressibility,
+    double? AcentricFactor,
+    double? DipoleMomentCoulombMetre,
+    double? IdealGasEnthalpyOfFormationJPerMol);
+
 public sealed record PropertyPackageInfo(string Name, bool Mvp);
 
 public sealed record EngineHealth(string Status, string EngineVersion, string DwsimVersion);
@@ -79,6 +100,7 @@ public static class WorkerMethods
     public const string SearchCompounds = "searchCompounds";
     public const string Solve = "solve";
     public const string ExportDwsim = "exportDwsim";
+    public const string CompoundCatalogue = "compoundCatalogue";
     public const string ImportDwsim = "importDwsim";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";

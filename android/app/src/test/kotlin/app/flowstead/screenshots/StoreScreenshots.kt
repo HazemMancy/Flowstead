@@ -17,9 +17,12 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.drawscope.scale
 import app.flowstead.ui.flowsheet.drawUnitIcon
 import app.flowstead.ui.theme.valueColors
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -164,7 +167,7 @@ class StoreScreenshots {
                     val s = app.flowstead.ui.flowsheet.CanvasGeometry.size(t)
                     val fit = minOf(size.width / (s.width + 8f), size.height / (s.height + 8f))
                     val p = app.flowstead.ui.flowsheet.IconPalette(colors.surface, colors.onSurface, colors.secondary, values.vapour, values.liquid, values.energy)
-                    androidx.compose.ui.graphics.drawscope.scale(fit, fit, pivot = Offset.Zero) {
+                    scale(fit, fit, pivot = Offset.Zero) {
                         drawUnitIcon(t, center / fit, s, p, 1.5f * density / fit)
                     }
                 }
@@ -175,6 +178,7 @@ class StoreScreenshots {
     @Test fun symbolsLight() = shoot("5-symbols", false) { AllSymbols() }
     @Test fun symbolsDark() = shoot("5-symbols", true) { AllSymbols() }
     @Test fun paletteColumns() = shoot("6-palette-columns", false, before = {
+        compose.onNodeWithTag("palette_groups").performScrollToNode(hasTestTag("group_Columns"))
         compose.onNodeWithTag("group_Columns").performClick()
     }) {
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.BottomCenter) {
