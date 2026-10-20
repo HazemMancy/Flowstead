@@ -1,0 +1,22 @@
+# Engine
+engine/dwsim-bin/
+engine/**/bin/
+engine/**/obj/
+engine/.dl/*
+!engine/.dl/.keep
+*.user
+
+# Android / Gradle
+.gradle/
+android/build/
+android/**/build/
+android/local.properties
+android/.kotlin/
+*.iml
+.idea/
+captures/
+*.keystore
+*.jks
+
+# OS
+.DS_Store

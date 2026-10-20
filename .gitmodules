@@ -1,0 +1,4 @@
+[submodule "third_party/dwsim"]
+	path = third_party/dwsim
+	url = https://github.com/DanWBR/dwsim.git
+	shallow = true
