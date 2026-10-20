@@ -32,6 +32,7 @@ object ResultKeys {
         "hotPressureDrop", "coldPressureDrop", "iterations",
         "heatTransferred", "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop", "beta",
         "liquidResidenceTime", "liquidVolumeFlow", "targetValue",
+        "residenceTime",
         "condenserDuty", "reboilerDuty", "refluxRatio", "condenserTemperature", "reboilerTemperature", "topTemperature",
         "bottomTemperature", "minimumRefluxRatio", "minimumStages", "actualStages", "optimalFeedStage",
     )
@@ -48,6 +49,8 @@ object ResultKeys {
         ObjectType.RefluxedAbsorber -> listOf("condenserDuty", "refluxRatio", "condenserTemperature", "bottomTemperature")
         ObjectType.ReboiledAbsorber -> listOf("reboilerDuty", "topTemperature", "reboilerTemperature")
         ObjectType.Absorber -> listOf("topTemperature", "bottomTemperature")
+        ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor -> listOf("duty", "temperatureChange", "pressureDrop")
+        ObjectType.Cstr, ObjectType.Pfr -> listOf("duty", "temperatureChange", "residenceTime", "pressureDrop")
         ObjectType.ShortcutColumn -> listOf(
             "minimumRefluxRatio", "minimumStages", "actualStages", "optimalFeedStage",
             "condenserDuty", "reboilerDuty",
@@ -89,7 +92,7 @@ object ResultKeys {
         "molarFlow" -> Quantity.MolarFlow
         "massFlow" -> Quantity.MassFlow
         "volumeFlow", "liquidVolumeFlow" -> Quantity.VolumeFlow
-        "liquidResidenceTime" -> Quantity.Time
+        "liquidResidenceTime", "residenceTime" -> Quantity.Time
         "massEnthalpy" -> Quantity.MassEnthalpy
         "massEntropy" -> Quantity.MassEntropy
         "massHeatCapacity" -> Quantity.MassHeatCapacity
@@ -138,6 +141,7 @@ object ResultKeys {
         "orificePressureDrop" -> "Differential across the plate"
         "beta" -> "Beta (d/D)"
         "liquidResidenceTime" -> "Liquid residence time"
+        "residenceTime" -> "Residence time"
         "liquidVolumeFlow" -> "Liquid outflow (actual)"
         "targetValue" -> "Value given to the target"
         "condenserDuty" -> "Condenser duty"
@@ -153,8 +157,15 @@ object ResultKeys {
         "optimalFeedStage" -> "Optimal feed stage"
         "manipulatedValue" -> "Varied value"
         "controlledValue" -> "Controlled value"
-        else -> key
+        else -> key.removePrefix(CONVERSION_PREFIX).takeIf { key.startsWith(CONVERSION_PREFIX) }?.let { "$it conversion" } ?: key
     }
+
+    /** Reactors report "conversion:<compound>" for each reactant. */
+    const val CONVERSION_PREFIX = "conversion:"
+
+    /** Keys shown for [o]: [forType] plus, for reactors, the conversion of each reactant. */
+    fun forObject(fs: Flowsheet, o: SimObject): List<String> =
+        forType(o.type) + if (Reactors.isReactor(o.type)) Reactors.reactants(fs, o).map { CONVERSION_PREFIX + it } else emptyList()
 }
 
 /**

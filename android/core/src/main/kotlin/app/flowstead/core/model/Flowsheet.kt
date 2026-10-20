@@ -5,6 +5,8 @@
 package app.flowstead.core.model
 
 import app.flowstead.core.units.StandardConditions
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -22,7 +24,13 @@ data class Flowsheet(
     val atmosphericPressurePa: Double = StandardConditions.DEFAULT_PATM_PA,
     val objects: List<SimObject> = emptyList(),
     val connections: List<Connection> = emptyList(),
+    /** Reactions reactors can use. Written only when there are some, so flowsheets without reactions keep their hash. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val reactions: List<Reaction> = emptyList(),
 ) {
+    fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
+
     companion object {
         const val SCHEMA_VERSION = 1
         val EMPTY = Flowsheet()
@@ -133,11 +141,11 @@ enum class ObjectType(val category: Category, val available: Boolean = true, val
     @SerialName("refluxed_absorber") RefluxedAbsorber(Category.Columns, available = false),
     @SerialName("reboiled_absorber") ReboiledAbsorber(Category.Columns),
 
-    @SerialName("conversion_reactor") ConversionReactor(Category.Reactors, available = false),
-    @SerialName("equilibrium_reactor") EquilibriumReactor(Category.Reactors, available = false),
-    @SerialName("gibbs_reactor") GibbsReactor(Category.Reactors, available = false),
-    @SerialName("cstr") Cstr(Category.Reactors, available = false),
-    @SerialName("pfr") Pfr(Category.Reactors, available = false),
+    @SerialName("conversion_reactor") ConversionReactor(Category.Reactors),
+    @SerialName("equilibrium_reactor") EquilibriumReactor(Category.Reactors),
+    @SerialName("gibbs_reactor") GibbsReactor(Category.Reactors),
+    @SerialName("cstr") Cstr(Category.Reactors),
+    @SerialName("pfr") Pfr(Category.Reactors),
 
     @SerialName("recycle") Recycle(Category.Logical),
     @SerialName("adjust") Adjust(Category.Logical),

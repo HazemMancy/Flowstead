@@ -42,6 +42,13 @@
       "items": {
         "$ref": "#/$defs/Connection"
       }
+    },
+    "reactions": {
+      "type": "array",
+      "description": "Reactions reactors can use; each reactor lists the ids it runs in refs.reactions (comma-separated).",
+      "items": {
+        "$ref": "#/$defs/Reaction"
+      }
     }
   },
   "$defs": {
@@ -175,6 +182,87 @@
         "toPort": {
           "type": "integer",
           "minimum": 0
+        }
+      }
+    },
+    "Reaction": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "type",
+        "stoichiometry",
+        "baseCompound"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "conversion",
+            "equilibrium",
+            "kinetic"
+          ]
+        },
+        "stoichiometry": {
+          "type": "object",
+          "description": "Coefficient by compound; negative for reactants",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "baseCompound": {
+          "type": "string",
+          "description": "A reactant (negative coefficient)"
+        },
+        "phase": {
+          "enum": [
+            "mixture",
+            "vapour",
+            "liquid"
+          ],
+          "default": "mixture",
+          "description": "Equilibrium reactions: vapour or liquid only"
+        },
+        "conversion": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "Conversion reactions: fraction of the base compound converted"
+        },
+        "approachTemperature": {
+          "type": "number",
+          "description": "Equilibrium reactions: K (temperature difference) added to T when evaluating K"
+        },
+        "forwardOrders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "reverseOrders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "forwardA": {
+          "type": "number",
+          "description": "Kinetic: pre-exponential factor; rate in mol/(m³·s), concentrations in mol/m³"
+        },
+        "forwardE": {
+          "type": "number",
+          "description": "Kinetic: activation energy, J/mol"
+        },
+        "reverseA": {
+          "type": "number"
+        },
+        "reverseE": {
+          "type": "number"
         }
       }
     }

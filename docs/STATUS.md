@@ -110,8 +110,14 @@ _Last updated: 2026-10-20_
   - The refluxed absorber stays "Coming".
 - **On-device engine:** the first emulator run crashed with a stack overflow in DWSIM on a normal thread. The engine now runs on its own 64 MB-stack thread; awaiting the next emulator run.
 
+- **M17 reactors (D29):**
+  - Conversion, equilibrium, Gibbs, CSTR and PFR reactors, with reactions defined in the reactor editor.
+  - Benchmarks 13 (combustion), 14 (water-gas shift: equilibrium and Gibbs reactors agree within 0.2 %, and with the published correlation within 3 %) and 15 (CSTR within 1e-5 of the design equation, PFR within 0.6 %).
+- **Engine fixes (D28):**
+  - Hot water no longer goes through DWSIM's free-water flash.
+  - A missing IPOPT can no longer crash the engine.
+
 ## Next
-- M17 reactors (owner's priority list).
 - A time limit for on-device solves (a slow column solver can run for minutes).
 - Review the `screenshots` artifact (light and dark) and pick the Play Store set. I couldn't download artifacts from the dev sandbox: the network policy blocks the artifact host.
 - Owner input still needed:

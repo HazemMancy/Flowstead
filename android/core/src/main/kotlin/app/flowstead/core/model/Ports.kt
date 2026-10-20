@@ -75,6 +75,12 @@ object Ports {
         ObjectType.ComponentSplitter -> listOf(mIn(0, "Feed"), mOut(0, "Overhead", dx = 0f, dy = -0.5f), mOut(1, "Bottoms", dx = 0f, dy = 0.5f))
         ObjectType.DistillationColumn, ObjectType.RefluxedAbsorber, ObjectType.ReboiledAbsorber,
         ObjectType.Absorber, ObjectType.ShortcutColumn -> column(type)
+        // Heat in on port 1 (hidden when not drawn); vapour and liquid products (CSTR: product + optional liquid; PFR: one product).
+        ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor -> listOf(
+            mIn(0, "Feed"), eIn(1, "Heat"), mOut(0, "Vapour", dx = 0f, dy = -0.5f), mOut(1, "Liquid", dx = 0f, dy = 0.5f),
+        )
+        ObjectType.Cstr -> listOf(mIn(0, "Feed"), eIn(1, "Heat"), mOut(0, "Product"), mOut(1, "Liquid", dx = 0f, dy = 0.5f, required = false))
+        ObjectType.Pfr -> listOf(mIn(0, "Feed"), eIn(1, "Heat"), mOut(0, "Product"))
         ObjectType.Tank -> listOf(mIn(0, "Feed"), mOut(0, "Vapour", dx = 0f, dy = -0.5f), mOut(1, "Liquid", dx = 0f, dy = 0.5f))
         // Ports for the remaining types arrive with their engine support (they are not placeable yet).
         else -> emptyList()

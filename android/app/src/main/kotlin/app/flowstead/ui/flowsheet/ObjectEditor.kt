@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,9 +59,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.flowstead.core.api.Phases
 import app.flowstead.core.format.ValueFormat
-import app.flowstead.core.model.ResultKeys
-import app.flowstead.core.model.ResultView
-import app.flowstead.ui.components.ValueText
 import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.ChoiceKey
 import app.flowstead.core.model.Columns
@@ -71,6 +69,13 @@ import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
 import app.flowstead.core.model.PortSide
 import app.flowstead.core.model.Ports
+import app.flowstead.core.model.Reaction
+import app.flowstead.core.model.ReactionPhase
+import app.flowstead.core.model.ReactionType
+import app.flowstead.core.model.ReactorKeys
+import app.flowstead.core.model.Reactors
+import app.flowstead.core.model.ResultKeys
+import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SetKeys
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
@@ -85,6 +90,7 @@ import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
 import app.flowstead.core.units.Units
+import app.flowstead.ui.components.ValueText
 import app.flowstead.ui.theme.NumberStyles
 import app.flowstead.ui.theme.valueColors
 
@@ -100,6 +106,9 @@ interface EditorActions {
     /** Attach [streamId] at [port] of [unitId]; null makes a new stream there. */
     fun connectPort(unitId: String, port: Port, streamId: String?)
     fun disconnectPort(unitId: String, port: Port)
+    /** Adds or replaces a flowsheet reaction. */
+    fun upsertReaction(reaction: Reaction)
+    fun deleteReaction(id: String)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -200,6 +209,8 @@ fun ObjectEditorSheet(
                 ObjectType.DistillationColumn, ObjectType.Absorber, ObjectType.ReboiledAbsorber, ObjectType.RefluxedAbsorber ->
                     ColumnEditor(fs, obj, unitSet, ctx, actions)
                 ObjectType.ShortcutColumn -> ShortcutColumnEditor(fs, obj, unitSet, ctx, actions)
+                ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor, ObjectType.Cstr, ObjectType.Pfr ->
+                    ReactorEditor(fs, obj, unitSet, ctx, actions)
                 ObjectType.OrificePlate -> {
                     SpecField(obj, SpecKey.ORIFICE_DIAMETER, unitSet, ctx, actions)
                     SpecField(obj, SpecKey.PIPE_DIAMETER, unitSet, ctx, actions)
@@ -214,7 +225,7 @@ fun ObjectEditorSheet(
                 else -> Calculated("${obj.type.displayName()} editing arrives with the remaining unit operations.")
             }
             if (!obj.type.isStream && Ports.of(obj.type).isNotEmpty()) ConnectionsSection(fs, obj, actions)
-            ResultsSection(obj, results, unitSet, ctx)
+            ResultsSection(fs, obj, results, unitSet, ctx)
         }
     }
 }
@@ -278,6 +289,123 @@ private fun MethodChoice(obj: SimObject, label: String, key: String, options: Li
     Choice(label, options.firstOrNull { it.first == current }?.second, options, testTag = "choice_$key") { picked ->
         actions.setRef(obj.id, key, picked.takeIf { it != options.first().first })
     }
+}
+
+/** Operating mode, size and the reactions a reactor runs (each reaction editable in place). */
+@Composable
+private fun ReactorEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
+    if (obj.type == ObjectType.GibbsReactor) {
+        Calculated("Minimises Gibbs energy over every component in the fluid package: no reactions to define.")
+    }
+    MethodChoice(obj, "Operation", ReactorKeys.MODE, ReactorKeys.MODES, actions)
+    if (obj.refs[ReactorKeys.MODE] == "outlet_temperature") SpecField(obj, SpecKey.OUTLET_TEMPERATURE, unitSet, ctx, actions)
+    if (obj.type == ObjectType.Cstr || obj.type == ObjectType.Pfr) SpecField(obj, SpecKey.VOLUME, unitSet, ctx, actions)
+    if (obj.type == ObjectType.Pfr) SpecField(obj, SpecKey.REACTOR_LENGTH, unitSet, ctx, actions)
+    SpecField(obj, SpecKey.PRESSURE_DROP, unitSet, ctx, actions, optionalHint = "0 if empty")
+    val type = Reactors.reactionType(obj.type) ?: return
+
+    SectionLabel("${type.label} reactions")
+    val used = Reactors.reactionIds(obj)
+    var editing by remember(obj.id) { mutableStateOf<String?>(null) }
+    fun setUsed(ids: List<String>) = actions.setRef(obj.id, ReactorKeys.REACTIONS, ids.joinToString(",").ifEmpty { null })
+    for (r in fs.reactions.filter { it.type == type }) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Checkbox(
+                checked = r.id in used,
+                onCheckedChange = { on -> setUsed(if (on) used + r.id else used - r.id) },
+                modifier = Modifier.testTag("use_reaction_${r.id}"),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(r.name, style = MaterialTheme.typography.bodyMedium)
+                Text(r.equation(), style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = { editing = if (editing == r.id) null else r.id }) { Text(if (editing == r.id) "Done" else "Edit") }
+        }
+        if (editing == r.id) ReactionFields(fs, r, actions) { editing = null }
+    }
+    TextButton(
+        onClick = {
+            val id = FlowsheetEditing.newId()
+            val n = generateSequence(1) { it + 1 }.first { k -> fs.reactions.none { it.name == "Rxn-$k" } }
+            actions.upsertReaction(Reaction(id, "Rxn-$n", type, phase = if (type == ReactionType.Equilibrium) ReactionPhase.Vapour else ReactionPhase.Mixture))
+            setUsed(used + id)
+            editing = id
+        },
+        modifier = Modifier.heightIn(min = 48.dp).testTag("new_reaction"),
+    ) { Text("New ${type.label.lowercase()} reaction") }
+}
+
+/** One reaction: name, stoichiometry (blank = not in the reaction), base compound, phase and its kind's parameters. */
+@Composable
+private fun ReactionFields(fs: Flowsheet, r: Reaction, actions: EditorActions, onDeleted: () -> Unit) {
+    fun save(updated: Reaction) { if (updated != r) actions.upsertReaction(updated) }
+    Column(Modifier.fillMaxWidth().padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        var name by remember(r.id, r.name) { mutableStateOf(r.name) }
+        OutlinedTextField(
+            value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused && name.isNotBlank()) save(r.copy(name = name.trim())) },
+        )
+        Calculated("Stoichiometric coefficients: negative for reactants, positive for products, empty if not involved.")
+        for (c in fs.compounds) {
+            PlainNumber("$c coefficient", r.stoichiometry[c], "rxn_${r.id}_$c") { v ->
+                save(r.copy(stoichiometry = if (v == null || v == 0.0) r.stoichiometry - c else r.stoichiometry + (c to v)))
+            }
+        }
+        val reactants = r.stoichiometry.filterValues { it < 0 }.keys.toList()
+        Choice("Base compound", r.baseCompound.takeIf { it in reactants }, reactants.map { it to it }) { save(r.copy(baseCompound = it)) }
+        val phases = if (r.type == ReactionType.Equilibrium) listOf(ReactionPhase.Vapour, ReactionPhase.Liquid) else ReactionPhase.entries
+        Choice("Phase", r.phase.label, phases.map { it.name to it.label }) { p -> save(r.copy(phase = ReactionPhase.valueOf(p))) }
+        when (r.type) {
+            ReactionType.Conversion -> PlainNumber("Conversion of the base compound", r.conversion?.times(100), "rxn_${r.id}_conversion", unit = "%") {
+                save(r.copy(conversion = it?.div(100)))
+            }
+            ReactionType.Equilibrium -> {
+                Calculated("K from Gibbs energies of formation at the reactor temperature.")
+                PlainNumber("Temperature approach", r.approachTemperature, "rxn_${r.id}_approach", unit = "K", hint = "0 if empty") {
+                    save(r.copy(approachTemperature = it))
+                }
+            }
+            ReactionType.Kinetic -> {
+                Calculated("r = A·exp(−E/RT)·Π cᵢ^orderᵢ, in mol/(m³·s) with concentrations in mol/m³.")
+                PlainNumber("Forward A", r.forwardA, "rxn_${r.id}_A") { save(r.copy(forwardA = it)) }
+                PlainNumber("Forward E", r.forwardE, "rxn_${r.id}_E", unit = "J/mol") { save(r.copy(forwardE = it)) }
+                for (c in reactants) PlainNumber("Order in $c", r.forwardOrders[c], "rxn_${r.id}_order_$c", hint = "0 if empty") { v ->
+                    save(r.copy(forwardOrders = if (v == null) r.forwardOrders - c else r.forwardOrders + (c to v)))
+                }
+                PlainNumber("Reverse A", r.reverseA, "rxn_${r.id}_Ar", hint = "irreversible if empty") { save(r.copy(reverseA = it)) }
+                if (r.reverseA != null) PlainNumber("Reverse E", r.reverseE, "rxn_${r.id}_Er", unit = "J/mol") { save(r.copy(reverseE = it)) }
+            }
+        }
+        Reactors.problem(fs, r)?.let { Text(it.replaceFirstChar(Char::uppercase), color = MaterialTheme.valueColors.underSpecifiedText, style = MaterialTheme.typography.bodySmall) }
+        TextButton(onClick = { actions.deleteReaction(r.id); onDeleted() }) { Text("Delete reaction", color = MaterialTheme.valueColors.error) }
+    }
+}
+
+/** A number without units conversion (coefficients, orders, kinetic constants): blank means "not given". */
+@Composable
+private fun PlainNumber(label: String, value: Double?, tag: String, unit: String? = null, hint: String? = null, onCommit: (Double?) -> Unit) {
+    val shown = value?.let { java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString() } ?: ""
+    var text by remember(tag, value) { mutableStateOf(shown) }
+    var error by remember(tag) { mutableStateOf(false) }
+    fun commit() {
+        val t = text.trim().replace(',', '.')
+        val v = if (t.isEmpty()) null else t.toDoubleOrNull()?.takeIf { it.isFinite() }
+        error = t.isNotEmpty() && v == null
+        if (!error && v != value) onCommit(v)
+    }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        label = { Text(label) },
+        placeholder = { Text(hint ?: "—") },
+        suffix = unit?.let { { Text(it) } },
+        isError = error,
+        singleLine = true,
+        textStyle = NumberStyles.valueSpecified.copy(color = if (value != null) MaterialTheme.valueColors.specified else MaterialTheme.colorScheme.onSurface),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { commit() }),
+        modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) commit() }.testTag(tag),
+    )
 }
 
 /** A rigorous column, HYSYS-style: trays, feed trays, pressures, then one condenser and one reboiler specification. */
@@ -466,11 +594,11 @@ private fun Choice(
 
 /** Calculated values for this object: only what the engine returned, "—" with the reason otherwise. */
 @Composable
-private fun ResultsSection(obj: SimObject, results: ResultView, unitSet: UnitSet, ctx: UnitContext) {
+private fun ResultsSection(fs: Flowsheet, obj: SimObject, results: ResultView, unitSet: UnitSet, ctx: UnitContext) {
     val keys = when (obj.type) {
         ObjectType.MaterialStream -> listOf("temperature", "pressure", "vapourFraction", "molarFlow", "massFlow", "massEnthalpy", "density", "molecularWeight")
         ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
-        else -> ResultKeys.forType(obj.type)
+        else -> ResultKeys.forObject(fs, obj)
     }
     if (keys.isEmpty()) return
     HorizontalDivider()

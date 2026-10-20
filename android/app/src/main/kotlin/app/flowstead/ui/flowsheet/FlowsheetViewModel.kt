@@ -14,6 +14,7 @@ import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
+import app.flowstead.core.model.Reaction
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.obj
 import app.flowstead.core.model.Spec
@@ -241,6 +242,10 @@ class FlowsheetViewModel @Inject constructor(
         edit { FlowsheetEditing.setExclusiveSpec(it, id, key, spec, group) }
 
     fun setRef(id: String, key: String, value: String?) = edit { FlowsheetEditing.setRef(it, id, key, value) }
+
+    fun upsertReaction(reaction: Reaction) = edit { FlowsheetEditing.upsertReaction(it, reaction) }
+
+    fun deleteReaction(id: String) = edit { FlowsheetEditing.deleteReaction(it, id) }
 
     fun setComposition(id: String, fractions: Map<String, Double>) =
         edit { FlowsheetEditing.setComposition(it, id, fractions) }

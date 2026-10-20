@@ -72,6 +72,8 @@ object SpecKey {
 
     /** Tank volume, for the liquid residence time. */
     const val VOLUME = "volume"
+    /** Plug-flow reactor length; the diameter follows from the volume. */
+    const val REACTOR_LENGTH = "reactorLength"
 
     /** Component splitter: fraction of [compound]'s feed sent to outlet 1 (overhead). */
     const val SPLIT_PREFIX = "split:"
@@ -141,7 +143,7 @@ object SpecKey {
         MOLAR_FLOW -> Quantity.MolarFlow
         MASS_FLOW -> Quantity.MassFlow
         DUTY -> Quantity.Power
-        LENGTH, INNER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER -> Quantity.Length
+        LENGTH, INNER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER, REACTOR_LENGTH -> Quantity.Length
         INCREMENTS -> Quantity.Count
         HEAT_TRANSFER_COEFFICIENT -> Quantity.HeatTransferCoefficient
         VOLUME -> Quantity.Volume
@@ -178,6 +180,7 @@ object SpecKey {
         ORIFICE_DIAMETER -> "Orifice diameter"
         PIPE_DIAMETER -> "Pipe inside diameter"
         VOLUME -> "Volume"
+        REACTOR_LENGTH -> "Length"
         TRAYS -> "Theoretical trays"
         "feedStage1" -> "Feed 1 tray"
         "feedStage2" -> "Feed 2 tray"
@@ -373,6 +376,8 @@ object Specification {
             }
             ObjectType.ShortcutColumn, ObjectType.DistillationColumn, ObjectType.Absorber,
             ObjectType.RefluxedAbsorber, ObjectType.ReboiledAbsorber -> Columns.check(fs, o, needs)?.let { return it }
+            ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor,
+            ObjectType.Cstr, ObjectType.Pfr -> Reactors.check(fs, o, needs)?.let { return it }
             ObjectType.Tank -> s[SpecKey.VOLUME]?.let { if (it.si <= 0) return SpecStatus.Invalid("Volume must be positive") }
             ObjectType.ComponentSplitter -> {
                 val splits = s.filterKeys { it.startsWith(SpecKey.SPLIT_PREFIX) }

@@ -66,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
+import app.flowstead.core.model.Reaction
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.obj
 import app.flowstead.ui.components.BackButton
@@ -210,6 +211,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun setRef(id: String, key: String, value: String?) = vm.setRef(id, key, value)
             override fun connectPort(unitId: String, port: Port, streamId: String?) = vm.connectPort(unitId, port, streamId)
             override fun disconnectPort(unitId: String, port: Port) = vm.disconnectPort(unitId, port)
+            override fun upsertReaction(reaction: Reaction) = vm.upsertReaction(reaction)
+            override fun deleteReaction(id: String) = vm.deleteReaction(id)
         }
     }
 

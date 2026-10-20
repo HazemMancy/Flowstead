@@ -74,6 +74,20 @@ object FlowsheetEditing {
         if (value == null) it.copy(refs = it.refs - key) else it.copy(refs = it.refs + (key to value))
     }
 
+    /** Adds [r], or replaces the reaction with its id. */
+    fun upsertReaction(fs: Flowsheet, r: Reaction): Flowsheet =
+        fs.copy(reactions = if (fs.reaction(r.id) == null) fs.reactions + r else fs.reactions.map { if (it.id == r.id) r else it })
+
+    /** Removes a reaction and takes it out of every reactor that ran it. */
+    fun deleteReaction(fs: Flowsheet, id: String): Flowsheet = fs.copy(
+        reactions = fs.reactions.filter { it.id != id },
+        objects = fs.objects.map { o ->
+            val ids = Reactors.reactionIds(o)
+            if (id !in ids) o
+            else (ids - id).let { left -> o.copy(refs = if (left.isEmpty()) o.refs - ReactorKeys.REACTIONS else o.refs + (ReactorKeys.REACTIONS to left.joinToString(","))) }
+        },
+    )
+
     fun setComposition(fs: Flowsheet, id: String, fractions: Map<String, Double>): Flowsheet {
         fractions.forEach { (c, x) ->
             if (c !in fs.compounds) throw EditRejected("$c is not in the component list")
