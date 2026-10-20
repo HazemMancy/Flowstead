@@ -20,6 +20,8 @@ public static class EmbeddedHost
     // Init has had a chance to point it at DWSIM's assemblies.
     private static object? _engine;
 
+    [ThreadStatic] private static HashSet<string>? Resolving;
+
     /// <summary>Loads DWSIM from <paramref name="dwsimHome"/>. Returns the ready response (id 0) or an error response.</summary>
     public static string Init(string dwsimHome)
     {
@@ -33,9 +35,23 @@ public static class EmbeddedHost
                         return Respond(new WorkerResponse(0, Error: $"DWSIM not found in '{dwsimHome}'."));
                     AppDomain.CurrentDomain.AssemblyResolve += (_, e) =>
                     {
-                        var path = Path.Combine(dwsimHome, new AssemblyName(e.Name).Name + ".dll");
-                        return File.Exists(path) ? Assembly.LoadFrom(path) : null;
+                        var name = new AssemblyName(e.Name).Name!;
+                        // A load from here can ask for the same name again (a version the file doesn't
+                        // satisfy); answering that by loading again would recurse until the stack runs out.
+                        var loaded = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == name);
+                        if (loaded is not null) return loaded;
+                        if (Resolving is { } busy && busy.Contains(name)) return null;
+                        var path = Path.Combine(dwsimHome, name + ".dll");
+                        if (!File.Exists(path)) return null;
+                        (Resolving ??= []).Add(name);
+                        try
+                        {
+                            Console.Error.WriteLine($"engine: loading {name} for {e.RequestingAssembly?.GetName().Name ?? "?"}");
+                            return Assembly.LoadFrom(path);
+                        }
+                        finally { Resolving.Remove(name); }
                     };
+                    Console.Error.WriteLine("engine: creating DWSIM");
                     Directory.SetCurrentDirectory(dwsimHome);
                     _engine = Create();
                 }
@@ -59,7 +75,10 @@ public static class EmbeddedHost
             {
                 if (_engine is null) return Respond(new WorkerResponse(-1, Error: "Engine not initialised."));
                 req = JsonSerializer.Deserialize<WorkerRequest>(requestJson, Json.Options) ?? throw new InvalidDataException("Empty request");
-                return Respond(new WorkerResponse(req.Id, Handle(_engine, req)));
+                Console.Error.WriteLine($"engine: {req.Method} #{req.Id}");
+                var answer = Respond(new WorkerResponse(req.Id, Handle(_engine, req)));
+                Console.Error.WriteLine($"engine: {req.Method} #{req.Id} done");
+                return answer;
             }
             catch (Exception e)
             {
