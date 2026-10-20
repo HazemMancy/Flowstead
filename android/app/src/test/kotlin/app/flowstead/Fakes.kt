@@ -4,7 +4,9 @@
  */
 package app.flowstead
 
+import app.flowstead.core.api.CompoundInfo
 import app.flowstead.core.api.EngineHealth
+import app.flowstead.core.api.PropertyPackageInfo
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.units.UnitSet
 import app.flowstead.data.Project
@@ -76,8 +78,15 @@ class FakeSecretStore : SecretStore {
 
 class FakeEngineClient(var result: EngineResult<EngineHealth> = EngineResult.Ok(EngineHealth("ok", "0.1.0", "9.0.5"))) : EngineClient {
     val calls = mutableListOf<Pair<String, String?>>()
+    var compoundResult: EngineResult<List<CompoundInfo>> = EngineResult.Ok(listOf(CompoundInfo("Methane")))
+    var packageResult: EngineResult<List<PropertyPackageInfo>> = EngineResult.Ok(listOf(PropertyPackageInfo("Peng-Robinson (PR)", true)))
+
     override suspend fun health(baseUrl: String, apiKey: String?): EngineResult<EngineHealth> {
         calls += baseUrl to apiKey
         return result
     }
+
+    override suspend fun compounds(baseUrl: String, apiKey: String?, query: String, limit: Int) = compoundResult
+
+    override suspend fun propertyPackages(baseUrl: String, apiKey: String?) = packageResult
 }

@@ -22,9 +22,22 @@ _Last updated: 2026-10-20_
   - Flowsheet screen placeholder (project title + grid).
 - **`:core` (pure Kotlin, tested locally):** unit conversion for every unit in Settings, including barg/psig with a configurable atmosphere and Sm³/d / MMSCFD. Checked against 54 shared vectors in `shared/units/test-vectors.json`. Also number formatting, value provenance (`DisplayValue`), flowsheet model.
 
+- **M5 flowsheet editor** (pending CI on the commit that adds it):
+  - Canvas: pan, pinch-zoom, 24-unit snap grid, PFD icons, elbow-routed streams (energy dashed amber; vapour amber / liquid teal once known).
+  - Palette: tap to add, or long-press and drag to place.
+  - Wiring: drag from a port to empty space creates a stream; port to port, or onto another unit, inserts a stream; drop onto a stream connects it.
+  - Gestures: long-press menu (edit / disconnect / delete); undo up to 50 steps.
+  - TalkBack: a labelled node per object with edit/delete actions.
+  - Editors in a bottom sheet:
+    - Feed streams: two of T, P, VF, H; flow; composition with sum and normalise.
+    - Valve: outlet P or ΔP. Heater/cooler: outlet T or duty, plus ΔP. Separators: nothing to specify.
+    - Every spec field has its own unit picker and the HYSYS-style colours; there is a degrees-of-freedom chip and an "issues before solving" list.
+  - Fluid package screen: MVP property packages, compound search (engine, with an offline list of 34 common compounds and the same aliases).
+  - Editing rules (ports, connections, tags, degrees of freedom) live in `:core` and are unit-tested locally.
+
 ## Next
 
-- M5: flowsheet canvas and object editors.
+- M6: solve round-trip from the app, results tables, solver log.
 - Import `.dwxmz` on the Projects screen arrives with M8 (it needs the engine).
 
 ## Known limitations

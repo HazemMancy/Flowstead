@@ -12,12 +12,14 @@ import androidx.navigation.toRoute
 import app.flowstead.ui.about.AboutScreen
 import app.flowstead.ui.about.LicenseTextScreen
 import app.flowstead.ui.flowsheet.FlowsheetScreen
+import app.flowstead.ui.fluid.FluidPackageScreen
 import app.flowstead.ui.projects.ProjectsScreen
 import app.flowstead.ui.settings.SettingsScreen
 import kotlinx.serialization.Serializable
 
 @Serializable data object ProjectsRoute
 @Serializable data class FlowsheetRoute(val projectId: String)
+@Serializable data class FluidRoute(val projectId: String)
 @Serializable data object SettingsRoute
 @Serializable data object AboutRoute
 @Serializable data class LicenseRoute(val title: String, val asset: String)
@@ -33,8 +35,15 @@ fun FlowsteadNavHost() {
                 onOpenAbout = { nav.navigate(AboutRoute) },
             )
         }
-        composable<FlowsheetRoute> {
-            FlowsheetScreen(onBack = { nav.popBackStack() })
+        composable<FlowsheetRoute> { entry ->
+            val route = entry.toRoute<FlowsheetRoute>()
+            FlowsheetScreen(
+                onBack = { nav.popBackStack() },
+                onOpenFluid = { nav.navigate(FluidRoute(route.projectId)) },
+            )
+        }
+        composable<FluidRoute> {
+            FluidPackageScreen(onBack = { nav.popBackStack() })
         }
         composable<SettingsRoute> {
             SettingsScreen(onBack = { nav.popBackStack() })

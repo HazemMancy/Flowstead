@@ -4,99 +4,259 @@
  */
 package app.flowstead.ui.flowsheet
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import androidx.navigation.toRoute
-import app.flowstead.data.Project
-import app.flowstead.data.ProjectRepository
+import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.Port
+import app.flowstead.core.model.Spec
+import app.flowstead.core.model.obj
 import app.flowstead.ui.components.BackButton
-import app.flowstead.ui.nav.FlowsheetRoute
 import app.flowstead.ui.theme.NumberStyles
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import javax.inject.Inject
+import app.flowstead.ui.theme.valueColors
 
-sealed interface FlowsheetUiState {
-    data object Loading : FlowsheetUiState
-    data object NotFound : FlowsheetUiState
-    data class Ready(val project: Project) : FlowsheetUiState
-}
-
-@HiltViewModel
-class FlowsheetViewModel @Inject constructor(
-    savedState: SavedStateHandle,
-    repository: ProjectRepository,
-) : ViewModel() {
-    private val projectId = savedState.toRoute<FlowsheetRoute>().projectId
-
-    val state: StateFlow<FlowsheetUiState> = repository.observeProject(projectId)
-        .map { if (it == null) FlowsheetUiState.NotFound else FlowsheetUiState.Ready(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
-}
-
-/** Milestone 4 shell: project title and the snap grid. The editor itself arrives in Milestone 5. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FlowsheetScreen(onBack: () -> Unit, viewModel: FlowsheetViewModel = hiltViewModel()) {
+fun FlowsheetScreen(
+    onBack: () -> Unit,
+    onOpenFluid: () -> Unit,
+    viewModel: FlowsheetViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(viewModel) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
+
+    val ready = (state as? FlowsheetUiState.Ready)?.ui
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
+                        Text(ready?.projectName ?: "Flowsheet", style = MaterialTheme.typography.titleLarge, maxLines = 1)
                         Text(
-                            (state as? FlowsheetUiState.Ready)?.project?.name ?: "Flowsheet",
-                            style = MaterialTheme.typography.titleLarge,
+                            ready?.flowsheet?.propertyPackage ?: "No property package",
+                            style = NumberStyles.tag,
+                            color = if (ready?.flowsheet?.propertyPackage == null) MaterialTheme.valueColors.underSpecifiedText
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                         )
-                        (state as? FlowsheetUiState.Ready)?.project?.flowsheet?.propertyPackage?.let {
-                            Text(it, style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
                     }
                 },
                 navigationIcon = { BackButton(onBack) },
+                actions = {
+                    IconButton(onClick = viewModel::undo, enabled = ready?.canUndo == true) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                    }
+                    IconButton(onClick = onOpenFluid) { Icon(Icons.Filled.Science, contentDescription = "Fluid package") }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
-            when (state) {
-                FlowsheetUiState.Loading -> CircularProgressIndicator()
-                FlowsheetUiState.NotFound -> Text("This project no longer exists.")
-                is FlowsheetUiState.Ready -> {
-                    GridBackground()
+        when (val s = state) {
+            FlowsheetUiState.Loading -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            FlowsheetUiState.NotFound -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("This project no longer exists.")
+            }
+            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, Modifier.padding(padding))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, modifier: Modifier) {
+    val density = LocalDensity.current.density
+    var viewport by remember { mutableStateOf(Viewport()) }
+    var canvasRect by remember { mutableStateOf(Rect.Zero) }
+    var centred by remember { mutableStateOf(false) }
+    var ghost by remember { mutableStateOf<Pair<ObjectType, Offset>?>(null) }
+    var quickActionsFor by remember { mutableStateOf<String?>(null) }
+    var showIssues by remember { mutableStateOf(false) }
+
+    // First layout: centre the drawing (or the world origin for an empty flowsheet).
+    LaunchedEffect(canvasRect.size, centred) {
+        if (centred || canvasRect.width == 0f) return@LaunchedEffect
+        val objs = ui.flowsheet.objects
+        val worldCentre = if (objs.isEmpty()) Offset.Zero
+        else Offset(objs.map { it.x }.average().toFloat(), objs.map { it.y }.average().toFloat())
+        viewport = Viewport(offset = Offset(canvasRect.width / 2, canvasRect.height / 2) - worldCentre * density, zoom = 1f)
+        centred = true
+    }
+
+    val canvasActions = remember(vm) {
+        object : CanvasActions {
+            override fun tap(hit: Hit) = when (hit) {
+                is Hit.OnObject -> vm.openEditor(hit.objectId)
+                is Hit.OnPort -> vm.openEditor(hit.objectId)
+                Hit.Empty -> vm.select(null)
+            }
+            override fun longPress(objectId: String) {
+                vm.select(objectId)
+                quickActionsFor = objectId
+            }
+            override fun move(objectId: String, x: Double, y: Double) = vm.move(objectId, x, y)
+            override fun wire(unitId: String, port: Port, target: Hit, world: Offset) =
+                vm.wire(unitId, port, target, world.x.toDouble(), world.y.toDouble())
+            override fun delete(objectId: String) = vm.delete(objectId)
+        }
+    }
+    val editorActions = remember(vm) {
+        object : EditorActions {
+            override fun rename(id: String, tag: String) = vm.rename(id, tag)
+            override fun setSpec(id: String, key: String, spec: Spec?) = vm.setSpec(id, key, spec)
+            override fun setExclusiveSpec(id: String, key: String, spec: Spec, group: Collection<String>) =
+                vm.setExclusiveSpec(id, key, spec, group)
+            override fun setComposition(id: String, fractions: Map<String, Double>) = vm.setComposition(id, fractions)
+            override fun normalise(id: String, fractions: Map<String, Double>) = vm.normaliseComposition(id, fractions)
+            override fun delete(id: String) = vm.delete(id)
+        }
+    }
+
+    fun worldAtRoot(root: Offset) = viewport.toWorld(root - canvasRect.topLeft, density)
+
+    Column(modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .onGloballyPositioned { canvasRect = Rect(it.positionInRoot(), it.size.toSize()) },
+        ) {
+            FlowsheetCanvas(
+                flowsheet = ui.flowsheet,
+                status = ui.status,
+                selectedId = ui.selectedId,
+                viewport = viewport,
+                onViewport = { viewport = it },
+                actions = canvasActions,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (ui.flowsheet.objects.isEmpty()) {
+                Text(
+                    "Tap or long-press-drag an item from the palette below.\nStart with a material stream for your feed.",
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Center).padding(32.dp),
+                )
+            }
+            ghost?.let { (type, root) -> PaletteGhost(type, root, canvasRect.topLeft, viewport.zoom) }
+        }
+
+        if (ui.problems.isNotEmpty()) {
+            IssuesBar(ui.problems.size) { showIssues = true }
+        }
+        Palette(
+            onAdd = { type ->
+                val c = viewport.toWorld(Offset(canvasRect.width / 2, canvasRect.height / 2), density)
+                // Nudge each new item so repeated taps don't stack exactly.
+                val n = ui.flowsheet.objects.size % 5
+                vm.add(type, (c.x + n * 24).toDouble(), (c.y + n * 24).toDouble())
+            },
+            onDrag = { type, root -> ghost = root?.let { type to it } },
+            onDrop = { type, root ->
+                if (canvasRect.contains(root)) {
+                    val w = worldAtRoot(root)
+                    vm.add(type, w.x.toDouble(), w.y.toDouble())
+                }
+            },
+            modifier = Modifier.navigationBarsPadding(),
+        )
+    }
+
+    ui.editingId?.let { id ->
+        ui.flowsheet.obj(id)?.let { obj ->
+            ObjectEditorSheet(
+                fs = ui.flowsheet,
+                obj = obj,
+                status = ui.status[id],
+                unitSet = ui.unitSet,
+                ctx = ui.unitContext,
+                actions = editorActions,
+                onDismiss = vm::closeEditor,
+            )
+        }
+    }
+
+    quickActionsFor?.let { id ->
+        ui.flowsheet.obj(id)?.let { obj ->
+            ObjectQuickActions(
+                obj = obj,
+                onEdit = { vm.openEditor(id) },
+                onDisconnect = { vm.disconnectAll(id) },
+                onDelete = { vm.delete(id) },
+                onDismiss = { quickActionsFor = null },
+            )
+        }
+    }
+
+    if (showIssues) {
+        ModalBottomSheet(onDismissRequest = { showIssues = false }) {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 24.dp),
+            ) {
+                Text("Before solving", style = MaterialTheme.typography.titleLarge)
+                ui.problems.forEach { (id, text) ->
                     Text(
-                        "Empty flowsheet.\nThe drag-and-drop editor is the next milestone.",
-                        textAlign = TextAlign.Center,
+                        text,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(32.dp),
+                        color = MaterialTheme.valueColors.underSpecifiedText,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clickable(enabled = id != null, role = Role.Button) {
+                                showIssues = false
+                                id?.let(vm::openEditor)
+                            }
+                            .padding(vertical = 12.dp),
                     )
                 }
             }
@@ -105,18 +265,17 @@ fun FlowsheetScreen(onBack: () -> Unit, viewModel: FlowsheetViewModel = hiltView
 }
 
 @Composable
-private fun GridBackground() {
-    val dot = MaterialTheme.colorScheme.outlineVariant
-    Canvas(Modifier.fillMaxSize()) {
-        val step = 24.dp.toPx()
-        var x = step / 2
-        while (x < size.width) {
-            var y = step / 2
-            while (y < size.height) {
-                drawCircle(dot, radius = 1.5.dp.toPx(), center = Offset(x, y))
-                y += step
-            }
-            x += step
+private fun IssuesBar(count: Int, onClick: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Show issues", onClick = onClick).testTag("issues_bar"),
+    ) {
+        Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (count == 1) "1 thing to fix before solving" else "$count things to fix before solving",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
         }
     }
 }

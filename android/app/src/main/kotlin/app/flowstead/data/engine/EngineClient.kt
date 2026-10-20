@@ -4,13 +4,16 @@
  */
 package app.flowstead.data.engine
 
+import app.flowstead.core.api.CompoundInfo
 import app.flowstead.core.api.EngineError
 import app.flowstead.core.api.EngineHealth
+import app.flowstead.core.api.PropertyPackageInfo
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
@@ -28,6 +31,8 @@ sealed interface EngineResult<out T> {
 
 interface EngineClient {
     suspend fun health(baseUrl: String, apiKey: String?): EngineResult<EngineHealth>
+    suspend fun compounds(baseUrl: String, apiKey: String?, query: String, limit: Int = 25): EngineResult<List<CompoundInfo>>
+    suspend fun propertyPackages(baseUrl: String, apiKey: String?): EngineResult<List<PropertyPackageInfo>>
 }
 
 @Singleton
@@ -35,6 +40,19 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
 
     override suspend fun health(baseUrl: String, apiKey: String?): EngineResult<EngineHealth> = call {
         http.get("$baseUrl/health") { apiKey?.let { bearerAuth(it) } }
+    }
+
+    override suspend fun compounds(baseUrl: String, apiKey: String?, query: String, limit: Int): EngineResult<List<CompoundInfo>> =
+        call {
+            http.get("$baseUrl/compounds") {
+                apiKey?.let { bearerAuth(it) }
+                parameter("query", query)
+                parameter("limit", limit)
+            }
+        }
+
+    override suspend fun propertyPackages(baseUrl: String, apiKey: String?): EngineResult<List<PropertyPackageInfo>> = call {
+        http.get("$baseUrl/property-packages") { apiKey?.let { bearerAuth(it) } }
     }
 
     private suspend inline fun <reified T> call(block: () -> HttpResponse): EngineResult<T> = try {

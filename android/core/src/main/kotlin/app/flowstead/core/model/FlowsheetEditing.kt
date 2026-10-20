@@ -1,0 +1,207 @@
+/*
+ * Flowstead — steady-state process simulation, in your pocket.
+ * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+ */
+package app.flowstead.core.model
+
+import java.util.UUID
+
+/** Why an edit was refused, in words the user sees. */
+class EditRejected(message: String) : IllegalArgumentException(message)
+
+/**
+ * Pure editing operations on a [Flowsheet]. Every function returns a new flowsheet or throws
+ * [EditRejected]; nothing here touches Android, so the rules are unit-tested in :core.
+ *
+ * Connection rules (they mirror DWSIM): a connection always joins a stream and a unit
+ * operation; a unit-op port carries one stream; a stream has at most one source and one
+ * destination; port kind (material/energy) must match the stream kind.
+ */
+object FlowsheetEditing {
+    const val GRID = 24.0
+
+    fun snap(v: Double): Double = Math.round(v / GRID) * GRID
+
+    fun nextTag(fs: Flowsheet, type: ObjectType): String {
+        val tags = fs.objects.map { it.tag }.toSet()
+        val prefix = type.tagPrefix()
+        return if (prefix == null) {
+            generateSequence(1) { it + 1 }.map { it.toString() }.first { it !in tags }
+        } else {
+            val start = if (type == ObjectType.Recycle || type == ObjectType.Adjust) 1 else 100
+            generateSequence(start) { it + 1 }.map { "$prefix-$it" }.first { it !in tags }
+        }
+    }
+
+    fun add(fs: Flowsheet, type: ObjectType, x: Double, y: Double, id: String = newId()): Pair<Flowsheet, SimObject> {
+        val obj = SimObject(id = id, tag = nextTag(fs, type), type = type, x = snap(x), y = snap(y))
+        return fs.copy(objects = fs.objects + obj) to obj
+    }
+
+    fun move(fs: Flowsheet, id: String, x: Double, y: Double): Flowsheet =
+        update(fs, id) { it.copy(x = snap(x), y = snap(y)) }
+
+    fun rename(fs: Flowsheet, id: String, tag: String): Flowsheet {
+        val clean = tag.trim()
+        if (clean.isEmpty()) throw EditRejected("A tag can't be empty")
+        if (clean.length > 24) throw EditRejected("Keep tags to 24 characters")
+        if (fs.objects.any { it.id != id && it.tag.equals(clean, ignoreCase = true) }) {
+            throw EditRejected("Tag $clean is already used")
+        }
+        return update(fs, id) { it.copy(tag = clean) }
+    }
+
+    fun delete(fs: Flowsheet, id: String): Flowsheet = fs.copy(
+        objects = fs.objects.filterNot { it.id == id },
+        connections = fs.connections.filterNot { it.fromObject == id || it.toObject == id },
+    )
+
+    /** Removes every connection on one unit-op port, or all connections of a stream end. */
+    fun disconnect(fs: Flowsheet, connection: Connection): Flowsheet = fs.copy(connections = fs.connections - connection)
+
+    fun setSpec(fs: Flowsheet, id: String, key: String, spec: Spec?): Flowsheet = update(fs, id) {
+        if (spec == null) it.copy(specs = it.specs - key) else {
+            require(spec.si.isFinite()) { "Not a number" }
+            it.copy(specs = it.specs + (key to spec))
+        }
+    }
+
+    /** Sets one spec and drops the ones it replaces, e.g. choosing outlet pressure clears ΔP. */
+    fun setExclusiveSpec(fs: Flowsheet, id: String, key: String, spec: Spec, clears: Collection<String>): Flowsheet =
+        update(fs, id) { o -> o.copy(specs = o.specs - clears.filter { it != key }.toSet() + (key to spec)) }
+
+    fun setComposition(fs: Flowsheet, id: String, fractions: Map<String, Double>): Flowsheet {
+        fractions.forEach { (c, x) ->
+            if (c !in fs.compounds) throw EditRejected("$c is not in the component list")
+            if (!x.isFinite() || x < 0) throw EditRejected("Mole fractions can't be negative")
+        }
+        return update(fs, id) { it.copy(composition = fractions.filterValues { x -> x > 0.0 }) }
+    }
+
+    fun normalise(fractions: Map<String, Double>): Map<String, Double> {
+        val sum = fractions.values.filter { it.isFinite() && it > 0 }.sum()
+        if (sum <= 0.0) throw EditRejected("Enter at least one non-zero fraction")
+        return fractions.mapValues { (_, x) -> if (x.isFinite() && x > 0) x / sum else 0.0 }
+    }
+
+    fun setCompounds(fs: Flowsheet, compounds: List<String>): Flowsheet {
+        val distinct = compounds.distinct()
+        // Compositions keep only compounds that are still present.
+        val objects = fs.objects.map { o -> o.copy(composition = o.composition.filterKeys { it in distinct }) }
+        return fs.copy(compounds = distinct, objects = objects)
+    }
+
+    /**
+     * Connects a stream to a unit-op port. Direction comes from the port: a stream feeding an
+     * inlet port is upstream of the unit op; an outlet port feeds the stream.
+     */
+    fun connect(fs: Flowsheet, streamId: String, unitId: String, port: Port): Flowsheet {
+        val stream = fs.obj(streamId) ?: throw EditRejected("That stream no longer exists")
+        val unit = fs.obj(unitId) ?: throw EditRejected("That unit operation no longer exists")
+        if (!stream.type.isStream) throw EditRejected("Connect a stream to a unit operation")
+        if (unit.type.isStream) throw EditRejected("Streams connect to unit operations, not to other streams")
+        if (Ports.find(unit.type, port.side, port.index) != port) throw EditRejected("${unit.tag} has no such port")
+        val kindOk = (port.kind == PortKind.Material) == (stream.type == ObjectType.MaterialStream)
+        if (!kindOk) {
+            throw EditRejected(
+                if (port.kind == PortKind.Energy) "${port.label} on ${unit.tag} needs an energy stream"
+                else "${port.label} on ${unit.tag} needs a material stream",
+            )
+        }
+
+        val connection = when (port.side) {
+            PortSide.Inlet -> Connection(streamId, 0, unitId, port.index)
+            PortSide.Outlet -> Connection(unitId, port.index, streamId, 0)
+        }
+        if (connection in fs.connections) return fs
+
+        val portTaken = fs.connections.any {
+            when (port.side) {
+                PortSide.Inlet -> it.toObject == unitId && it.toPort == port.index
+                PortSide.Outlet -> it.fromObject == unitId && it.fromPort == port.index
+            }
+        }
+        if (portTaken) throw EditRejected("${port.label} on ${unit.tag} is already connected")
+
+        when (port.side) {
+            PortSide.Inlet -> if (fs.connections.any { it.fromObject == streamId }) {
+                throw EditRejected("${stream.tag} already flows into another unit")
+            }
+            PortSide.Outlet -> if (fs.connections.any { it.toObject == streamId }) {
+                throw EditRejected("${stream.tag} already comes from another unit")
+            }
+        }
+        if (port.side == PortSide.Outlet && stream.hasFeedSpecs()) {
+            // A product stream is calculated; its old feed specs would over-specify it.
+            return fs.copy(
+                objects = fs.objects.map { if (it.id == streamId) it.copy(specs = emptyMap(), composition = emptyMap()) else it },
+                connections = fs.connections + connection,
+            )
+        }
+        return fs.copy(connections = fs.connections + connection)
+    }
+
+    /**
+     * Drag from a unit-op port to empty canvas: create a new stream of the right kind there and
+     * connect it. Returns the new stream.
+     */
+    fun connectNewStream(fs: Flowsheet, unitId: String, port: Port, x: Double, y: Double): Pair<Flowsheet, SimObject> {
+        val type = if (port.kind == PortKind.Energy) ObjectType.EnergyStream else ObjectType.MaterialStream
+        val (withStream, stream) = add(fs, type, x, y)
+        return connect(withStream, stream.id, unitId, port) to stream
+    }
+
+    /**
+     * Port-to-port drag between two unit operations: an outlet and an inlet of the same kind get
+     * a new stream placed halfway between them.
+     */
+    fun connectUnits(fs: Flowsheet, aId: String, aPort: Port, bId: String, bPort: Port, x: Double, y: Double): Flowsheet {
+        if (aId == bId) throw EditRejected("Connect two different units")
+        if (aPort.side == bPort.side) {
+            throw EditRejected(if (aPort.side == PortSide.Outlet) "Join an outlet to an inlet" else "Join an inlet to an outlet")
+        }
+        if (aPort.kind != bPort.kind) throw EditRejected("Material and energy ports can't be joined")
+        val (withStream, stream) = connectNewStream(fs, aId, aPort, x, y)
+        return connect(withStream, stream.id, bId, bPort)
+    }
+
+    /** First unconnected port on [unitId] that a wire from [from] could join (opposite side, same kind). */
+    fun firstFreePort(fs: Flowsheet, unitId: String, from: Port): Port? {
+        val unit = fs.obj(unitId) ?: return null
+        return Ports.of(unit.type).firstOrNull { p ->
+            p.side != from.side && p.kind == from.kind && fs.streamAt(unitId, p) == null
+        }
+    }
+
+    /** First unconnected port on [unitId] that can take [stream], given the side the stream is free on. */
+    fun firstFreePortFor(fs: Flowsheet, unitId: String, stream: SimObject, side: PortSide): Port? {
+        val unit = fs.obj(unitId) ?: return null
+        val kind = if (stream.type == ObjectType.EnergyStream) PortKind.Energy else PortKind.Material
+        return Ports.of(unit.type).firstOrNull { p -> p.side == side && p.kind == kind && fs.streamAt(unitId, p) == null }
+    }
+
+    fun newId(): String = UUID.randomUUID().toString()
+
+    private fun update(fs: Flowsheet, id: String, f: (SimObject) -> SimObject): Flowsheet {
+        if (fs.objects.none { it.id == id }) throw EditRejected("That object no longer exists")
+        return fs.copy(objects = fs.objects.map { if (it.id == id) f(it) else it })
+    }
+
+    private fun SimObject.hasFeedSpecs() = specs.isNotEmpty() || composition.isNotEmpty()
+}
+
+fun Flowsheet.obj(id: String): SimObject? = objects.firstOrNull { it.id == id }
+
+/** The stream entering [port] of unit [unitId], or leaving it for outlet ports. */
+fun Flowsheet.streamAt(unitId: String, port: Port): SimObject? {
+    val c = connections.firstOrNull {
+        when (port.side) {
+            PortSide.Inlet -> it.toObject == unitId && it.toPort == port.index
+            PortSide.Outlet -> it.fromObject == unitId && it.fromPort == port.index
+        }
+    } ?: return null
+    return obj(if (port.side == PortSide.Inlet) c.fromObject else c.toObject)
+}
+
+/** True when nothing flows into this stream: the user must specify it (a feed). */
+fun Flowsheet.isFeed(stream: SimObject): Boolean = stream.type.isStream && connections.none { it.toObject == stream.id }
