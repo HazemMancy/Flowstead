@@ -1,0 +1,28 @@
+{
+  "name": "Dew and bubble points",
+  "description": "Water saturation at 1 atm (IAPWS-IF97): bubble point (VF = 0) and dew point (VF = 1). Pure-water Tsat and latent heat have independent IAPWS references.",
+  "flowsheet": {
+    "propertyPackage": "Steam Tables (IAPWS-IF97)",
+    "compounds": ["Water"],
+    "objects": [
+      {
+        "id": "bubble", "tag": "SAT-LIQ", "type": "material_stream",
+        "specs": {
+          "pressure": { "si": 101325.0, "unit": "kPa" },
+          "vapourFraction": { "si": 0.0, "unit": "frac" },
+          "massFlow": { "si": 1.0, "unit": "kg/s" }
+        },
+        "composition": { "Water": 1.0 }
+      },
+      {
+        "id": "dew", "tag": "SAT-VAP", "type": "material_stream",
+        "specs": {
+          "pressure": { "si": 101325.0, "unit": "kPa" },
+          "vapourFraction": { "si": 1.0, "unit": "frac" },
+          "massFlow": { "si": 1.0, "unit": "kg/s" }
+        },
+        "composition": { "Water": 1.0 }
+      }
+    ]
+  }
+}

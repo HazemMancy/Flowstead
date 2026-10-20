@@ -1,0 +1,239 @@
+# Flowstead engine API. SPDX-License-Identifier: GPL-3.0-or-later
+openapi: 3.1.0
+info:
+  title: Flowstead engine
+  version: 0.1.0
+  description: |
+    Steady-state solves on DWSIM 9.0.5. All numbers are SI: K, Pa, mol/s, kg/s, m³/s, W, J/kg,
+    J/mol, J/(kg·K), kg/m³, Pa·s, kg/kmol, mole fractions. Unit conversion is the client's job.
+    A value the engine could not compute is omitted from the result, never sent as 0 or NaN.
+servers:
+  - url: https://engine.example.com
+security:
+  - apiKey: []
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness (no auth, does not touch the engine)
+      security: []
+      responses:
+        "200": { description: Alive }
+  /health:
+    get:
+      summary: Engine readiness and versions (waits for the DWSIM workers)
+      responses:
+        "200":
+          description: Ready
+          content: { application/json: { schema: { $ref: "#/components/schemas/EngineHealth" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /property-packages:
+    get:
+      summary: Available property packages, MVP set first
+      responses:
+        "200":
+          description: Packages
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PropertyPackageInfo" } }
+  /compounds:
+    get:
+      summary: Search the DWSIM compound database
+      description: Matches name, CAS number and HYSYS-style shorthand (CO2, nC4, TEG, …). Exact matches first.
+      parameters:
+        - { name: query, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 25 } }
+      responses:
+        "200":
+          description: Matches
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/CompoundInfo" } }
+  /solve:
+    post:
+      summary: Solve a flowsheet sent in full (stateless; what the app uses)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Flowsheet" } } }
+      responses:
+        "200":
+          description: Solve outcome (also for invalid input, failures and timeouts; see status)
+          content: { application/json: { schema: { $ref: "#/components/schemas/SolveResult" } } }
+        "429": { description: Rate limit (120 requests/minute per key) }
+  /flowsheets:
+    get:
+      summary: List stored flowsheets
+      responses:
+        "200":
+          description: Summaries
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/FlowsheetSummary" } }
+    post:
+      summary: Store a flowsheet
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FlowsheetDocument" } } }
+      responses:
+        "201":
+          description: Stored
+          content: { application/json: { schema: { $ref: "#/components/schemas/StoredFlowsheet" } } }
+  /flowsheets/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Get a stored flowsheet
+      responses:
+        "200": { description: Found, content: { application/json: { schema: { $ref: "#/components/schemas/StoredFlowsheet" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Replace a stored flowsheet
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/FlowsheetDocument" } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/StoredFlowsheet" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a stored flowsheet and its results
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /flowsheets/{id}/solve:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Solve a stored flowsheet and keep the result
+      responses:
+        "200": { description: Outcome, content: { application/json: { schema: { $ref: "#/components/schemas/SolveResult" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /flowsheets/{id}/results:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Last stored result; stale = true when the flowsheet changed after it
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [result, solvedAt, stale]
+                properties:
+                  result: { $ref: "#/components/schemas/SolveResult" }
+                  solvedAt: { type: string, format: date-time }
+                  stale: { type: boolean }
+        "404": { $ref: "#/components/responses/NotFound" }
+  # Planned for milestone 8: POST /import and GET /flowsheets/{id}/export (.dwxmz).
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: Per-device key from `Flowstead.Engine.Api keys add <device>`.
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+  responses:
+    Unauthorized:
+      description: Missing, unknown or revoked key
+      content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } }
+    NotFound:
+      description: No such flowsheet, or not solved yet
+      content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } }
+  schemas:
+    EngineHealth:
+      type: object
+      required: [status, engineVersion, dwsimVersion]
+      properties:
+        status: { type: string, const: ok }
+        engineVersion: { type: string }
+        dwsimVersion: { type: string }
+    EngineError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+    PropertyPackageInfo:
+      type: object
+      required: [name, mvp]
+      properties:
+        name: { type: string, examples: ["Peng-Robinson (PR)"] }
+        mvp: { type: boolean, description: In Flowstead's supported MVP set }
+    CompoundInfo:
+      type: object
+      properties:
+        name: { type: string }
+        cas: { type: string }
+        formula: { type: string, description: As stored by DWSIM (may be SMILES-like) }
+        molecularWeight: { type: number, description: kg/kmol }
+        normalBoilingPointK: { type: number }
+        database: { type: string }
+    Flowsheet:
+      $ref: "schema/flowsheet.schema.json"
+    FlowsheetDocument:
+      type: object
+      required: [name, flowsheet]
+      properties:
+        name: { type: string }
+        flowsheet: { $ref: "#/components/schemas/Flowsheet" }
+    StoredFlowsheet:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        flowsheet: { $ref: "#/components/schemas/Flowsheet" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    FlowsheetSummary:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        updatedAt: { type: string, format: date-time }
+    SolveResult:
+      type: object
+      required: [status, elapsedMs, messages, objects]
+      properties:
+        status: { type: string, enum: [converged, failed, invalid, timeout] }
+        elapsedMs: { type: integer }
+        iterations: { type: [integer, "null"], description: Outer recycle iterations when reported }
+        engineVersion: { type: string }
+        dwsimVersion: { type: string }
+        messages:
+          type: array
+          items:
+            type: object
+            required: [level, text]
+            properties:
+              level: { type: string, enum: [info, warning, error] }
+              text: { type: string, description: Plain-language message }
+              objectId: { type: string }
+        objects:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/ObjectResult" }
+    ObjectResult:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [solved, error, not_solved] }
+        error: { type: string }
+        properties:
+          type: object
+          description: |
+            SI values by key. Streams: temperature, pressure, vapourFraction, molarFlow, massFlow, massEnthalpy.
+            Valves: pressureDrop, outletPressure, temperatureChange. Heaters/coolers: duty (W), pressureDrop, outletTemperature.
+          additionalProperties: { type: number }
+        phases:
+          type: object
+          description: Material streams only. Keys overall, vapour, liquid1, liquid2; absent phases are omitted.
+          additionalProperties:
+            type: object
+            properties:
+              properties:
+                type: object
+                description: temperature, pressure, phaseMoleFraction, molarFlow, massFlow, volumeFlow, massEnthalpy, massEntropy, massHeatCapacity, density, molecularWeight, viscosity, compressibilityFactor
+                additionalProperties: { type: number }
+              composition:
+                type: object
+                description: Mole fractions by compound
+                additionalProperties: { type: number }

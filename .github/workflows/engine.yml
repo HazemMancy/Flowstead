@@ -2,9 +2,9 @@ name: engine
 
 on:
   push:
-    paths: ["engine/**", "shared/**", "benchmarks/**", ".github/workflows/engine.yml"]
+    paths: ["engine/**", "shared/**", "benchmarks/**", "deploy/**", ".github/workflows/engine.yml"]
   pull_request:
-    paths: ["engine/**", "shared/**", "benchmarks/**", ".github/workflows/engine.yml"]
+    paths: ["engine/**", "shared/**", "benchmarks/**", "deploy/**", ".github/workflows/engine.yml"]
 
 jobs:
   build-test:
@@ -24,9 +24,11 @@ jobs:
       - name: Fetch pinned DWSIM binaries
         run: engine/scripts/fetch-dwsim.sh
       - name: Build
-        run: dotnet build engine/src/Flowstead.Engine.Spike -c Release
+        run: dotnet build engine/Flowstead.Engine.sln -c Release
       - name: Engine spike (headless solve)
         run: dotnet engine/src/Flowstead.Engine.Spike/bin/Release/net8.0/linux-x64/Flowstead.Engine.Spike.dll
+      - name: Tests + benchmark harness
+        run: dotnet test engine/Flowstead.Engine.sln -c Release --no-build --logger "console;verbosity=normal"
 
   docker:
     runs-on: ubuntu-24.04
@@ -40,4 +42,16 @@ jobs:
       - name: Build image
         run: docker build -t flowstead-engine engine/
       - name: Spike in container
-        run: docker run --rm flowstead-engine
+        run: docker run --rm --entrypoint dotnet flowstead-engine /app/spike/Flowstead.Engine.Spike.dll
+      - name: API smoke test in container
+        run: |
+          docker run -d --name eng -p 8080:8080 flowstead-engine
+          for i in $(seq 1 30); do curl -fs localhost:8080/healthz && break; sleep 2; done
+          KEY=$(docker exec eng dotnet /app/Flowstead.Engine.Api.dll keys add ci | tail -1)
+          curl -fsS -H "Authorization: Bearer $KEY" localhost:8080/health
+          curl -fsS -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+            --data @<(python3 -c "import json;print(json.dumps(json.load(open('benchmarks/03-two-phase-flash/input.json'))['flowsheet']))") \
+            localhost:8080/solve | python3 -c "import json,sys;r=json.load(sys.stdin);print(r['status'],r['objects']['feed']['properties']);assert r['status']=='converged'"
+      - name: Container logs
+        if: always()
+        run: docker logs eng || true

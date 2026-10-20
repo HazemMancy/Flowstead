@@ -6,6 +6,13 @@ _Last updated: 2026-10-20_
 
 - **M1 scaffold:** GPL-3.0 licence, NOTICE, DWSIM submodule pinned at `1abf72d1` (9.0.5), `ENGINE_VERSION.md`, CI.
 - **M2 engine spike:** DWSIM 9.0.5 solves a C1/C2/C3 PR stream headless on .NET 8 Linux (`docs/engine-spike.md`).
+- **M3 engine API:** ASP.NET Core service (`engine/src/Flowstead.Engine.Api`) in front of a pool of DWSIM worker processes (`Flowstead.Engine.Worker`, line-JSON over stdio).
+  - Endpoints: `/health`, `/compounds` (HYSYS-style aliases: CO2, nC4, TEG…), `/property-packages` (PR/LK registered), `/solve` (stateless), `/flowsheets` CRUD, `/flowsheets/{id}/solve`, `/flowsheets/{id}/results` (with staleness). Spec: `shared/openapi.yaml`, `shared/schema/flowsheet.schema.json`.
+  - Per-device API keys (hashed, CLI-issued), 120 req/min per key, solve timeout with worker kill and restart. One slow solve never blocks another.
+  - Feed-stream degrees-of-freedom validation, with plain-language messages, before DWSIM sees the flowsheet.
+  - Engine support so far: material/energy streams, valve, heater, cooler, 2- and 3-phase separator.
+  - 18 engine tests including the **benchmark harness (3 cases passing)**. Case 02 checks water Tsat and latent heat against IAPWS-IF97 (blocking).
+  - Docker image (API + worker + DWSIM) and `deploy/docker-compose.yml` with Caddy for HTTPS (`docs/engine-setup.md`).
 - **M4 Android shell** (CI-verified only, see limitations):
   - Brand theme: Material 3 light and dark schemes from the brand palette, Manrope + IBM Plex Mono bundled, HYSYS-style value colours.
   - Adaptive icon (navy background, mark in the safe zone, themed monochrome layer), notification glyph, Android 12 splash.
@@ -17,11 +24,13 @@ _Last updated: 2026-10-20_
 
 ## Next
 
-- M3: engine API (ASP.NET Core), worker pool, OpenAPI spec, benchmark harness.
 - M5: flowsheet canvas and object editors.
 - Import `.dwxmz` on the Projects screen arrives with M8 (it needs the engine).
 
 ## Known limitations
+
+- Benchmarks 01 and 03 have only engine-provisional expected values (D6). They need desktop-DWSIM `.dwxmz` files and HYSYS numbers.
+- `.dwxmz` import/export and `iterations` in solve results are not implemented yet (M8 / when DWSIM exposes them).
 
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).
 - The engine Docker image is verified in CI only (no Docker daemon in the sandbox).

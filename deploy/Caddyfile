@@ -1,0 +1,6 @@
+# HTTPS in front of the Flowstead engine. A public domain gets a Let's Encrypt certificate;
+# an IP address or local name gets one from Caddy's internal CA (tls internal).
+{$FLOWSTEAD_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy engine:8080
+}
