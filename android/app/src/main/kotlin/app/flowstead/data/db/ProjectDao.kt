@@ -30,6 +30,9 @@ interface ProjectDao {
     @Query("UPDATE projects SET name = :name, updated_at = :updatedAt WHERE id = :id")
     suspend fun rename(id: String, name: String, updatedAt: Long)
 
+    @Query("UPDATE projects SET result_json = :resultJson, solved_hash = :hash WHERE id = :id")
+    suspend fun saveResult(id: String, resultJson: String, hash: String)
+
     @Query("DELETE FROM projects WHERE id = :id")
     suspend fun delete(id: String)
 }

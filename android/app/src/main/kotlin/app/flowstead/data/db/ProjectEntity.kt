@@ -18,8 +18,10 @@ data class ProjectEntity(
     @ColumnInfo(name = "flowsheet_json") val flowsheetJson: String,
     /** Denormalised from [flowsheetJson] for the projects list. */
     @ColumnInfo(name = "object_count") val objectCount: Int = 0,
-    /** SHA-256 of [flowsheetJson] at the last successful solve; null if never solved. */
+    /** Model hash of the flowsheet the stored result belongs to; null if never solved. */
     @ColumnInfo(name = "solved_hash") val solvedHash: String? = null,
+    /** Last solve result (StoredSolve JSON); null if never solved. */
+    @ColumnInfo(name = "result_json") val resultJson: String? = null,
 )
 
 /** Lightweight row for the projects list. */

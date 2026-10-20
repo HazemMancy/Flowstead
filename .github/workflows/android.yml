@@ -2,9 +2,9 @@ name: android
 
 on:
   push:
-    paths: ["android/**", "shared/**", ".github/workflows/android.yml"]
+    paths: ["android/**", "shared/**", "engine/**", "benchmarks/**", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["android/**", "shared/**", ".github/workflows/android.yml"]
+    paths: ["android/**", "shared/**", "engine/**", "benchmarks/**", ".github/workflows/android.yml"]
 
 jobs:
   build-test:
@@ -38,6 +38,9 @@ jobs:
               for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"[^>]*>\s*<(failure|error) message="([^"]*)"', s):
                   print(f"FAILED {m.group(2)}.{m.group(1)}: {html.unescape(m.group(4))[:600]}")
           PY
+      - name: Print Room schemas (to commit into android/app/schemas)
+        if: success()
+        run: find app/schemas -name '*.json' -exec sh -c 'echo "=== $1"; cat "$1"' _ {} \;
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
@@ -54,6 +57,35 @@ jobs:
             android/core/build/reports/
             android/app/build/test-results/
             android/app/schemas/
+
+  e2e:
+    # App client against a real engine container (brief §4: one end-to-end test).
+    runs-on: ubuntu-24.04
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: engine/.dl
+          key: dwsim-9.0.5-52c041b1
+      - name: Start engine container
+        run: |
+          docker build -t flowstead-engine engine/
+          docker run -d --name eng -p 8080:8080 flowstead-engine
+          for i in $(seq 1 60); do curl -fs localhost:8080/healthz && break; sleep 2; done
+          echo "FLOWSTEAD_E2E_KEY=$(docker exec eng dotnet /app/Flowstead.Engine.Api.dll keys add ci-e2e | tail -1)" >> "$GITHUB_ENV"
+          echo "FLOWSTEAD_E2E_URL=http://localhost:8080" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: End-to-end test
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --tests 'app.flowstead.e2e.*'
+      - name: Engine logs
+        if: always()
+        run: docker logs eng || true
 
   toolchain-report:
     # Non-blocking: lists the newest stable toolchain versions so pinned ones can be bumped deliberately.

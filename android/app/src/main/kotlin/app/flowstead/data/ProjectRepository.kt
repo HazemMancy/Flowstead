@@ -6,11 +6,12 @@ package app.flowstead.data
 
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetJson
+import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.modelHash
 import app.flowstead.data.db.ProjectDao
 import app.flowstead.data.db.ProjectEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import java.security.MessageDigest
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,9 +29,12 @@ data class Project(
     val name: String,
     val flowsheet: Flowsheet,
     val updatedAt: Long,
+    /** Last solve, if any. Check [resultsCurrent] before treating its values as up to date. */
+    val solve: StoredSolve? = null,
+) {
     /** True when the stored results belong to exactly this flowsheet. */
-    val resultsCurrent: Boolean,
-)
+    val resultsCurrent: Boolean get() = solve != null && solve.modelHash == flowsheet.modelHash()
+}
 
 interface ProjectRepository {
     fun observeProjects(): Flow<List<ProjectSummary>>
@@ -40,6 +44,7 @@ interface ProjectRepository {
     suspend fun rename(id: String, name: String)
     suspend fun delete(id: String)
     suspend fun saveFlowsheet(id: String, flowsheet: Flowsheet)
+    suspend fun saveSolve(id: String, solve: StoredSolve)
 }
 
 /** Clock seam so tests control timestamps. */
@@ -64,7 +69,9 @@ class RoomProjectRepository @Inject constructor(
                 name = it.name,
                 flowsheet = FlowsheetJson.decodeFromString(Flowsheet.serializer(), it.flowsheetJson),
                 updatedAt = it.updatedAt,
-                resultsCurrent = it.solvedHash != null && it.solvedHash == sha256(it.flowsheetJson),
+                solve = it.resultJson?.let { json ->
+                    runCatching { FlowsheetJson.decodeFromString(StoredSolve.serializer(), json) }.getOrNull()
+                },
             )
         }
     }
@@ -97,6 +104,7 @@ class RoomProjectRepository @Inject constructor(
                 createdAt = now,
                 updatedAt = now,
                 solvedHash = null,
+                resultJson = null,
             ),
         )
         return newId
@@ -113,6 +121,9 @@ class RoomProjectRepository @Inject constructor(
         )
     }
 
+    override suspend fun saveSolve(id: String, solve: StoredSolve) =
+        dao.saveResult(id, FlowsheetJson.encodeToString(StoredSolve.serializer(), solve), solve.modelHash)
+
     private fun encode(fs: Flowsheet) = FlowsheetJson.encodeToString(Flowsheet.serializer(), fs)
 
     companion object {
@@ -121,8 +132,5 @@ class RoomProjectRepository @Inject constructor(
 
         fun cleanName(name: String): String =
             name.trim().replace(Regex("\\s+"), " ").take(MAX_NAME).trim().ifEmpty { DEFAULT_NAME }
-
-        fun sha256(text: String): String =
-            MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 }

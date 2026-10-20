@@ -22,7 +22,7 @@ _Last updated: 2026-10-20_
   - Flowsheet screen placeholder (project title + grid).
 - **`:core` (pure Kotlin, tested locally):** unit conversion for every unit in Settings, including barg/psig with a configurable atmosphere and Sm³/d / MMSCFD. Checked against 54 shared vectors in `shared/units/test-vectors.json`. Also number formatting, value provenance (`DisplayValue`), flowsheet model.
 
-- **M5 flowsheet editor** (pending CI on the commit that adds it):
+- **M5 flowsheet editor** (CI green):
   - Canvas: pan, pinch-zoom, 24-unit snap grid, PFD icons, elbow-routed streams (energy dashed amber; vapour amber / liquid teal once known).
   - Palette: tap to add, or long-press and drag to place.
   - Wiring: drag from a port to empty space creates a stream; port to port, or onto another unit, inserts a stream; drop onto a stream connects it.
@@ -35,9 +35,21 @@ _Last updated: 2026-10-20_
   - Fluid package screen: MVP property packages, compound search (engine, with an offline list of 34 common compounds and the same aliases).
   - Editing rules (ports, connections, tags, degrees of freedom) live in `:core` and are unit-tested locally.
 
+- **M6 solve round-trip** (pending CI on the commit that adds it):
+  - **Solve button and status bar:** shows what blocks a solve, then the converged / out-of-date / failed state.
+  - **Solving:** the app sends the flowsheet exactly as stored, and refuses locally while degrees-of-freedom issues remain.
+  - **Storage:** each result is kept with the hash of the flowsheet it belongs to (Room v2 migration), so any edit marks the results "out of date".
+  - **Canvas:** streams are coloured by solved phase (vapour amber, liquid teal, two-phase teal-dark); objects get a green (solved) or red (error) badge.
+  - **Editor results:** each object's editor lists its calculated values, using `ValueText` only — engine numbers or "—" with the reason.
+  - **Results screen:** stream table (tap a property to sort streams by it), overall composition, unit-op duties and ΔP, stale banner.
+  - **Solver log:** status, wall time, engine and DWSIM versions, plain-language messages tied to object tags.
+  - **End-to-end test:** the app's Ktor client against the engine Docker container in CI (`e2e` job).
+  - **Contract test:** Kotlin decodes a real engine response (`shared/fixtures/solve-result-letdown.json`).
+
 ## Next
 
-- M6: solve round-trip from the app, results tables, solver log.
+- M7: remaining MVP unit ops (mixer, splitter, heat exchanger, pump, compressor, expander, recycle, adjust) in engine and app; benchmarks 04–08.
+- M8: `.dwxmz` import/export, CSV/XLSX export, offline solve queue.
 - Import `.dwxmz` on the Projects screen arrives with M8 (it needs the engine).
 
 ## Known limitations

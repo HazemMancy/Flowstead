@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,6 +32,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -45,17 +49,22 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.obj
 import app.flowstead.ui.components.BackButton
+import app.flowstead.ui.theme.Brand
 import app.flowstead.ui.theme.NumberStyles
 import app.flowstead.ui.theme.valueColors
 
@@ -64,6 +73,8 @@ import app.flowstead.ui.theme.valueColors
 fun FlowsheetScreen(
     onBack: () -> Unit,
     onOpenFluid: () -> Unit,
+    onOpenResults: () -> Unit,
+    onOpenLog: () -> Unit,
     viewModel: FlowsheetViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -106,14 +117,14 @@ fun FlowsheetScreen(
             FlowsheetUiState.NotFound -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("This project no longer exists.")
             }
-            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, Modifier.padding(padding))
+            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, onOpenResults, onOpenLog, Modifier.padding(padding))
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, modifier: Modifier) {
+private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () -> Unit, onOpenLog: () -> Unit, modifier: Modifier) {
     val density = LocalDensity.current.density
     var viewport by remember { mutableStateOf(Viewport()) }
     var canvasRect by remember { mutableStateOf(Rect.Zero) }
@@ -174,6 +185,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, modifier: Modifier) 
                 flowsheet = ui.flowsheet,
                 status = ui.status,
                 selectedId = ui.selectedId,
+                results = ui.results,
                 viewport = viewport,
                 onViewport = { viewport = it },
                 actions = canvasActions,
@@ -191,9 +203,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, modifier: Modifier) 
             ghost?.let { (type, root) -> PaletteGhost(type, root, canvasRect.topLeft, viewport.zoom) }
         }
 
-        if (ui.problems.isNotEmpty()) {
-            IssuesBar(ui.problems.size) { showIssues = true }
-        }
+        SolveBar(ui, onSolve = vm::solve, onIssues = { showIssues = true }, onResults = onOpenResults, onLog = onOpenLog)
         Palette(
             onAdd = { type ->
                 val c = viewport.toWorld(Offset(canvasRect.width / 2, canvasRect.height / 2), density)
@@ -218,6 +228,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, modifier: Modifier) 
                 fs = ui.flowsheet,
                 obj = obj,
                 status = ui.status[id],
+                results = ui.results,
                 unitSet = ui.unitSet,
                 ctx = ui.unitContext,
                 actions = editorActions,
@@ -264,18 +275,48 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, modifier: Modifier) 
     }
 }
 
+/**
+ * Status and actions under the canvas: what blocks a solve, the last result's state, and the
+ * Solve button (teal, as on the brand board).
+ */
 @Composable
-private fun IssuesBar(count: Int, onClick: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Show issues", onClick = onClick).testTag("issues_bar"),
-    ) {
-        Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onIssues: () -> Unit, onResults: () -> Unit, onLog: () -> Unit) {
+    val v = MaterialTheme.valueColors
+    val solving = ui.solveState == SolveState.Solving
+    val (text, color) = when {
+        ui.problems.isNotEmpty() ->
+            (if (ui.problems.size == 1) "1 thing to fix before solving" else "${ui.problems.size} things to fix before solving") to v.underSpecifiedText
+        solving -> "Solving…" to MaterialTheme.colorScheme.onSurfaceVariant
+        ui.results.status == null -> (if (ui.engineConfigured) "Ready to solve" else "Set the engine in Settings to solve") to MaterialTheme.colorScheme.onSurfaceVariant
+        ui.results.stale -> "Results out of date — solve again" to v.underSpecifiedText
+        ui.results.status == SolveStatus.Converged -> "✓ Converged" to v.convergedText
+        else -> "Last solve ${ui.results.status?.name?.lowercase()} — see log" to v.error
+    }
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().testTag("solve_bar")) {
+        Row(Modifier.heightIn(min = 56.dp).padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (count == 1) "1 thing to fix before solving" else "$count things to fix before solving",
+                text,
+                color = color,
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                maxLines = 2,
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(enabled = ui.problems.isNotEmpty(), role = Role.Button, onClickLabel = "Show issues", onClick = onIssues)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             )
+            if (ui.results.status != null) {
+                TextButton(onClick = onLog, modifier = Modifier.heightIn(min = 48.dp)) { Text("Log") }
+                TextButton(onClick = onResults, modifier = Modifier.heightIn(min = 48.dp)) { Text("Results") }
+            }
+            Button(
+                onClick = onSolve,
+                enabled = !solving,
+                colors = ButtonDefaults.buttonColors(containerColor = Brand.Teal, contentColor = Brand.Navy),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("solve_button"),
+            ) {
+                if (solving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Brand.Navy)
+                else Text("Solve", style = MaterialTheme.typography.labelLarge)
+            }
         }
     }
 }

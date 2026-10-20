@@ -34,7 +34,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
-import kotlinx.serialization.json.Json
+import app.flowstead.core.model.FlowsheetJson
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -45,7 +45,9 @@ object AppModule {
     @Provides
     @Singleton
     fun database(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME).build()
+        Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides
     fun projectDao(db: AppDatabase): ProjectDao = db.projectDao()
@@ -75,7 +77,8 @@ object AppModule {
     @Singleton
     fun httpClient(): HttpClient = HttpClient(OkHttp) {
         expectSuccess = false
-        install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        // Same JSON settings as the stored master copy, so what is solved is exactly what is saved.
+        install(ContentNegotiation) { json(FlowsheetJson) }
         install(HttpTimeout) {
             connectTimeoutMillis = 10_000
             requestTimeoutMillis = 120_000

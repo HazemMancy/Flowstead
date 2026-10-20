@@ -47,7 +47,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.flowstead.core.api.ObjectStatus
+import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
@@ -78,6 +81,7 @@ fun FlowsheetCanvas(
     flowsheet: Flowsheet,
     status: Map<String, SpecStatus>,
     selectedId: String?,
+    results: ResultView,
     viewport: Viewport,
     onViewport: (Viewport) -> Unit,
     actions: CanvasActions,
@@ -98,6 +102,7 @@ fun FlowsheetCanvas(
     val labelColor = colors.onSurfaceVariant
 
     val fs by rememberUpdatedState(flowsheet)
+    val twoPhase = MaterialTheme.colorScheme.secondary
     val vp by rememberUpdatedState(viewport)
     val act by rememberUpdatedState(actions)
     val onVp by rememberUpdatedState(onViewport)
@@ -222,7 +227,7 @@ fun FlowsheetCanvas(
                         val stream = fs.objects.firstOrNull { it.id == c.fromObject && it.type.isStream }
                             ?: fs.objects.firstOrNull { it.id == c.toObject }
                         val energy = stream?.type == ObjectType.EnergyStream
-                        val color = if (energy) palette.energy else stream?.let { streamColor(it, palette) } ?: palette.stroke
+                        val color = if (energy) palette.energy else stream?.let { streamColor(it, palette, results, twoPhase) } ?: palette.stroke
                         val pts = CanvasGeometry.elbow(a, b)
                         val path = Path().apply {
                             moveTo(pts[0].x, pts[0].y)
@@ -245,7 +250,7 @@ fun FlowsheetCanvas(
                             val b = CanvasGeometry.bounds(o, at).inflate(6f)
                             drawRoundRect(colors.secondary, b.topLeft, b.size, CornerRadius(10f), style = Stroke(2.5f))
                         }
-                        drawUnitIcon(o.type, at, s, palette, strokeWidth = 2f, streamColor = streamColor(o, palette))
+                        drawUnitIcon(o.type, at, s, palette, strokeWidth = 2f, streamColor = streamColor(o, palette, results, twoPhase))
 
                         // Ports
                         for (p in Ports.of(o.type)) {
@@ -258,11 +263,15 @@ fun FlowsheetCanvas(
                             }
                         }
 
-                        // Status badge: amber = needs input, red = invalid / over-specified.
+                        // Status badge: amber = needs input, red = invalid or failed, green = solved and current.
                         val badge = when (status[o.id]) {
                             is SpecStatus.UnderSpecified -> values.underSpecified
                             is SpecStatus.OverSpecified, is SpecStatus.Invalid -> values.error
-                            else -> null
+                            else -> when (results.objectStatus(o.id)) {
+                                ObjectStatus.Error -> values.error
+                                ObjectStatus.Solved -> if (results.stale) null else values.converged
+                                else -> null
+                            }
                         }
                         if (badge != null) {
                             val b = CanvasGeometry.bounds(o, at)
@@ -294,7 +303,7 @@ fun FlowsheetCanvas(
         for (o in flowsheet.objects) {
             val b = CanvasGeometry.bounds(o)
             val topLeft = viewport.toScreen(b.topLeft, density)
-            val description = describe(o, status[o.id])
+            val description = describe(o, status[o.id], results)
             Box(
                 Modifier
                     .offset { IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()) }
@@ -310,22 +319,32 @@ fun FlowsheetCanvas(
     }
 }
 
-private fun streamColor(o: SimObject, p: IconPalette): Color = when (o.type) {
+/** Vapour amber, liquid teal, two-phase light teal; from the solved vapour fraction, else from a VF spec. */
+private fun streamColor(o: SimObject, p: IconPalette, results: ResultView, twoPhase: Color): Color = when (o.type) {
     ObjectType.EnergyStream -> p.energy
-    ObjectType.MaterialStream -> when (o.specs[SpecKey.VAPOUR_FRACTION]?.si) {
-        1.0 -> p.vapour
-        0.0 -> p.liquid
-        else -> p.stroke
+    ObjectType.MaterialStream -> {
+        val vf = (results.value(o.id, "vapourFraction") as? DisplayValue.Calculated)?.si
+            ?: o.specs[SpecKey.VAPOUR_FRACTION]?.si
+        when {
+            vf == null -> p.stroke
+            vf >= 0.9999 -> p.vapour
+            vf <= 0.0001 -> p.liquid
+            else -> twoPhase
+        }
     }
     else -> p.stroke
 }
 
-private fun describe(o: SimObject, status: SpecStatus?): String {
+private fun describe(o: SimObject, status: SpecStatus?, results: ResultView): String {
     val state = when (status) {
         is SpecStatus.UnderSpecified -> "needs ${status.needs.joinToString(", ")}"
         is SpecStatus.OverSpecified -> status.problem
         is SpecStatus.Invalid -> status.problem
-        else -> "fully specified"
+        else -> when (results.objectStatus(o.id)) {
+            ObjectStatus.Solved -> if (results.stale) "solved, results out of date" else "solved"
+            ObjectStatus.Error -> "calculation error"
+            else -> "fully specified, not solved"
+        }
     }
     return "${o.type.displayName()} ${o.tag}, $state"
 }

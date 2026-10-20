@@ -7,7 +7,9 @@ package app.flowstead.ui.flowsheet
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.flowstead.FakeEngineClient
 import app.flowstead.FakeProjectRepository
+import app.flowstead.FakeSecretStore
 import app.flowstead.FakeSettingsRepository
 import app.flowstead.MainDispatcherRule
 import app.flowstead.core.model.Connection
@@ -33,10 +35,12 @@ class FlowsheetViewModelTest {
     @get:Rule val main = MainDispatcherRule()
 
     private val repo = FakeProjectRepository()
+    private val settings = FakeSettingsRepository()
+    private val engine = FakeEngineClient()
 
-    private suspend fun vm(): FlowsheetViewModel {
-        val id = repo.create("Letdown", Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane")))
-        return FlowsheetViewModel(SavedStateHandle(mapOf("projectId" to id)), repo, FakeSettingsRepository())
+    private suspend fun vm(fs: Flowsheet = Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"))): FlowsheetViewModel {
+        val id = repo.create("Letdown", fs)
+        return FlowsheetViewModel(SavedStateHandle(mapOf("projectId" to id)), repo, settings, FakeSecretStore(), engine) { 42L }
     }
 
     private suspend fun FlowsheetViewModel.ui(predicate: (FlowsheetUi) -> Boolean = { true }): FlowsheetUi =
@@ -99,5 +103,61 @@ class FlowsheetViewModelTest {
         val stream = fs.objects.single { it.type == ObjectType.MaterialStream }
         assertEquals(setOf(Connection(valve.id, 0, stream.id, 0), Connection(stream.id, 0, sep.id, 0)), fs.connections.toSet())
         assertEquals(Offset(120f, 0f), Offset(stream.x.toFloat(), stream.y.toFloat()))
+    }
+
+    private fun completeFeed(): Flowsheet {
+        val feed = app.flowstead.core.model.SimObject(
+            "f", "FEED", ObjectType.MaterialStream,
+            specs = mapOf(
+                SpecKey.TEMPERATURE to Spec(300.0, "C"),
+                SpecKey.PRESSURE to Spec(5e6, "bara"),
+                SpecKey.MOLAR_FLOW to Spec(10.0, "kgmol/h"),
+            ),
+            composition = mapOf("Methane" to 1.0),
+        )
+        return Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"), objects = listOf(feed))
+    }
+
+    @Test
+    fun solveRefusesWhileThereAreLocalIssues() = runTest {
+        val vm = vm()
+        vm.ui()
+        vm.add(ObjectType.MaterialStream, 0.0, 0.0)
+        vm.ui { it.flowsheet.objects.size == 1 }
+        vm.solve()
+        assertTrue(vm.messages.first().startsWith("Fix 1 issue(s) first"))
+        assertTrue(engine.solved.isEmpty())
+    }
+
+    @Test
+    fun solveNeedsAnEngineAddress() = runTest {
+        val vm = vm(completeFeed())
+        vm.ui()
+        vm.solve()
+        assertEquals("Set the engine address in Settings to solve", vm.messages.first())
+    }
+
+    @Test
+    fun solveStoresTheResultAndEditsMakeItStale() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        engine.solveResult = app.flowstead.data.engine.EngineResult.Ok(
+            app.flowstead.core.api.SolveResult(
+                app.flowstead.core.api.SolveStatus.Converged,
+                elapsedMs = 1200,
+                objects = mapOf("f" to app.flowstead.core.api.ObjectResult(
+                    app.flowstead.core.api.ObjectStatus.Solved, properties = mapOf("vapourFraction" to 1.0))),
+            ),
+        )
+        val vm = vm(completeFeed())
+        vm.ui()
+        vm.solve()
+        assertEquals("Converged in 1.2 s", vm.messages.first())
+        val solved = vm.ui { it.results.status != null }
+        assertFalse(solved.results.stale)
+        assertEquals(app.flowstead.core.model.DisplayValue.Calculated(1.0, stale = false), solved.results.value("f", "vapourFraction"))
+        assertEquals(completeFeed(), engine.solved.single())
+
+        vm.setSpec("f", SpecKey.TEMPERATURE, Spec(310.0, "C"))
+        assertTrue(vm.ui { it.results.stale }.results.stale)
     }
 }

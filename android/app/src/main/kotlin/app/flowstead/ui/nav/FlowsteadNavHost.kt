@@ -14,12 +14,15 @@ import app.flowstead.ui.about.LicenseTextScreen
 import app.flowstead.ui.flowsheet.FlowsheetScreen
 import app.flowstead.ui.fluid.FluidPackageScreen
 import app.flowstead.ui.projects.ProjectsScreen
+import app.flowstead.ui.results.ResultsScreen
+import app.flowstead.ui.results.SolverLogScreen
 import app.flowstead.ui.settings.SettingsScreen
 import kotlinx.serialization.Serializable
 
 @Serializable data object ProjectsRoute
 @Serializable data class FlowsheetRoute(val projectId: String)
 @Serializable data class FluidRoute(val projectId: String)
+@Serializable data class ResultsRoute(val projectId: String, val log: Boolean = false)
 @Serializable data object SettingsRoute
 @Serializable data object AboutRoute
 @Serializable data class LicenseRoute(val title: String, val asset: String)
@@ -40,7 +43,13 @@ fun FlowsteadNavHost() {
             FlowsheetScreen(
                 onBack = { nav.popBackStack() },
                 onOpenFluid = { nav.navigate(FluidRoute(route.projectId)) },
+                onOpenResults = { nav.navigate(ResultsRoute(route.projectId)) },
+                onOpenLog = { nav.navigate(ResultsRoute(route.projectId, log = true)) },
             )
+        }
+        composable<ResultsRoute> { entry ->
+            if (entry.toRoute<ResultsRoute>().log) SolverLogScreen(onBack = { nav.popBackStack() })
+            else ResultsScreen(onBack = { nav.popBackStack() })
         }
         composable<FluidRoute> {
             FluidPackageScreen(onBack = { nav.popBackStack() })

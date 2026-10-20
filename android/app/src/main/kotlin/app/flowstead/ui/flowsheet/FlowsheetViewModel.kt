@@ -20,7 +20,16 @@ import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.Specification
 import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
+import app.flowstead.core.api.SolveResult
+import app.flowstead.core.api.SolveStatus
+import app.flowstead.core.model.ResultView
+import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.modelHash
+import app.flowstead.data.Clock
 import app.flowstead.data.ProjectRepository
+import app.flowstead.data.engine.EngineClient
+import app.flowstead.data.engine.EngineResult
+import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.AppSettings
 import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.ui.nav.FlowsheetRoute
@@ -31,11 +40,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+sealed interface SolveState {
+    data object Idle : SolveState
+    data object Solving : SolveState
+}
 
 data class FlowsheetUi(
     val projectName: String,
@@ -47,6 +62,9 @@ data class FlowsheetUi(
     val canUndo: Boolean,
     val unitSet: UnitSet,
     val unitContext: UnitContext,
+    val results: ResultView,
+    val solveState: SolveState,
+    val engineConfigured: Boolean,
 )
 
 sealed interface FlowsheetUiState {
@@ -63,7 +81,10 @@ sealed interface FlowsheetUiState {
 class FlowsheetViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val repository: ProjectRepository,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
+    private val secrets: SecretStore,
+    private val engine: EngineClient,
+    private val clock: Clock,
 ) : ViewModel() {
 
     private val projectId = savedState.toRoute<FlowsheetRoute>().projectId
@@ -72,6 +93,7 @@ class FlowsheetViewModel @Inject constructor(
         val selectedId: String? = null,
         val editingId: String? = null,
         val undo: List<Flowsheet> = emptyList(),
+        val solving: Boolean = false,
     )
 
     private val local = MutableStateFlow(Local())
@@ -100,6 +122,9 @@ class FlowsheetViewModel @Inject constructor(
                 canUndo = l.undo.isNotEmpty(),
                 unitSet = settings.unitSet,
                 unitContext = UnitContext(fs.atmosphericPressurePa),
+                results = ResultView(project.solve, fs.modelHash()),
+                solveState = if (l.solving) SolveState.Solving else SolveState.Idle,
+                engineConfigured = settings.engineUrl.isNotBlank(),
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
@@ -179,6 +204,46 @@ class FlowsheetViewModel @Inject constructor(
     fun setAtmosphericPressure(pa: Double) = edit { fs ->
         if (!(pa.isFinite() && pa > 0)) throw EditRejected("Atmospheric pressure must be positive")
         fs.copy(atmosphericPressurePa = pa)
+    }
+
+    /**
+     * Sends the flowsheet as it is now to the engine and keeps the result with the project.
+     * Local degrees-of-freedom problems are reported first, so the engine only sees complete input.
+     */
+    fun solve() {
+        val fs = current ?: return
+        if (local.value.solving) return
+        val problems = Specification.problems(fs)
+        if (problems.isNotEmpty()) {
+            _messages.trySend("Fix ${problems.size} issue(s) first: ${problems.first().second}")
+            return
+        }
+        local.update { it.copy(solving = true) }
+        viewModelScope.launch {
+            try {
+                val url = settingsRepository.settings.first().engineUrl
+                if (url.isBlank()) {
+                    _messages.send("Set the engine address in Settings to solve")
+                    return@launch
+                }
+                when (val r = engine.solve(url, secrets.apiKey(), fs)) {
+                    is EngineResult.Failed -> _messages.send("Not solved: ${r.reason}")
+                    is EngineResult.Ok -> {
+                        repository.saveSolve(projectId, StoredSolve(r.value, fs.modelHash(), clock.now()))
+                        _messages.send(summary(r.value))
+                    }
+                }
+            } finally {
+                local.update { it.copy(solving = false) }
+            }
+        }
+    }
+
+    private fun summary(r: SolveResult): String = when (r.status) {
+        SolveStatus.Converged -> "Converged in %.1f s".format(java.util.Locale.ROOT, r.elapsedMs / 1000.0)
+        SolveStatus.Failed -> "Solve failed: ${r.messages.firstOrNull()?.text ?: "see the solver log"}"
+        SolveStatus.Invalid -> "Engine refused the flowsheet: ${r.messages.firstOrNull()?.text ?: "see the solver log"}"
+        SolveStatus.Timeout -> "Solve timed out: ${r.messages.firstOrNull()?.text ?: ""}".trimEnd(' ', ':')
     }
 
     fun undo() {

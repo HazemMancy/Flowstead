@@ -10,6 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.SimObject
+import app.flowstead.core.model.modelHash
 import app.flowstead.data.db.AppDatabase
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -20,6 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class RoomProjectRepositoryTest {
@@ -75,6 +77,25 @@ class RoomProjectRepositoryTest {
         assertEquals(1, repo.observeProjects().first().single().objectCount)
         repo.delete(id)
         assertNull(repo.observeProject(id).first())
+    }
+
+    @Test
+    fun storedSolveIsCurrentUntilTheFlowsheetChanges() = runTest {
+        val fs = Flowsheet(compounds = listOf("Methane"))
+        val id = repo.create("Flash", fs)
+        val solve = app.flowstead.core.model.StoredSolve(
+            app.flowstead.core.api.SolveResult(app.flowstead.core.api.SolveStatus.Converged), fs.modelHash(), 7L,
+        )
+        repo.saveSolve(id, solve)
+        val p = assertNotNull(repo.observeProject(id).first())
+        assertEquals(solve, p.solve)
+        assertTrue(p.resultsCurrent)
+        assertTrue(repo.observeProjects().first().single().everSolved)
+
+        repo.saveFlowsheet(id, fs.copy(compounds = listOf("Methane", "Ethane")))
+        assertFalse(assertNotNull(repo.observeProject(id).first()).resultsCurrent)
+        // A duplicate starts unsolved.
+        assertNull(assertNotNull(repo.observeProject(assertNotNull(repo.duplicate(id))).first()).solve)
     }
 
     @Test

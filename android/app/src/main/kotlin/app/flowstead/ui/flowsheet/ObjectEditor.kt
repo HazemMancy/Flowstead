@@ -55,7 +55,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import app.flowstead.core.api.Phases
 import app.flowstead.core.format.ValueFormat
+import app.flowstead.core.model.ResultKeys
+import app.flowstead.core.model.ResultView
+import app.flowstead.ui.components.ValueText
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.SimObject
@@ -88,6 +92,7 @@ fun ObjectEditorSheet(
     fs: Flowsheet,
     obj: SimObject,
     status: SpecStatus?,
+    results: ResultView,
     unitSet: UnitSet,
     ctx: UnitContext,
     actions: EditorActions,
@@ -126,6 +131,41 @@ fun ObjectEditorSheet(
                     Calculated("Adiabatic flash at the lowest feed pressure. Nothing to specify: connect the feed and the product streams.")
                 else -> Calculated("${obj.type.displayName()} editing arrives with the remaining unit operations.")
             }
+            ResultsSection(obj, results, unitSet, ctx)
+        }
+    }
+}
+
+/** Calculated values for this object: only what the engine returned, "—" with the reason otherwise. */
+@Composable
+private fun ResultsSection(obj: SimObject, results: ResultView, unitSet: UnitSet, ctx: UnitContext) {
+    val keys = when (obj.type) {
+        ObjectType.MaterialStream -> listOf("temperature", "pressure", "vapourFraction", "molarFlow", "massFlow", "massEnthalpy", "density", "molecularWeight")
+        ObjectType.EnergyStream -> listOf("energyFlow")
+        ObjectType.Valve -> listOf("pressureDrop", "outletPressure", "temperatureChange")
+        ObjectType.Heater, ObjectType.Cooler -> listOf("duty", "outletTemperature", "pressureDrop")
+        else -> emptyList()
+    }
+    if (keys.isEmpty()) return
+    HorizontalDivider()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Results", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        if (results.stale) Text("⚠ out of date", style = NumberStyles.tag, color = MaterialTheme.valueColors.underSpecifiedText)
+    }
+    for (key in keys) {
+        val unit = unitSet.unitFor(ResultKeys.quantity(key))
+        // Overall density/MW live on the overall phase.
+        val value = if (key == "density" || key == "molecularWeight") results.phaseValue(obj.id, Phases.OVERALL, key)
+        else results.value(obj.id, key)
+        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(ResultKeys.label(key), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            ValueText(value, unit, ctx = ctx)
+        }
+        (value as? app.flowstead.core.model.DisplayValue.Missing)?.takeIf { key == keys.first() }?.let {
+            Text(it.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        (value as? app.flowstead.core.model.DisplayValue.Error)?.takeIf { key == keys.first() }?.let {
+            Text(it.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.error)
         }
     }
 }
