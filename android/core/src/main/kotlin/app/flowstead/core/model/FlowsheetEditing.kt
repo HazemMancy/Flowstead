@@ -70,6 +70,10 @@ object FlowsheetEditing {
     fun setExclusiveSpec(fs: Flowsheet, id: String, key: String, spec: Spec, clears: Collection<String>): Flowsheet =
         update(fs, id) { o -> o.copy(specs = o.specs - clears.filter { it != key }.toSet() + (key to spec)) }
 
+    fun setRef(fs: Flowsheet, id: String, key: String, value: String?): Flowsheet = update(fs, id) {
+        if (value == null) it.copy(refs = it.refs - key) else it.copy(refs = it.refs + (key to value))
+    }
+
     fun setComposition(fs: Flowsheet, id: String, fractions: Map<String, Double>): Flowsheet {
         fractions.forEach { (c, x) ->
             if (c !in fs.compounds) throw EditRejected("$c is not in the component list")

@@ -1,0 +1,78 @@
+{
+  "name": "JT valve letdown",
+  "description": "Lean gas from 70 bara, 40 °C let down to 20 bara across a valve (PR): isenthalpic, Joule-Thomson cooling.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Nitrogen",
+      "Carbon dioxide",
+      "Methane",
+      "Ethane",
+      "Propane"
+    ],
+    "objects": [
+      {
+        "id": "hp",
+        "tag": "HP",
+        "type": "material_stream",
+        "x": 0,
+        "y": 0,
+        "specs": {
+          "temperature": {
+            "si": 313.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 7000000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 277.77777777777777,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Nitrogen": 0.01,
+          "Carbon dioxide": 0.02,
+          "Methane": 0.88,
+          "Ethane": 0.06,
+          "Propane": 0.03
+        }
+      },
+      {
+        "id": "v",
+        "tag": "VLV-100",
+        "type": "valve",
+        "x": 120,
+        "y": 0,
+        "specs": {
+          "outletPressure": {
+            "si": 2000000.0,
+            "unit": "bara"
+          }
+        }
+      },
+      {
+        "id": "lp",
+        "tag": "LP",
+        "type": "material_stream",
+        "x": 240,
+        "y": 0
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "hp",
+        "fromPort": 0,
+        "toObject": "v",
+        "toPort": 0
+      },
+      {
+        "fromObject": "v",
+        "fromPort": 0,
+        "toObject": "lp",
+        "toPort": 0
+      }
+    ]
+  }
+}

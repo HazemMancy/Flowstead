@@ -1,0 +1,218 @@
+{
+  "name": "Recycle loop",
+  "description": "Feed gas mixed with recycled liquid, chilled to −20 °C and separated; half the liquid is recycled, half purged (PR).",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Methane",
+      "Ethane",
+      "Propane",
+      "N-butane"
+    ],
+    "objects": [
+      {
+        "id": "feed",
+        "tag": "FEED",
+        "type": "material_stream",
+        "x": 0,
+        "y": 0,
+        "specs": {
+          "temperature": {
+            "si": 303.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 3000000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 27.77777777777778,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Methane": 0.75,
+          "Ethane": 0.12,
+          "Propane": 0.08,
+          "N-butane": 0.05
+        }
+      },
+      {
+        "id": "mix",
+        "tag": "MIX-100",
+        "type": "mixer",
+        "x": 120,
+        "y": 0
+      },
+      {
+        "id": "m",
+        "tag": "2",
+        "type": "material_stream",
+        "x": 240,
+        "y": 0
+      },
+      {
+        "id": "chill",
+        "tag": "E-100",
+        "type": "cooler",
+        "x": 360,
+        "y": 0,
+        "specs": {
+          "outletTemperature": {
+            "si": 253.15,
+            "unit": "C"
+          }
+        }
+      },
+      {
+        "id": "c",
+        "tag": "3",
+        "type": "material_stream",
+        "x": 480,
+        "y": 0
+      },
+      {
+        "id": "sep",
+        "tag": "V-100",
+        "type": "separator",
+        "x": 600,
+        "y": 0
+      },
+      {
+        "id": "gas",
+        "tag": "GAS",
+        "type": "material_stream",
+        "x": 720,
+        "y": -60
+      },
+      {
+        "id": "liq",
+        "tag": "LIQ",
+        "type": "material_stream",
+        "x": 720,
+        "y": 60
+      },
+      {
+        "id": "tee",
+        "tag": "TEE-100",
+        "type": "splitter",
+        "x": 840,
+        "y": 60,
+        "specs": {
+          "split1": {
+            "si": 0.5,
+            "unit": "frac"
+          }
+        }
+      },
+      {
+        "id": "rec",
+        "tag": "RCY-IN",
+        "type": "material_stream",
+        "x": 960,
+        "y": 120
+      },
+      {
+        "id": "purge",
+        "tag": "PURGE",
+        "type": "material_stream",
+        "x": 960,
+        "y": 0
+      },
+      {
+        "id": "rcy",
+        "tag": "RCY-1",
+        "type": "recycle",
+        "x": 600,
+        "y": 200
+      },
+      {
+        "id": "back",
+        "tag": "RCY-OUT",
+        "type": "material_stream",
+        "x": 240,
+        "y": 200
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "feed",
+        "fromPort": 0,
+        "toObject": "mix",
+        "toPort": 0
+      },
+      {
+        "fromObject": "back",
+        "fromPort": 0,
+        "toObject": "mix",
+        "toPort": 1
+      },
+      {
+        "fromObject": "mix",
+        "fromPort": 0,
+        "toObject": "m",
+        "toPort": 0
+      },
+      {
+        "fromObject": "m",
+        "fromPort": 0,
+        "toObject": "chill",
+        "toPort": 0
+      },
+      {
+        "fromObject": "chill",
+        "fromPort": 0,
+        "toObject": "c",
+        "toPort": 0
+      },
+      {
+        "fromObject": "c",
+        "fromPort": 0,
+        "toObject": "sep",
+        "toPort": 0
+      },
+      {
+        "fromObject": "sep",
+        "fromPort": 0,
+        "toObject": "gas",
+        "toPort": 0
+      },
+      {
+        "fromObject": "sep",
+        "fromPort": 1,
+        "toObject": "liq",
+        "toPort": 0
+      },
+      {
+        "fromObject": "liq",
+        "fromPort": 0,
+        "toObject": "tee",
+        "toPort": 0
+      },
+      {
+        "fromObject": "tee",
+        "fromPort": 0,
+        "toObject": "rec",
+        "toPort": 0
+      },
+      {
+        "fromObject": "tee",
+        "fromPort": 1,
+        "toObject": "purge",
+        "toPort": 0
+      },
+      {
+        "fromObject": "rec",
+        "fromPort": 0,
+        "toObject": "rcy",
+        "toPort": 0
+      },
+      {
+        "fromObject": "rcy",
+        "fromPort": 0,
+        "toObject": "back",
+        "toPort": 0
+      }
+    ]
+  }
+}

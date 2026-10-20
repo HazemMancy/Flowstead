@@ -126,6 +126,8 @@ object Units {
     val cP = u("cP", "cP", Quantity.Viscosity, 1e-3, 4)
     val fraction = u("frac", "", Quantity.Fraction, 1.0, 4)
     val percent = u("%", "%", Quantity.Fraction, 0.01, 2)
+    val ratio = u("ratio", "", Quantity.Ratio, 1.0, 3)
+    val count = u("count", "", Quantity.Count, 1.0, 0)
 
     private val byId: Map<String, EngUnit> = all.associateBy { it.id }.also {
         check(it.size == all.size) { "Duplicate unit ids" }

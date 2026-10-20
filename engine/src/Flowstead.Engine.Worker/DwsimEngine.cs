@@ -8,6 +8,7 @@
 using System.Diagnostics;
 using DWSIM.Interfaces;
 using DWSIM.Interfaces.Enums;
+using FlashSetting = DWSIM.Interfaces.Enums.FlashSetting;
 using DWSIM.Thermodynamics.PropertyPackages;
 using DWSIM.Thermodynamics.Streams;
 using DWSIM.UnitOperations.UnitOperations;
@@ -124,6 +125,31 @@ public sealed class DwsimEngine
             return Result(SolveStatus.Invalid, messages, [], sw);
         }
 
+        var adjust = model.Objects.FirstOrDefault(o => o.Type == ObjectType.Adjust);
+        if (adjust is null) return SolveCore(model, messages, sw);
+
+        // Adjust: DWSIM never sees the Adjust object; each iteration is a full solve of the rest.
+        var withoutAdjust = model with { Objects = model.Objects.Where(o => o.Id != adjust.Id).ToList() };
+        var outcome = AdjustSolver.Solve(withoutAdjust, adjust, m => SolveCore(m, [], Stopwatch.StartNew()));
+        var objects = new Dictionary<string, ObjectResult>(outcome.Result.Objects) { [adjust.Id] = outcome.AdjustResult };
+        var all = messages.Concat(outcome.Result.Messages).ToList();
+        if (outcome.AdjustResult.Status == ObjectStatus.Error)
+        {
+            all.Add(new SolverMessage(MessageLevel.Error, outcome.AdjustResult.Error!, adjust.Id));
+        }
+        var ok = outcome.Result.Status == SolveStatus.Converged && outcome.AdjustResult.Status == ObjectStatus.Solved;
+        return outcome.Result with
+        {
+            Status = ok ? SolveStatus.Converged : SolveStatus.Failed,
+            ElapsedMs = sw.ElapsedMilliseconds,
+            Messages = all,
+            Objects = objects,
+            Iterations = (int)outcome.AdjustResult.Properties.GetValueOrDefault("iterations"),
+        };
+    }
+
+    private SolveResult SolveCore(Flowsheet model, List<SolverMessage> messages, Stopwatch sw)
+    {
         IFlowsheet fs;
         Dictionary<string, ISimulationObject> objects;
         try
@@ -161,8 +187,45 @@ public sealed class DwsimEngine
             messages.Add(new SolverMessage(MessageLevel.Error, r.Error ?? "Calculation failed", id));
         }
 
+        switch (WaterTreatment(model))
+        {
+            case WaterMode.FreeWater:
+                messages.Add(new SolverMessage(MessageLevel.Info,
+                    "Water with hydrocarbons: DWSIM's free-water (immiscible water) three-phase flash used, comparable to HYSYS free-water handling."));
+                break;
+            case WaterMode.RigorousVlle:
+                messages.Add(new SolverMessage(MessageLevel.Info,
+                    "Water with polar components or an activity model: rigorous three-phase (VLLE) flash used."));
+                break;
+        }
+        if (MassBalanceWarning(model, results) is { } balance) messages.Add(balance);
+
         var ok = errors.Count == 0 && results.Values.All(r => r.Status == ObjectStatus.Solved);
-        return Result(ok ? SolveStatus.Converged : SolveStatus.Failed, messages, results, sw);
+        var recycleIterations = objects.Values.OfType<DWSIM.UnitOperations.SpecialOps.Recycle>().Select(r => r.IterationsTaken).DefaultIfEmpty().Max();
+        return Result(ok ? SolveStatus.Converged : SolveStatus.Failed, messages, results, sw) with
+        {
+            Iterations = objects.Values.OfType<DWSIM.UnitOperations.SpecialOps.Recycle>().Any() ? recycleIterations : null,
+        };
+    }
+
+    /// <summary>
+    /// Overall check: total mass in through feed streams equals total mass out through terminal
+    /// product streams. A gap means a unit or loop did not close and the numbers shouldn't be trusted.
+    /// </summary>
+    public static SolverMessage? MassBalanceWarning(Flowsheet model, Dictionary<string, ObjectResult> results)
+    {
+        var fed = model.Connections.Select(c => c.ToObject).ToHashSet();
+        var feeding = model.Connections.Select(c => c.FromObject).ToHashSet();
+        double Flow(SimObject o) => results.TryGetValue(o.Id, out var r) && r.Properties.TryGetValue("massFlow", out var m) ? m : double.NaN;
+        var streams = model.Objects.Where(o => o.Type == ObjectType.MaterialStream).ToList();
+        var inflow = streams.Where(o => !fed.Contains(o.Id)).Sum(Flow);
+        var outflow = streams.Where(o => fed.Contains(o.Id) && !feeding.Contains(o.Id)).Sum(Flow);
+        if (!double.IsFinite(inflow) || !double.IsFinite(outflow) || inflow <= 0 || outflow == 0) return null;
+        var rel = Math.Abs(inflow - outflow) / inflow;
+        return rel > 1e-4
+            ? new SolverMessage(MessageLevel.Warning,
+                $"Overall mass balance is off by {rel * 100:0.###} % (in {inflow:0.######} kg/s, out {outflow:0.######} kg/s). Check recycles and unit results before using these numbers.")
+            : null;
     }
 
     private SolveResult Result(SolveStatus status, List<SolverMessage> messages, Dictionary<string, ObjectResult> objects, Stopwatch sw) =>
@@ -183,7 +246,17 @@ public sealed class DwsimEngine
         var fs = _automation.CreateFlowsheet();
         foreach (var c in model.Compounds) fs.AddCompound(c);
         var ppName = MvpPackages.FirstOrDefault(p => p.Name == model.PropertyPackage).Dwsim ?? model.PropertyPackage!;
-        fs.CreateAndAddPropertyPackage(ppName);
+        var pp = (PropertyPackage)fs.CreateAndAddPropertyPackage(ppName);
+        switch (WaterTreatment(model))
+        {
+            case WaterMode.FreeWater:
+                pp.FlashSettings[FlashSetting.ForceEquilibriumCalculationType] = "VLLE";
+                pp.FlashSettings[FlashSetting.ImmiscibleWaterOption] = "True";
+                break;
+            case WaterMode.RigorousVlle:
+                pp.FlashSettings[FlashSetting.ForceEquilibriumCalculationType] = "VLLE";
+                break;
+        }
 
         var map = new Dictionary<string, ISimulationObject>();
         foreach (var o in model.Objects)
@@ -209,6 +282,32 @@ public sealed class DwsimEngine
         return (fs, map);
     }
 
+    public enum WaterMode { None, FreeWater, RigorousVlle }
+
+    /// <summary>Water-soluble polar compounds: with these present, water is not an immiscible free phase.</summary>
+    private static readonly HashSet<string> PolarSolvents =
+    [
+        "Methanol", "Ethanol", "Ethylene glycol", "Diethylene glycol", "Triethylene glycol",
+        "Methyl DiEthanolAmine", "Diethanolamine", "Ammonia",
+    ];
+
+    private static readonly HashSet<string> ActivityPackages = ["NRTL", "UNIQUAC"];
+
+    /// <summary>
+    /// How water is handled (docs/DECISIONS.md D17). Measured on benchmark 04: DWSIM's default and
+    /// its rigorous PR VLLE flash both leave 44 mol % water in a single "hydrocarbon" liquid, which is
+    /// unphysical; its immiscible-water flash gives the free-water phase HYSYS shows. So cubic EOS +
+    /// water + hydrocarbons use free water; polar solvents or activity models use rigorous VLLE.
+    /// </summary>
+    public static WaterMode WaterTreatment(Flowsheet model)
+    {
+        if (!model.Compounds.Contains("Water") || model.Compounds.Count < 2) return WaterMode.None;
+        if (model.PropertyPackage is "Steam Tables (IAPWS-IF97)" or "CoolProp") return WaterMode.None;
+        if (ActivityPackages.Contains(model.PropertyPackage ?? "") || model.Compounds.Any(PolarSolvents.Contains))
+            return WaterMode.RigorousVlle;
+        return WaterMode.FreeWater;
+    }
+
     private static DwsimObjectType ToDwsim(ObjectType t) => t switch
     {
         ObjectType.MaterialStream => DwsimObjectType.MaterialStream,
@@ -217,6 +316,13 @@ public sealed class DwsimEngine
         ObjectType.Heater => DwsimObjectType.Heater,
         ObjectType.Cooler => DwsimObjectType.Cooler,
         ObjectType.Separator or ObjectType.ThreePhaseSeparator => DwsimObjectType.Vessel,
+        ObjectType.Mixer => DwsimObjectType.NodeIn,
+        ObjectType.Splitter => DwsimObjectType.NodeOut,
+        ObjectType.Pump => DwsimObjectType.Pump,
+        ObjectType.Compressor => DwsimObjectType.Compressor,
+        ObjectType.Expander => DwsimObjectType.Expander,
+        ObjectType.HeatExchanger => DwsimObjectType.HeatExchanger,
+        ObjectType.Recycle => DwsimObjectType.OT_Recycle,
         _ => throw new NotSupportedException($"'{t}' is not supported by this engine version yet"),
     };
 
@@ -298,6 +404,102 @@ public sealed class DwsimEngine
                 break;
             case Vessel:
                 break; // adiabatic flash at the lowest inlet pressure (DWSIM default)
+            case Mixer:
+                break; // outlet at the lowest inlet pressure (DWSIM default)
+            case Splitter splitter:
+            {
+                var r1 = V(SpecKeys.Split1) ?? 1.0;
+                var r2 = V(SpecKeys.Split2) ?? 1.0 - r1;
+                splitter.OperationMode = Splitter.OpMode.SplitRatios;
+                splitter.Ratios[0] = r1;
+                splitter.Ratios[1] = r2;
+                splitter.Ratios[2] = Math.Max(0.0, 1.0 - r1 - r2);
+                break;
+            }
+            case Pump pump:
+                pump.Eficiencia = (V(SpecKeys.Efficiency) ?? 0.75) * 100.0;
+                if (V(SpecKeys.OutletPressure) is { } pp)
+                {
+                    pump.CalcMode = Pump.CalculationMode.OutletPressure;
+                    pump.Pout = pp;
+                }
+                else
+                {
+                    pump.CalcMode = Pump.CalculationMode.Delta_P;
+                    pump.DeltaP = V(SpecKeys.PressureRise) ?? 0.0;
+                }
+                break;
+            case Compressor comp:
+                comp.ProcessPath = Compressor.ProcessPathType.Adiabatic;
+                comp.AdiabaticEfficiency = (V(SpecKeys.Efficiency) ?? 0.75) * 100.0;
+                if (V(SpecKeys.OutletPressure) is { } cp)
+                {
+                    comp.CalcMode = Compressor.CalculationMode.OutletPressure;
+                    comp.POut = cp;
+                }
+                else if (V(SpecKeys.PressureRatio) is { } cr)
+                {
+                    comp.CalcMode = Compressor.CalculationMode.PressureRatio;
+                    comp.PressureRatio = cr;
+                }
+                else
+                {
+                    comp.CalcMode = Compressor.CalculationMode.Delta_P;
+                    comp.DeltaP = V(SpecKeys.PressureRise) ?? 0.0;
+                }
+                break;
+            case Expander exp:
+                exp.ProcessPath = Expander.ProcessPathType.Adiabatic;
+                exp.AdiabaticEfficiency = (V(SpecKeys.Efficiency) ?? 0.75) * 100.0;
+                if (V(SpecKeys.OutletPressure) is { } ep)
+                {
+                    exp.CalcMode = Expander.CalculationMode.OutletPressure;
+                    exp.POut = ep;
+                }
+                else if (V(SpecKeys.PressureRatio) is { } er)
+                {
+                    exp.CalcMode = Expander.CalculationMode.PressureRatio;
+                    exp.PressureRatio = er;
+                }
+                else
+                {
+                    exp.CalcMode = Expander.CalculationMode.Delta_P;
+                    exp.DeltaP = V(SpecKeys.PressureDrop) ?? 0.0;
+                }
+                break;
+            case DWSIM.UnitOperations.SpecialOps.Recycle rcy:
+            {
+                // DWSIM's defaults (0.01 kg/s, 0.1 K) let a loop stop with a visibly open mass balance.
+                var conv = rcy.ConvergenceParameters;
+                conv.VazaoMassica = 1e-6;   // kg/s
+                conv.Temperatura = 1e-3;    // K
+                conv.Pressao = 1.0;         // Pa
+                conv.Composicao = 1e-6;
+                conv.Entalpia = 1e-3;
+                conv.FracaoVapor = 1e-6;
+                rcy.MaximumIterations = 100;
+                break;
+            }
+            case HeatExchanger hx:
+                hx.FlowDir = FlowDirection.CounterCurrent;
+                hx.HotSidePressureDrop = V(SpecKeys.HotPressureDrop) ?? 0.0;
+                hx.ColdSidePressureDrop = V(SpecKeys.ColdPressureDrop) ?? 0.0;
+                if (V(SpecKeys.HotOutletTemperature) is { } hotOut)
+                {
+                    hx.CalculationMode = HeatExchangerCalcMode.CalcTempColdOut;
+                    hx.HotSideOutletTemperature = hotOut;
+                }
+                else if (V(SpecKeys.ColdOutletTemperature) is { } coldOut)
+                {
+                    hx.CalculationMode = HeatExchangerCalcMode.CalcTempHotOut;
+                    hx.ColdSideOutletTemperature = coldOut;
+                }
+                else
+                {
+                    hx.CalculationMode = HeatExchangerCalcMode.CalcBothTemp;
+                    hx.Q = (V(SpecKeys.Duty) ?? 0.0) / 1000.0; // DWSIM kW
+                }
+                break;
         }
     }
 
@@ -307,9 +509,11 @@ public sealed class DwsimEngine
     /// </summary>
     private static void AddHiddenEnergyStreams(IFlowsheet fs, Flowsheet model, Dictionary<string, ISimulationObject> map)
     {
-        foreach (var o in model.Objects.Where(o => o.Type is ObjectType.Heater or ObjectType.Cooler))
+        foreach (var o in model.Objects.Where(o => o.Type is ObjectType.Heater or ObjectType.Cooler
+                     or ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander))
         {
-            var isHeater = o.Type == ObjectType.Heater;
+            // Energy flows in to heaters, pumps and compressors; out of coolers and expanders.
+            var isHeater = o.Type is ObjectType.Heater or ObjectType.Pump or ObjectType.Compressor;
             var drawn = model.Connections.Any(c => isHeater
                 ? c.ToObject == o.Id && c.ToPort == 1
                 : c.FromObject == o.Id && c.FromPort == 1);
@@ -362,6 +566,39 @@ public sealed class DwsimEngine
             {
                 Status = ObjectStatus.Solved,
                 Properties = Props(("duty", c.DeltaQ * 1000.0), ("pressureDrop", c.DeltaP), ("outletTemperature", c.OutletTemperature)),
+            },
+            Pump p => new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                Properties = Props(("power", p.DeltaQ * 1000.0), ("pressureRise", p.DeltaP), ("temperatureChange", p.DeltaT),
+                    ("efficiency", p.Eficiencia / 100.0)),
+            },
+            Compressor k => new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                Properties = Props(("power", k.DeltaQ * 1000.0), ("pressureRise", k.DeltaP), ("outletPressure", k.POut),
+                    ("outletTemperature", k.OutletTemperature), ("temperatureChange", k.DeltaT),
+                    ("pressureRatio", k.POut / (k.POut - k.DeltaP)), ("adiabaticHead", k.AdiabaticHead),
+                    ("polytropicHead", k.PolytropicHead), ("efficiency", k.AdiabaticEfficiency / 100.0)),
+            },
+            Expander x => new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                Properties = Props(("power", x.DeltaQ * 1000.0), ("pressureDrop", x.DeltaP), ("outletPressure", x.POut),
+                    ("outletTemperature", x.OutletTemperature), ("temperatureChange", x.DeltaT),
+                    ("efficiency", x.AdiabaticEfficiency / 100.0)),
+            },
+            HeatExchanger hx => new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                Properties = Props(("duty", hx.Q * 1000.0), ("lmtd", hx.LMTD), ("ua", hx.Q * 1000.0 / hx.LMTD),
+                    ("hotOutletTemperature", hx.HotSideOutletTemperature), ("coldOutletTemperature", hx.ColdSideOutletTemperature),
+                    ("hotPressureDrop", hx.HotSidePressureDrop), ("coldPressureDrop", hx.ColdSidePressureDrop)),
+            },
+            DWSIM.UnitOperations.SpecialOps.Recycle r => new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                Properties = Props(("iterations", r.IterationsTaken)),
             },
             _ => new ObjectResult { Status = ObjectStatus.Solved },
         };

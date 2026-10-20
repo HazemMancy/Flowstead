@@ -1,0 +1,113 @@
+{
+  "name": "Steam heater",
+  "description": "Water (1 kg/s, 3 bara, 25 °C) heated to 120 °C in a counter-current exchanger by 0.2 kg/s of saturated steam at 5 bara (IAPWS-IF97).",
+  "flowsheet": {
+    "propertyPackage": "Steam Tables (IAPWS-IF97)",
+    "compounds": [
+      "Water"
+    ],
+    "objects": [
+      {
+        "id": "steam",
+        "tag": "STEAM",
+        "type": "material_stream",
+        "x": 0,
+        "y": 0,
+        "specs": {
+          "pressure": {
+            "si": 500000.0,
+            "unit": "bara"
+          },
+          "vapourFraction": {
+            "si": 1.0,
+            "unit": "frac"
+          },
+          "massFlow": {
+            "si": 0.2,
+            "unit": "kg/s"
+          }
+        },
+        "composition": {
+          "Water": 1.0
+        }
+      },
+      {
+        "id": "cw",
+        "tag": "WATER-IN",
+        "type": "material_stream",
+        "x": 0,
+        "y": 120,
+        "specs": {
+          "temperature": {
+            "si": 298.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 300000.0,
+            "unit": "bara"
+          },
+          "massFlow": {
+            "si": 1.0,
+            "unit": "kg/s"
+          }
+        },
+        "composition": {
+          "Water": 1.0
+        }
+      },
+      {
+        "id": "hx",
+        "tag": "E-100",
+        "type": "heat_exchanger",
+        "x": 120,
+        "y": 60,
+        "specs": {
+          "coldOutletTemperature": {
+            "si": 393.15,
+            "unit": "C"
+          }
+        }
+      },
+      {
+        "id": "cond",
+        "tag": "CONDENSATE",
+        "type": "material_stream",
+        "x": 240,
+        "y": 0
+      },
+      {
+        "id": "hw",
+        "tag": "WATER-OUT",
+        "type": "material_stream",
+        "x": 240,
+        "y": 120
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "steam",
+        "fromPort": 0,
+        "toObject": "hx",
+        "toPort": 0
+      },
+      {
+        "fromObject": "cw",
+        "fromPort": 0,
+        "toObject": "hx",
+        "toPort": 1
+      },
+      {
+        "fromObject": "hx",
+        "fromPort": 0,
+        "toObject": "cond",
+        "toPort": 0
+      },
+      {
+        "fromObject": "hx",
+        "fromPort": 1,
+        "toObject": "hw",
+        "toPort": 0
+      }
+    ]
+  }
+}

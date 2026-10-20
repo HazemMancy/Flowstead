@@ -10,7 +10,9 @@ public static class Validator
     public static readonly HashSet<ObjectType> Supported =
     [
         ObjectType.MaterialStream, ObjectType.EnergyStream, ObjectType.Valve, ObjectType.Heater,
-        ObjectType.Cooler, ObjectType.Separator, ObjectType.ThreePhaseSeparator,
+        ObjectType.Cooler, ObjectType.Separator, ObjectType.ThreePhaseSeparator, ObjectType.Mixer,
+        ObjectType.Splitter, ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander,
+        ObjectType.HeatExchanger, ObjectType.Recycle, ObjectType.Adjust,
     ];
 
     public static List<SolverMessage> Validate(Flowsheet fs, IEnumerable<string> knownCompounds, IEnumerable<string> knownPackages)
@@ -44,7 +46,82 @@ public static class Validator
         {
             ValidateFeed(fs, o, Err);
         }
+        foreach (var o in fs.Objects.Where(o => !o.Type.IsStream()))
+        {
+            ValidateUnitOp(o, Err);
+        }
+        var adjusts = fs.Objects.Where(o => o.Type == ObjectType.Adjust).ToList();
+        if (adjusts.Count > 1) Err("Only one Adjust per flowsheet is supported in this version.", adjusts[1].Id);
+        foreach (var a in adjusts) ValidateAdjust(fs, a, Err);
         return m;
+    }
+
+    private static void ValidateAdjust(Flowsheet fs, SimObject a, Action<string, string?> err)
+    {
+        string? Ref(string k) => a.Refs.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) ? v : null;
+        var mId = Ref(AdjustKeys.ManipulatedObject);
+        var mKey = Ref(AdjustKeys.ManipulatedSpec);
+        var cId = Ref(AdjustKeys.ControlledObject);
+        var cKey = Ref(AdjustKeys.ControlledProperty);
+        if (mId is null || mKey is null) { err($"{a.Tag}: choose the variable to vary.", a.Id); return; }
+        if (cId is null || cKey is null) { err($"{a.Tag}: choose the result to control.", a.Id); return; }
+        var manipulated = fs.Objects.FirstOrDefault(o => o.Id == mId);
+        if (manipulated is null || manipulated.Type == ObjectType.Adjust) { err($"{a.Tag}: the varied object no longer exists.", a.Id); return; }
+        if (!manipulated.Specs.ContainsKey(mKey)) err($"{a.Tag}: {manipulated.Tag} has no {mKey} specified to start from.", a.Id);
+        if (fs.Objects.All(o => o.Id != cId)) err($"{a.Tag}: the controlled object no longer exists.", a.Id);
+        if (!a.Specs.ContainsKey(AdjustKeys.Target)) err($"{a.Tag}: under-specified — give the target value.", a.Id);
+        var min = a.Specs.GetValueOrDefault(AdjustKeys.Minimum)?.Si;
+        var max = a.Specs.GetValueOrDefault(AdjustKeys.Maximum)?.Si;
+        if (min is not null && max is not null && min >= max) err($"{a.Tag}: minimum must be below maximum.", a.Id);
+        if (a.Specs.GetValueOrDefault(AdjustKeys.Tolerance) is { } t && t.Si <= 0) err($"{a.Tag}: tolerance must be positive.", a.Id);
+    }
+
+    /// <summary>Exactly one spec from each group must be given (null group entries are optional extras).</summary>
+    private static void ValidateUnitOp(SimObject o, Action<string, string?> err)
+    {
+        var s = o.Specs;
+        void OneOf(string what, params string[] keys)
+        {
+            var given = keys.Count(s.ContainsKey);
+            if (given == 0) err($"{o.Tag}: under-specified — give {what}.", o.Id);
+            else if (given > 1) err($"{o.Tag}: over-specified — give only one of {what}.", o.Id);
+        }
+        foreach (var (k, v) in s)
+        {
+            if (!double.IsFinite(v.Si)) err($"{o.Tag}: {k} is not a number.", o.Id);
+        }
+        switch (o.Type)
+        {
+            case ObjectType.Valve:
+                OneOf("outlet pressure or pressure drop", SpecKeys.OutletPressure, SpecKeys.PressureDrop);
+                break;
+            case ObjectType.Heater:
+            case ObjectType.Cooler:
+                OneOf("outlet temperature or duty", SpecKeys.OutletTemperature, SpecKeys.Duty);
+                break;
+            case ObjectType.Pump:
+                OneOf("outlet pressure or pressure rise", SpecKeys.OutletPressure, SpecKeys.PressureRise);
+                break;
+            case ObjectType.Compressor:
+                OneOf("outlet pressure, pressure rise or pressure ratio", SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.PressureRatio);
+                break;
+            case ObjectType.Expander:
+                OneOf("outlet pressure, pressure drop or pressure ratio", SpecKeys.OutletPressure, SpecKeys.PressureDrop, SpecKeys.PressureRatio);
+                break;
+            case ObjectType.HeatExchanger:
+                OneOf("duty or one outlet temperature", SpecKeys.Duty, SpecKeys.HotOutletTemperature, SpecKeys.ColdOutletTemperature);
+                break;
+            case ObjectType.Splitter:
+                if (!s.ContainsKey(SpecKeys.Split1)) err($"{o.Tag}: under-specified — give the fraction to outlet 1.", o.Id);
+                var total = (s.GetValueOrDefault(SpecKeys.Split1)?.Si ?? 0) + (s.GetValueOrDefault(SpecKeys.Split2)?.Si ?? 0);
+                if (total > 1 + 1e-9) err($"{o.Tag}: split fractions add up to more than 1.", o.Id);
+                break;
+        }
+        if (s.GetValueOrDefault(SpecKeys.Efficiency) is { } eff && eff.Si is <= 0 or > 1)
+            err($"{o.Tag}: efficiency must be between 0 and 100 %.", o.Id);
+        foreach (var k in new[] { SpecKeys.Split1, SpecKeys.Split2 })
+            if (s.GetValueOrDefault(k) is { } f && f.Si is < 0 or > 1) err($"{o.Tag}: split fractions must be between 0 and 1.", o.Id);
+        if (s.GetValueOrDefault(SpecKeys.PressureRatio) is { } pr && pr.Si <= 0) err($"{o.Tag}: pressure ratio must be positive.", o.Id);
     }
 
     private static void ValidateFeed(Flowsheet fs, SimObject o, Action<string, string?> err)

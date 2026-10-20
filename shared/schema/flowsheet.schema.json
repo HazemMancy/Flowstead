@@ -5,58 +5,160 @@
   "description": "The master copy of a Flowstead project (decision D5). Mirrors android/core app.flowstead.core.model.Flowsheet and engine Flowstead.Engine.Contracts.Flowsheet. All numbers SI.",
   "type": "object",
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 1 },
-    "propertyPackage": { "type": ["string", "null"], "examples": ["Peng-Robinson (PR)"] },
-    "compounds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-    "atmosphericPressurePa": { "type": "number", "exclusiveMinimum": 0, "default": 101325, "description": "Reference for gauge pressures shown in this project" },
-    "objects": { "type": "array", "items": { "$ref": "#/$defs/SimObject" } },
-    "connections": { "type": "array", "items": { "$ref": "#/$defs/Connection" } }
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "propertyPackage": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "examples": [
+        "Peng-Robinson (PR)"
+      ]
+    },
+    "compounds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "atmosphericPressurePa": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 101325,
+      "description": "Reference for gauge pressures shown in this project"
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SimObject"
+      }
+    },
+    "connections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Connection"
+      }
+    }
   },
   "$defs": {
     "ObjectType": {
       "enum": [
-        "material_stream", "energy_stream", "mixer", "splitter", "heater", "cooler", "heat_exchanger",
-        "valve", "pump", "compressor", "expander", "separator", "three_phase_separator", "recycle", "adjust",
-        "distillation_column", "reactor", "pipe_segment"
+        "material_stream",
+        "energy_stream",
+        "mixer",
+        "splitter",
+        "heater",
+        "cooler",
+        "heat_exchanger",
+        "valve",
+        "pump",
+        "compressor",
+        "expander",
+        "separator",
+        "three_phase_separator",
+        "recycle",
+        "adjust",
+        "distillation_column",
+        "reactor",
+        "pipe_segment"
       ]
     },
     "Spec": {
       "type": "object",
-      "required": ["si", "unit"],
+      "required": [
+        "si",
+        "unit"
+      ],
       "properties": {
-        "si": { "type": "number", "description": "Value in the SI base unit" },
-        "unit": { "type": "string", "description": "Unit id the user typed it in (display only), e.g. barg" }
+        "si": {
+          "type": "number",
+          "description": "Value in the SI base unit"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit id the user typed it in (display only), e.g. barg"
+        }
       }
     },
     "SimObject": {
       "type": "object",
-      "required": ["id", "tag", "type"],
+      "required": [
+        "id",
+        "tag",
+        "type"
+      ],
       "properties": {
-        "id": { "type": "string" },
-        "tag": { "type": "string", "examples": ["V-100", "FEED"] },
-        "type": { "$ref": "#/$defs/ObjectType" },
-        "x": { "type": "number" },
-        "y": { "type": "number" },
+        "id": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string",
+          "examples": [
+            "V-100",
+            "FEED"
+          ]
+        },
+        "type": {
+          "$ref": "#/$defs/ObjectType"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
         "specs": {
           "type": "object",
-          "description": "User specifications: temperature, pressure, vapourFraction, massEnthalpy, molarFlow, massFlow (streams); outletPressure, pressureDrop, outletTemperature, duty (unit ops).",
-          "additionalProperties": { "$ref": "#/$defs/Spec" }
+          "description": "User specifications (SI). Streams: temperature, pressure, vapourFraction, massEnthalpy, molarFlow, massFlow. Valve: outletPressure | pressureDrop. Heater/cooler: outletTemperature | duty, pressureDrop. Pump: outletPressure | pressureRise, efficiency. Compressor: outletPressure | pressureRise | pressureRatio, efficiency. Expander: outletPressure | pressureDrop | pressureRatio, efficiency. Heat exchanger: duty | hotOutletTemperature | coldOutletTemperature, hotPressureDrop, coldPressureDrop. Splitter: split1, split2. Adjust: target, tolerance, minimum, maximum.",
+          "additionalProperties": {
+            "$ref": "#/$defs/Spec"
+          }
         },
         "composition": {
           "type": "object",
           "description": "Overall mole fractions by compound (material streams); must sum to 1",
-          "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "refs": {
+          "type": "object",
+          "description": "References to other objects. Adjust: manipulatedObject, manipulatedSpec (a spec key on that object), controlledObject, controlledProperty (a result key). Its specs: target, optional tolerance, minimum, maximum (SI).",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
     "Connection": {
       "type": "object",
-      "required": ["fromObject", "fromPort", "toObject", "toPort"],
+      "required": [
+        "fromObject",
+        "fromPort",
+        "toObject",
+        "toPort"
+      ],
       "properties": {
-        "fromObject": { "type": "string" },
-        "fromPort": { "type": "integer", "minimum": 0 },
-        "toObject": { "type": "string" },
-        "toPort": { "type": "integer", "minimum": 0 }
+        "fromObject": {
+          "type": "string"
+        },
+        "fromPort": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toObject": {
+          "type": "string"
+        },
+        "toPort": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     }
   }

@@ -40,6 +40,8 @@ data class UnitSet(val name: String, val units: Map<Quantity, String>) {
                 Quantity.MolecularWeight to Units.kgPerKmol.id,
                 Quantity.Viscosity to Units.cP.id,
                 Quantity.Fraction to Units.fraction.id,
+                Quantity.Ratio to Units.ratio.id,
+                Quantity.Count to Units.count.id,
             ),
         )
 
@@ -63,6 +65,8 @@ data class UnitSet(val name: String, val units: Map<Quantity, String>) {
                 Quantity.MolecularWeight to Units.kgPerKmol.id,
                 Quantity.Viscosity to Units.cP.id,
                 Quantity.Fraction to Units.fraction.id,
+                Quantity.Ratio to Units.ratio.id,
+                Quantity.Count to Units.count.id,
             ),
         )
 

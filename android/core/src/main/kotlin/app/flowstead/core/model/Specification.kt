@@ -18,15 +18,27 @@ object SpecKey {
     const val PRESSURE_DROP = "pressureDrop"
     const val OUTLET_TEMPERATURE = "outletTemperature"
     const val DUTY = "duty"
+    const val PRESSURE_RISE = "pressureRise"
+    const val PRESSURE_RATIO = "pressureRatio"
+    /** Adiabatic efficiency, stored as a fraction (0–1). */
+    const val EFFICIENCY = "efficiency"
+    /** Splitter: fraction of the feed to outlet 1 / outlet 2; outlet 3 takes the rest. */
+    const val SPLIT_1 = "split1"
+    const val SPLIT_2 = "split2"
+    const val HOT_OUTLET_TEMPERATURE = "hotOutletTemperature"
+    const val COLD_OUTLET_TEMPERATURE = "coldOutletTemperature"
+    const val HOT_PRESSURE_DROP = "hotPressureDrop"
+    const val COLD_PRESSURE_DROP = "coldPressureDrop"
 
     val STREAM_STATE = listOf(TEMPERATURE, PRESSURE, VAPOUR_FRACTION, MASS_ENTHALPY)
     val STREAM_FLOW = listOf(MOLAR_FLOW, MASS_FLOW)
 
     fun quantity(key: String): Quantity = when (key) {
-        TEMPERATURE, OUTLET_TEMPERATURE -> Quantity.Temperature
+        TEMPERATURE, OUTLET_TEMPERATURE, HOT_OUTLET_TEMPERATURE, COLD_OUTLET_TEMPERATURE -> Quantity.Temperature
         PRESSURE, OUTLET_PRESSURE -> Quantity.Pressure
-        PRESSURE_DROP -> Quantity.PressureDifference
-        VAPOUR_FRACTION -> Quantity.Fraction
+        PRESSURE_DROP, PRESSURE_RISE, HOT_PRESSURE_DROP, COLD_PRESSURE_DROP -> Quantity.PressureDifference
+        VAPOUR_FRACTION, EFFICIENCY, SPLIT_1, SPLIT_2 -> Quantity.Fraction
+        PRESSURE_RATIO -> Quantity.Ratio
         MASS_ENTHALPY -> Quantity.MassEnthalpy
         MOLAR_FLOW -> Quantity.MolarFlow
         MASS_FLOW -> Quantity.MassFlow
@@ -45,6 +57,15 @@ object SpecKey {
         PRESSURE_DROP -> "Pressure drop"
         OUTLET_TEMPERATURE -> "Outlet temperature"
         DUTY -> "Duty"
+        PRESSURE_RISE -> "Pressure rise"
+        PRESSURE_RATIO -> "Pressure ratio"
+        EFFICIENCY -> "Adiabatic efficiency"
+        SPLIT_1 -> "Fraction to outlet 1"
+        SPLIT_2 -> "Fraction to outlet 2"
+        HOT_OUTLET_TEMPERATURE -> "Hot outlet temperature"
+        COLD_OUTLET_TEMPERATURE -> "Cold outlet temperature"
+        HOT_PRESSURE_DROP -> "Hot side pressure drop"
+        COLD_PRESSURE_DROP -> "Cold side pressure drop"
         else -> key
     }
 }
@@ -69,7 +90,30 @@ object Specification {
     fun status(fs: Flowsheet, o: SimObject): SpecStatus = when (o.type) {
         ObjectType.MaterialStream -> if (fs.isFeed(o)) feedStream(fs, o) else SpecStatus.Complete
         ObjectType.EnergyStream -> SpecStatus.Complete
+        ObjectType.Adjust -> adjust(fs, o)
         else -> unitOp(fs, o)
+    }
+
+    /** Mirrors the engine's ValidateAdjust. */
+    fun adjust(fs: Flowsheet, a: SimObject): SpecStatus {
+        val needs = mutableListOf<String>()
+        val mId = a.refs[AdjustKeys.MANIPULATED_OBJECT]
+        val mKey = a.refs[AdjustKeys.MANIPULATED_SPEC]
+        val cId = a.refs[AdjustKeys.CONTROLLED_OBJECT]
+        val cKey = a.refs[AdjustKeys.CONTROLLED_PROPERTY]
+        if (mId == null || mKey == null) needs += "variable to vary"
+        if (cId == null || cKey == null) needs += "result to control"
+        if (AdjustKeys.TARGET !in a.specs) needs += "target value"
+        if (mId != null) {
+            val m = fs.obj(mId) ?: return SpecStatus.Invalid("The varied object no longer exists")
+            if (mKey != null && mKey !in m.specs) return SpecStatus.Invalid("${m.tag} has no ${SpecKey.label(mKey).lowercase()} specified to start from")
+        }
+        if (cId != null && fs.obj(cId) == null) return SpecStatus.Invalid("The controlled object no longer exists")
+        val min = a.specs[AdjustKeys.MINIMUM]?.si
+        val max = a.specs[AdjustKeys.MAXIMUM]?.si
+        if (min != null && max != null && min >= max) return SpecStatus.Invalid("Minimum must be below maximum")
+        a.specs[AdjustKeys.TOLERANCE]?.let { if (it.si <= 0) return SpecStatus.Invalid("Tolerance must be positive") }
+        return if (needs.isEmpty()) SpecStatus.Complete else SpecStatus.UnderSpecified(needs)
     }
 
     fun feedStream(fs: Flowsheet, o: SimObject): SpecStatus {
@@ -124,27 +168,51 @@ object Specification {
         val unconnected = Ports.of(o.type).filter { it.required && fs.streamAt(o.id, it) == null }
         val needs = unconnected.map { "${it.label.lowercase()} stream" }.toMutableList()
         val s = o.specs
-        when (o.type) {
-            ObjectType.Valve -> when {
-                SpecKey.OUTLET_PRESSURE in s && SpecKey.PRESSURE_DROP in s ->
-                    return SpecStatus.OverSpecified("Give outlet pressure or pressure drop, not both")
-                SpecKey.OUTLET_PRESSURE !in s && SpecKey.PRESSURE_DROP !in s -> needs += "outlet pressure or pressure drop"
+        exclusiveGroups(o.type).forEach { (what, keys) ->
+            when (keys.count { it in s }) {
+                0 -> needs += what
+                1 -> Unit
+                else -> return SpecStatus.OverSpecified("Give only one of $what")
             }
-            ObjectType.Heater, ObjectType.Cooler -> when {
-                SpecKey.OUTLET_TEMPERATURE in s && SpecKey.DUTY in s ->
-                    return SpecStatus.OverSpecified("Give outlet temperature or duty, not both")
-                SpecKey.OUTLET_TEMPERATURE !in s && SpecKey.DUTY !in s -> needs += "outlet temperature or duty"
-            }
-            else -> Unit
         }
-        s[SpecKey.PRESSURE_DROP]?.let { if (it.si < 0) return SpecStatus.Invalid("Pressure drop can't be negative") }
+        if (o.type == ObjectType.Splitter) {
+            if (SpecKey.SPLIT_1 !in s) needs += "fraction to outlet 1"
+            val total = (s[SpecKey.SPLIT_1]?.si ?: 0.0) + (s[SpecKey.SPLIT_2]?.si ?: 0.0)
+            if (total > 1.0 + 1e-9) return SpecStatus.Invalid("Split fractions add up to more than 1")
+        }
+        for (k in listOf(SpecKey.PRESSURE_DROP, SpecKey.PRESSURE_RISE, SpecKey.HOT_PRESSURE_DROP, SpecKey.COLD_PRESSURE_DROP)) {
+            s[k]?.let { if (it.si < 0) return SpecStatus.Invalid("${SpecKey.label(k)} can't be negative") }
+        }
         s[SpecKey.DUTY]?.let { if (it.si < 0) return SpecStatus.Invalid("Enter duty as a positive number") }
+        s[SpecKey.EFFICIENCY]?.let { if (it.si <= 0 || it.si > 1) return SpecStatus.Invalid("Efficiency must be between 0 and 100 %") }
+        s[SpecKey.PRESSURE_RATIO]?.let { if (it.si <= 0) return SpecStatus.Invalid("Pressure ratio must be positive") }
+        for (k in listOf(SpecKey.SPLIT_1, SpecKey.SPLIT_2)) {
+            s[k]?.let { if (it.si !in 0.0..1.0) return SpecStatus.Invalid("Split fractions must be between 0 and 1") }
+        }
         return if (needs.isEmpty()) SpecStatus.Complete else SpecStatus.UnderSpecified(needs)
+    }
+
+    /** Alternative specs per unit type: exactly one of each group must be given. Mirrors the engine validator. */
+    fun exclusiveGroups(type: ObjectType): List<Pair<String, List<String>>> = when (type) {
+        ObjectType.Valve -> listOf("outlet pressure or pressure drop" to listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_DROP))
+        ObjectType.Heater, ObjectType.Cooler -> listOf("outlet temperature or duty" to listOf(SpecKey.OUTLET_TEMPERATURE, SpecKey.DUTY))
+        ObjectType.Pump -> listOf("outlet pressure or pressure rise" to listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE))
+        ObjectType.Compressor -> listOf(
+            "outlet pressure, pressure rise or pressure ratio" to listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE, SpecKey.PRESSURE_RATIO),
+        )
+        ObjectType.Expander -> listOf(
+            "outlet pressure, pressure drop or pressure ratio" to listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_DROP, SpecKey.PRESSURE_RATIO),
+        )
+        ObjectType.HeatExchanger -> listOf(
+            "duty or one outlet temperature" to listOf(SpecKey.DUTY, SpecKey.HOT_OUTLET_TEMPERATURE, SpecKey.COLD_OUTLET_TEMPERATURE),
+        )
+        else -> emptyList()
     }
 
     /** Flowsheet-level problems that block a solve, with the object they belong to (null = flowsheet). */
     fun problems(fs: Flowsheet): List<Pair<String?, String>> = buildList {
         if (fs.propertyPackage.isNullOrBlank()) add(null to "Choose a property package")
+        fs.objects.filter { it.type == ObjectType.Adjust }.drop(1).forEach { add(it.id to "${it.tag}: only one Adjust per flowsheet is supported") }
         if (fs.compounds.isEmpty()) add(null to "Add components")
         if (fs.objects.isEmpty()) add(null to "The flowsheet is empty")
         for (o in fs.objects) {

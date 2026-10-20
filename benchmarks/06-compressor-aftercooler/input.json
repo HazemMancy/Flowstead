@@ -1,0 +1,114 @@
+{
+  "name": "Compressor and aftercooler",
+  "description": "Gas compressed from 5 to 15 bara (adiabatic, 75 %) then cooled to 40 °C with 0.3 bar ΔP (PR).",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Methane",
+      "Ethane",
+      "Propane"
+    ],
+    "objects": [
+      {
+        "id": "suc",
+        "tag": "SUCTION",
+        "type": "material_stream",
+        "x": 0,
+        "y": 0,
+        "specs": {
+          "temperature": {
+            "si": 303.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 500000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 138.88888888888889,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Methane": 0.9,
+          "Ethane": 0.07,
+          "Propane": 0.03
+        }
+      },
+      {
+        "id": "k",
+        "tag": "K-100",
+        "type": "compressor",
+        "x": 120,
+        "y": 0,
+        "specs": {
+          "outletPressure": {
+            "si": 1500000.0,
+            "unit": "bara"
+          },
+          "efficiency": {
+            "si": 0.75,
+            "unit": "%"
+          }
+        }
+      },
+      {
+        "id": "dis",
+        "tag": "DISCHARGE",
+        "type": "material_stream",
+        "x": 240,
+        "y": 0
+      },
+      {
+        "id": "e",
+        "tag": "E-100",
+        "type": "cooler",
+        "x": 360,
+        "y": 0,
+        "specs": {
+          "outletTemperature": {
+            "si": 313.15,
+            "unit": "C"
+          },
+          "pressureDrop": {
+            "si": 30000.0,
+            "unit": "dbar"
+          }
+        }
+      },
+      {
+        "id": "out",
+        "tag": "COOLED",
+        "type": "material_stream",
+        "x": 480,
+        "y": 0
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "suc",
+        "fromPort": 0,
+        "toObject": "k",
+        "toPort": 0
+      },
+      {
+        "fromObject": "k",
+        "fromPort": 0,
+        "toObject": "dis",
+        "toPort": 0
+      },
+      {
+        "fromObject": "dis",
+        "fromPort": 0,
+        "toObject": "e",
+        "toPort": 0
+      },
+      {
+        "fromObject": "e",
+        "fromPort": 0,
+        "toObject": "out",
+        "toPort": 0
+      }
+    ]
+  }
+}

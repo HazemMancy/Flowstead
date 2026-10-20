@@ -60,9 +60,10 @@ object Ports {
             mIn(0, "Inlet"), mOut(0, "Outlet 1", dy = -0.25f), mOut(1, "Outlet 2", dy = 0.25f),
             mOut(2, "Outlet 3", required = false),
         )
+        // DWSIM decides which side is hot from the inlet temperatures.
         ObjectType.HeatExchanger -> listOf(
-            mIn(0, "Tube in", dy = -0.25f), mIn(1, "Shell in", dx = 0f, dy = -0.5f),
-            mOut(0, "Tube out", dy = 0.25f), mOut(1, "Shell out", dx = 0f, dy = 0.5f),
+            mIn(0, "Side A in"), mIn(1, "Side B in", dx = 0f, dy = -0.5f),
+            mOut(0, "Side A out"), mOut(1, "Side B out", dx = 0f, dy = 0.5f),
         )
         ObjectType.Pump, ObjectType.Compressor -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"), eIn(1, "Power"))
         ObjectType.Expander -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"), eOut(1, "Power"))

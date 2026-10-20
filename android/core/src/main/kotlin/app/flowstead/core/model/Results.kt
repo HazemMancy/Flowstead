@@ -26,14 +26,44 @@ object ResultKeys {
         "temperature", "pressure", "vapourFraction", "molarFlow", "massFlow", "volumeFlow",
         "massEnthalpy", "massEntropy", "massHeatCapacity", "density", "molecularWeight", "viscosity", "compressibilityFactor",
     )
-    val UNIT_OP = listOf("duty", "power", "pressureDrop", "outletPressure", "outletTemperature", "temperatureChange")
+    val UNIT_OP = listOf(
+        "duty", "power", "pressureDrop", "pressureRise", "pressureRatio", "outletPressure", "outletTemperature",
+        "temperatureChange", "efficiency", "adiabaticHead", "lmtd", "hotOutletTemperature", "coldOutletTemperature",
+        "hotPressureDrop", "coldPressureDrop", "iterations",
+    )
+
+    /** Unit-level results shown for each type, in display order. Streams use [STREAM]. */
+    fun forType(type: ObjectType): List<String> = when (type) {
+        ObjectType.EnergyStream -> listOf("energyFlow")
+        ObjectType.Valve -> listOf("pressureDrop", "outletPressure", "temperatureChange")
+        ObjectType.Heater, ObjectType.Cooler -> listOf("duty", "outletTemperature", "pressureDrop")
+        ObjectType.Pump -> listOf("power", "pressureRise", "temperatureChange", "efficiency")
+        ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency")
+        ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
+        ObjectType.HeatExchanger -> listOf("duty", "lmtd", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
+        ObjectType.Recycle -> listOf("iterations")
+        ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
+        else -> emptyList()
+    }
+
+    /** Like [quantity], but an Adjust's values take the quantity of what they reference. */
+    fun quantityFor(o: SimObject, key: String): Quantity = when {
+        o.type == ObjectType.Adjust && key == "manipulatedValue" ->
+            o.refs[AdjustKeys.MANIPULATED_SPEC]?.let { runCatching { SpecKey.quantity(it) }.getOrNull() } ?: Quantity.Ratio
+        o.type == ObjectType.Adjust && key == "controlledValue" ->
+            o.refs[AdjustKeys.CONTROLLED_PROPERTY]?.let { quantity(it) } ?: Quantity.Ratio
+        else -> quantity(key)
+    }
 
     fun quantity(key: String): Quantity = when (key) {
-        "temperature", "outletTemperature" -> Quantity.Temperature
-        "temperatureChange" -> Quantity.TemperatureDifference
+        "temperature", "outletTemperature", "hotOutletTemperature", "coldOutletTemperature" -> Quantity.Temperature
+        "temperatureChange", "lmtd" -> Quantity.TemperatureDifference
         "pressure", "outletPressure" -> Quantity.Pressure
-        "pressureDrop" -> Quantity.PressureDifference
-        "vapourFraction", "phaseMoleFraction", "compressibilityFactor" -> Quantity.Fraction
+        "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop" -> Quantity.PressureDifference
+        "vapourFraction", "phaseMoleFraction", "efficiency" -> Quantity.Fraction
+        "compressibilityFactor", "pressureRatio" -> Quantity.Ratio
+        "iterations" -> Quantity.Count
+        "adiabaticHead" -> Quantity.MassEnthalpy
         "molarFlow" -> Quantity.MolarFlow
         "massFlow" -> Quantity.MassFlow
         "volumeFlow" -> Quantity.VolumeFlow
@@ -69,6 +99,18 @@ object ResultKeys {
         "outletTemperature" -> "Outlet temperature"
         "temperatureChange" -> "Temperature change"
         "energyFlow" -> "Energy flow"
+        "pressureRise" -> "Pressure rise"
+        "pressureRatio" -> "Pressure ratio"
+        "efficiency" -> "Adiabatic efficiency"
+        "adiabaticHead" -> "Adiabatic head"
+        "lmtd" -> "LMTD"
+        "hotOutletTemperature" -> "Hot outlet temperature"
+        "coldOutletTemperature" -> "Cold outlet temperature"
+        "hotPressureDrop" -> "Hot side pressure drop"
+        "coldPressureDrop" -> "Cold side pressure drop"
+        "iterations" -> "Iterations"
+        "manipulatedValue" -> "Varied value"
+        "controlledValue" -> "Controlled value"
         else -> key
     }
 }

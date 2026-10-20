@@ -195,6 +195,8 @@ class FlowsheetViewModel @Inject constructor(
     fun setExclusiveSpec(id: String, key: String, spec: Spec, group: Collection<String>) =
         edit { FlowsheetEditing.setExclusiveSpec(it, id, key, spec, group) }
 
+    fun setRef(id: String, key: String, value: String?) = edit { FlowsheetEditing.setRef(it, id, key, value) }
+
     fun setComposition(id: String, fractions: Map<String, Double>) =
         edit { FlowsheetEditing.setComposition(it, id, fractions) }
 

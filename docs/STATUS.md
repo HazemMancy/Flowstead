@@ -35,7 +35,7 @@ _Last updated: 2026-10-20_
   - Fluid package screen: MVP property packages, compound search (engine, with an offline list of 34 common compounds and the same aliases).
   - Editing rules (ports, connections, tags, degrees of freedom) live in `:core` and are unit-tested locally.
 
-- **M6 solve round-trip** (pending CI on the commit that adds it):
+- **M6 solve round-trip** (CI green after a test-tag fix):
   - **Solve button and status bar:** shows what blocks a solve, then the converged / out-of-date / failed state.
   - **Solving:** the app sends the flowsheet exactly as stored, and refuses locally while degrees-of-freedom issues remain.
   - **Storage:** each result is kept with the hash of the flowsheet it belongs to (Room v2 migration), so any edit marks the results "out of date".
@@ -46,9 +46,15 @@ _Last updated: 2026-10-20_
   - **End-to-end test:** the app's Ktor client against the engine Docker container in CI (`e2e` job).
   - **Contract test:** Kotlin decodes a real engine response (`shared/fixtures/solve-result-letdown.json`).
 
-## Next
+- **M7 remaining MVP unit ops** (pending CI on the commit that adds it):
+  - New unit ops in both the engine and the app: mixer, splitter, pump, compressor, expander, heat exchanger, recycle, adjust. Each has editors, results, palette entries and degrees-of-freedom rules.
+  - **All 8 benchmarks pass** through the HTTP API. Each now has blocking checks from conservation laws or IAPWS. Values from HYSYS or desktop DWSIM are still provisional.
+  - Engine fixes found by the benchmarks:
+    - water + hydrocarbons now uses a free-water three-phase flash (D17);
+    - recycle tolerances are tightened, and an overall mass-balance warning is added (D18).
+  - Adjust is solved in the engine layer (D19).
 
-- M7: remaining MVP unit ops (mixer, splitter, heat exchanger, pump, compressor, expander, recycle, adjust) in engine and app; benchmarks 04–08.
+## Next
 - M8: `.dwxmz` import/export, CSV/XLSX export, offline solve queue.
 - Import `.dwxmz` on the Projects screen arrives with M8 (it needs the engine).
 
@@ -60,6 +66,7 @@ _Last updated: 2026-10-20_
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).
 - The engine Docker image is verified in CI only (no Docker daemon in the sandbox).
 - The engine DLLs come from the official 9.0.5 package, not yet rebuilt from the pinned source (D1).
+- DWSIM's rigorous PR VLLE flash did not find the water phase in benchmark 04; Flowstead uses DWSIM's free-water flash instead (D17). Glycol/amine systems still use rigorous VLLE and need checking case by case.
 - DWSIM absolute enthalpy uses a different reference state from HYSYS. Compare duties and ΔH, not absolute H (`docs/engine-spike.md`).
 - The brief's amber/green value colours fail 4.5:1 as text. Darker text variants are used (D14).
 - The Room schema JSON (`android/app/schemas/`) is generated in CI and still needs committing.

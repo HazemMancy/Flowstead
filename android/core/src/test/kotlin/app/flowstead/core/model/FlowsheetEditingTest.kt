@@ -214,3 +214,66 @@ class FlowsheetEditingTest {
 private object FlowsteadAssert {
     fun connect(fs: Flowsheet, stream: String, unit: String, port: Port) = FlowsheetEditing.connect(fs, stream, unit, port)
 }
+
+class RemainingUnitOpsSpecificationTest {
+    private fun status(type: ObjectType, specs: Map<String, Spec>): SpecStatus {
+        var fs = Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"))
+        val (a, o) = FlowsheetEditing.add(fs, type, 0.0, 0.0); fs = a
+        // Connect every required port so only the specs decide.
+        for (p in Ports.of(type).filter { it.required }) {
+            fs = FlowsheetEditing.connectNewStream(fs, o.id, p, 0.0, 0.0).first
+        }
+        fs = fs.copy(objects = fs.objects.map { if (it.id == o.id) it.copy(specs = specs) else it })
+        return Specification.status(fs, fs.obj(o.id)!!)
+    }
+
+    private fun s(si: Double, unit: String = "x") = Spec(si, unit)
+
+    @Test
+    fun rotatingEquipment() {
+        assertEquals(listOf("outlet pressure or pressure rise"), assertIs<SpecStatus.UnderSpecified>(status(ObjectType.Pump, emptyMap())).needs)
+        assertEquals(SpecStatus.Complete, status(ObjectType.Pump, mapOf(SpecKey.PRESSURE_RISE to s(5e5))))
+        assertEquals(SpecStatus.Complete, status(ObjectType.Compressor, mapOf(SpecKey.PRESSURE_RATIO to s(3.0), SpecKey.EFFICIENCY to s(0.75))))
+        assertIs<SpecStatus.OverSpecified>(status(ObjectType.Compressor, mapOf(SpecKey.PRESSURE_RATIO to s(3.0), SpecKey.OUTLET_PRESSURE to s(1e6))))
+        assertIs<SpecStatus.Invalid>(status(ObjectType.Compressor, mapOf(SpecKey.PRESSURE_RATIO to s(3.0), SpecKey.EFFICIENCY to s(1.2))))
+        assertEquals(SpecStatus.Complete, status(ObjectType.Expander, mapOf(SpecKey.PRESSURE_DROP to s(2e6))))
+    }
+
+    @Test
+    fun heatExchangerSplitterMixerRecycle() {
+        assertEquals(SpecStatus.Complete, status(ObjectType.HeatExchanger, mapOf(SpecKey.COLD_OUTLET_TEMPERATURE to s(393.15))))
+        assertIs<SpecStatus.OverSpecified>(status(ObjectType.HeatExchanger, mapOf(SpecKey.DUTY to s(1e5), SpecKey.HOT_OUTLET_TEMPERATURE to s(350.0))))
+        assertEquals(listOf("fraction to outlet 1"), assertIs<SpecStatus.UnderSpecified>(status(ObjectType.Splitter, emptyMap())).needs)
+        assertEquals(SpecStatus.Complete, status(ObjectType.Splitter, mapOf(SpecKey.SPLIT_1 to s(0.3), SpecKey.SPLIT_2 to s(0.7))))
+        assertIs<SpecStatus.Invalid>(status(ObjectType.Splitter, mapOf(SpecKey.SPLIT_1 to s(0.6), SpecKey.SPLIT_2 to s(0.6))))
+        assertEquals(SpecStatus.Complete, status(ObjectType.Mixer, emptyMap()))
+        assertEquals(SpecStatus.Complete, status(ObjectType.Recycle, emptyMap()))
+    }
+
+    @Test
+    fun adjustNeedsReferencesAndAStartingValue() {
+        var fs = Flowsheet(propertyPackage = "Steam Tables (IAPWS-IF97)", compounds = listOf("Water"))
+        val (a, h) = FlowsheetEditing.add(fs, ObjectType.Heater, 0.0, 0.0); fs = a
+        val (b, adj) = FlowsheetEditing.add(fs, ObjectType.Adjust, 0.0, 0.0); fs = b
+        assertEquals("ADJ-1", adj.tag)
+        assertEquals(listOf("variable to vary", "result to control", "target value"),
+            assertIs<SpecStatus.UnderSpecified>(Specification.status(fs, fs.obj(adj.id)!!)).needs)
+        fs = FlowsheetEditing.setRef(fs, adj.id, AdjustKeys.MANIPULATED_OBJECT, h.id)
+        fs = FlowsheetEditing.setRef(fs, adj.id, AdjustKeys.MANIPULATED_SPEC, SpecKey.DUTY)
+        fs = FlowsheetEditing.setRef(fs, adj.id, AdjustKeys.CONTROLLED_OBJECT, h.id)
+        fs = FlowsheetEditing.setRef(fs, adj.id, AdjustKeys.CONTROLLED_PROPERTY, "outletTemperature")
+        fs = FlowsheetEditing.setSpec(fs, adj.id, AdjustKeys.TARGET, Spec(350.0, "K"))
+        assertEquals("E-100 has no duty specified to start from",
+            assertIs<SpecStatus.Invalid>(Specification.status(fs, fs.obj(adj.id)!!)).problem)
+        fs = FlowsheetEditing.setSpec(fs, h.id, SpecKey.DUTY, Spec(1e5, "kW"))
+        assertEquals(SpecStatus.Complete, Specification.status(fs, fs.obj(adj.id)!!))
+        val (c, second) = FlowsheetEditing.add(fs, ObjectType.Adjust, 0.0, 0.0); fs = c
+        assertTrue(Specification.problems(fs).any { it.first == second.id && "only one Adjust" in it.second })
+    }
+
+    @Test
+    fun energyPortsAreOptional() {
+        assertTrue(Ports.of(ObjectType.Compressor).filter { it.kind == PortKind.Energy }.none { it.required })
+    }
+}
+

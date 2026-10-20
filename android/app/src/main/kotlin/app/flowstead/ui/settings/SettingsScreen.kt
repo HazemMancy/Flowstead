@@ -271,4 +271,6 @@ private fun label(q: Quantity): String = when (q) {
     Quantity.MolecularWeight -> "Molecular weight"
     Quantity.Viscosity -> "Viscosity"
     Quantity.Fraction -> "Fractions"
+    Quantity.Ratio -> "Ratios"
+    Quantity.Count -> "Counts"
 }

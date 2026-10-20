@@ -1,0 +1,96 @@
+{
+  "name": "Three-phase flash with water",
+  "description": "Wet hydrocarbon feed at 40 °C, 20 bara into a 3-phase separator (PR): vapour, hydrocarbon liquid and free water.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Methane",
+      "Propane",
+      "N-hexane",
+      "Water"
+    ],
+    "objects": [
+      {
+        "id": "feed",
+        "tag": "FEED",
+        "type": "material_stream",
+        "x": 0,
+        "y": 0,
+        "specs": {
+          "temperature": {
+            "si": 313.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 2000000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 27.77777777777778,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Methane": 0.5,
+          "Propane": 0.1,
+          "N-hexane": 0.2,
+          "Water": 0.2
+        }
+      },
+      {
+        "id": "v",
+        "tag": "V-100",
+        "type": "three_phase_separator",
+        "x": 120,
+        "y": 0
+      },
+      {
+        "id": "gas",
+        "tag": "GAS",
+        "type": "material_stream",
+        "x": 240,
+        "y": -60
+      },
+      {
+        "id": "oil",
+        "tag": "OIL",
+        "type": "material_stream",
+        "x": 240,
+        "y": 0
+      },
+      {
+        "id": "wat",
+        "tag": "WATER",
+        "type": "material_stream",
+        "x": 240,
+        "y": 60
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "feed",
+        "fromPort": 0,
+        "toObject": "v",
+        "toPort": 0
+      },
+      {
+        "fromObject": "v",
+        "fromPort": 0,
+        "toObject": "gas",
+        "toPort": 0
+      },
+      {
+        "fromObject": "v",
+        "fromPort": 1,
+        "toObject": "oil",
+        "toPort": 0
+      },
+      {
+        "fromObject": "v",
+        "fromPort": 2,
+        "toObject": "wat",
+        "toPort": 0
+      }
+    ]
+  }
+}

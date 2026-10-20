@@ -189,4 +189,78 @@ public sealed class ApiTests(EngineFixture engine)
         Assert.InRange(Math.Abs(duty), 230_100 * 0.995, 230_100 * 1.005);
         Assert.Equal(3, r.Objects.Count); // the hidden energy stream is not reported
     }
+
+    [Fact]
+    public async Task AdjustFindsTheDutyForHalfVaporisedWater()
+    {
+        // 1 kg/s water at 1 atm, 25 °C. VF = 0.5 needs Δh = (h_f − h_25) + h_fg/2 ≈ 314.1 + 1128.2 ≈ 1442 kW (IAPWS-IF97).
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Steam Tables (IAPWS-IF97)",
+            Compounds = ["Water"],
+            Objects =
+            [
+                new SimObject
+                {
+                    Id = "in", Tag = "1", Type = ObjectType.MaterialStream,
+                    Specs = new()
+                    {
+                        [SpecKeys.Temperature] = new Spec(298.15, "C"),
+                        [SpecKeys.Pressure] = new Spec(101325, "kPa"),
+                        [SpecKeys.MassFlow] = new Spec(1.0, "kg/s"),
+                    },
+                    Composition = new() { ["Water"] = 1.0 },
+                },
+                new SimObject { Id = "h", Tag = "E-100", Type = ObjectType.Heater, Specs = new() { [SpecKeys.Duty] = new Spec(500_000, "kW") } },
+                new SimObject { Id = "out", Tag = "2", Type = ObjectType.MaterialStream },
+                new SimObject
+                {
+                    Id = "adj", Tag = "ADJ-1", Type = ObjectType.Adjust,
+                    Refs = new()
+                    {
+                        [AdjustKeys.ManipulatedObject] = "h", [AdjustKeys.ManipulatedSpec] = SpecKeys.Duty,
+                        [AdjustKeys.ControlledObject] = "out", [AdjustKeys.ControlledProperty] = "vapourFraction",
+                    },
+                    Specs = new()
+                    {
+                        [AdjustKeys.Target] = new Spec(0.5, "frac"),
+                        [AdjustKeys.Tolerance] = new Spec(1e-5, "frac"),
+                        [AdjustKeys.Minimum] = new Spec(0, "kW"),
+                    },
+                },
+            ],
+            Connections = [new Connection("in", 0, "h", 0), new Connection("h", 0, "out", 0)],
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        Assert.Equal(0.5, r.Objects["out"].Properties["vapourFraction"], 4);
+        Assert.InRange(r.Objects["h"].Properties["duty"], 1_442_300 * 0.995, 1_442_300 * 1.005);
+        var adj = r.Objects["adj"].Properties;
+        Assert.InRange(adj["iterations"], 2, AdjustSolverLimits.Max);
+        Assert.Equal(r.Iterations, (int)adj["iterations"]);
+    }
+
+    [Fact]
+    public async Task AdjustWithoutAStartingValueIsRejected()
+    {
+        var fs = Water(300) with { };
+        fs.Objects.Add(new SimObject
+        {
+            Id = "adj", Tag = "ADJ-1", Type = ObjectType.Adjust,
+            Refs = new()
+            {
+                [AdjustKeys.ManipulatedObject] = "w", [AdjustKeys.ManipulatedSpec] = SpecKeys.VapourFraction,
+                [AdjustKeys.ControlledObject] = "w", [AdjustKeys.ControlledProperty] = "temperature",
+            },
+            Specs = new() { [AdjustKeys.Target] = new Spec(350, "K") },
+        });
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.Equal(SolveStatus.Invalid, r.Status);
+        Assert.Contains(r.Messages, m => m.Text.Contains("no vapourFraction specified"));
+    }
+}
+
+internal static class AdjustSolverLimits
+{
+    public const int Max = 40;
 }

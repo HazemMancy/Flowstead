@@ -249,17 +249,12 @@ private fun TableRow(
 private fun UnitOpCard(op: SimObject, u: ResultsUi) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text("${op.tag} · ${op.type.displayName()}", style = MaterialTheme.typography.titleSmall)
-        val keys = when (op.type) {
-            ObjectType.Valve -> listOf("pressureDrop", "outletPressure", "temperatureChange")
-            ObjectType.Heater, ObjectType.Cooler -> listOf("duty", "pressureDrop", "outletTemperature")
-            ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander -> listOf("power", "pressureDrop")
-            else -> emptyList()
-        }
+        val keys = ResultKeys.forType(op.type)
         if (keys.isEmpty()) {
             Text("No unit-level results; see its product streams.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         keys.forEach { key ->
-            val unit = u.unitSet.unitFor(ResultKeys.quantity(key))
+            val unit = u.unitSet.unitFor(ResultKeys.quantityFor(op, key))
             Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(ResultKeys.label(key), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 ValueText(u.results.value(op.id, key), unit, ctx = u.ctx)

@@ -27,6 +27,26 @@ public sealed record SimObject
     public Dictionary<string, Spec> Specs { get; init; } = [];
     /// <summary>Overall mole fractions by compound name (material streams).</summary>
     public Dictionary<string, double> Composition { get; init; } = [];
+    /// <summary>References to other objects (Adjust: manipulated/controlled object and property).</summary>
+    public Dictionary<string, string> Refs { get; init; } = [];
+}
+
+/// <summary>Keys of <see cref="SimObject.Refs"/> and specs used by an Adjust.</summary>
+public static class AdjustKeys
+{
+    public const string ManipulatedObject = "manipulatedObject";
+    /// <summary>A spec key on the manipulated object, e.g. "temperature" or "outletPressure".</summary>
+    public const string ManipulatedSpec = "manipulatedSpec";
+    public const string ControlledObject = "controlledObject";
+    /// <summary>A result key on the controlled object, e.g. "vapourFraction" or "temperature".</summary>
+    public const string ControlledProperty = "controlledProperty";
+    /// <summary>Spec: target value of the controlled property (SI).</summary>
+    public const string Target = "target";
+    /// <summary>Optional spec: absolute tolerance on the controlled property (SI).</summary>
+    public const string Tolerance = "tolerance";
+    /// <summary>Optional specs: bounds on the manipulated value (SI).</summary>
+    public const string Minimum = "minimum";
+    public const string Maximum = "maximum";
 }
 
 public sealed record Spec(double Si, string Unit);
@@ -68,6 +88,17 @@ public static class SpecKeys
     public const string PressureDrop = "pressureDrop";
     public const string OutletTemperature = "outletTemperature";
     public const string Duty = "duty";
+    public const string PressureRise = "pressureRise";
+    public const string PressureRatio = "pressureRatio";
+    /// <summary>Adiabatic efficiency as a fraction (0–1).</summary>
+    public const string Efficiency = "efficiency";
+    /// <summary>Splitter: fraction of the feed to outlet 1 / outlet 2 (outlet 3 gets the rest).</summary>
+    public const string Split1 = "split1";
+    public const string Split2 = "split2";
+    public const string HotOutletTemperature = "hotOutletTemperature";
+    public const string ColdOutletTemperature = "coldOutletTemperature";
+    public const string HotPressureDrop = "hotPressureDrop";
+    public const string ColdPressureDrop = "coldPressureDrop";
 }
 
 public static class Json

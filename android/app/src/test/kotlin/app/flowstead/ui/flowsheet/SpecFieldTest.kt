@@ -37,6 +37,7 @@ class SpecFieldTest {
         override fun setComposition(id: String, fractions: Map<String, Double>) = Unit
         override fun normalise(id: String, fractions: Map<String, Double>) = Unit
         override fun delete(id: String) = Unit
+        override fun setRef(id: String, key: String, value: String?) = Unit
     }
 
     @Test

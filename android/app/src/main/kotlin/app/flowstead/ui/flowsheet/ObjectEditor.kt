@@ -5,6 +5,7 @@
 package app.flowstead.ui.flowsheet
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,7 @@ import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.ResultKeys
 import app.flowstead.core.model.ResultView
 import app.flowstead.ui.components.ValueText
+import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.SimObject
@@ -70,6 +72,7 @@ import app.flowstead.core.model.Specification
 import app.flowstead.core.model.displayName
 import app.flowstead.core.model.isFeed
 import app.flowstead.core.units.EngUnit
+import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
 import app.flowstead.core.units.Units
@@ -84,6 +87,7 @@ interface EditorActions {
     fun setComposition(id: String, fractions: Map<String, Double>)
     fun normalise(id: String, fractions: Map<String, Double>)
     fun delete(id: String)
+    fun setRef(id: String, key: String, value: String?)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -129,9 +133,125 @@ fun ObjectEditorSheet(
                 }
                 ObjectType.Separator, ObjectType.ThreePhaseSeparator ->
                     Calculated("Adiabatic flash at the lowest feed pressure. Nothing to specify: connect the feed and the product streams.")
+                ObjectType.Pump -> {
+                    ExclusiveSpecs(obj, unitSet, ctx, actions, listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_RISE to "ΔP rise"))
+                    SpecField(obj, SpecKey.EFFICIENCY, unitSet, ctx, actions, optionalHint = "75 % if empty")
+                }
+                ObjectType.Compressor -> {
+                    ExclusiveSpecs(
+                        obj, unitSet, ctx, actions,
+                        listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_RISE to "ΔP", SpecKey.PRESSURE_RATIO to "Ratio"),
+                    )
+                    SpecField(obj, SpecKey.EFFICIENCY, unitSet, ctx, actions, optionalHint = "75 % adiabatic if empty")
+                }
+                ObjectType.Expander -> {
+                    ExclusiveSpecs(
+                        obj, unitSet, ctx, actions,
+                        listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_DROP to "ΔP", SpecKey.PRESSURE_RATIO to "Ratio"),
+                    )
+                    SpecField(obj, SpecKey.EFFICIENCY, unitSet, ctx, actions, optionalHint = "75 % adiabatic if empty")
+                }
+                ObjectType.HeatExchanger -> {
+                    Calculated("Counter-current. The engine finds the hot and cold sides from the inlet temperatures.")
+                    ExclusiveSpecs(
+                        obj, unitSet, ctx, actions,
+                        listOf(SpecKey.DUTY to "Duty", SpecKey.HOT_OUTLET_TEMPERATURE to "Hot out T", SpecKey.COLD_OUTLET_TEMPERATURE to "Cold out T"),
+                    )
+                    SpecField(obj, SpecKey.HOT_PRESSURE_DROP, unitSet, ctx, actions, optionalHint = "0 if empty")
+                    SpecField(obj, SpecKey.COLD_PRESSURE_DROP, unitSet, ctx, actions, optionalHint = "0 if empty")
+                }
+                ObjectType.Splitter -> {
+                    SpecField(obj, SpecKey.SPLIT_1, unitSet, ctx, actions)
+                    SpecField(obj, SpecKey.SPLIT_2, unitSet, ctx, actions, optionalHint = "the rest if empty")
+                    Calculated("Outlet 3, when connected, takes whatever is left.")
+                }
+                ObjectType.Mixer -> Calculated("Adiabatic mixing; the outlet is at the lowest inlet pressure. Nothing to specify.")
+                ObjectType.Adjust -> AdjustEditor(fs, obj, unitSet, ctx, actions)
+                ObjectType.Recycle -> Calculated(
+                    "Tear stream: the engine iterates until the assumed and calculated streams agree (1e-6 kg/s, 0.001 K). " +
+                        "Iterations are reported in the results.",
+                )
                 else -> Calculated("${obj.type.displayName()} editing arrives with the remaining unit operations.")
             }
             ResultsSection(obj, results, unitSet, ctx)
+        }
+    }
+}
+
+/** "Vary <object · spec> until <object · result> = target", with optional tolerance and bounds. */
+@Composable
+private fun AdjustEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
+    val others = fs.objects.filter { it.id != obj.id && it.type != ObjectType.Adjust }
+    val mId = obj.refs[AdjustKeys.MANIPULATED_OBJECT]
+    val mKey = obj.refs[AdjustKeys.MANIPULATED_SPEC]
+    val cId = obj.refs[AdjustKeys.CONTROLLED_OBJECT]
+    val cKey = obj.refs[AdjustKeys.CONTROLLED_PROPERTY]
+    val manipulated = others.firstOrNull { it.id == mId }
+    val controlled = others.firstOrNull { it.id == cId }
+
+    SectionLabel("Vary")
+    Choice("Object", manipulated?.tag, others.filter { it.specs.isNotEmpty() }.map { it.id to "${it.tag} · ${it.type.displayName()}" }) {
+        actions.setRef(obj.id, AdjustKeys.MANIPULATED_OBJECT, it)
+        actions.setRef(obj.id, AdjustKeys.MANIPULATED_SPEC, null)
+    }
+    if (manipulated != null) {
+        Choice("Specification", mKey?.let { SpecKey.label(it) }, manipulated.specs.keys.map { it to SpecKey.label(it) }) {
+            actions.setRef(obj.id, AdjustKeys.MANIPULATED_SPEC, it)
+        }
+    }
+    SectionLabel("Until")
+    Choice("Object", controlled?.tag, others.map { it.id to "${it.tag} · ${it.type.displayName()}" }) {
+        actions.setRef(obj.id, AdjustKeys.CONTROLLED_OBJECT, it)
+        actions.setRef(obj.id, AdjustKeys.CONTROLLED_PROPERTY, null)
+    }
+    if (controlled != null) {
+        val keys = if (controlled.type == ObjectType.MaterialStream) ResultKeys.STREAM else ResultKeys.forType(controlled.type)
+        Choice("Result", cKey?.let { ResultKeys.label(it) }, keys.map { it to ResultKeys.label(it) }) {
+            actions.setRef(obj.id, AdjustKeys.CONTROLLED_PROPERTY, it)
+        }
+    }
+    if (cKey != null) {
+        val q = ResultKeys.quantity(cKey)
+        SpecField(obj, AdjustKeys.TARGET, unitSet, ctx, actions, quantityOverride = q, labelOverride = "Target ${ResultKeys.label(cKey).lowercase()}")
+        SpecField(obj, AdjustKeys.TOLERANCE, unitSet, ctx, actions, quantityOverride = differenceOf(q),
+            labelOverride = "Tolerance (optional)", optionalHint = "1e-6 relative if empty")
+    }
+    if (mKey != null) {
+        val q = SpecKey.quantity(mKey)
+        SpecField(obj, AdjustKeys.MINIMUM, unitSet, ctx, actions, quantityOverride = q, labelOverride = "Lowest allowed ${SpecKey.label(mKey).lowercase()}", optionalHint = "no limit")
+        SpecField(obj, AdjustKeys.MAXIMUM, unitSet, ctx, actions, quantityOverride = q, labelOverride = "Highest allowed ${SpecKey.label(mKey).lowercase()}", optionalHint = "no limit")
+    }
+}
+
+/** A tolerance on a temperature or pressure is a difference, not an absolute value. */
+private fun differenceOf(q: Quantity): Quantity = when (q) {
+    Quantity.Temperature -> Quantity.TemperatureDifference
+    Quantity.Pressure -> Quantity.PressureDifference
+    else -> q
+}
+
+@Composable
+private fun Choice(label: String, selected: String?, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = selected ?: "",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            placeholder = { Text("Choose…") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        // Transparent tap target over the read-only field.
+        Box(
+            Modifier
+                .matchParentSize()
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Choose $label") { open = true },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (options.isEmpty()) DropdownMenuItem(text = { Text("Nothing to choose yet") }, onClick = { open = false }, enabled = false)
+            options.forEach { (id, text) -> DropdownMenuItem(text = { Text(text) }, onClick = { open = false; onPick(id) }) }
         }
     }
 }
@@ -141,10 +261,8 @@ fun ObjectEditorSheet(
 private fun ResultsSection(obj: SimObject, results: ResultView, unitSet: UnitSet, ctx: UnitContext) {
     val keys = when (obj.type) {
         ObjectType.MaterialStream -> listOf("temperature", "pressure", "vapourFraction", "molarFlow", "massFlow", "massEnthalpy", "density", "molecularWeight")
-        ObjectType.EnergyStream -> listOf("energyFlow")
-        ObjectType.Valve -> listOf("pressureDrop", "outletPressure", "temperatureChange")
-        ObjectType.Heater, ObjectType.Cooler -> listOf("duty", "outletTemperature", "pressureDrop")
-        else -> emptyList()
+        ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
+        else -> ResultKeys.forType(obj.type)
     }
     if (keys.isEmpty()) return
     HorizontalDivider()
@@ -153,7 +271,7 @@ private fun ResultsSection(obj: SimObject, results: ResultView, unitSet: UnitSet
         if (results.stale) Text("⚠ out of date", style = NumberStyles.tag, color = MaterialTheme.valueColors.underSpecifiedText)
     }
     for (key in keys) {
-        val unit = unitSet.unitFor(ResultKeys.quantity(key))
+        val unit = unitSet.unitFor(ResultKeys.quantityFor(obj, key))
         // Overall density/MW live on the overall phase.
         val value = if (key == "density" || key == "molecularWeight") results.phaseValue(obj.id, Phases.OVERALL, key)
         else results.value(obj.id, key)
@@ -275,11 +393,17 @@ fun SpecField(
     actions: EditorActions,
     exclusiveGroup: Collection<String>? = null,
     optionalHint: String? = null,
+    quantityOverride: Quantity? = null,
+    labelOverride: String? = null,
 ) {
-    val quantity = SpecKey.quantity(key)
+    val quantity = quantityOverride ?: SpecKey.quantity(key)
     val spec = obj.specs[key]
     var unit by remember(obj.id, key, spec?.unit, unitSet) {
-        mutableStateOf(spec?.unit?.let { Units.byIdOrNull(it) }?.takeIf { it.quantity == quantity } ?: unitSet.unitFor(quantity))
+        mutableStateOf(
+            spec?.unit?.let { Units.byIdOrNull(it) }?.takeIf { it.quantity == quantity }
+                // Engineers think of efficiency in percent.
+                ?: if (key == SpecKey.EFFICIENCY) Units.percent else unitSet.unitFor(quantity),
+        )
     }
     val shown = spec?.let { ValueFormat.number(unit.fromSi(it.si, ctx), unit.decimals).replace(",", "") } ?: ""
     var text by remember(obj.id, key, spec, unit) { mutableStateOf(shown) }
@@ -309,7 +433,7 @@ fun SpecField(
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            label = { Text(SpecKey.label(key)) },
+            label = { Text(labelOverride ?: SpecKey.label(key)) },
             placeholder = { Text(optionalHint ?: "—") },
             isError = error != null,
             supportingText = error?.let { { Text(it) } },
@@ -338,10 +462,10 @@ private fun UnitPicker(selected: EngUnit, options: List<EngUnit>, onPick: (EngUn
         TextButton(
             onClick = { open = true },
             modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Unit ${selected.symbol.ifEmpty { "fraction" }}, change" },
-        ) { Text(selected.symbol.ifEmpty { "frac" }, style = NumberStyles.value) }
+        ) { Text(selected.symbol.ifEmpty { selected.id }, style = NumberStyles.value) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { u ->
-                DropdownMenuItem(text = { Text(u.symbol.ifEmpty { "fraction" }, style = NumberStyles.value) }, onClick = { open = false; onPick(u) })
+                DropdownMenuItem(text = { Text(u.symbol.ifEmpty { u.id }, style = NumberStyles.value) }, onClick = { open = false; onPick(u) })
             }
         }
     }

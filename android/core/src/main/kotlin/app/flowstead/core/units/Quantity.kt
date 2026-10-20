@@ -25,4 +25,8 @@ enum class Quantity(val siUnitId: String) {
     MolecularWeight("kg/kmol"),
     Viscosity("Pa.s"),
     Fraction("frac"),
+    /** Dimensionless ratio, e.g. a compressor pressure ratio (not a fraction: can exceed 1). */
+    Ratio("ratio"),
+    /** Whole numbers such as iteration counts. */
+    Count("count"),
 }

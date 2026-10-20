@@ -43,15 +43,23 @@ import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.displayName
 import app.flowstead.ui.theme.valueColors
 
-/** Unit operations the engine can solve today. Grows as milestone 7 adds the rest of the MVP set. */
+/** Objects the engine can solve, in the order engineers reach for them. */
 val PALETTE: List<ObjectType> = listOf(
     ObjectType.MaterialStream,
     ObjectType.EnergyStream,
+    ObjectType.Separator,
+    ObjectType.ThreePhaseSeparator,
     ObjectType.Valve,
     ObjectType.Heater,
     ObjectType.Cooler,
-    ObjectType.Separator,
-    ObjectType.ThreePhaseSeparator,
+    ObjectType.HeatExchanger,
+    ObjectType.Compressor,
+    ObjectType.Expander,
+    ObjectType.Pump,
+    ObjectType.Mixer,
+    ObjectType.Splitter,
+    ObjectType.Recycle,
+    ObjectType.Adjust,
 )
 
 /**

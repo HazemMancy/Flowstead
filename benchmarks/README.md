@@ -23,6 +23,11 @@ Tolerances follow the brief: ±0.01 K on temperature, ±0.1 % relative elsewhere
 | 01-single-phase-gas | PR, lean gas at 40 °C / 70 bara, vapour only | — (needs HYSYS/desktop DWSIM) |
 | 02-dew-bubble-point | Steam Tables, water at 1 atm, VF = 0 and VF = 1 | IAPWS-IF97 Tsat 373.1243 K, h_fg 2256.4 kJ/kg (blocking) |
 | 03-two-phase-flash | PR, C1/C2/C3 at −40 °C / 30 bara | — (needs HYSYS/desktop DWSIM) |
+| 04-three-phase-flash | PR, wet C1/C3/nC6 at 40 °C / 20 bara, 3-phase separator | Mass balance (blocking); free water > 99.5 % water (blocking) |
+| 05-jt-valve-letdown | PR, lean gas 70 → 20 bara | Isenthalpic valve; molar flow conserved (blocking) |
+| 06-compressor-aftercooler | PR, 5 → 15 bara at 75 % adiabatic, cooled to 40 °C | Mass conserved; outlet P = 15 bara − cooler ΔP (blocking) |
+| 07-recycle-loop | PR, mixer, chiller, separator, 50 % liquid recycle | Plant mass balance closes; split = 50/50 (blocking) |
+| 08-steam-heater | IAPWS, water heated 25 → 120 °C by condensing 5 bara steam | Duty 399.0 kW and Tsat 424.98 K from IAPWS; heat balance (blocking) |
 
 To regenerate the provisional values after an intentional engine change:
 

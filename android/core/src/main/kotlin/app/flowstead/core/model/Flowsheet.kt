@@ -40,7 +40,21 @@ data class SimObject(
     val specs: Map<String, Spec> = emptyMap(),
     /** Mole fractions by compound name; material streams only. */
     val composition: Map<String, Double> = emptyMap(),
+    /** References to other objects; used by Adjust (see [AdjustKeys]). */
+    val refs: Map<String, String> = emptyMap(),
 )
+
+/** Keys of [SimObject.refs] and specs used by an Adjust. Same strings as the engine's AdjustKeys. */
+object AdjustKeys {
+    const val MANIPULATED_OBJECT = "manipulatedObject"
+    const val MANIPULATED_SPEC = "manipulatedSpec"
+    const val CONTROLLED_OBJECT = "controlledObject"
+    const val CONTROLLED_PROPERTY = "controlledProperty"
+    const val TARGET = "target"
+    const val TOLERANCE = "tolerance"
+    const val MINIMUM = "minimum"
+    const val MAXIMUM = "maximum"
+}
 
 @Serializable
 data class Spec(val si: Double, val unit: String)

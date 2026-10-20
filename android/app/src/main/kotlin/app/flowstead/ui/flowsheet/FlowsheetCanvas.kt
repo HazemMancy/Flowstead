@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.flowstead.core.api.ObjectStatus
+import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ResultView
@@ -276,6 +277,18 @@ fun FlowsheetCanvas(
                         if (badge != null) {
                             val b = CanvasGeometry.bounds(o, at)
                             drawCircle(badge, 4.5f, Offset(b.right, b.top))
+                        }
+                    }
+
+                    // Adjust references: dashed lines to the varied and controlled objects.
+                    for (adj in fs.objects.filter { it.type == ObjectType.Adjust }) {
+                        val from = positionOf(adj)
+                        for (key in listOf(AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.CONTROLLED_OBJECT)) {
+                            val target = adj.refs[key]?.let { id -> fs.objects.firstOrNull { it.id == id } } ?: continue
+                            drawLine(
+                                colors.secondary, from, positionOf(target), 1.5f, StrokeCap.Round,
+                                PathEffect.dashPathEffect(floatArrayOf(3f, 4f)),
+                            )
                         }
                     }
 
