@@ -83,6 +83,12 @@ jobs:
       - name: End-to-end test
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --tests 'app.flowstead.e2e.*'
+      - name: Fail if any end-to-end test was skipped
+        working-directory: android
+        run: |
+          f=app/build/test-results/testDebugUnitTest/TEST-app.flowstead.e2e.EngineEndToEndTest.xml
+          grep -oE 'tests="[0-9]+" skipped="[0-9]+" failures="[0-9]+" errors="[0-9]+"' "$f"
+          grep -q 'skipped="0"' "$f"
       - name: Engine logs
         if: always()
         run: docker logs eng || true
