@@ -9,32 +9,45 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -47,8 +60,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import app.flowstead.core.api.OfflineCatalogue
+import app.flowstead.core.compounds.Compound
+import app.flowstead.core.compounds.CompoundCatalogue
+import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.FlowsheetEditing
+import app.flowstead.core.units.Quantity
+import app.flowstead.core.units.UnitSet
 import app.flowstead.data.ProjectRepository
+import app.flowstead.data.compounds.CompoundLibrary
 import app.flowstead.data.engine.EngineClient
 import app.flowstead.data.engine.EngineResult
 import app.flowstead.data.settings.SecretStore
@@ -73,19 +92,28 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class SearchHit(val name: String, val detail: String)
-
 data class FluidUi(
     val loaded: Boolean = false,
     val propertyPackage: String? = null,
     val compounds: List<String> = emptyList(),
     val packages: List<String> = OfflineCatalogue.propertyPackages,
     val query: String = "",
-    val results: List<SearchHit> = emptyList(),
-    /** Null when results come from the engine; otherwise why the offline list is shown. */
-    val offlineReason: String? = null,
+    /** Family filter; null = all, [CompoundCatalogue.COMMON] = the oil & gas favourites. */
+    val family: String? = CompoundCatalogue.COMMON,
+    val families: List<String> = emptyList(),
+    val results: List<Compound> = emptyList(),
+    val libraryLoaded: Boolean = false,
+    val librarySize: Int = 0,
+    val unitSet: UnitSet = UnitSet.SI,
 )
 
+private data class Search(val query: String, val family: String?)
+
+/**
+ * Fluid package: property package and the component list. Compounds come from the bundled
+ * library (all of DWSIM's databases), so searching works offline; the engine solves with the same
+ * databases, so a compound found here is one the engine knows.
+ */
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class FluidPackageViewModel @Inject constructor(
@@ -94,24 +122,32 @@ class FluidPackageViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val secrets: SecretStore,
     private val engine: EngineClient,
+    private val library: CompoundLibrary,
 ) : ViewModel() {
     private val projectId = savedState.toRoute<FluidRoute>().projectId
-    private val query = MutableStateFlow("")
+    private val search = MutableStateFlow(Search("", CompoundCatalogue.COMMON))
     private val packages = MutableStateFlow(OfflineCatalogue.propertyPackages)
     private val _messages = Channel<String>(Channel.BUFFERED)
     val messages: Flow<String> = _messages.receiveAsFlow()
 
-    private val search: Flow<Pair<List<SearchHit>, String?>> = query.debounce(250).mapLatest { q -> lookup(q) }
+    private val results: Flow<Pair<CompoundCatalogue, List<Compound>>> = search.debounce(150).mapLatest { s ->
+        val c = library.catalogue()
+        c to c.search(s.query, s.family, limit = 300)
+    }
 
-    val state: StateFlow<FluidUi> = combine(projects.observeProject(projectId), query, search, packages) { p, q, (hits, offline), pk ->
+    val state: StateFlow<FluidUi> = combine(projects.observeProject(projectId), search, results, packages, settings.settings) { p, s, (cat, hits), pk, st ->
         FluidUi(
             loaded = p != null,
             propertyPackage = p?.flowsheet?.propertyPackage,
             compounds = p?.flowsheet?.compounds.orEmpty(),
             packages = pk,
-            query = q,
+            query = s.query,
+            family = s.family,
+            families = cat.families,
             results = hits,
-            offlineReason = offline,
+            libraryLoaded = true,
+            librarySize = cat.all.size,
+            unitSet = st.unitSet,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FluidUi())
 
@@ -124,26 +160,10 @@ class FluidPackageViewModel @Inject constructor(
         }
     }
 
-    private suspend fun lookup(q: String): Pair<List<SearchHit>, String?> {
-        val url = settings.settings.first().engineUrl
-        if (url.isNotBlank()) {
-            when (val r = engine.compounds(url, secrets.apiKey(), q, 25)) {
-                is EngineResult.Ok -> return r.value.map { c ->
-                    val mw = if (c.molecularWeight.isFinite()) " · MW ${"%.3f".format(java.util.Locale.ROOT, c.molecularWeight)}" else ""
-                    SearchHit(c.name, "${c.cas.ifBlank { "no CAS" }}$mw · ${c.database}")
-                } to null
-                is EngineResult.Failed -> return offline(q) to "Engine unavailable (${r.reason}). Showing common compounds."
-            }
-        }
-        return offline(q) to "No engine set. Showing common compounds; set the engine in Settings for the full DWSIM database."
-    }
+    fun setQuery(q: String) = search.value.let { search.value = it.copy(query = q, family = if (q.isNotBlank() && it.family == CompoundCatalogue.COMMON) null else it.family) }
 
-    private fun offline(q: String) = OfflineCatalogue.search(q).map { name ->
-        SearchHit(name, OfflineCatalogue.compounds.first { it.first == name }.second.joinToString(" · ").ifEmpty { "common compound" })
-    }
-
-    fun setQuery(q: String) {
-        query.value = q
+    fun setFamily(family: String?) {
+        search.value = search.value.copy(family = family)
     }
 
     fun setPackage(name: String) = viewModelScope.launch {
@@ -174,7 +194,22 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
     val ui by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
+    FluidPackageContent(ui, snackbar, viewModel::setPackage, viewModel::add, viewModel::remove, viewModel::setQuery, viewModel::setFamily, onBack)
+}
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun FluidPackageContent(
+    ui: FluidUi,
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    onPackage: (String) -> Unit = {},
+    onAdd: (String) -> Unit = {},
+    onRemove: (String) -> Unit = {},
+    onQuery: (String) -> Unit = {},
+    onFamily: (String?) -> Unit = {},
+    onBack: () -> Unit = {},
+) {
+    var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -186,69 +221,174 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Column(
-            Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(padding).testTag("fluid_list"),
         ) {
-            Text("Property package", style = MaterialTheme.typography.titleMedium)
-            ui.packages.forEach { name ->
+            item { Text("Property package", style = MaterialTheme.typography.titleMedium) }
+            items(ui.packages, key = { "pkg_$it" }) { name ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
-                        .selectable(selected = ui.propertyPackage == name, role = Role.RadioButton) { viewModel.setPackage(name) },
+                        .selectable(selected = ui.propertyPackage == name, role = Role.RadioButton) { onPackage(name) },
                 ) {
                     RadioButton(selected = ui.propertyPackage == name, onClick = null)
                     Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
                 }
             }
+            item {
+                Text(
+                    "Binary interaction parameters come from DWSIM's databanks for the chosen package. Pairs without data use zero. Check them for polar or non-ideal systems.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item { HorizontalDivider() }
+            item { Text("Components (${ui.compounds.size})", style = MaterialTheme.typography.titleMedium) }
+            item {
+                if (ui.compounds.isEmpty()) {
+                    Text("No components yet. Search the library below and tap to add.", color = MaterialTheme.valueColors.underSpecifiedText)
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ui.compounds.forEach { c ->
+                        InputChip(
+                            selected = false,
+                            onClick = { onRemove(c) },
+                            label = { Text(c) },
+                            trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Remove $c") },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        )
+                    }
+                }
+            }
+            item { HorizontalDivider() }
+            item {
+                Text(
+                    if (ui.libraryLoaded) "Compound library · ${ui.librarySize} compounds" else "Compound library",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "DWSIM's databases (ChemSep, ChEDL Thermo, CoolProp, electrolytes, food, DWSIM), on this phone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item {
+                OutlinedTextField(
+                    value = ui.query,
+                    onValueChange = onQuery,
+                    label = { Text("Search compounds") },
+                    placeholder = { Text("Name, formula, CAS or shorthand: CO2, nC4, TEG") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("compound_search"),
+                )
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("family_chips")) {
+                    item { FamilyChip("All", ui.family == null) { onFamily(null) } }
+                    item { FamilyChip(CompoundCatalogue.COMMON, ui.family == CompoundCatalogue.COMMON) { onFamily(CompoundCatalogue.COMMON) } }
+                    items(ui.families) { f -> FamilyChip(f, ui.family == f) { onFamily(f) } }
+                }
+            }
+            if (ui.libraryLoaded && ui.results.isEmpty()) {
+                item { Text("No compound matches.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            items(ui.results, key = { "c_${it.name}" }) { c ->
+                CompoundRow(c, added = c.name in ui.compounds, unitSet = ui.unitSet, onAdd = { onAdd(c.name) }, onInfo = { details = c })
+            }
+        }
+    }
+    details?.let { c ->
+        CompoundSheet(c, added = c.name in ui.compounds, unitSet = ui.unitSet, onAdd = { onAdd(c.name); details = null }, onDismiss = { details = null })
+    }
+}
+
+@Composable
+private fun FamilyChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+        modifier = Modifier.heightIn(min = 48.dp).testTag("family_$label"),
+    )
+}
+
+@Composable
+private fun CompoundRow(c: Compound, added: Boolean, unitSet: UnitSet, onAdd: () -> Unit, onInfo: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            Modifier
+                .weight(1f)
+                .heightIn(min = 48.dp)
+                .clickable(enabled = !added, role = Role.Button, onClickLabel = "Add ${c.name}") { onAdd() }
+                .padding(vertical = 6.dp)
+                .testTag("compound_${c.name}"),
+        ) {
+            Text(if (added) "${c.name}  ✓" else c.name, style = MaterialTheme.typography.bodyLarge)
+            Text(summary(c, unitSet), style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = onInfo) { Icon(Icons.Outlined.Info, contentDescription = "Details of ${c.name}") }
+    }
+}
+
+private fun summary(c: Compound, unitSet: UnitSet): String = buildList {
+    if (c.formula.isNotBlank()) add(c.formula)
+    c.molecularWeight?.let { add("MW " + ValueFormat.number(it, 2)) }
+    c.normalBoilingPointK?.let { add("Tb " + ValueFormat.si(it, unitSet.unitFor(Quantity.Temperature))) }
+    add(c.database)
+}.joinToString(" · ")
+
+/** Every database constant of one compound, in the user's units. Database values, not engine results. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CompoundSheet(c: Compound, added: Boolean, unitSet: UnitSet, onAdd: () -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 24.dp)
+                .testTag("compound_sheet"),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(c.name, style = MaterialTheme.typography.titleLarge)
+            Text("${c.family} · ${c.database} database", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val t = unitSet.unitFor(Quantity.Temperature)
+            val p = unitSet.unitFor(Quantity.Pressure)
+            val rows = listOf(
+                "Formula" to c.formula.ifBlank { null },
+                "Structure" to c.structure.ifBlank { null },
+                "CAS" to c.cas.ifBlank { null },
+                "SMILES" to c.smiles.ifBlank { null }?.let { if (it.length > 60) it.take(57) + "…" else it },
+                "Molecular weight" to c.molecularWeight?.let { ValueFormat.number(it, 3) + " kg/kmol" },
+                "Normal boiling point" to c.normalBoilingPointK?.let { ValueFormat.si(it, t) },
+                "Melting point" to c.meltingPointK?.let { ValueFormat.si(it, t) },
+                "Critical temperature" to c.criticalTemperatureK?.let { ValueFormat.si(it, t) },
+                "Critical pressure" to c.criticalPressurePa?.let { ValueFormat.si(it, p) },
+                "Critical volume" to c.criticalVolumeM3PerMol?.let { ValueFormat.number(it * 1000.0, 4) + " m³/kmol" },
+                "Critical compressibility" to c.criticalCompressibility?.let { ValueFormat.number(it, 4) },
+                "Acentric factor" to c.acentricFactor?.let { ValueFormat.number(it, 4) },
+                "Dipole moment" to c.dipoleMomentCoulombMetre?.let { ValueFormat.number(it / DEBYE, 3) + " D" },
+                "ΔHf° ideal gas, 25 °C" to c.idealGasEnthalpyOfFormationJPerMol?.let { ValueFormat.number(it / 1000.0, 2) + " kJ/mol" },
+            )
+            rows.forEach { (label, value) ->
+                Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(value ?: "—", style = NumberStyles.value, color = if (value == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                }
+            }
+            if (c.aliases.isNotEmpty()) Text("Also found as: ${c.aliases.joinToString(", ")}", style = MaterialTheme.typography.bodySmall)
             Text(
-                "Binary interaction parameters come from DWSIM's databanks for the chosen package. Pairs without data use zero. Check them for polar or non-ideal systems.",
+                "Database values from DWSIM's compound library; \"—\" where the database has none.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            HorizontalDivider()
-
-            Text("Components (${ui.compounds.size})", style = MaterialTheme.typography.titleMedium)
-            if (ui.compounds.isEmpty()) {
-                Text("No components yet. Search below and tap to add.", color = MaterialTheme.valueColors.underSpecifiedText)
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                ui.compounds.forEach { c ->
-                    InputChip(
-                        selected = false,
-                        onClick = { viewModel.remove(c) },
-                        label = { Text(c) },
-                        trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Remove $c") },
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    )
-                }
-            }
-            OutlinedTextField(
-                value = ui.query,
-                onValueChange = viewModel::setQuery,
-                label = { Text("Search compounds") },
-                placeholder = { Text("Name, CAS or shorthand: CO2, nC4, TEG") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().testTag("compound_search"),
-            )
-            ui.offlineReason?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText)
-            }
-            ui.results.forEach { hit ->
-                val added = hit.name in ui.compounds
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clickable(enabled = !added, role = Role.Button, onClickLabel = "Add ${hit.name}") { viewModel.add(hit.name) }
-                        .padding(vertical = 6.dp),
-                ) {
-                    Text(if (added) "${hit.name}  ✓" else hit.name, style = MaterialTheme.typography.bodyLarge)
-                    Text(hit.detail, style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+            TextButton(onClick = onAdd, enabled = !added, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("add_from_sheet")) {
+                Text(if (added) "Already in the component list" else "Add to component list")
             }
         }
     }
 }
+
+/** 1 debye in C·m. */
+private const val DEBYE = 3.33564e-30

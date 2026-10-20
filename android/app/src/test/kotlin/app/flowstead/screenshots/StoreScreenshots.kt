@@ -175,6 +175,19 @@ class StoreScreenshots {
         }
     }
 
+    @Test fun libraryLight() = shoot("7-compound-library", false) { Library() }
+
+    @Composable
+    private fun Library() {
+        val catalogue = app.flowstead.FileCompoundLibrary().let { kotlinx.coroutines.runBlocking { it.catalogue() } }
+        val ui = app.flowstead.ui.fluid.FluidUi(
+            loaded = true, propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane", "Ethane", "Propane"),
+            libraryLoaded = true, librarySize = catalogue.all.size, family = "Aromatics", families = catalogue.families,
+            results = catalogue.search("", family = "Aromatics"), unitSet = units,
+        )
+        app.flowstead.ui.fluid.FluidPackageContent(ui)
+    }
+
     @Test fun symbolsLight() = shoot("5-symbols", false) { AllSymbols() }
     @Test fun symbolsDark() = shoot("5-symbols", true) { AllSymbols() }
     @Test fun paletteColumns() = shoot("6-palette-columns", false, before = {

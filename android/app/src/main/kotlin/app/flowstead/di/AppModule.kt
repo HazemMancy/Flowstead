@@ -13,6 +13,8 @@ import androidx.room.Room
 import app.flowstead.data.Clock
 import app.flowstead.data.ProjectRepository
 import app.flowstead.data.RoomProjectRepository
+import app.flowstead.data.compounds.AssetCompoundLibrary
+import app.flowstead.data.compounds.CompoundLibrary
 import app.flowstead.data.db.AppDatabase
 import app.flowstead.data.db.ProjectDao
 import app.flowstead.data.engine.EngineClient
@@ -98,5 +100,6 @@ abstract class BindingsModule {
     @Binds abstract fun secrets(impl: EncryptedSecretStore): SecretStore
     @Binds abstract fun engine(impl: KtorEngineClient): EngineClient
     @Binds abstract fun documents(impl: ContentResolverDocumentIo): DocumentIo
+    @Binds abstract fun compounds(impl: AssetCompoundLibrary): CompoundLibrary
     @Binds abstract fun solveQueue(impl: WorkManagerSolveQueue): SolveQueue
 }

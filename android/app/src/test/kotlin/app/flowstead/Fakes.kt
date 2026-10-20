@@ -133,3 +133,12 @@ class FakeDocumentIo(var toRead: PickedDocument? = PickedDocument("Plant.dwxmz",
     override suspend fun read(uri: Uri): PickedDocument = toRead ?: throw java.io.IOException("Permission denied")
     override suspend fun write(uri: Uri, bytes: ByteArray) { written[uri] = bytes }
 }
+
+/** The real bundled catalogue, read from the repo (no Android assets needed). */
+class FileCompoundLibrary : app.flowstead.data.compounds.CompoundLibrary {
+    private val catalogue by lazy {
+        val repo = System.getProperty("flowstead.repoDir") ?: error("flowstead.repoDir not set")
+        app.flowstead.core.compounds.CompoundCatalogue.parse(java.io.File(repo, "shared/compounds/catalogue.json").readText())
+    }
+    override suspend fun catalogue() = catalogue
+}

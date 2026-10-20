@@ -39,16 +39,6 @@ class FlowsheetJsonTest {
     }
 }
 
-class OfflineCatalogueTest {
-    @Test
-    fun aliasesAndNamesRankFirst() {
-        assertEquals("Carbon dioxide", app.flowstead.core.api.OfflineCatalogue.search("co2").first())
-        assertEquals("N-butane", app.flowstead.core.api.OfflineCatalogue.search("butane").first())
-        assertEquals("Triethylene glycol", app.flowstead.core.api.OfflineCatalogue.search("TEG").first())
-        assertTrue(app.flowstead.core.api.OfflineCatalogue.search("zzz").isEmpty())
-    }
-}
-
 class ObjectTypeContractTest {
     @Test
     fun typesMatchTheSharedSchemaInOrder() {
