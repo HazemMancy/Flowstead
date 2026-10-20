@@ -1,7 +1,7 @@
 // Flowstead Android app. SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
+    // AGP 9 compiles Kotlin itself (built-in Kotlin); no org.jetbrains.kotlin.android plugin.
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "app.flowstead"
-    compileSdk = 36
+    compileSdk = 37
 
     // The privacy policy ships in the app from its one source in docs/ (shown under About).
     sourceSets.getByName("main").assets.srcDir("../../docs/privacy")
@@ -18,7 +18,7 @@ android {
     defaultConfig {
         applicationId = "app.flowstead"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

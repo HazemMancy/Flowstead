@@ -78,7 +78,7 @@ _Last updated: 2026-10-20_
     - Already in place: 48 dp targets, live regions on solve and DOF status, and enforced text contrast (D14).
 
 ## Next
-- M9 (rest): toolchain upgrade (AGP 9 / newer Compose BOM), a dark-theme screenshot check.
+- M9 (rest): toolchain upgrade to AGP 9.4.1 / Kotlin 2.4.21 / SDK 37 (D15), pending CI; dark-theme screenshot check.
 - M10: on-device spike report.
 
 ## Known limitations
