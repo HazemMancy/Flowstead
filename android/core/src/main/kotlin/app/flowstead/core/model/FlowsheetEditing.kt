@@ -196,10 +196,19 @@ object FlowsheetEditing {
     }
 
     /** Where a stream made from a port (not dragged) is placed: beside the port, on its side of the unit. */
-    fun newStreamPosition(unit: SimObject, port: Port): Pair<Double, Double> = when {
-        port.kind == PortKind.Energy -> unit.x to unit.y + 96.0
-        port.side == PortSide.Inlet -> unit.x - 120.0 to unit.y + port.dy * 96.0
-        else -> unit.x + 120.0 to unit.y + port.dy * 96.0
+    fun newStreamPosition(unit: SimObject, port: Port): Pair<Double, Double> {
+        // Nozzles a little off the centreline (valve, pump) keep the stream level with the unit;
+        // ports clearly above or below (separator outlets, tee branches) get their own row.
+        val dy = when {
+            port.dy <= -0.3f -> -72.0
+            port.dy >= 0.3f -> 72.0
+            else -> 0.0
+        }
+        return when {
+            port.kind == PortKind.Energy -> unit.x to unit.y + 96.0
+            port.side == PortSide.Inlet -> unit.x - 120.0 to unit.y + dy
+            else -> unit.x + 120.0 to unit.y + dy
+        }
     }
 
     fun firstFreePort(fs: Flowsheet, unitId: String, from: Port): Port? {
