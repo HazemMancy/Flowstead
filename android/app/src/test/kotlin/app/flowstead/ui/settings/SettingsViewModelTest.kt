@@ -27,7 +27,8 @@ class SettingsViewModelTest {
     private val settings = FakeSettingsRepository()
     private val secrets = FakeSecretStore()
     private val engine = FakeEngineClient()
-    private val vm = SettingsViewModel(settings, secrets, engine)
+    // Lazy: built after MainDispatcherRule has installed the test Main dispatcher.
+    private val vm by lazy { SettingsViewModel(settings, secrets, engine) }
 
     private suspend fun loaded() = vm.state.first { it.loaded }
 

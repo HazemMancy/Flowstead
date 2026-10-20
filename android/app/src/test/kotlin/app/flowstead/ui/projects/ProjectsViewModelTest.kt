@@ -17,7 +17,8 @@ class ProjectsViewModelTest {
     @get:Rule val main = MainDispatcherRule()
 
     private val repo = FakeProjectRepository()
-    private val vm = ProjectsViewModel(repo)
+    // Lazy: built after MainDispatcherRule has installed the test Main dispatcher.
+    private val vm by lazy { ProjectsViewModel(repo) }
 
     private suspend fun names() = vm.state.first { !it.loading }.projects.map { it.name }
 
