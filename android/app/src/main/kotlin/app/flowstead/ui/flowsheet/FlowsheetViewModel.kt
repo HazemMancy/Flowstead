@@ -30,6 +30,7 @@ import app.flowstead.data.Clock
 import app.flowstead.data.ProjectRepository
 import app.flowstead.data.engine.EngineClient
 import app.flowstead.data.engine.EngineResult
+import app.flowstead.data.engine.ON_DEVICE_ENGINE
 import app.flowstead.data.files.DocumentIo
 import app.flowstead.data.queue.SolveQueue
 import app.flowstead.core.export.Csv
@@ -150,11 +151,18 @@ class FlowsheetViewModel @Inject constructor(
                     queued -> SolveState.Queued
                     else -> SolveState.Idle
                 },
-                engineConfigured = settings.engineUrl.isNotBlank(),
+                engineConfigured = settings.engineTarget.isNotBlank(),
                 exporting = l.exporting,
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
+
+    init {
+        // On-device engine: start loading DWSIM while the user edits, so the first solve is quick.
+        viewModelScope.launch {
+            if (settingsRepository.settings.first().engineTarget == ON_DEVICE_ENGINE) engine.health(ON_DEVICE_ENGINE, null)
+        }
+    }
 
     // ---- selection and editor
 
@@ -260,7 +268,7 @@ class FlowsheetViewModel @Inject constructor(
         local.update { it.copy(solving = true) }
         viewModelScope.launch {
             try {
-                val url = settingsRepository.settings.first().engineUrl
+                val url = settingsRepository.settings.first().engineTarget
                 if (url.isBlank()) {
                     _messages.send("Set the engine address in Settings to solve")
                     return@launch
@@ -295,7 +303,7 @@ class FlowsheetViewModel @Inject constructor(
     /** Writes the flowsheet as a DWSIM .dwxmz (solved by the engine, so it opens with results in desktop DWSIM). */
     fun exportDwsim(uri: Uri) = export {
         val fs = current ?: return@export
-        val url = settingsRepository.settings.first().engineUrl
+        val url = settingsRepository.settings.first().engineTarget
         if (url.isBlank()) {
             _messages.send("Set the engine address in Settings to export DWSIM files")
             return@export

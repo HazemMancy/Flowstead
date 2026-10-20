@@ -15,6 +15,7 @@ import app.flowstead.data.engine.EngineResult
 import app.flowstead.data.settings.AppSettings
 import app.flowstead.data.settings.EngineUrl
 import app.flowstead.data.settings.SecretStore
+import app.flowstead.data.settings.EngineMode
 import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -84,8 +85,13 @@ class SettingsViewModel @Inject constructor(
 
     fun clearApiKey() = viewModelScope.launch { secrets.clearApiKey() }
 
+    fun setEngineMode(mode: EngineMode) = viewModelScope.launch {
+        transient.update { it.copy(connection = ConnectionState.Idle) }
+        settingsRepository.setEngineMode(mode)
+    }
+
     fun testConnection() = viewModelScope.launch {
-        val url = settingsRepository.settings.first().engineUrl
+        val url = settingsRepository.settings.first().engineTarget
         if (url.isBlank()) {
             transient.update { it.copy(connection = ConnectionState.Failed("Set the engine address first")) }
             return@launch

@@ -4,6 +4,11 @@
  */
 package app.flowstead.ui.settings
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.semantics.Role
+import app.flowstead.BuildConfig
+import app.flowstead.data.settings.EngineMode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,11 +104,46 @@ private fun SectionTitle(text: String) {
 @Composable
 private fun EngineSection(state: SettingsUiState, vm: SettingsViewModel) {
     SectionTitle("Engine")
-    Text(
-        "Flowstead solves on your own DWSIM engine: a VPS or a PC on the same network. HTTPS only.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    val onDevice = state.settings.engineMode == EngineMode.OnDevice
+    EngineChoice(
+        selected = onDevice,
+        enabled = BuildConfig.LOCAL_ENGINE,
+        title = "On this phone",
+        detail = if (BuildConfig.LOCAL_ENGINE) "DWSIM runs on the phone's processor. Works offline; the first solve after starting the app takes a few seconds to load DWSIM."
+        else "Not included in this build.",
+        tag = "engine_on_device",
+    ) { vm.setEngineMode(EngineMode.OnDevice) }
+    EngineChoice(
+        selected = !onDevice,
+        enabled = true,
+        title = "Remote engine",
+        detail = "Your own Flowstead engine server: a VPS or a PC on the same network. HTTPS only.",
+        tag = "engine_remote",
+    ) { vm.setEngineMode(EngineMode.Remote) }
+    if (!onDevice) RemoteEngineFields(state, vm)
+    ConnectionTest(state, vm, if (onDevice) "Start and test" else "Test connection")
+}
+
+@Composable
+private fun EngineChoice(selected: Boolean, enabled: Boolean, title: String, detail: String, tag: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .testTag(tag),
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun RemoteEngineFields(state: SettingsUiState, vm: SettingsViewModel) {
     var url by rememberSaveable(state.settings.engineUrl) { mutableStateOf(state.settings.engineUrl) }
     OutlinedTextField(
         value = url,
@@ -140,18 +180,22 @@ private fun EngineSection(state: SettingsUiState, vm: SettingsViewModel) {
             TextButton(onClick = { vm.clearApiKey() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Remove key") }
         }
     }
+}
+
+@Composable
+private fun ConnectionTest(state: SettingsUiState, vm: SettingsViewModel, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedButton(
             onClick = { vm.testConnection() },
             enabled = state.connection != ConnectionState.Testing,
-            modifier = Modifier.heightIn(min = 48.dp),
-        ) { Text("Test connection") }
+            modifier = Modifier.heightIn(min = 48.dp).testTag("test_engine"),
+        ) { Text(label) }
         if (state.connection == ConnectionState.Testing) CircularProgressIndicator(Modifier.size(24.dp))
     }
     val colors = MaterialTheme.valueColors
     when (val c = state.connection) {
         is ConnectionState.Connected -> Text(
-            "✓ Connected · ${c.summary}",
+            "✓ Ready · ${c.summary}",
             color = colors.convergedText,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },

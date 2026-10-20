@@ -57,11 +57,17 @@ int fh_start(const char *framework_dir, const char *app_dir, const char *dwsim_d
     add_dlls(&tpa, &len, &cap, framework_dir);
     add_dlls(&tpa, &len, &cap, app_dir);
 
-    const char *keys[] = {"TRUSTED_PLATFORM_ASSEMBLIES", "APP_PATHS", "NATIVE_DLL_SEARCH_DIRECTORIES", "System.Globalization.Invariant"};
+    /* Invariant globalization (no ICU to ship), but named cultures still construct: DWSIM asks for
+     * en-US, which then formats like the invariant culture ("." decimals), as DWSIM expects. */
+    const char *keys[] = {"TRUSTED_PLATFORM_ASSEMBLIES", "APP_PATHS", "NATIVE_DLL_SEARCH_DIRECTORIES",
+                          "System.Globalization.Invariant", "System.Globalization.PredefinedCulturesOnly"};
     char app_paths[8192];
     snprintf(app_paths, sizeof app_paths, "%s:%s", app_dir, dwsim_dir);
-    const char *values[] = {tpa, app_paths, native_dirs, "false"};
-    if (monovm_initialize(4, keys, values) != 0) {
+    const char *values[] = {tpa, app_paths, native_dirs, "true", "false"};
+    /* Inside an Android app ART owns the signal handlers; Mono must chain to them, not replace them. */
+    mono_set_signal_chaining(1);
+    mono_set_crash_chaining(1);
+    if (monovm_initialize(5, keys, values) != 0) {
         *error = "monovm_initialize failed";
         goto fail;
     }

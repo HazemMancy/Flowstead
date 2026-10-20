@@ -18,7 +18,9 @@ import app.flowstead.data.compounds.CompoundLibrary
 import app.flowstead.data.db.AppDatabase
 import app.flowstead.data.db.ProjectDao
 import app.flowstead.data.engine.EngineClient
-import app.flowstead.data.engine.KtorEngineClient
+import app.flowstead.data.engine.RoutingEngineClient
+import app.flowstead.data.engine.local.EmbeddedLocalEngine
+import app.flowstead.data.engine.local.LocalEngine
 import app.flowstead.data.files.ContentResolverDocumentIo
 import app.flowstead.data.files.DocumentIo
 import app.flowstead.data.queue.SolveQueue
@@ -98,7 +100,8 @@ abstract class BindingsModule {
     @Binds abstract fun projects(impl: RoomProjectRepository): ProjectRepository
     @Binds abstract fun settings(impl: DataStoreSettingsRepository): SettingsRepository
     @Binds abstract fun secrets(impl: EncryptedSecretStore): SecretStore
-    @Binds abstract fun engine(impl: KtorEngineClient): EngineClient
+    @Binds abstract fun engine(impl: RoutingEngineClient): EngineClient
+    @Binds abstract fun localEngine(impl: EmbeddedLocalEngine): LocalEngine
     @Binds abstract fun documents(impl: ContentResolverDocumentIo): DocumentIo
     @Binds abstract fun compounds(impl: AssetCompoundLibrary): CompoundLibrary
     @Binds abstract fun solveQueue(impl: WorkManagerSolveQueue): SolveQueue

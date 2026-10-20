@@ -31,7 +31,7 @@ class ImportDwsimTest {
     @get:Rule val main = MainDispatcherRule()
 
     private val repo = FakeProjectRepository()
-    private val settings = FakeSettingsRepository(AppSettings(engineUrl = "https://engine.example.com"))
+    private val settings = FakeSettingsRepository(AppSettings(engineUrl = "https://engine.example.com", engineMode = app.flowstead.data.settings.EngineMode.Remote))
     private val engine = FakeEngineClient()
     private val documents = FakeDocumentIo()
     private val vm by lazy { ProjectsViewModel(repo, settings, FakeSecretStore(), engine, documents) }

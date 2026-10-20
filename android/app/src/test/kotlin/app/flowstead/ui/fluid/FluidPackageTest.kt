@@ -52,13 +52,16 @@ class FluidPackageTest {
         assertTrue(start.results.all { it.common })
 
         vm.setQuery("toluene")
-        val found = vm.state.first { it.query == "toluene" && it.results.isNotEmpty() }
+        // Search is debounced: wait for the results of this query, not the previous list.
+        val found = vm.state.first { it.query == "toluene" && it.results.firstOrNull()?.name == "Toluene" }
         assertEquals("Toluene", found.results.first().name)
         assertEquals(null, found.family, "typing leaves the Common filter")
 
         vm.setFamily("Aromatics")
         vm.setQuery("")
-        assertTrue(vm.state.first { it.family == "Aromatics" && it.query.isEmpty() && it.results.isNotEmpty() }.results.all { it.family == "Aromatics" })
+        // The debounced search settles on the full aromatic family (100+ compounds).
+        val aromatics = vm.state.first { s -> s.family == "Aromatics" && s.query.isEmpty() && s.results.size > 20 && s.results.all { it.family == "Aromatics" } }
+        assertTrue(aromatics.results.any { it.name == "Toluene" })
 
         vm.add("Toluene")
         assertEquals(listOf("Toluene"), vm.state.first { it.compounds.isNotEmpty() }.compounds)
@@ -74,8 +77,8 @@ class FluidPackageTest {
         compose.onNodeWithTag("fluid_list").performScrollToNode(hasTestTag("compound_Methane"))
         compose.onNodeWithContentDescription("Details of Methane").performClick()
         compose.onNodeWithTag("compound_sheet").assertIsDisplayed()
-        compose.onNodeWithText("190.56 K").assertIsDisplayed() // SI unit set; ChemSep Tc
-        compose.onNodeWithText("74-82-8").assertIsDisplayed()
+        compose.onNodeWithText("74-82-8").assertExists()
+        compose.onNodeWithText("190.56 K").assertExists() // SI unit set; ChemSep Tc (may be below the fold)
         compose.onNodeWithTag("add_from_sheet").performClick()
         assertEquals("Methane", added)
     }

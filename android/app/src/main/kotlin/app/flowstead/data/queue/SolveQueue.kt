@@ -87,7 +87,7 @@ class QueuedSolver @Inject constructor(
         val fs = project.flowsheet
         // Edited into an unsolvable state while waiting, or the engine address removed: nothing to send.
         if (Specification.problems(fs).isNotEmpty()) return QueuedOutcome.Dropped
-        val url = settings.settings.first().engineUrl
+        val url = settings.settings.first().engineTarget
         if (url.isBlank()) return QueuedOutcome.Dropped
         return when (val r = engine.solve(url, secrets.apiKey(), fs)) {
             is EngineResult.Ok -> {

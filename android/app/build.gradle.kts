@@ -8,6 +8,10 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// On-device engine (decision D25): present when engine/embedded/android/prepare.sh has run.
+val localEngineDir = rootDir.resolve("../engine/embedded/android")
+val localEngine = localEngineDir.resolve("out/assets/engine/VERSION").exists()
+
 android {
     namespace = "app.flowstead"
     compileSdk = 37
@@ -16,6 +20,11 @@ android {
     // library built from DWSIM's databases (engine/tools/compounds/build_catalogue.py).
     sourceSets.getByName("main").assets.srcDir("../../docs/privacy")
     sourceSets.getByName("main").assets.srcDir("../../shared/compounds")
+    if (localEngine) {
+        sourceSets.getByName("main").assets.srcDir(localEngineDir.resolve("out/assets"))
+        sourceSets.getByName("main").jniLibs.srcDir(localEngineDir.resolve("out/jniLibs"))
+        externalNativeBuild { cmake { path = localEngineDir.resolve("CMakeLists.txt") } }
+    }
 
     defaultConfig {
         applicationId = "app.flowstead"
@@ -24,6 +33,9 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "LOCAL_ENGINE", localEngine.toString())
+        // The engine's runtime is built for 64-bit ARM (phones) and x86_64 (emulators).
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     // A fixed, public debug key (not a secret) so every CI debug build is signed the same way and
@@ -69,6 +81,8 @@ android {
     }
 
     packaging {
+        // Unpacked on install, so the .NET runtime can load native libraries by path.
+        jniLibs.useLegacyPackaging = true
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/INDEX.LIST", "/META-INF/io.netty.versions.properties")
     }
 }
@@ -133,6 +147,9 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.kotlin.test)
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)

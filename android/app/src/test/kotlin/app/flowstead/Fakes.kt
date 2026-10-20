@@ -26,6 +26,7 @@ import app.flowstead.data.files.DocumentIo
 import app.flowstead.data.files.PickedDocument
 import app.flowstead.data.queue.SolveQueue
 import app.flowstead.data.settings.AppSettings
+import app.flowstead.data.settings.EngineMode
 import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.ui.theme.ThemeMode
@@ -72,10 +73,12 @@ class FakeProjectRepository : ProjectRepository {
         rows.update { list -> list.map { if (it.id == id) it.copy(solve = solve) else it } }
 }
 
-class FakeSettingsRepository(initial: AppSettings = AppSettings()) : SettingsRepository {
+/** Remote mode by default: tests drive the engine through FakeEngineClient with an address. */
+class FakeSettingsRepository(initial: AppSettings = AppSettings(engineMode = EngineMode.Remote)) : SettingsRepository {
     val state = MutableStateFlow(initial)
     override val settings: Flow<AppSettings> = state
     override suspend fun setEngineUrl(url: String) = state.update { it.copy(engineUrl = url) }
+    override suspend fun setEngineMode(mode: EngineMode) = state.update { it.copy(engineMode = mode) }
     override suspend fun setUnitSet(unitSet: UnitSet) = state.update { it.copy(unitSet = unitSet) }
     override suspend fun setThemeMode(mode: ThemeMode) = state.update { it.copy(themeMode = mode) }
     override suspend fun setDefaultAtmosphericPressure(pa: Double) = state.update { it.copy(defaultAtmosphericPressurePa = pa) }

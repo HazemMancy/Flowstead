@@ -20,6 +20,18 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            engine/.dl
+            engine/embedded/android/.dl
+          key: on-device-engine-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/embedded/android/prepare.sh') }}
+      - name: Prepare the on-device engine (DWSIM + .NET runtime for Android)
+        working-directory: .
+        run: engine/embedded/android/ci-prepare.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -42,7 +54,7 @@ jobs:
 
           **Install:** download \`${apk}\` on your Android phone (Android 8.0 or newer), open it and allow installing from this source. Later debug releases install as updates.
 
-          **Solving needs a Flowstead engine:** run it with Docker on a Linux x64 machine (see \`docs/engine-setup.md\`), then enter its HTTPS address and API key in Settings. Editing flowsheets and exporting results work offline.
+          **Solves on the phone:** DWSIM runs on the device (Settings → Engine → On this phone, the default); the first solve after starting the app takes a few seconds while DWSIM loads. A remote Flowstead engine (\`docs/engine-setup.md\`) is optional.
 
           Signed with the public debug key: not for the Play Store. Status and known limitations: \`docs/STATUS.md\`.
 

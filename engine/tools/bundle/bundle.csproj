@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- A build tool: runs on the build machine, not part of the engine. -->
+    <RuntimeIdentifier></RuntimeIdentifier>
+  </PropertyGroup>
+</Project>

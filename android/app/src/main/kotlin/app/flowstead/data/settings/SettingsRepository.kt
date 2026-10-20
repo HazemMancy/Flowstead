@@ -4,6 +4,8 @@
  */
 package app.flowstead.data.settings
 
+import app.flowstead.BuildConfig
+import app.flowstead.data.engine.ON_DEVICE_ENGINE
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.doublePreferencesKey
@@ -19,17 +21,26 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
+/** Where flowsheets are solved (decision D25). */
+enum class EngineMode { OnDevice, Remote }
+
 data class AppSettings(
+    /** Remote engine address (HTTPS); used when [engineMode] is Remote. */
     val engineUrl: String = "",
+    val engineMode: EngineMode = if (BuildConfig.LOCAL_ENGINE) EngineMode.OnDevice else EngineMode.Remote,
     val unitSet: UnitSet = UnitSet.SI,
     val themeMode: ThemeMode = ThemeMode.System,
     /** Atmospheric reference for gauge pressures in new projects, Pa (D9). */
     val defaultAtmosphericPressurePa: Double = StandardConditions.DEFAULT_PATM_PA,
-)
+) {
+    /** What engine calls are sent to: [ON_DEVICE_ENGINE] or the remote URL; blank when none is set. */
+    val engineTarget: String get() = if (engineMode == EngineMode.OnDevice) ON_DEVICE_ENGINE else engineUrl
+}
 
 interface SettingsRepository {
     val settings: Flow<AppSettings>
     suspend fun setEngineUrl(url: String)
+    suspend fun setEngineMode(mode: EngineMode)
     suspend fun setUnitSet(unitSet: UnitSet)
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setDefaultAtmosphericPressure(pa: Double)
@@ -45,6 +56,9 @@ class DataStoreSettingsRepository @Inject constructor(
     override val settings: Flow<AppSettings> = store.data.map { p ->
         AppSettings(
             engineUrl = p[ENGINE_URL].orEmpty(),
+            engineMode = p[ENGINE_MODE]?.let { runCatching { EngineMode.valueOf(it) }.getOrNull() }
+                ?.takeIf { it == EngineMode.Remote || BuildConfig.LOCAL_ENGINE }
+                ?: AppSettings().engineMode,
             unitSet = p[UNIT_SET]?.let { runCatching { json.decodeFromString(UnitSet.serializer(), it) }.getOrNull() }
                 ?: UnitSet.SI,
             themeMode = p[THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.System,
@@ -55,6 +69,10 @@ class DataStoreSettingsRepository @Inject constructor(
 
     override suspend fun setEngineUrl(url: String) {
         store.edit { it[ENGINE_URL] = url.trim().trimEnd('/') }
+    }
+
+    override suspend fun setEngineMode(mode: EngineMode) {
+        store.edit { it[ENGINE_MODE] = mode.name }
     }
 
     override suspend fun setUnitSet(unitSet: UnitSet) {
@@ -72,6 +90,7 @@ class DataStoreSettingsRepository @Inject constructor(
 
     private companion object {
         val ENGINE_URL = stringPreferencesKey("engine_url")
+        val ENGINE_MODE = stringPreferencesKey("engine_mode")
         val UNIT_SET = stringPreferencesKey("unit_set")
         val THEME = stringPreferencesKey("theme_mode")
         val PATM = doublePreferencesKey("default_patm_pa")

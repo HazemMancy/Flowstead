@@ -80,7 +80,7 @@ class ProjectsViewModel @Inject constructor(
         importing.value = true
         viewModelScope.launch {
             try {
-                val url = settings.settings.first().engineUrl
+                val url = settings.settings.first().engineTarget
                 if (url.isBlank()) {
                     _effects.send(ProjectsEffect.Message("Set the engine address in Settings to import DWSIM files"))
                     return@launch

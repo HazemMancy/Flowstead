@@ -14,6 +14,18 @@ jobs:
         working-directory: android
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            engine/.dl
+            engine/embedded/android/.dl
+          key: on-device-engine-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/embedded/android/prepare.sh') }}
+      - name: Prepare the on-device engine (DWSIM + .NET runtime for Android)
+        working-directory: .
+        run: engine/embedded/android/ci-prepare.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -99,6 +111,62 @@ jobs:
       - name: Engine logs
         if: always()
         run: docker logs eng || true
+
+  device:
+    # DWSIM on an Android emulator (decision D25): every benchmark through the on-device engine.
+    runs-on: ubuntu-24.04
+    needs: build-test
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            engine/.dl
+            engine/embedded/android/.dl
+          key: on-device-engine-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/embedded/android/prepare.sh') }}
+      - name: Prepare the on-device engine (DWSIM + .NET runtime for Android)
+        working-directory: .
+        run: engine/embedded/android/ci-prepare.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: On-device benchmarks on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          ram-size: 4096M
+          disk-size: 8G
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            adb logcat -c
+            (adb logcat -v time FlowsteadOnDevice:I mono:W monodroid:W DOTNET:W '*:E' > logcat.txt &)
+            cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
+      - name: Device log
+        if: always()
+        run: grep -E "FlowsteadOnDevice|mono|DOTNET|FATAL|flowstead" logcat.txt | tail -200 || true
+      - name: Upload device test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-reports
+          path: |
+            android/app/build/reports/androidTests/
+            android/app/build/outputs/androidTest-results/
+            logcat.txt
 
   toolchain-report:
     # Non-blocking: lists the newest stable toolchain versions so pinned ones can be bumped deliberately.

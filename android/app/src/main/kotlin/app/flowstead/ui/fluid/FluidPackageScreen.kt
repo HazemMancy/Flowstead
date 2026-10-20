@@ -70,6 +70,7 @@ import app.flowstead.data.ProjectRepository
 import app.flowstead.data.compounds.CompoundLibrary
 import app.flowstead.data.engine.EngineClient
 import app.flowstead.data.engine.EngineResult
+import app.flowstead.data.engine.ON_DEVICE_ENGINE
 import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.ui.components.BackButton
@@ -153,8 +154,9 @@ class FluidPackageViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val url = settings.settings.first().engineUrl
-            if (url.isBlank()) return@launch
+            val url = settings.settings.first().engineTarget
+            // The bundled list is the on-device engine's own set; don't load DWSIM just for it.
+            if (url.isBlank() || url == ON_DEVICE_ENGINE) return@launch
             val r = engine.propertyPackages(url, secrets.apiKey())
             if (r is EngineResult.Ok) packages.value = r.value.filter { it.mvp }.map { it.name }.ifEmpty { OfflineCatalogue.propertyPackages }
         }
