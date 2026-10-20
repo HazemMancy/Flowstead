@@ -56,11 +56,35 @@ object SpecKey {
     const val ORIFICE_DIAMETER = "orificeDiameter"
     const val PIPE_DIAMETER = "pipeDiameter"
 
+    /** Tank volume, for the liquid residence time. */
+    const val VOLUME = "volume"
+
+    /** Component splitter: fraction of [compound]'s feed sent to outlet 1 (overhead). */
+    const val SPLIT_PREFIX = "split:"
+    fun split(compound: String) = SPLIT_PREFIX + compound
+    fun splitCompound(key: String): String? = key.takeIf { it.startsWith(SPLIT_PREFIX) }?.removePrefix(SPLIT_PREFIX)
+
     /** Small lengths that read better in mm or inches than in m or ft. */
     val SMALL_LENGTHS = setOf(INNER_DIAMETER, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER)
 
     val STREAM_STATE = listOf(TEMPERATURE, PRESSURE, VAPOUR_FRACTION, MASS_ENTHALPY)
     val STREAM_FLOW = listOf(MOLAR_FLOW, MASS_FLOW)
+
+    /** The spec keys each type takes (component-splitter fractions aside). Mirrors the engine's Validator.SpecKeysFor. */
+    fun forType(type: ObjectType): List<String> = when (type) {
+        ObjectType.MaterialStream -> STREAM_STATE + STREAM_FLOW
+        ObjectType.Valve -> listOf(OUTLET_PRESSURE, PRESSURE_DROP)
+        ObjectType.Heater, ObjectType.Cooler, ObjectType.AirCooler -> listOf(OUTLET_TEMPERATURE, DUTY, PRESSURE_DROP)
+        ObjectType.Pump -> listOf(OUTLET_PRESSURE, PRESSURE_RISE, EFFICIENCY)
+        ObjectType.Compressor -> listOf(OUTLET_PRESSURE, PRESSURE_RISE, PRESSURE_RATIO, EFFICIENCY)
+        ObjectType.Expander -> listOf(OUTLET_PRESSURE, PRESSURE_DROP, PRESSURE_RATIO, EFFICIENCY)
+        ObjectType.HeatExchanger -> listOf(DUTY, HOT_OUTLET_TEMPERATURE, COLD_OUTLET_TEMPERATURE, HOT_PRESSURE_DROP, COLD_PRESSURE_DROP)
+        ObjectType.Splitter -> listOf(SPLIT_1, SPLIT_2)
+        ObjectType.PipeSegment -> listOf(LENGTH, INNER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, INCREMENTS, HEAT_TRANSFER_COEFFICIENT, AMBIENT_TEMPERATURE)
+        ObjectType.OrificePlate -> listOf(ORIFICE_DIAMETER, PIPE_DIAMETER)
+        ObjectType.Tank -> listOf(VOLUME)
+        else -> emptyList()
+    }
 
     fun quantity(key: String): Quantity = when (key) {
         TEMPERATURE, OUTLET_TEMPERATURE, HOT_OUTLET_TEMPERATURE, COLD_OUTLET_TEMPERATURE, AMBIENT_TEMPERATURE -> Quantity.Temperature
@@ -75,7 +99,8 @@ object SpecKey {
         LENGTH, INNER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER -> Quantity.Length
         INCREMENTS -> Quantity.Count
         HEAT_TRANSFER_COEFFICIENT -> Quantity.HeatTransferCoefficient
-        else -> throw IllegalArgumentException("Unknown spec '$key'")
+        VOLUME -> Quantity.Volume
+        else -> if (key.startsWith(SPLIT_PREFIX)) Quantity.Fraction else throw IllegalArgumentException("Unknown spec '$key'")
     }
 
     fun label(key: String): String = when (key) {
@@ -107,7 +132,8 @@ object SpecKey {
         AMBIENT_TEMPERATURE -> "Ambient temperature"
         ORIFICE_DIAMETER -> "Orifice diameter"
         PIPE_DIAMETER -> "Pipe inside diameter"
-        else -> key
+        VOLUME -> "Volume"
+        else -> splitCompound(key)?.let { "$it to overhead" } ?: key
     }
 }
 
@@ -128,10 +154,17 @@ sealed interface SpecStatus {
 object Specification {
     const val COMPOSITION_TOLERANCE = 1e-6
 
-    fun status(fs: Flowsheet, o: SimObject): SpecStatus = when (o.type) {
+    /** Degrees of freedom for [o], counting values that Sets give it. */
+    fun status(fs: Flowsheet, o: SimObject): SpecStatus {
+        val applied = withSets(fs)
+        return statusOf(applied, applied.obj(o.id) ?: o)
+    }
+
+    private fun statusOf(fs: Flowsheet, o: SimObject): SpecStatus = when (o.type) {
         ObjectType.MaterialStream -> if (fs.isFeed(o)) feedStream(fs, o) else SpecStatus.Complete
         ObjectType.EnergyStream -> SpecStatus.Complete
         ObjectType.Adjust -> adjust(fs, o)
+        ObjectType.Set -> set(fs, o)
         else -> unitOp(fs, o)
     }
 
@@ -155,6 +188,46 @@ object Specification {
         if (min != null && max != null && min >= max) return SpecStatus.Invalid("Minimum must be below maximum")
         a.specs[AdjustKeys.TOLERANCE]?.let { if (it.si <= 0) return SpecStatus.Invalid("Tolerance must be positive") }
         return if (needs.isEmpty()) SpecStatus.Complete else SpecStatus.UnderSpecified(needs)
+    }
+
+    /** Mirrors the engine's ValidateSets (loops are left to the engine). */
+    fun set(fs: Flowsheet, o: SimObject): SpecStatus {
+        val needs = mutableListOf<String>()
+        val target = o.refs[SetKeys.TARGET_OBJECT]?.let { fs.obj(it) }
+        val source = o.refs[SetKeys.SOURCE_OBJECT]?.let { fs.obj(it) }
+        val key = o.refs[SetKeys.VARIABLE]
+        if (o.refs[SetKeys.TARGET_OBJECT] != null && target == null) return SpecStatus.Invalid("The target object no longer exists")
+        if (o.refs[SetKeys.SOURCE_OBJECT] != null && source == null) return SpecStatus.Invalid("The source object no longer exists")
+        if (target == null || key == null) needs += "target object and variable"
+        if (source == null) needs += "source object"
+        if (target != null && key != null) {
+            if (key !in SpecKey.forType(target.type) || (target.type == ObjectType.MaterialStream && !fs.isFeed(target))) {
+                return SpecStatus.Invalid("${target.tag} can't take ${SpecKey.label(key).lowercase()} as a specification")
+            }
+        }
+        if (source != null && target != null && source.id == target.id) return SpecStatus.Invalid("Source and target must be different objects")
+        if (source != null && key != null && key !in source.specs) {
+            return SpecStatus.Invalid("${source.tag} has no ${SpecKey.label(key).lowercase()} specified to copy")
+        }
+        return if (needs.isEmpty()) SpecStatus.Complete else SpecStatus.UnderSpecified(needs)
+    }
+
+    /** Objects whose specs a Set drives: their status must count the Set's value as given. */
+    fun withSets(fs: Flowsheet): Flowsheet {
+        val sets = fs.objects.filter { it.type == ObjectType.Set && set(fs, it) == SpecStatus.Complete }
+        if (sets.isEmpty()) return fs
+        val byId = fs.objects.associateBy { it.id }.toMutableMap()
+        repeat(sets.size) {
+            for (s in sets) {
+                val source = byId.getValue(s.refs.getValue(SetKeys.SOURCE_OBJECT))
+                val target = byId.getValue(s.refs.getValue(SetKeys.TARGET_OBJECT))
+                val key = s.refs.getValue(SetKeys.VARIABLE)
+                val x = source.specs[key] ?: continue
+                val v = (s.specs[SetKeys.MULTIPLIER]?.si ?: 1.0) * x.si + (s.specs[SetKeys.OFFSET]?.si ?: 0.0)
+                byId[target.id] = target.copy(specs = target.specs + (key to Spec(v, target.specs[key]?.unit ?: x.unit)))
+            }
+        }
+        return fs.copy(objects = fs.objects.map { byId.getValue(it.id) })
     }
 
     fun feedStream(fs: Flowsheet, o: SimObject): SpecStatus {
@@ -234,6 +307,15 @@ object Specification {
             ObjectType.PipeSegment -> {
                 pipe(o, needs)?.let { return it }
             }
+            ObjectType.Tank -> s[SpecKey.VOLUME]?.let { if (it.si <= 0) return SpecStatus.Invalid("Volume must be positive") }
+            ObjectType.ComponentSplitter -> {
+                val splits = s.filterKeys { it.startsWith(SpecKey.SPLIT_PREFIX) }
+                if (splits.isEmpty()) needs += "fraction of each component to the overhead"
+                splits.forEach { (k, v) ->
+                    if (v.si !in 0.0..1.0) return SpecStatus.Invalid("${SpecKey.label(k)} must be between 0 and 1")
+                    if (SpecKey.splitCompound(k) !in fs.compounds) return SpecStatus.Invalid("${SpecKey.splitCompound(k)} is not in the component list")
+                }
+            }
             ObjectType.OrificePlate -> {
                 for (k in listOf(SpecKey.ORIFICE_DIAMETER, SpecKey.PIPE_DIAMETER)) {
                     val v = s[k] ?: run { needs += SpecKey.label(k).lowercase(); null } ?: continue
@@ -271,7 +353,7 @@ object Specification {
     /** Alternative specs per unit type: exactly one of each group must be given. Mirrors the engine validator. */
     fun exclusiveGroups(type: ObjectType): List<Pair<String, List<String>>> = when (type) {
         ObjectType.Valve -> listOf("outlet pressure or pressure drop" to listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_DROP))
-        ObjectType.Heater, ObjectType.Cooler -> listOf("outlet temperature or duty" to listOf(SpecKey.OUTLET_TEMPERATURE, SpecKey.DUTY))
+        ObjectType.Heater, ObjectType.Cooler, ObjectType.AirCooler -> listOf("outlet temperature or duty" to listOf(SpecKey.OUTLET_TEMPERATURE, SpecKey.DUTY))
         ObjectType.Pump -> listOf("outlet pressure or pressure rise" to listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE))
         ObjectType.Compressor -> listOf(
             "outlet pressure, pressure rise or pressure ratio" to listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE, SpecKey.PRESSURE_RATIO),
@@ -286,13 +368,14 @@ object Specification {
     }
 
     /** Flowsheet-level problems that block a solve, with the object they belong to (null = flowsheet). */
-    fun problems(fs: Flowsheet): List<Pair<String?, String>> = buildList {
+    fun problems(flowsheet: Flowsheet): List<Pair<String?, String>> = buildList {
+        val fs = withSets(flowsheet)
         if (fs.propertyPackage.isNullOrBlank()) add(null to "Choose a property package")
         fs.objects.filter { it.type == ObjectType.Adjust }.drop(1).forEach { add(it.id to "${it.tag}: only one Adjust per flowsheet is supported") }
         if (fs.compounds.isEmpty()) add(null to "Add components")
         if (fs.objects.isEmpty()) add(null to "The flowsheet is empty")
         for (o in fs.objects) {
-            when (val st = status(fs, o)) {
+            when (val st = statusOf(fs, o)) {
                 SpecStatus.Complete -> Unit
                 is SpecStatus.UnderSpecified -> add(o.id to "${o.tag}: needs ${st.needs.joinToString("; ")}")
                 is SpecStatus.OverSpecified -> add(o.id to "${o.tag}: ${st.problem}")

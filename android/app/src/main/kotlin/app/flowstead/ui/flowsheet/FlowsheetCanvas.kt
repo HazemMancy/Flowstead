@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.flowstead.core.api.ObjectStatus
 import app.flowstead.core.model.AdjustKeys
+import app.flowstead.core.model.SetKeys
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ResultView
@@ -280,10 +281,12 @@ fun FlowsheetCanvas(
                         }
                     }
 
-                    // Adjust references: dashed lines to the varied and controlled objects.
-                    for (adj in fs.objects.filter { it.type == ObjectType.Adjust }) {
+                    // Adjust and Set references: dashed lines to the objects they read and write.
+                    for (adj in fs.objects.filter { it.type == ObjectType.Adjust || it.type == ObjectType.Set }) {
                         val from = positionOf(adj)
-                        for (key in listOf(AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.CONTROLLED_OBJECT)) {
+                        val keys = if (adj.type == ObjectType.Adjust) listOf(AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.CONTROLLED_OBJECT)
+                        else listOf(SetKeys.SOURCE_OBJECT, SetKeys.TARGET_OBJECT)
+                        for (key in keys) {
                             val target = adj.refs[key]?.let { id -> fs.objects.firstOrNull { it.id == id } } ?: continue
                             drawLine(
                                 colors.secondary, from, positionOf(target), 1.5f, StrokeCap.Round,

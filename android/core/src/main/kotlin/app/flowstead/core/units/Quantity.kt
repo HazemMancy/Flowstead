@@ -31,4 +31,6 @@ enum class Quantity(val siUnitId: String) {
     Count("count"),
     Length("m"),
     HeatTransferCoefficient("W/m2.K"),
+    Volume("m3"),
+    Time("s"),
 }

@@ -61,6 +61,13 @@
     { "quantity": "Length", "unit": "ft", "value": 100.0, "si": 30.48 },
     { "quantity": "Length", "unit": "in", "value": 4.0, "si": 0.1016 },
     { "quantity": "HeatTransferCoefficient", "unit": "W/m2.K", "value": 25.0, "si": 25.0 },
-    { "quantity": "HeatTransferCoefficient", "unit": "Btu/h.ft2.F", "value": 1.0, "si": 5.678263341113487 }
+    { "quantity": "HeatTransferCoefficient", "unit": "Btu/h.ft2.F", "value": 1.0, "si": 5.678263341113487 },
+    { "quantity": "Volume", "unit": "m3", "value": 10.0, "si": 10.0 },
+    { "quantity": "Volume", "unit": "ft3", "value": 100.0, "si": 2.8316846592 },
+    { "quantity": "Volume", "unit": "bbl", "value": 1.0, "si": 0.158987294928 },
+    { "quantity": "Volume", "unit": "USgal", "value": 1.0, "si": 0.003785411784 },
+    { "quantity": "Time", "unit": "s", "value": 90.0, "si": 90.0 },
+    { "quantity": "Time", "unit": "min", "value": 5.0, "si": 300.0 },
+    { "quantity": "Time", "unit": "h", "value": 2.0, "si": 7200.0 }
   ]
 }

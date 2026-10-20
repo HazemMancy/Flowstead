@@ -44,6 +44,20 @@ data class SimObject(
     val refs: Map<String, String> = emptyMap(),
 )
 
+/**
+ * Keys of a Set (HYSYS-style): target.variable = multiplier × source.variable + offset, applied by the
+ * engine before every solve. Same strings as the engine's SetKeys.
+ */
+object SetKeys {
+    const val TARGET_OBJECT = "targetObject"
+    const val SOURCE_OBJECT = "sourceObject"
+    /** A spec key both objects take. */
+    const val VARIABLE = "variable"
+    const val MULTIPLIER = "multiplier"
+    /** Offset, as a difference in the variable's quantity (SI). */
+    const val OFFSET = "offset"
+}
+
 /** Keys of [SimObject.refs] and specs used by an Adjust. Same strings as the engine's AdjustKeys. */
 object AdjustKeys {
     const val MANIPULATED_OBJECT = "manipulatedObject"
@@ -92,7 +106,7 @@ enum class ObjectType(val category: Category, val available: Boolean = true, val
     @SerialName("heater") Heater(Category.HeatTransfer),
     @SerialName("cooler") Cooler(Category.HeatTransfer),
     @SerialName("heat_exchanger") HeatExchanger(Category.HeatTransfer),
-    @SerialName("air_cooler") AirCooler(Category.HeatTransfer, available = false),
+    @SerialName("air_cooler") AirCooler(Category.HeatTransfer),
 
     @SerialName("pump") Pump(Category.Rotating),
     @SerialName("compressor") Compressor(Category.Rotating),
@@ -105,11 +119,11 @@ enum class ObjectType(val category: Category, val available: Boolean = true, val
 
     @SerialName("mixer") Mixer(Category.Mixing),
     @SerialName("splitter") Splitter(Category.Mixing),
-    @SerialName("component_splitter") ComponentSplitter(Category.Mixing, available = false),
+    @SerialName("component_splitter") ComponentSplitter(Category.Mixing),
 
     @SerialName("separator") Separator(Category.Separators),
     @SerialName("three_phase_separator") ThreePhaseSeparator(Category.Separators),
-    @SerialName("tank") Tank(Category.Separators, available = false),
+    @SerialName("tank") Tank(Category.Separators),
     @SerialName("filter") Filter(Category.Separators, available = false),
     @SerialName("solids_separator") SolidsSeparator(Category.Separators, available = false),
 
@@ -127,7 +141,7 @@ enum class ObjectType(val category: Category, val available: Boolean = true, val
 
     @SerialName("recycle") Recycle(Category.Logical),
     @SerialName("adjust") Adjust(Category.Logical),
-    @SerialName("set") Set(Category.Logical, available = false),
+    @SerialName("set") Set(Category.Logical),
     @SerialName("energy_recycle") EnergyRecycle(Category.Logical, available = false),
 }
 

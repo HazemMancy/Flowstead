@@ -28,7 +28,7 @@ object FlowsheetEditing {
         return if (prefix == null) {
             generateSequence(1) { it + 1 }.map { it.toString() }.first { it !in tags }
         } else {
-            val start = if (type == ObjectType.Recycle || type == ObjectType.Adjust) 1 else 100
+            val start = if (type == ObjectType.Recycle || type == ObjectType.Adjust || type == ObjectType.Set) 1 else 100
             generateSequence(start) { it + 1 }.map { "$prefix-$it" }.first { it !in tags }
         }
     }

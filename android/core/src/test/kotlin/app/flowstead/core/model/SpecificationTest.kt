@@ -61,4 +61,35 @@ class SpecificationTest {
             assertIs<SpecStatus.UnderSpecified>(status(SimObject("o", "FO-100", ObjectType.OrificePlate))).needs,
         )
     }
+
+    @Test
+    fun aSetSuppliesItsTargetsSpecAndChecksTheVariable() {
+        val ac = SimObject("ac", "AC-100", ObjectType.AirCooler, specs = mapOf(SpecKey.OUTLET_TEMPERATURE to Spec(318.15, "C")))
+        val e = SimObject("e", "E-101", ObjectType.Cooler)
+        fun set(key: String) = SimObject(
+            "s", "SET-1", ObjectType.Set,
+            refs = mapOf(SetKeys.SOURCE_OBJECT to "ac", SetKeys.TARGET_OBJECT to "e", SetKeys.VARIABLE to key),
+            specs = mapOf(SetKeys.OFFSET to Spec(5.0, "dC")),
+        )
+        val base = Flowsheet(objects = listOf(ac, e))
+        assertEquals(listOf("outlet temperature or duty"), (assertIs<SpecStatus.UnderSpecified>(Specification.status(base, e))).needs.filterNot { it.endsWith("stream") })
+        val withSet = base.copy(objects = base.objects + set(SpecKey.OUTLET_TEMPERATURE))
+        assertEquals(323.15, Specification.withSets(withSet).obj("e")!!.specs.getValue(SpecKey.OUTLET_TEMPERATURE).si, 1e-9)
+        assertEquals(SpecStatus.Complete, Specification.set(withSet, withSet.obj("s")!!))
+        val wrong = base.copy(objects = base.objects + set(SpecKey.OUTLET_PRESSURE))
+        assertIs<SpecStatus.Invalid>(Specification.status(wrong, wrong.obj("s")!!))
+    }
+
+    @Test
+    fun componentSplitterNeedsFractionsOfKnownCompounds() {
+        fun cs(vararg splits: Pair<String, Double>) = SimObject(
+            "x", "X-100", ObjectType.ComponentSplitter, specs = splits.associate { (c, f) -> SpecKey.split(c) to Spec(f, "frac") },
+        )
+        val fs = Flowsheet(compounds = listOf("Methane", "Carbon dioxide"))
+        fun st(o: SimObject) = Specification.status(fs.copy(objects = listOf(o)), o)
+        assertTrue("fraction of each component to the overhead" in assertIs<SpecStatus.UnderSpecified>(st(cs())).needs)
+        assertIs<SpecStatus.Invalid>(st(cs("Carbon dioxide" to 1.2)))
+        assertIs<SpecStatus.Invalid>(st(cs("Water" to 0.5)))
+        assertEquals("Carbon dioxide to overhead", SpecKey.label(SpecKey.split("Carbon dioxide")))
+    }
 }

@@ -97,10 +97,14 @@ _Last updated: 2026-10-20_
   - Pipe segment: one section; length, ID, elevation, roughness, increments; Beggs & Brill, Lockhart & Martinelli or Petalas & Aziz; adiabatic or U + ambient T.
   - Orifice plate (ISO 5167): flange, corner or radius taps.
   - Benchmark 09 checks both against hand references (Darcy–Weisbach/Colebrook within 0.5 %, ISO 5167 within 2 %).
-  - Next: relief valve (API 520 sizing in the engine layer; DWSIM's steady-state relief valve does no calculation).
+  - Relief valve still to come: API 520 sizing in the engine layer, because DWSIM's steady-state relief valve does no calculation.
+- **M15 separators and logic (D26):**
+  - Component splitter; tank (flash, plus liquid residence time); air cooler (process side); Set (target = m × source + b, solved by Flowstead).
+  - Benchmark 10 checks the component, mole and mass balances and the Set.
+  - Filter, solids separator and energy recycle stay "Coming".
 
 ## Next
-- M15 separators and logic, M16 columns, M17 reactors (owner's priority list).
+- M16 columns, M17 reactors (owner's priority list).
 - Review the `screenshots` artifact (light and dark) and pick the Play Store set. I couldn't download artifacts from the dev sandbox: the network policy blocks the artifact host.
 - Owner input still needed:
   - HYSYS/UniSim and desktop-DWSIM reference values for the benchmarks (D6);

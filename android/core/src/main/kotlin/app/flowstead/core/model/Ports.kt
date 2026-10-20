@@ -70,6 +70,10 @@ object Ports {
         ObjectType.Expander -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"), eOut(1, "Power"))
         ObjectType.Recycle -> listOf(mIn(0, "Calculated"), mOut(0, "Assumed"))
         ObjectType.PipeSegment, ObjectType.OrificePlate -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"))
+        // The engine gives the air cooler a hidden energy stream (its duty is a result).
+        ObjectType.AirCooler -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"))
+        ObjectType.ComponentSplitter -> listOf(mIn(0, "Feed"), mOut(0, "Overhead", dx = 0f, dy = -0.5f), mOut(1, "Bottoms", dx = 0f, dy = 0.5f))
+        ObjectType.Tank -> listOf(mIn(0, "Feed"), mOut(0, "Vapour", dx = 0f, dy = -0.5f), mOut(1, "Liquid", dx = 0f, dy = 0.5f))
         // Ports for the remaining types arrive with their engine support (they are not placeable yet).
         else -> emptyList()
     }

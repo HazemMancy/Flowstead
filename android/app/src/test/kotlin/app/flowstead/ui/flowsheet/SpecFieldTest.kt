@@ -100,6 +100,10 @@ class SpecFieldTest {
         compose.onNodeWithTag("spec_innerDiameter").performImeAction()
         compose.onNodeWithTag("spec_length").performTextInput("100")
         compose.onNodeWithTag("spec_length").performImeAction()
-        assertEquals(listOf(Spec(0.1, "mm"), Spec(30.48, "ft")), rec.specs.map { it.third })
+        // The recorder doesn't feed values back, so moving focus may commit the first field again.
+        assertEquals(
+            mapOf(SpecKey.INNER_DIAMETER to Spec(0.1, "mm"), SpecKey.LENGTH to Spec(30.48, "ft")),
+            rec.specs.associate { it.second to it.third },
+        )
     }
 }

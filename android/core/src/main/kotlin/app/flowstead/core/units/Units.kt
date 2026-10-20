@@ -137,6 +137,15 @@ object Units {
     val ft = u("ft", "ft", Quantity.Length, FT_M, 3)
     val inch = u("in", "in", Quantity.Length, IN_M, 4)
 
+    // Volume and time (vessel volumes, residence times)
+    val m3 = u("m3", "m³", Quantity.Volume, 1.0, 3)
+    val ft3 = u("ft3", "ft³", Quantity.Volume, FT3_M3, 2)
+    val bbl = u("bbl", "bbl", Quantity.Volume, BBL_M3, 2)
+    val usgal = u("USgal", "US gal", Quantity.Volume, US_GAL_M3, 1)
+    val second = u("s", "s", Quantity.Time, 1.0, 1)
+    val minute = u("min", "min", Quantity.Time, 60.0, 2)
+    val hour = u("h", "h", Quantity.Time, HOUR_S, 3)
+
     // Heat transfer coefficient
     val wPerM2K = u("W/m2.K", "W/m²·K", Quantity.HeatTransferCoefficient, 1.0, 2)
     val btuPerHFt2F = u("Btu/h.ft2.F", "Btu/h·ft²·°F", Quantity.HeatTransferCoefficient, BTU_IT_J / (HOUR_S * FT_M * FT_M * 5.0 / 9.0), 3)

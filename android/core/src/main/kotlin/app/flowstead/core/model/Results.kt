@@ -31,13 +31,17 @@ object ResultKeys {
         "temperatureChange", "efficiency", "adiabaticHead", "lmtd", "hotOutletTemperature", "coldOutletTemperature",
         "hotPressureDrop", "coldPressureDrop", "iterations",
         "heatTransferred", "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop", "beta",
+        "liquidResidenceTime", "liquidVolumeFlow", "targetValue",
     )
 
     /** Unit-level results shown for each type, in display order. Streams use [STREAM]. */
     fun forType(type: ObjectType): List<String> = when (type) {
         ObjectType.EnergyStream -> listOf("energyFlow")
         ObjectType.Valve -> listOf("pressureDrop", "outletPressure", "temperatureChange")
-        ObjectType.Heater, ObjectType.Cooler -> listOf("duty", "outletTemperature", "pressureDrop")
+        ObjectType.Heater, ObjectType.Cooler, ObjectType.AirCooler -> listOf("duty", "outletTemperature", "pressureDrop")
+        ObjectType.ComponentSplitter -> listOf("duty")
+        ObjectType.Tank -> listOf("liquidResidenceTime", "liquidVolumeFlow")
+        ObjectType.Set -> listOf("targetValue")
         ObjectType.Pump -> listOf("power", "pressureRise", "temperatureChange", "efficiency")
         ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
@@ -55,6 +59,8 @@ object ResultKeys {
             o.refs[AdjustKeys.MANIPULATED_SPEC]?.let { runCatching { SpecKey.quantity(it) }.getOrNull() } ?: Quantity.Ratio
         o.type == ObjectType.Adjust && key == "controlledValue" ->
             o.refs[AdjustKeys.CONTROLLED_PROPERTY]?.let { quantity(it) } ?: Quantity.Ratio
+        o.type == ObjectType.Set && key == "targetValue" ->
+            o.refs[SetKeys.VARIABLE]?.let { runCatching { SpecKey.quantity(it) }.getOrNull() } ?: Quantity.Ratio
         else -> quantity(key)
     }
 
@@ -70,7 +76,8 @@ object ResultKeys {
         "adiabaticHead" -> Quantity.MassEnthalpy
         "molarFlow" -> Quantity.MolarFlow
         "massFlow" -> Quantity.MassFlow
-        "volumeFlow" -> Quantity.VolumeFlow
+        "volumeFlow", "liquidVolumeFlow" -> Quantity.VolumeFlow
+        "liquidResidenceTime" -> Quantity.Time
         "massEnthalpy" -> Quantity.MassEnthalpy
         "massEntropy" -> Quantity.MassEntropy
         "massHeatCapacity" -> Quantity.MassHeatCapacity
@@ -118,6 +125,9 @@ object ResultKeys {
         "staticPressureDrop" -> "Static (elevation) pressure drop"
         "orificePressureDrop" -> "Differential across the plate"
         "beta" -> "Beta (d/D)"
+        "liquidResidenceTime" -> "Liquid residence time"
+        "liquidVolumeFlow" -> "Liquid outflow (actual)"
+        "targetValue" -> "Value given to the target"
         "manipulatedValue" -> "Varied value"
         "controlledValue" -> "Controlled value"
         else -> key

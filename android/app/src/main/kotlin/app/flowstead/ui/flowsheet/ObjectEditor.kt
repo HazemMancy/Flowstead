@@ -70,6 +70,7 @@ import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
 import app.flowstead.core.model.PortSide
 import app.flowstead.core.model.Ports
+import app.flowstead.core.model.SetKeys
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
@@ -134,6 +135,14 @@ fun ObjectEditorSheet(
                     obj, unitSet, ctx, actions,
                     listOf(SpecKey.OUTLET_PRESSURE to "Outlet pressure", SpecKey.PRESSURE_DROP to "Pressure drop"),
                 )
+                ObjectType.AirCooler -> {
+                    Calculated("Process side only: the engine finds the duty to air; fan power is not modelled.")
+                    ExclusiveSpecs(
+                        obj, unitSet, ctx, actions,
+                        listOf(SpecKey.OUTLET_TEMPERATURE to "Outlet temperature", SpecKey.DUTY to "Duty"),
+                    )
+                    SpecField(obj, SpecKey.PRESSURE_DROP, unitSet, ctx, actions, optionalHint = "0 if left empty")
+                }
                 ObjectType.Heater, ObjectType.Cooler -> {
                     ExclusiveSpecs(
                         obj, unitSet, ctx, actions,
@@ -177,6 +186,16 @@ fun ObjectEditorSheet(
                 }
                 ObjectType.Mixer -> Calculated("Adiabatic mixing; the outlet is at the lowest inlet pressure. Nothing to specify.")
                 ObjectType.PipeSegment -> PipeEditor(obj, unitSet, ctx, actions)
+                ObjectType.ComponentSplitter -> {
+                    Calculated("Fraction of each component's feed sent to the overhead; the rest goes to the bottoms. Both leave at the feed temperature and pressure.")
+                    if (fs.compounds.isEmpty()) Calculated("Add components in Fluid package first.")
+                    for (c in fs.compounds) SpecField(obj, SpecKey.split(c), unitSet, ctx, actions, optionalHint = "0 (all to bottoms)")
+                }
+                ObjectType.Tank -> {
+                    Calculated("Flash at the feed pressure, like a separator. Give the volume to see the liquid residence time.")
+                    SpecField(obj, SpecKey.VOLUME, unitSet, ctx, actions, optionalHint = "optional")
+                }
+                ObjectType.Set -> SetEditor(fs, obj, unitSet, ctx, actions)
                 ObjectType.OrificePlate -> {
                     SpecField(obj, SpecKey.ORIFICE_DIAMETER, unitSet, ctx, actions)
                     SpecField(obj, SpecKey.PIPE_DIAMETER, unitSet, ctx, actions)
@@ -254,6 +273,41 @@ private fun MethodChoice(obj: SimObject, label: String, key: String, options: Li
     val current = obj.refs[key] ?: options.first().first
     Choice(label, options.firstOrNull { it.first == current }?.second, options, testTag = "choice_$key") { picked ->
         actions.setRef(obj.id, key, picked.takeIf { it != options.first().first })
+    }
+}
+
+/** "<target · variable> = multiplier × <source · variable> + offset", applied before every solve. */
+@Composable
+private fun SetEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
+    val candidates = fs.objects.filter {
+        it.id != obj.id && SpecKey.forType(it.type).isNotEmpty() && (it.type != ObjectType.MaterialStream || fs.isFeed(it))
+    }
+    val target = candidates.firstOrNull { it.id == obj.refs[SetKeys.TARGET_OBJECT] }
+    val key = obj.refs[SetKeys.VARIABLE]
+    val source = fs.objects.firstOrNull { it.id == obj.refs[SetKeys.SOURCE_OBJECT] }
+
+    SectionLabel("Target")
+    Choice("Object", target?.tag, candidates.map { it.id to "${it.tag} · ${it.type.displayName()}" }) {
+        actions.setRef(obj.id, SetKeys.TARGET_OBJECT, it)
+        actions.setRef(obj.id, SetKeys.VARIABLE, null)
+        actions.setRef(obj.id, SetKeys.SOURCE_OBJECT, null)
+    }
+    if (target != null) {
+        Choice("Variable", key?.let { SpecKey.label(it) }, SpecKey.forType(target.type).map { it to SpecKey.label(it) }) {
+            actions.setRef(obj.id, SetKeys.VARIABLE, it)
+            actions.setRef(obj.id, SetKeys.SOURCE_OBJECT, null)
+        }
+    }
+    if (target != null && key != null) {
+        SectionLabel("Source")
+        val sources = fs.objects.filter { it.id != target.id && it.id != obj.id && key in it.specs }
+        Choice("Object", source?.tag, sources.map { it.id to "${it.tag} · ${it.type.displayName()}" }) {
+            actions.setRef(obj.id, SetKeys.SOURCE_OBJECT, it)
+        }
+        val q = SpecKey.quantity(key)
+        SpecField(obj, SetKeys.MULTIPLIER, unitSet, ctx, actions, quantityOverride = Quantity.Ratio, labelOverride = "Multiplier", optionalHint = "1 if empty")
+        SpecField(obj, SetKeys.OFFSET, unitSet, ctx, actions, quantityOverride = differenceOf(q), labelOverride = "Offset", optionalHint = "0 if empty")
+        Calculated("${target.tag} ${SpecKey.label(key).lowercase()} = multiplier × ${source?.tag ?: "source"} ${SpecKey.label(key).lowercase()} + offset")
     }
 }
 
