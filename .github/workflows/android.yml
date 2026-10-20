@@ -157,7 +157,10 @@ jobs:
             cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
       - name: Device log
         if: always()
-        run: grep -E "FlowsteadOnDevice|FlowsteadEngine|mono|DOTNET|FATAL|flowstead| F/|AndroidRuntime" logcat.txt | tail -400 || true
+        # Repeated stack frames (a runaway recursion) are counted, not printed, so the callers stay visible.
+        run: |
+          grep -E "FlowsteadOnDevice|FlowsteadEngine|mono|DOTNET|FATAL|flowstead| F/|AndroidRuntime" logcat.txt \
+            | sed -E 's/^[0-9-]+ [0-9:.]+ //' | uniq -c | sed -E 's/^ +1 //' | tail -400 || true
       - name: Upload device test reports
         if: always()
         uses: actions/upload-artifact@v4
