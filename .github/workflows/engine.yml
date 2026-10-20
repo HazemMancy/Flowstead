@@ -52,6 +52,12 @@ jobs:
           curl -fsS -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
             --data @<(python3 -c "import json;print(json.dumps(json.load(open('benchmarks/03-two-phase-flash/input.json'))['flowsheet']))") \
             localhost:8080/solve | python3 -c "import json,sys;r=json.load(sys.stdin);print(r['status'],r['objects']['feed']['properties']);assert r['status']=='converged'"
+          # .dwxmz export then import, inside the container (temp files, DWSIM file I/O)
+          python3 -c "import json;print(json.dumps(json.load(open('benchmarks/05-jt-valve-letdown/input.json'))['flowsheet']))" > /tmp/fs.json
+          curl -fsS -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' --data @/tmp/fs.json localhost:8080/export \
+            | python3 -c "import json,sys;r=json.load(sys.stdin);print('export',r['status'],len(r['data']));print(json.dumps({'data':r['data']}))" | tail -1 > /tmp/file.json
+          curl -fsS -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' --data @/tmp/file.json localhost:8080/import \
+            | python3 -c "import json,sys;r=json.load(sys.stdin);print('import',[o['tag'] for o in r['flowsheet']['objects']],r['warnings']);assert len(r['flowsheet']['objects'])>=3"
       - name: Container logs
         if: always()
         run: docker logs eng || true

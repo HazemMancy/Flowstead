@@ -239,6 +239,81 @@ public sealed class DwsimEngine
             Objects = objects,
         };
 
+    // ------------------------------------------------------------------ DWSIM files
+
+    /// <summary>
+    /// Builds and solves the flowsheet in DWSIM and saves it as a .dwxmz that opens in desktop DWSIM
+    /// with its results. Adjusts are not written (they are solved by Flowstead, not DWSIM).
+    /// </summary>
+    public ExportResult ExportDwsim(Flowsheet model)
+    {
+        var messages = Validator.Validate(model, _automation.AvailableCompounds.Keys, MvpPackages.Select(p => p.Name)
+            .Concat(_automation.AvailablePropertyPackages.Keys));
+        var errors = messages.Where(m => m.Level == MessageLevel.Error).Select(m => m.Text).ToList();
+        if (errors.Count > 0) throw new InvalidDataException("The flowsheet can't be exported yet: " + string.Join(" ", errors));
+
+        var warnings = new List<string>();
+        var adjusts = model.Objects.Where(o => o.Type == ObjectType.Adjust).ToList();
+        foreach (var a in adjusts)
+            warnings.Add($"{a.Tag}: Adjust is not written to the DWSIM file; the varied specification keeps its value as entered.");
+        var plain = model with { Objects = model.Objects.Where(o => o.Type != ObjectType.Adjust).ToList() };
+
+        var (fs, _) = Build(plain);
+        var solveErrors = _automation.CalculateFlowsheet4(fs) ?? [];
+        var status = solveErrors.Count == 0 ? SolveStatus.Converged : SolveStatus.Failed;
+        if (status != SolveStatus.Converged) warnings.Add("The flowsheet did not solve cleanly; the file is saved with partial results.");
+
+        var path = Path.Combine(Path.GetTempPath(), $"flowstead-{Guid.NewGuid():N}.dwxmz");
+        try
+        {
+            _automation.SaveFlowsheet(fs, path, true);
+            return new ExportResult(Convert.ToBase64String(File.ReadAllBytes(path)), status, warnings);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>Opens a DWSIM file and maps what Flowstead supports (see DwxmzImporter).</summary>
+    public ImportResult ImportDwsim(DwsimFile file)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(file.Data);
+        }
+        catch (FormatException)
+        {
+            throw new InvalidDataException("The file data is not valid base64.");
+        }
+        if (bytes.Length == 0) throw new InvalidDataException("The file is empty.");
+        // .dwxmz is a zip ("PK"); anything else is treated as uncompressed .dwxml.
+        var ext = bytes is [0x50, 0x4B, ..] ? ".dwxmz" : ".dwxml";
+        var path = Path.Combine(Path.GetTempPath(), $"flowstead-{Guid.NewGuid():N}{ext}");
+        try
+        {
+            File.WriteAllBytes(path, bytes);
+            IFlowsheet fs;
+            try
+            {
+                fs = _automation.LoadFlowsheet(path);
+            }
+            catch (Exception e)
+            {
+                throw new InvalidDataException("DWSIM could not open the file: " + e.GetBaseException().Message);
+            }
+            return DwxmzImporter.Map(fs, FlowsteadPackageName);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static string FlowsteadPackageName(string dwsim) =>
+        MvpPackages.FirstOrDefault(p => p.Dwsim == dwsim).Name ?? dwsim;
+
     // ------------------------------------------------------------------ build
 
     private (IFlowsheet, Dictionary<string, ISimulationObject>) Build(Flowsheet model)

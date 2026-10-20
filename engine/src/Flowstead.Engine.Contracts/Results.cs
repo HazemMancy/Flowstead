@@ -78,11 +78,22 @@ public static class WorkerMethods
     public const string PropertyPackages = "propertyPackages";
     public const string SearchCompounds = "searchCompounds";
     public const string Solve = "solve";
+    public const string ExportDwsim = "exportDwsim";
+    public const string ImportDwsim = "importDwsim";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }
 
 public sealed record SearchCompoundsParams(string Query, int Limit = 25);
+
+/// <summary>A DWSIM file (.dwxmz, or uncompressed .dwxml), base64-encoded.</summary>
+public sealed record DwsimFile(string Data);
+
+/// <summary>Export: the solved flowsheet as a .dwxmz, plus anything that could not be carried over.</summary>
+public sealed record ExportResult(string Data, SolveStatus Status, List<string> Warnings);
+
+/// <summary>Import: the mapped Flowstead model and everything left out or changed on the way in.</summary>
+public sealed record ImportResult(Flowsheet Flowsheet, List<string> Warnings);
 
 public static class EngineInfo
 {

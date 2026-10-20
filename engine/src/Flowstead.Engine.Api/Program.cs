@@ -99,8 +99,52 @@ api.MapGet("/flowsheets/{id}/results", (string id, Store s) =>
     return Results.Ok(new FlowsheetResults(r.Result, r.SolvedAt, Stale: r.ModelHash != Store.ModelHash(f.Flowsheet)));
 });
 
+// DWSIM files (.dwxmz). JSON with base64 data so the app needs no multipart handling.
+api.MapPost("/export", async (Flowsheet fs, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.ExportDwsimAsync(fs, ct), "cannot_export"));
+
+api.MapGet("/flowsheets/{id}/export", async (string id, Store s, EngineService e, CancellationToken ct) =>
+{
+    if (s.Get(id) is not { } f) return NotFound(id);
+    try
+    {
+        var export = await e.ExportDwsimAsync(f.Flowsheet, ct);
+        return Results.File(Convert.FromBase64String(export.Data), "application/octet-stream", SafeFileName(f.Name) + ".dwxmz");
+    }
+    catch (Exception x) when (x is WorkerRequestException or TimeoutException or WorkerFailedException)
+    {
+        return FileError(x, "cannot_export");
+    }
+});
+
+api.MapPost("/import", async (DwsimFile file, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.ImportDwsimAsync(file, ct), "invalid_file"));
+
 app.Run();
 return 0;
+
+static async Task<IResult> FileCall<T>(Func<Task<T>> call, string code)
+{
+    try
+    {
+        return Results.Ok(await call());
+    }
+    catch (Exception x) when (x is WorkerRequestException or TimeoutException or WorkerFailedException)
+    {
+        return FileError(x, code);
+    }
+}
+
+// A bad file or an unexportable flowsheet is the caller's to fix (422); a dead or slow engine is ours (503).
+static IResult FileError(Exception x, string code) => x is WorkerRequestException
+    ? Results.UnprocessableEntity(new EngineError(code, x.Message))
+    : Results.Json(new EngineError("engine_unavailable", x.Message), statusCode: StatusCodes.Status503ServiceUnavailable);
+
+static string SafeFileName(string name)
+{
+    var clean = new string(name.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' or ' ' ? c : '_').ToArray()).Trim();
+    return clean.Length == 0 ? "flowsheet" : clean;
+}
 
 static IResult NotFound(string id) => Results.NotFound(new EngineError("not_found", $"No flowsheet '{id}'."));
 

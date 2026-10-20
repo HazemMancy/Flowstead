@@ -122,7 +122,37 @@ paths:
                   solvedAt: { type: string, format: date-time }
                   stale: { type: boolean }
         "404": { $ref: "#/components/responses/NotFound" }
-  # Planned for milestone 8: POST /import and GET /flowsheets/{id}/export (.dwxmz).
+  /flowsheets/{id}/export:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Solve a stored flowsheet and download it as a DWSIM .dwxmz (opens in desktop DWSIM with results)
+      responses:
+        "200":
+          description: The file (Content-Disposition names it after the flowsheet)
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/FileError" }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+  /export:
+    post:
+      summary: Solve a flowsheet sent in full and return it as a base64 DWSIM .dwxmz. Adjusts are not written (warning).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Flowsheet" } } }
+      responses:
+        "200": { description: The file, content: { application/json: { schema: { $ref: "#/components/schemas/ExportResult" } } } }
+        "422": { $ref: "#/components/responses/FileError" }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+  /import:
+    post:
+      summary: Map a DWSIM .dwxmz/.dwxml to a Flowstead flowsheet. Unsupported objects are left out with a warning each.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DwsimFile" } } }
+      responses:
+        "200": { description: Mapped flowsheet, content: { application/json: { schema: { $ref: "#/components/schemas/ImportResult" } } } }
+        "422": { $ref: "#/components/responses/FileError" }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
 
 components:
   securitySchemes:
@@ -139,7 +169,31 @@ components:
     NotFound:
       description: No such flowsheet, or not solved yet
       content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } }
+    FileError:
+      description: "Not a readable DWSIM file (code invalid_file), or a flowsheet that can't be exported (code cannot_export)"
+      content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } }
+    EngineUnavailable:
+      description: Engine worker crashed or timed out (code engine_unavailable)
+      content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } }
   schemas:
+    DwsimFile:
+      type: object
+      required: [data]
+      properties:
+        data: { type: string, contentEncoding: base64 }
+    ExportResult:
+      type: object
+      required: [data, status, warnings]
+      properties:
+        data: { type: string, contentEncoding: base64, description: .dwxmz bytes }
+        status: { type: string, enum: [converged, failed] }
+        warnings: { type: array, items: { type: string } }
+    ImportResult:
+      type: object
+      required: [flowsheet, warnings]
+      properties:
+        flowsheet: { $ref: "#/components/schemas/Flowsheet" }
+        warnings: { type: array, items: { type: string }, description: What was left out or changed; show every one to the user }
     EngineHealth:
       type: object
       required: [status, engineVersion, dwsimVersion]
