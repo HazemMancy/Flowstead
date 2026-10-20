@@ -77,9 +77,20 @@ _Last updated: 2026-10-20_
     - Already in place: canvas objects have TalkBack nodes with edit / more / delete actions.
     - Already in place: 48 dp targets, live regions on solve and DOF status, and enforced text contrast (D14).
 
+- **M10 on-device engine spike:** `docs/on-device-spike.md`.
+  - **Not run on a device** (no Android tooling here). It is measured on the x64 worker instead, plus a static analysis of every assembly DWSIM loads.
+  - All 39 assemblies are IL-only.
+  - The only native library a MVP solve loads is SkiaSharp, which ships for Android.
+  - Size: about 42 MB deflated. Memory: 250 MB peak.
+  - **Recommendation:** keep the remote engine for v1. The report also gives a device experiment with go/no-go criteria.
+- Benchmarks now include each case's `.dwxmz`, exported by the engine (it opens in desktop DWSIM for cross-checks).
+
 ## Next
-- M9 (rest): toolchain upgrade to AGP 9.4.1 / Kotlin 2.4.21 / SDK 37 (D15), pending CI; dark-theme screenshot check.
-- M10: on-device spike report.
+- Toolchain upgrade to AGP 9.4.1 / Kotlin 2.4.21 / SDK 37 (D15): pending the full CI run (unit and UI tests already pass).
+- Play Store phone screenshots against a real engine; a dark-theme visual check.
+- Owner input still needed:
+  - HYSYS/UniSim and desktop-DWSIM reference values for the benchmarks (D6);
+  - the support e-mail and a privacy-policy URL for the listing.
 
 ## Known limitations
 
