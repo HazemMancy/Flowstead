@@ -68,7 +68,10 @@ kotlin {
 
 tasks.withType<Test>().configureEach {
     systemProperty("flowstead.repoDir", rootDir.parentFile.canonicalPath)
-    systemProperty("flowstead.screenshotDir", layout.buildDirectory.dir("screenshots").get().asFile.path)
+    val screenshots = layout.buildDirectory.dir("screenshots")
+    systemProperty("flowstead.screenshotDir", screenshots.get().asFile.path)
+    outputs.dir(screenshots) // so a cached test run still restores the images
+
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.SHORT
