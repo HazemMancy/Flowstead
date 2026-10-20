@@ -1,0 +1,59 @@
+name: android
+
+on:
+  push:
+    paths: ["android/**", "shared/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["android/**", "shared/**", ".github/workflows/android.yml"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Core unit tests (units, model, formatting)
+        run: ./gradlew :core:test --stacktrace
+      - name: App unit + Robolectric UI tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+      - name: Lint
+        run: ./gradlew :app:lintDebug --stacktrace
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flowstead-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            android/app/build/reports/
+            android/core/build/reports/
+            android/app/build/test-results/
+            android/app/schemas/
+
+  toolchain-report:
+    # Non-blocking: lists the newest stable toolchain versions so pinned ones can be bumped deliberately.
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - name: Latest stable versions on Google Maven
+        run: |
+          for a in com/android/tools/build/gradle androidx/compose/compose-bom androidx/core/core-ktx \
+                   androidx/navigation/navigation-compose androidx/room/room-runtime androidx/lifecycle/lifecycle-runtime-compose; do
+            v=$(curl -fsSL "https://dl.google.com/dl/android/maven2/$a/maven-metadata.xml" \
+                | grep -oE '<version>[^<]+' | sed 's/<version>//' | grep -vE 'alpha|beta|rc|dev' | tail -1)
+            echo "$a: $v"
+          done

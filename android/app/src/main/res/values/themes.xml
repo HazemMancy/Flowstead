@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose draws everything; the window theme only sets edge-to-edge friendly basics. -->
+    <style name="Theme.Flowstead" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/brand_background</item>
+    </style>
+
+    <!-- Android 12 SplashScreen API (backported by core-splashscreen): navy, the mark centred. -->
+    <style name="Theme.Flowstead.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/brand_navy</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Flowstead</item>
+    </style>
+</resources>

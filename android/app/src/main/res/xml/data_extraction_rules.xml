@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Projects are backed up; the engine key never leaves the device (it is Keystore-bound anyway). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/engine_secrets.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/engine_secrets.preferences_pb" />
+    </device-transfer>
+</data-extraction-rules>

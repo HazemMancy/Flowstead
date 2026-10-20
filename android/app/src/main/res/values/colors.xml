@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette (docs: brand board v1.0) -->
+    <color name="brand_navy">#FF0B1F33</color>
+    <color name="brand_teal">#FF12A89D</color>
+    <color name="brand_teal_text">#FF0E7C74</color>
+    <color name="brand_teal_light">#FF7FDCD3</color>
+    <color name="brand_amber">#FFF2A33A</color>
+    <color name="brand_mist">#FFE8EEF3</color>
+    <color name="brand_background">#FFF6F8FA</color>
+</resources>

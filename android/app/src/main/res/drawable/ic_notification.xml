@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar / notification glyph: white silhouette, no trays. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <group android:translateX="-1">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M40,20A12,12 0,0 1,52 32V88A12,12 0,0 1,40 100A12,12 0,0 1,28 88V32A12,12 0,0 1,40 20Z" />
+        <path
+            android:pathData="M50,33h30M50,60h18"
+            android:strokeWidth="12"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M78,22l16,11l-16,11zM66,50l14,10l-14,10z" />
+    </group>
+</vector>

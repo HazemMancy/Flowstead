@@ -7,7 +7,7 @@ Status: **plan only, no production code yet.** Answers to the open questions in 
 ## 1. What I verified in the DWSIM source
 
 Inspected a shallow clone of `DanWBR/dwsim` at
-`1abf72d1b6b41d3e9a8cc770d3cc4e8fc76e5766` (2026-07-17, "feat: scale the pump curves to the speed the pump runs at"). This is the newest commit on `master` and the proposed pin.
+`1abf72d1b6b41d3e9a8cc770d3cc4e8fc76e5766` (2026-07-17, "feat: scale the pump curves to the speed the pump runs at"). This is the newest commit on the default branch (`windows`, not `master`) and the proposed pin.
 
 | Claim in the brief | Finding |
 |---|---|

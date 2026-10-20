@@ -1,0 +1,93 @@
+/*
+ * Flowstead — steady-state process simulation, in your pocket.
+ * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+ */
+package app.flowstead.di
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStoreFile
+import androidx.room.Room
+import app.flowstead.data.Clock
+import app.flowstead.data.ProjectRepository
+import app.flowstead.data.RoomProjectRepository
+import app.flowstead.data.db.AppDatabase
+import app.flowstead.data.db.ProjectDao
+import app.flowstead.data.engine.EngineClient
+import app.flowstead.data.engine.KtorEngineClient
+import app.flowstead.data.settings.DataStoreSettingsRepository
+import app.flowstead.data.settings.EncryptedSecretStore
+import app.flowstead.data.settings.KeystoreCipher
+import app.flowstead.data.settings.SecretCipher
+import app.flowstead.data.settings.SecretStore
+import app.flowstead.data.settings.SettingsRepository
+import dagger.Binds
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.json.Json
+import javax.inject.Named
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
+
+    @Provides
+    @Singleton
+    fun database(@ApplicationContext context: Context): AppDatabase =
+        Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME).build()
+
+    @Provides
+    fun projectDao(db: AppDatabase): ProjectDao = db.projectDao()
+
+    @Provides
+    @Singleton
+    fun clock(): Clock = Clock { System.currentTimeMillis() }
+
+    @Provides
+    @Singleton
+    @Named("settings")
+    fun settingsStore(@ApplicationContext context: Context): DataStore<Preferences> =
+        PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("settings") }
+
+    /** Kept in its own file so backup rules can exclude it (res/xml/data_extraction_rules.xml). */
+    @Provides
+    @Singleton
+    @Named("secrets")
+    fun secretsStore(@ApplicationContext context: Context): DataStore<Preferences> =
+        PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("engine_secrets") }
+
+    @Provides
+    @Singleton
+    fun secretCipher(): SecretCipher = KeystoreCipher()
+
+    @Provides
+    @Singleton
+    fun httpClient(): HttpClient = HttpClient(OkHttp) {
+        expectSuccess = false
+        install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        install(HttpTimeout) {
+            connectTimeoutMillis = 10_000
+            requestTimeoutMillis = 120_000
+        }
+    }
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class BindingsModule {
+    @Binds abstract fun projects(impl: RoomProjectRepository): ProjectRepository
+    @Binds abstract fun settings(impl: DataStoreSettingsRepository): SettingsRepository
+    @Binds abstract fun secrets(impl: EncryptedSecretStore): SecretStore
+    @Binds abstract fun engine(impl: KtorEngineClient): EngineClient
+}

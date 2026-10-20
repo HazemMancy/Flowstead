@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: the mark without its background, scaled ×0.64 and centred so the
+     whole glyph (farthest point ≈ 47 units from centre) sits well inside the 66 dp safe zone (radius ≈ 30 of 33 dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.64"
+        android:scaleY="0.64"
+        android:translateX="15.44"
+        android:translateY="15.6">
+        <path
+            android:fillColor="@color/brand_teal"
+            android:pathData="M40,20A12,12 0,0 1,52 32V88A12,12 0,0 1,40 100A12,12 0,0 1,28 88V32A12,12 0,0 1,40 20Z" />
+        <path
+            android:pathData="M34,42h12M34,54h12M34,66h12M34,78h12"
+            android:strokeWidth="3"
+            android:strokeColor="@color/brand_navy"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M50,33h30"
+            android:strokeWidth="10"
+            android:strokeColor="@color/brand_amber"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="@color/brand_amber"
+            android:pathData="M78,23l15,10l-15,10z"
+            android:strokeWidth="2"
+            android:strokeColor="@color/brand_amber"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M50,60h18"
+            android:strokeWidth="10"
+            android:strokeColor="@color/brand_teal_light"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="@color/brand_teal_light"
+            android:pathData="M66,51l13,9l-13,9z"
+            android:strokeWidth="2"
+            android:strokeColor="@color/brand_teal_light"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

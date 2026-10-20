@@ -1,0 +1,53 @@
+/*
+ * Flowstead — steady-state process simulation, in your pocket.
+ * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+ */
+package app.flowstead.ui.nav
+
+import androidx.compose.runtime.Composable
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import app.flowstead.ui.about.AboutScreen
+import app.flowstead.ui.about.LicenseTextScreen
+import app.flowstead.ui.flowsheet.FlowsheetScreen
+import app.flowstead.ui.projects.ProjectsScreen
+import app.flowstead.ui.settings.SettingsScreen
+import kotlinx.serialization.Serializable
+
+@Serializable data object ProjectsRoute
+@Serializable data class FlowsheetRoute(val projectId: String)
+@Serializable data object SettingsRoute
+@Serializable data object AboutRoute
+@Serializable data class LicenseRoute(val title: String, val asset: String)
+
+@Composable
+fun FlowsteadNavHost() {
+    val nav = rememberNavController()
+    NavHost(navController = nav, startDestination = ProjectsRoute) {
+        composable<ProjectsRoute> {
+            ProjectsScreen(
+                onOpenProject = { nav.navigate(FlowsheetRoute(it)) },
+                onOpenSettings = { nav.navigate(SettingsRoute) },
+                onOpenAbout = { nav.navigate(AboutRoute) },
+            )
+        }
+        composable<FlowsheetRoute> {
+            FlowsheetScreen(onBack = { nav.popBackStack() })
+        }
+        composable<SettingsRoute> {
+            SettingsScreen(onBack = { nav.popBackStack() })
+        }
+        composable<AboutRoute> {
+            AboutScreen(
+                onBack = { nav.popBackStack() },
+                onOpenLicense = { title, asset -> nav.navigate(LicenseRoute(title, asset)) },
+            )
+        }
+        composable<LicenseRoute> { entry ->
+            val route = entry.toRoute<LicenseRoute>()
+            LicenseTextScreen(title = route.title, asset = route.asset, onBack = { nav.popBackStack() })
+        }
+    }
+}
