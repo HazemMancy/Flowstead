@@ -86,8 +86,8 @@ object EngineUrl {
     }
 
     fun normalise(input: String): Result {
-        val raw = input.trim().trimEnd('/')
-        if (raw.isEmpty()) return Result.Invalid("Enter the engine address")
+        val raw = input.trim()
+        if (raw.isEmpty() || raw.trimEnd('/').isEmpty()) return Result.Invalid("Enter the engine address")
         val withScheme = if ("://" in raw) raw else "https://$raw"
         val uri = runCatching { java.net.URI(withScheme) }.getOrNull()
             ?: return Result.Invalid("Not a valid address")
@@ -96,6 +96,6 @@ object EngineUrl {
         }
         if (uri.host.isNullOrBlank()) return Result.Invalid("Address has no host name")
         if (uri.rawQuery != null || uri.rawFragment != null) return Result.Invalid("Remove the query or fragment")
-        return Result.Ok(withScheme)
+        return Result.Ok(withScheme.trimEnd('/'))
     }
 }
