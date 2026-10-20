@@ -70,4 +70,26 @@ class ProjectsScreenTest {
         compose.onNodeWithTag("confirm_delete").performClick()
         assertEquals("a", deleted)
     }
+
+    @Test
+    fun importNotesAreListedBeforeOpening() {
+        var opened: Boolean? = null
+        val report = ProjectsEffect.ImportReport("p9", "Gas plant", listOf("PIPE-1: Pipe is not supported", "END: it was fed by PIPE-1"))
+        compose.setContent {
+            FlowsteadTheme {
+                ProjectsContent(ProjectsUiState(loading = false), importReport = report, onImportReportDone = { opened = it })
+            }
+        }
+        compose.onNodeWithText("Imported “Gas plant” with 2 notes").assertIsDisplayed()
+        compose.onNodeWithText("• PIPE-1: Pipe is not supported").assertIsDisplayed()
+        compose.onNodeWithTag("open_imported").performClick()
+        assertEquals(true, opened)
+    }
+
+    @Test
+    fun importButtonShowsProgressWhileImporting() {
+        compose.setContent { FlowsteadTheme { ProjectsContent(ProjectsUiState(loading = false, importing = true)) } }
+        compose.onNodeWithTag("importing").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Import DWSIM file").assertDoesNotExist()
+    }
 }

@@ -5,6 +5,9 @@
 package app.flowstead.data.engine
 
 import app.flowstead.core.api.CompoundInfo
+import app.flowstead.core.api.DwsimFile
+import app.flowstead.core.api.ExportResult
+import app.flowstead.core.api.ImportResult
 import app.flowstead.core.api.EngineError
 import app.flowstead.core.api.EngineHealth
 import app.flowstead.core.api.PropertyPackageInfo
@@ -32,7 +35,8 @@ import javax.net.ssl.SSLException
 /** Outcome of an engine call, in words an engineer can act on. */
 sealed interface EngineResult<out T> {
     data class Ok<T>(val value: T) : EngineResult<T>
-    data class Failed(val reason: String) : EngineResult<Nothing>
+    /** [unreachable]: no connection at all (offline, DNS, refused), as opposed to an engine that answered "no". */
+    data class Failed(val reason: String, val unreachable: Boolean = false) : EngineResult<Nothing>
 }
 
 interface EngineClient {
@@ -40,6 +44,8 @@ interface EngineClient {
     suspend fun compounds(baseUrl: String, apiKey: String?, query: String, limit: Int = 25): EngineResult<List<CompoundInfo>>
     suspend fun propertyPackages(baseUrl: String, apiKey: String?): EngineResult<List<PropertyPackageInfo>>
     suspend fun solve(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<SolveResult>
+    suspend fun exportDwsim(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<ExportResult>
+    suspend fun importDwsim(baseUrl: String, apiKey: String?, file: DwsimFile): EngineResult<ImportResult>
 }
 
 @Singleton
@@ -70,6 +76,22 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
         }
     }
 
+    override suspend fun exportDwsim(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<ExportResult> = call {
+        http.post("$baseUrl/export") {
+            apiKey?.let { bearerAuth(it) }
+            contentType(ContentType.Application.Json)
+            setBody(flowsheet)
+        }
+    }
+
+    override suspend fun importDwsim(baseUrl: String, apiKey: String?, file: DwsimFile): EngineResult<ImportResult> = call {
+        http.post("$baseUrl/import") {
+            apiKey?.let { bearerAuth(it) }
+            contentType(ContentType.Application.Json)
+            setBody(file)
+        }
+    }
+
     private suspend inline fun <reified T> call(block: () -> HttpResponse): EngineResult<T> = try {
         val response = block()
         if (response.status.isSuccess()) {
@@ -84,7 +106,7 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
     } catch (e: SSLException) {
         EngineResult.Failed("Secure connection failed: ${e.message ?: "certificate not trusted"}")
     } catch (e: IOException) {
-        EngineResult.Failed("Cannot reach the engine: ${e.message ?: e::class.simpleName}")
+        EngineResult.Failed("Cannot reach the engine: ${e.message ?: e::class.simpleName}", unreachable = true)
     } catch (e: Exception) {
         EngineResult.Failed("Unexpected engine response: ${e.message ?: e::class.simpleName}")
     }
@@ -95,6 +117,7 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
             HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden -> "The engine rejected the API key"
             HttpStatusCode.TooManyRequests -> "Too many requests; try again shortly"
             HttpStatusCode.NotFound -> "This address is not a Flowstead engine"
+            HttpStatusCode.UnprocessableEntity -> "The engine could not use it"
             else -> "Engine error ${response.status.value}"
         }
         return if (detail.isNullOrBlank()) base else "$base: $detail"

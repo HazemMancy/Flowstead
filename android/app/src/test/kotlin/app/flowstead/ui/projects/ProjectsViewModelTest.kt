@@ -4,7 +4,11 @@
  */
 package app.flowstead.ui.projects
 
+import app.flowstead.FakeDocumentIo
+import app.flowstead.FakeEngineClient
 import app.flowstead.FakeProjectRepository
+import app.flowstead.FakeSecretStore
+import app.flowstead.FakeSettingsRepository
 import app.flowstead.MainDispatcherRule
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -18,7 +22,7 @@ class ProjectsViewModelTest {
 
     private val repo = FakeProjectRepository()
     // Lazy: built after MainDispatcherRule has installed the test Main dispatcher.
-    private val vm by lazy { ProjectsViewModel(repo) }
+    private val vm by lazy { ProjectsViewModel(repo, FakeSettingsRepository(), FakeSecretStore(), FakeEngineClient(), FakeDocumentIo()) }
 
     private suspend fun names() = vm.state.first { !it.loading }.projects.map { it.name }
 

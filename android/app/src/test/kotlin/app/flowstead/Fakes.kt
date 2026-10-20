@@ -4,7 +4,11 @@
  */
 package app.flowstead
 
+import android.net.Uri
 import app.flowstead.core.api.CompoundInfo
+import app.flowstead.core.api.DwsimFile
+import app.flowstead.core.api.ExportResult
+import app.flowstead.core.api.ImportResult
 import app.flowstead.core.api.EngineHealth
 import app.flowstead.core.api.PropertyPackageInfo
 import app.flowstead.core.api.SolveResult
@@ -18,6 +22,9 @@ import app.flowstead.data.ProjectSummary
 import app.flowstead.data.RoomProjectRepository
 import app.flowstead.data.engine.EngineClient
 import app.flowstead.data.engine.EngineResult
+import app.flowstead.data.files.DocumentIo
+import app.flowstead.data.files.PickedDocument
+import app.flowstead.data.queue.SolveQueue
 import app.flowstead.data.settings.AppSettings
 import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.SettingsRepository
@@ -102,4 +109,27 @@ class FakeEngineClient(var result: EngineResult<EngineHealth> = EngineResult.Ok(
         solved += flowsheet
         return solveResult
     }
+
+    var exportResult: EngineResult<ExportResult> = EngineResult.Ok(ExportResult("UEsDBA==", SolveStatus.Converged)) // "PK\u0003\u0004"
+    override suspend fun exportDwsim(baseUrl: String, apiKey: String?, flowsheet: Flowsheet) = exportResult
+
+    var importResult: EngineResult<ImportResult> = EngineResult.Ok(ImportResult(Flowsheet()))
+    val imported = mutableListOf<DwsimFile>()
+    override suspend fun importDwsim(baseUrl: String, apiKey: String?, file: DwsimFile): EngineResult<ImportResult> {
+        imported += file
+        return importResult
+    }
+}
+
+class FakeSolveQueue : SolveQueue {
+    val queued = MutableStateFlow<Set<String>>(emptySet())
+    override fun enqueue(projectId: String) = queued.update { it + projectId }
+    override fun cancel(projectId: String) = queued.update { it - projectId }
+    override fun observeQueued(projectId: String): Flow<Boolean> = queued.map { projectId in it }
+}
+
+class FakeDocumentIo(var toRead: PickedDocument? = PickedDocument("Plant.dwxmz", byteArrayOf(0x50, 0x4B))) : DocumentIo {
+    val written = mutableMapOf<Uri, ByteArray>()
+    override suspend fun read(uri: Uri): PickedDocument = toRead ?: throw java.io.IOException("Permission denied")
+    override suspend fun write(uri: Uri, bytes: ByteArray) { written[uri] = bytes }
 }

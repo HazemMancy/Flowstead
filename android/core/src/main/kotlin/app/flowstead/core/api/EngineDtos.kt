@@ -81,3 +81,15 @@ object OfflineCatalogue {
         }.sortedWith(compareBy({ it.second }, { it.first.length })).map { it.first }.take(limit)
     }
 }
+
+/** A DWSIM file (.dwxmz, or uncompressed .dwxml), base64-encoded, for POST /import. */
+@Serializable
+data class DwsimFile(val data: String)
+
+/** POST /export: the solved flowsheet as .dwxmz bytes (base64), plus what could not be carried over. */
+@Serializable
+data class ExportResult(val data: String, val status: SolveStatus, val warnings: List<String> = emptyList())
+
+/** POST /import: the mapped flowsheet and everything left out or changed; show every warning. */
+@Serializable
+data class ImportResult(val flowsheet: app.flowstead.core.model.Flowsheet, val warnings: List<String> = emptyList())

@@ -4,6 +4,8 @@
  */
 package app.flowstead.ui.flowsheet
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,10 +20,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -82,6 +87,16 @@ fun FlowsheetScreen(
     LaunchedEffect(viewModel) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
 
     val ready = (state as? FlowsheetUiState.Ready)?.ui
+    var menu by remember { mutableStateOf(false) }
+    val dwsimFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        uri?.let(viewModel::exportDwsim)
+    }
+    val csvFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(ResultsFormat.Csv.mimeType)) { uri ->
+        uri?.let { viewModel.exportResults(it, ResultsFormat.Csv) }
+    }
+    val xlsxFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(ResultsFormat.Xlsx.mimeType)) { uri ->
+        uri?.let { viewModel.exportResults(it, ResultsFormat.Xlsx) }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -103,6 +118,29 @@ fun FlowsheetScreen(
                         Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
                     }
                     IconButton(onClick = onOpenFluid) { Icon(Icons.Filled.Science, contentDescription = "Fluid package") }
+                    Box {
+                        IconButton(onClick = { menu = true }, enabled = ready != null && !ready.exporting, modifier = Modifier.testTag("flowsheet_menu")) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Export DWSIM file (.dwxmz)") },
+                                enabled = ready != null && ready.engineConfigured && ready.problems.isEmpty(),
+                                onClick = { menu = false; dwsimFile.launch(viewModel.exportFileName("dwxmz")) },
+                            )
+                            val hasResults = ready?.results?.status != null
+                            DropdownMenuItem(
+                                text = { Text("Export results (CSV)") },
+                                enabled = hasResults,
+                                onClick = { menu = false; csvFile.launch(viewModel.exportFileName("csv", " results")) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export results (Excel)") },
+                                enabled = hasResults,
+                                onClick = { menu = false; xlsxFile.launch(viewModel.exportFileName("xlsx", " results")) },
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
@@ -204,7 +242,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             ghost?.let { (type, root) -> PaletteGhost(type, root, canvasRect.topLeft, viewport.zoom) }
         }
 
-        SolveBar(ui, onSolve = vm::solve, onIssues = { showIssues = true }, onResults = onOpenResults, onLog = onOpenLog)
+        SolveBar(ui, onSolve = vm::solve, onCancelQueued = vm::cancelQueuedSolve, onIssues = { showIssues = true }, onResults = onOpenResults, onLog = onOpenLog)
         Palette(
             onAdd = { type ->
                 val c = viewport.toWorld(Offset(canvasRect.width / 2, canvasRect.height / 2), density)
@@ -281,13 +319,14 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
  * Solve button (teal, as on the brand board).
  */
 @Composable
-private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onIssues: () -> Unit, onResults: () -> Unit, onLog: () -> Unit) {
+private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onCancelQueued: () -> Unit, onIssues: () -> Unit, onResults: () -> Unit, onLog: () -> Unit) {
     val v = MaterialTheme.valueColors
     val solving = ui.solveState == SolveState.Solving
     val (text, color) = when {
         ui.problems.isNotEmpty() ->
             (if (ui.problems.size == 1) "1 thing to fix before solving" else "${ui.problems.size} things to fix before solving") to v.underSpecifiedText
         solving -> "Solving…" to MaterialTheme.colorScheme.onSurfaceVariant
+        ui.solveState == SolveState.Queued -> "Queued — solves when the engine is reachable" to MaterialTheme.colorScheme.onSurfaceVariant
         ui.results.status == null -> (if (ui.engineConfigured) "Ready to solve" else "Set the engine in Settings to solve") to MaterialTheme.colorScheme.onSurfaceVariant
         ui.results.stale -> "Results out of date — solve again" to v.underSpecifiedText
         ui.results.status == SolveStatus.Converged -> "✓ Converged" to v.convergedText
@@ -305,7 +344,9 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onIssues: () -> Unit,
                     .clickable(enabled = ui.problems.isNotEmpty(), role = Role.Button, onClickLabel = "Show issues", onClick = onIssues)
                     .semantics { liveRegion = LiveRegionMode.Polite },
             )
-            if (ui.results.status != null) {
+            if (ui.solveState == SolveState.Queued) {
+                TextButton(onClick = onCancelQueued, modifier = Modifier.heightIn(min = 48.dp).testTag("cancel_queued")) { Text("Cancel") }
+            } else if (ui.results.status != null) {
                 TextButton(onClick = onLog, modifier = Modifier.heightIn(min = 48.dp)) { Text("Log") }
                 TextButton(onClick = onResults, modifier = Modifier.heightIn(min = 48.dp)) { Text("Results") }
             }

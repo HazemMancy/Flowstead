@@ -4,6 +4,8 @@
  */
 package app.flowstead.ui.projects
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -83,14 +87,18 @@ fun ProjectsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    var report by remember { mutableStateOf<ProjectsEffect.ImportReport?>(null) }
     LaunchedEffect(viewModel) {
         viewModel.effects.collect {
             when (it) {
                 is ProjectsEffect.OpenProject -> onOpenProject(it.id)
                 is ProjectsEffect.Message -> snackbar.showSnackbar(it.text)
+                is ProjectsEffect.ImportReport -> report = it
             }
         }
     }
+    // DWSIM files have no registered MIME type and SAF can't filter by extension, so any file is offered.
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(viewModel::import) }
     ProjectsContent(
         state = state,
         snackbar = snackbar,
@@ -99,6 +107,13 @@ fun ProjectsScreen(
         onRename = viewModel::rename,
         onDuplicate = viewModel::duplicate,
         onDelete = viewModel::delete,
+        onImport = { picker.launch(arrayOf("*/*")) },
+        importReport = report,
+        onImportReportDone = { open ->
+            val r = report
+            report = null
+            if (open && r != null) onOpenProject(r.id)
+        },
         onOpenSettings = onOpenSettings,
         onOpenAbout = onOpenAbout,
     )
@@ -120,6 +135,9 @@ fun ProjectsContent(
     onRename: (String, String) -> Unit = { _, _ -> },
     onDuplicate: (String) -> Unit = {},
     onDelete: (String) -> Unit = {},
+    onImport: () -> Unit = {},
+    importReport: ProjectsEffect.ImportReport? = null,
+    onImportReportDone: (open: Boolean) -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
 ) {
@@ -130,6 +148,13 @@ fun ProjectsContent(
             TopAppBar(
                 title = { Wordmark(MaterialTheme.typography.titleLarge) },
                 actions = {
+                    if (state.importing) {
+                        CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp).testTag("importing"), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(onClick = onImport, modifier = Modifier.testTag("import")) {
+                            Icon(Icons.Filled.FileOpen, contentDescription = "Import DWSIM file")
+                        }
+                    }
                     IconButton(onClick = onOpenAbout) { Icon(Icons.Filled.Info, contentDescription = "About Flowstead") }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
                 },
@@ -199,6 +224,22 @@ fun ProjectsContent(
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
         null -> Unit
+    }
+
+    importReport?.let { r ->
+        AlertDialog(
+            onDismissRequest = { onImportReportDone(false) },
+            title = { Text("Imported “${r.name}” with ${r.warnings.size} note${if (r.warnings.size == 1) "" else "s"}") },
+            text = {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("import_warnings")) {
+                    items(r.warnings) { w -> Text("• $w", style = MaterialTheme.typography.bodyMedium) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onImportReportDone(true) }, modifier = Modifier.testTag("open_imported")) { Text("Open project") }
+            },
+            dismissButton = { TextButton(onClick = { onImportReportDone(false) }) { Text("Close") } },
+        )
     }
 }
 

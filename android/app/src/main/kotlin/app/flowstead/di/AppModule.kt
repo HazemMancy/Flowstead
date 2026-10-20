@@ -17,6 +17,10 @@ import app.flowstead.data.db.AppDatabase
 import app.flowstead.data.db.ProjectDao
 import app.flowstead.data.engine.EngineClient
 import app.flowstead.data.engine.KtorEngineClient
+import app.flowstead.data.files.ContentResolverDocumentIo
+import app.flowstead.data.files.DocumentIo
+import app.flowstead.data.queue.SolveQueue
+import app.flowstead.data.queue.WorkManagerSolveQueue
 import app.flowstead.data.settings.DataStoreSettingsRepository
 import app.flowstead.data.settings.EncryptedSecretStore
 import app.flowstead.data.settings.KeystoreCipher
@@ -93,4 +97,6 @@ abstract class BindingsModule {
     @Binds abstract fun settings(impl: DataStoreSettingsRepository): SettingsRepository
     @Binds abstract fun secrets(impl: EncryptedSecretStore): SecretStore
     @Binds abstract fun engine(impl: KtorEngineClient): EngineClient
+    @Binds abstract fun documents(impl: ContentResolverDocumentIo): DocumentIo
+    @Binds abstract fun solveQueue(impl: WorkManagerSolveQueue): SolveQueue
 }

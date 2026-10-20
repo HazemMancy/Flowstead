@@ -58,6 +58,22 @@ class EngineEndToEndTest {
     }
 
     @Test
+    fun dwsimFileRoundTripThroughTheApi() = runBlocking<Unit> {
+        assumeTrue("FLOWSTEAD_E2E_URL not set", !url.isNullOrBlank())
+        val c = client()
+        val original = benchmark("06-compressor-aftercooler")
+        val export = assertIs<EngineResult.Ok<app.flowstead.core.api.ExportResult>>(c.exportDwsim(url, key, original)).value
+        assertEquals(SolveStatus.Converged, export.status)
+        val back = assertIs<EngineResult.Ok<app.flowstead.core.api.ImportResult>>(
+            c.importDwsim(url, key, app.flowstead.core.api.DwsimFile(export.data)),
+        ).value.flowsheet
+        assertEquals(original.propertyPackage, back.propertyPackage)
+        assertEquals(original.objects.map { it.tag }.toSet(), back.objects.map { it.tag }.toSet() - back.objects.filter { it.tag.endsWith("-Q") }.map { it.tag }.toSet())
+        val resolved = assertIs<EngineResult.Ok<app.flowstead.core.api.SolveResult>>(c.solve(url, key, back)).value
+        assertEquals(SolveStatus.Converged, resolved.status, resolved.messages.joinToString { it.text })
+    }
+
+    @Test
     fun wrongKeyIsReportedInPlainLanguage() = runBlocking<Unit> {
         assumeTrue("FLOWSTEAD_E2E_URL not set", !url.isNullOrBlank())
         val r = client().health(url, "fs_wrong")

@@ -7,10 +7,12 @@ package app.flowstead.ui.flowsheet
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.flowstead.FakeDocumentIo
 import app.flowstead.FakeEngineClient
 import app.flowstead.FakeProjectRepository
 import app.flowstead.FakeSecretStore
 import app.flowstead.FakeSettingsRepository
+import app.flowstead.FakeSolveQueue
 import app.flowstead.MainDispatcherRule
 import app.flowstead.core.model.Connection
 import app.flowstead.core.model.Flowsheet
@@ -37,10 +39,12 @@ class FlowsheetViewModelTest {
     private val repo = FakeProjectRepository()
     private val settings = FakeSettingsRepository()
     private val engine = FakeEngineClient()
+    private val queue = FakeSolveQueue()
+    private val documents = FakeDocumentIo()
 
     private suspend fun vm(fs: Flowsheet = Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"))): FlowsheetViewModel {
         val id = repo.create("Letdown", fs)
-        return FlowsheetViewModel(SavedStateHandle(mapOf("projectId" to id)), repo, settings, FakeSecretStore(), engine) { 42L }
+        return FlowsheetViewModel(SavedStateHandle(mapOf("projectId" to id)), repo, settings, FakeSecretStore(), engine, queue, documents) { 42L }
     }
 
     private suspend fun FlowsheetViewModel.ui(predicate: (FlowsheetUi) -> Boolean = { true }): FlowsheetUi =
@@ -159,5 +163,72 @@ class FlowsheetViewModelTest {
 
         vm.setSpec("f", SpecKey.TEMPERATURE, Spec(310.0, "C"))
         assertTrue(vm.ui { it.results.stale }.results.stale)
+    }
+
+    @Test
+    fun unreachableEngineQueuesTheSolve() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        engine.solveResult = app.flowstead.data.engine.EngineResult.Failed("Cannot reach the engine: timeout", unreachable = true)
+        val vm = vm(completeFeed())
+        vm.ui()
+        vm.solve()
+        assertEquals("Engine unreachable. Queued: it will solve when the phone is back online", vm.messages.first())
+        assertEquals(SolveState.Queued, vm.ui { it.solveState == SolveState.Queued }.solveState)
+        vm.cancelQueuedSolve()
+        assertEquals(SolveState.Idle, vm.ui { it.solveState == SolveState.Idle }.solveState)
+    }
+
+    @Test
+    fun engineThatAnswersNoIsNotQueued() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        engine.solveResult = app.flowstead.data.engine.EngineResult.Failed("The engine rejected the API key")
+        val vm = vm(completeFeed())
+        vm.ui()
+        vm.solve()
+        assertEquals("Not solved: The engine rejected the API key", vm.messages.first())
+        assertTrue(queue.queued.value.isEmpty())
+    }
+
+    @Test
+    fun resultsExportNeedsASolveThenWritesCsvAndXlsx() = runTest {
+        val vm = vm(completeFeed())
+        vm.ui()
+        val csv = android.net.Uri.parse("content://test/results.csv")
+        vm.exportResults(csv, ResultsFormat.Csv)
+        assertEquals("Solve first: there are no results to export", vm.messages.first())
+
+        settings.setEngineUrl("https://engine.example.com")
+        engine.solveResult = app.flowstead.data.engine.EngineResult.Ok(
+            app.flowstead.core.api.SolveResult(
+                app.flowstead.core.api.SolveStatus.Converged,
+                objects = mapOf("f" to app.flowstead.core.api.ObjectResult(
+                    app.flowstead.core.api.ObjectStatus.Solved, properties = mapOf("temperature" to 300.0))),
+            ),
+        )
+        vm.solve()
+        vm.messages.first()
+        vm.ui { it.results.status != null }
+        vm.exportResults(csv, ResultsFormat.Csv)
+        assertEquals("Results exported", vm.messages.first())
+        val text = documents.written.getValue(csv).toString(Charsets.UTF_8)
+        assertTrue(text.startsWith("Streams\r\nProject,Letdown\r\n"), text)
+        assertTrue(text.contains("Property,FEED"), text)
+
+        val xlsx = android.net.Uri.parse("content://test/results.xlsx")
+        vm.exportResults(xlsx, ResultsFormat.Xlsx)
+        assertEquals("Results exported", vm.messages.first())
+        assertEquals(0x50, documents.written.getValue(xlsx)[0].toInt()) // zip
+        assertEquals("Letdown results.xlsx", vm.exportFileName("xlsx", " results"))
+    }
+
+    @Test
+    fun dwsimExportWritesTheEngineFile() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        val vm = vm(completeFeed())
+        vm.ui()
+        val uri = android.net.Uri.parse("content://test/plant.dwxmz")
+        vm.exportDwsim(uri)
+        assertEquals("Exported DWSIM file", vm.messages.first())
+        assertEquals(listOf<Byte>(0x50, 0x4B, 3, 4), documents.written.getValue(uri).toList())
     }
 }

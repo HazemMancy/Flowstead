@@ -46,7 +46,7 @@ _Last updated: 2026-10-20_
   - **End-to-end test:** the app's Ktor client against the engine Docker container in CI (`e2e` job).
   - **Contract test:** Kotlin decodes a real engine response (`shared/fixtures/solve-result-letdown.json`).
 
-- **M7 remaining MVP unit ops** (pending CI on the commit that adds it):
+- **M7 remaining MVP unit ops** (engine CI green):
   - New unit ops in both the engine and the app: mixer, splitter, pump, compressor, expander, heat exchanger, recycle, adjust. Each has editors, results, palette entries and degrees-of-freedom rules.
   - **All 8 benchmarks pass** through the HTTP API. Each now has blocking checks from conservation laws or IAPWS. Values from HYSYS or desktop DWSIM are still provisional.
   - Engine fixes found by the benchmarks:
@@ -54,14 +54,28 @@ _Last updated: 2026-10-20_
     - recycle tolerances are tightened, and an overall mass-balance warning is added (D18).
   - Adjust is solved in the engine layer (D19).
 
+- **M8 files and offline** (pending CI on the commit that adds it):
+  - **Engine** (D20):
+    - `POST /export` and `GET /flowsheets/{id}/export` write a solved `.dwxmz`.
+    - `POST /import` maps a `.dwxmz`/`.dwxml` to the Flowstead model, with a warning for each object or mode left out.
+    - All 8 benchmarks export → import → re-solve to the same numbers.
+    - A file saved by DWSIM with a pipe checks the warnings.
+    - The container smoke test round-trips a file.
+  - **Projects screen:** "Import DWSIM file" (system picker). Notes on anything not carried over are listed before the project opens.
+  - **Flowsheet ⋮ menu:**
+    - Export DWSIM file (`.dwxmz`).
+    - Export results as CSV or Excel (`.xlsx`), written on the phone and offline-capable (D21).
+  - **Offline solve queue:** when the engine is unreachable, the solve is queued (WorkManager) and runs once back online. The solve bar shows "Queued" with Cancel (D22).
+
 ## Next
-- M8: `.dwxmz` import/export, CSV/XLSX export, offline solve queue.
-- Import `.dwxmz` on the Projects screen arrives with M8 (it needs the engine).
+- M9: accessibility pass, Play Store assets, privacy policy, toolchain upgrade.
+- M10: on-device spike report.
 
 ## Known limitations
 
 - Benchmarks 01 and 03 have only engine-provisional expected values (D6). They need desktop-DWSIM `.dwxmz` files and HYSYS numbers.
-- `.dwxmz` import/export and `iterations` in solve results are not implemented yet (M8 / when DWSIM exposes them).
+- Import supports the MVP unit ops only. Pipes, columns, reactors and other DWSIM objects are left out with a warning. The streams they fed need specifying again.
+- Exported `.dwxmz` files don't contain Adjusts, and the engine's hidden energy streams become visible after a round trip.
 
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).
 - The engine Docker image is verified in CI only (no Docker daemon in the sandbox).
