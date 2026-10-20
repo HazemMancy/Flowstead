@@ -20,13 +20,24 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
       - name: Core unit tests (units, model, formatting)
-        run: ./gradlew :core:test --stacktrace
+        run: ./gradlew :core:test
       - name: App unit + Robolectric UI tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+        run: ./gradlew :app:testDebugUnitTest
       - name: Lint
-        run: ./gradlew :app:lintDebug --stacktrace
+        run: ./gradlew :app:lintDebug
       - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: ./gradlew :app:assembleDebug
+      - name: Summarise test failures
+        if: failure()
+        working-directory: .
+        run: |
+          python3 - <<'PY'
+          import glob, re, html
+          for f in sorted(glob.glob('android/**/test-results/**/TEST-*.xml', recursive=True)):
+              s = open(f, encoding='utf-8').read()
+              for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"[^>]*>\s*<(failure|error) message="([^"]*)"', s):
+                  print(f"FAILED {m.group(2)}.{m.group(1)}: {html.unescape(m.group(4))[:600]}")
+          PY
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4

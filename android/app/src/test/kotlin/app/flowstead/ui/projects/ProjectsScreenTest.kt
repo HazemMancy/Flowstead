@@ -64,10 +64,10 @@ class ProjectsScreenTest {
             FlowsteadTheme { ProjectsContent(ProjectsUiState(loading = false, projects = listOf(p)), onDelete = { deleted = it }) }
         }
         compose.onNodeWithContentDescription("More actions for Recycle loop").performClick()
-        compose.onNodeWithText("Delete").performClick()
+        compose.onNodeWithTag("menu_delete").performClick()
         compose.onNodeWithText("Delete “Recycle loop”?").assertIsDisplayed()
         assertEquals(null, deleted)
-        compose.onNodeWithText("Delete").performClick()
+        compose.onNodeWithTag("confirm_delete").performClick()
         assertEquals("a", deleted)
     }
 }

@@ -191,7 +191,7 @@ fun ProjectsContent(
             title = { Text("Delete “${d.project.name}”?") },
             text = { Text("The flowsheet and its results are removed from this phone. This can’t be undone.") },
             confirmButton = {
-                TextButton(onClick = { onDelete(d.project.id); dialog = null }) {
+                TextButton(onClick = { onDelete(d.project.id); dialog = null }, modifier = Modifier.testTag("confirm_delete")) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
@@ -269,6 +269,7 @@ private fun ProjectCard(
                     DropdownMenuItem(
                         text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                         onClick = { menu = false; onDelete() },
+                        modifier = Modifier.testTag("menu_delete"),
                     )
                 }
             }
