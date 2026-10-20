@@ -170,6 +170,38 @@ object FlowsheetEditing {
     }
 
     /** First unconnected port on [unitId] that a wire from [from] could join (opposite side, same kind). */
+    /** Removes whatever stream is attached at [port] of [unitId]; the stream itself stays. */
+    fun disconnectPort(fs: Flowsheet, unitId: String, port: Port): Flowsheet = fs.copy(
+        connections = fs.connections.filterNot {
+            when (port.side) {
+                PortSide.Inlet -> it.toObject == unitId && it.toPort == port.index
+                PortSide.Outlet -> it.fromObject == unitId && it.fromPort == port.index
+            }
+        },
+    )
+
+    /**
+     * Existing streams that could go on [port] without a drag: the right kind, and still free on
+     * that end (an inlet takes a stream nothing consumes yet, an outlet one nothing produces yet).
+     */
+    fun attachableStreams(fs: Flowsheet, unitId: String, port: Port): List<SimObject> {
+        val type = if (port.kind == PortKind.Energy) ObjectType.EnergyStream else ObjectType.MaterialStream
+        return fs.objects.filter { s ->
+            s.type == type && fs.connections.none { c -> (c.fromObject == s.id && c.toObject == unitId) || (c.toObject == s.id && c.fromObject == unitId) } &&
+                when (port.side) {
+                    PortSide.Inlet -> fs.connections.none { it.fromObject == s.id }
+                    PortSide.Outlet -> fs.connections.none { it.toObject == s.id }
+                }
+        }
+    }
+
+    /** Where a stream made from a port (not dragged) is placed: beside the port, on its side of the unit. */
+    fun newStreamPosition(unit: SimObject, port: Port): Pair<Double, Double> = when {
+        port.kind == PortKind.Energy -> unit.x to unit.y + 96.0
+        port.side == PortSide.Inlet -> unit.x - 120.0 to unit.y + port.dy * 96.0
+        else -> unit.x + 120.0 to unit.y + port.dy * 96.0
+    }
+
     fun firstFreePort(fs: Flowsheet, unitId: String, from: Port): Port? {
         val unit = fs.obj(unitId) ?: return null
         return Ports.of(unit.type).firstOrNull { p ->

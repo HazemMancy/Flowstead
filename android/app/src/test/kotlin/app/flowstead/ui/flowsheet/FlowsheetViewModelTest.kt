@@ -231,4 +231,23 @@ class FlowsheetViewModelTest {
         assertEquals("Exported DWSIM file", vm.messages.first())
         assertEquals(listOf<Byte>(0x50, 0x4B, 3, 4), documents.written.getValue(uri).toList())
     }
+
+    @Test
+    fun portsCanBeWiredFromTheEditor() = runTest {
+        val vm = vm()
+        vm.ui()
+        vm.add(ObjectType.Valve, 240.0, 0.0)
+        val valve = vm.ui { it.flowsheet.objects.size == 1 }.flowsheet.objects.single()
+        val outlet = Ports.find(ObjectType.Valve, PortSide.Outlet, 0)!!
+        vm.connectPort(valve.id, outlet, null)
+        val fs = vm.ui { it.flowsheet.objects.size == 2 }.flowsheet
+        val stream = fs.objects.single { it.type == ObjectType.MaterialStream }
+        assertEquals(listOf(Connection(valve.id, 0, stream.id, 0)), fs.connections)
+        assertEquals(360.0 to 0.0, stream.x to stream.y)
+
+        vm.disconnectPort(valve.id, outlet)
+        assertTrue(vm.ui { it.flowsheet.connections.isEmpty() }.flowsheet.objects.size == 2)
+        vm.connectPort(valve.id, Ports.find(ObjectType.Valve, PortSide.Inlet, 0)!!, stream.id)
+        assertEquals(listOf(Connection(stream.id, 0, valve.id, 0)), vm.ui { it.flowsheet.connections.isNotEmpty() }.flowsheet.connections)
+    }
 }

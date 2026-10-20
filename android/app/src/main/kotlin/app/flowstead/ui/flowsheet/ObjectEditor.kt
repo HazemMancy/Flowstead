@@ -63,7 +63,12 @@ import app.flowstead.core.model.ResultView
 import app.flowstead.ui.components.ValueText
 import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.Port
+import app.flowstead.core.model.PortKind
+import app.flowstead.core.model.PortSide
+import app.flowstead.core.model.Ports
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
@@ -71,6 +76,7 @@ import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.Specification
 import app.flowstead.core.model.displayName
 import app.flowstead.core.model.isFeed
+import app.flowstead.core.model.streamAt
 import app.flowstead.core.units.EngUnit
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitContext
@@ -88,6 +94,9 @@ interface EditorActions {
     fun normalise(id: String, fractions: Map<String, Double>)
     fun delete(id: String)
     fun setRef(id: String, key: String, value: String?)
+    /** Attach [streamId] at [port] of [unitId]; null makes a new stream there. */
+    fun connectPort(unitId: String, port: Port, streamId: String?)
+    fun disconnectPort(unitId: String, port: Port)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -173,10 +182,49 @@ fun ObjectEditorSheet(
                 )
                 else -> Calculated("${obj.type.displayName()} editing arrives with the remaining unit operations.")
             }
+            if (!obj.type.isStream && Ports.of(obj.type).isNotEmpty()) ConnectionsSection(fs, obj, actions)
             ResultsSection(obj, results, unitSet, ctx)
         }
     }
 }
+
+/**
+ * Every port with what is attached, changeable from a list. The same wiring as dragging on the
+ * canvas, reachable with TalkBack or a keyboard.
+ */
+@Composable
+private fun ConnectionsSection(fs: Flowsheet, unit: SimObject, actions: EditorActions) {
+    HorizontalDivider()
+    SectionLabel("Connections")
+    for (port in Ports.of(unit.type)) {
+        val attached = fs.streamAt(unit.id, port)
+        val options = buildList {
+            add(NEW_STREAM to if (port.kind == PortKind.Energy) "New energy stream" else "New stream")
+            FlowsheetEditing.attachableStreams(fs, unit.id, port).forEach { add(it.id to it.tag) }
+            if (attached != null) add(DISCONNECT to "Disconnect ${attached.tag}")
+        }
+        val side = if (port.side == PortSide.Inlet) "in" else "out"
+        Choice(
+            label = "${port.label} ($side)" + if (port.required) "" else " · optional",
+            selected = attached?.tag,
+            options = options,
+            placeholder = "Not connected",
+            testTag = "port_${port.side.name.lowercase()}_${port.index}",
+        ) { picked ->
+            when (picked) {
+                NEW_STREAM -> actions.connectPort(unit.id, port, null)
+                DISCONNECT -> actions.disconnectPort(unit.id, port)
+                else -> {
+                    if (attached != null) actions.disconnectPort(unit.id, port)
+                    actions.connectPort(unit.id, port, picked)
+                }
+            }
+        }
+    }
+}
+
+private const val NEW_STREAM = "__new"
+private const val DISCONNECT = "__disconnect"
 
 /** "Vary <object · spec> until <object · result> = target", with optional tolerance and bounds. */
 @Composable
@@ -231,15 +279,22 @@ private fun differenceOf(q: Quantity): Quantity = when (q) {
 }
 
 @Composable
-private fun Choice(label: String, selected: String?, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
+private fun Choice(
+    label: String,
+    selected: String?,
+    options: List<Pair<String, String>>,
+    placeholder: String = "Choose…",
+    testTag: String? = null,
+    onPick: (String) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().then(if (testTag != null) Modifier.testTag(testTag) else Modifier)) {
         OutlinedTextField(
             value = selected ?: "",
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
-            placeholder = { Text("Choose…") },
+            placeholder = { Text(placeholder) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -247,7 +302,8 @@ private fun Choice(label: String, selected: String?, options: List<Pair<String, 
         Box(
             Modifier
                 .matchParentSize()
-                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Choose $label") { open = true },
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Choose $label") { open = true }
+                .semantics { contentDescription = "$label: ${selected ?: placeholder}" },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             if (options.isEmpty()) DropdownMenuItem(text = { Text("Nothing to choose yet") }, onClick = { open = false }, enabled = false)

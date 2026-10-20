@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.Port
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
@@ -38,6 +39,8 @@ class SpecFieldTest {
         override fun normalise(id: String, fractions: Map<String, Double>) = Unit
         override fun delete(id: String) = Unit
         override fun setRef(id: String, key: String, value: String?) = Unit
+        override fun connectPort(unitId: String, port: Port, streamId: String?) = Unit
+        override fun disconnectPort(unitId: String, port: Port) = Unit
     }
 
     @Test

@@ -1,0 +1,40 @@
+<!doctype html>
+<!-- Play Store feature graphic, 1024×500. Render: see ../README.md -->
+<html><head><meta charset="utf-8"><style>
+@font-face{font-family:Manrope;font-weight:800;src:url(../../../android/app/src/main/res/font/manrope_extrabold.ttf)}
+@font-face{font-family:Manrope;font-weight:500;src:url(../../../android/app/src/main/res/font/manrope_medium.ttf)}
+@font-face{font-family:Plex;font-weight:500;src:url(../../../android/app/src/main/res/font/ibm_plex_mono_medium.ttf)}
+html,body{margin:0;width:1024px;height:500px;overflow:hidden;background:#0B1F33}
+.wrap{position:relative;width:1024px;height:500px}
+.flow{position:absolute;inset:0}
+.mark{position:absolute;left:84px;top:150px}
+.name{position:absolute;left:300px;top:158px;font:800 104px/1 Manrope;color:#FFFFFF;letter-spacing:-2px}
+.tag{position:absolute;left:304px;top:282px;font:500 30px/1.25 Manrope;color:#7FDCD3}
+.by{position:absolute;left:306px;top:366px;font:500 18px/1 Plex;color:#9FB0C0;letter-spacing:0.5px}
+</style></head><body><div class="wrap">
+<!-- A faint flowsheet behind the text: vapour (amber) and liquid (teal) lines between unit outlines. -->
+<svg class="flow" width="1024" height="500" viewBox="0 0 1024 500" xmlns="http://www.w3.org/2000/svg" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <g opacity="0.28" stroke-width="4">
+    <path d="M0 448H160" stroke="#7FDCD3"/>
+    <path d="M160 426h44v44h-44z" stroke="#E8EEF3"/>
+    <path d="M204 448H560" stroke="#7FDCD3"/>
+    <circle cx="590" cy="448" r="30" stroke="#E8EEF3"/>
+    <path d="M620 448H860" stroke="#12A89D"/>
+    <rect x="860" y="300" width="60" height="176" rx="30" stroke="#E8EEF3"/>
+    <path d="M890 300V60H1024" stroke="#F2A33A"/>
+    <path d="M920 448H1024" stroke="#12A89D"/>
+  </g>
+</svg>
+<svg class="mark" width="190" height="190" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <rect width="120" height="120" rx="28" fill="#12304D"/>
+  <rect x="28" y="20" width="24" height="80" rx="12" fill="#12A89D"/>
+  <path d="M34 42h12M34 54h12M34 66h12M34 78h12" stroke="#12304D" stroke-width="3" stroke-linecap="round"/>
+  <path d="M50 33h30" stroke="#F2A33A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M78 23l15 10-15 10z" fill="#F2A33A" stroke="#F2A33A" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M50 60h18" stroke="#7FDCD3" stroke-width="10" stroke-linecap="round"/>
+  <path d="M66 51l13 9-13 9z" fill="#7FDCD3" stroke="#7FDCD3" stroke-width="2" stroke-linejoin="round"/>
+</svg>
+<div class="name">Flowstead</div>
+<div class="tag">Steady-state process simulation,<br>in your pocket.</div>
+<div class="by">POWERED BY DWSIM · OPEN SOURCE (GPL-3.0)</div>
+</div></body></html>

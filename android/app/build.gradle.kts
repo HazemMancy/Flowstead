@@ -12,6 +12,9 @@ android {
     namespace = "app.flowstead"
     compileSdk = 36
 
+    // The privacy policy ships in the app from its one source in docs/ (shown under About).
+    sourceSets.getByName("main").assets.srcDir("../../docs/privacy")
+
     defaultConfig {
         applicationId = "app.flowstead"
         minSdk = 26

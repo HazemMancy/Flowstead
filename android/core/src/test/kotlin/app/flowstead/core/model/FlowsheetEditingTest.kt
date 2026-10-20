@@ -52,6 +52,32 @@ class FlowsheetEditingTest {
     }
 
     @Test
+    fun portsCanBeWiredWithoutDragging() {
+        var fs = base
+        val (a, feed) = FlowsheetEditing.add(fs, ObjectType.MaterialStream, 0.0, 0.0); fs = a
+        val (b, q) = FlowsheetEditing.add(fs, ObjectType.EnergyStream, 0.0, 0.0); fs = b
+        val (c, valve) = FlowsheetEditing.add(fs, ObjectType.Valve, 240.0, 0.0); fs = c
+        val (d, sep) = FlowsheetEditing.add(fs, ObjectType.Separator, 480.0, 0.0); fs = d
+        val inlet = port(ObjectType.Valve, PortSide.Inlet)
+        val outlet = port(ObjectType.Valve, PortSide.Outlet)
+
+        // Only free material streams are offered; energy streams never go on a material port.
+        assertEquals(listOf(feed), FlowsheetEditing.attachableStreams(fs, valve.id, inlet))
+        fs = FlowsheetEditing.connect(fs, feed.id, valve.id, inlet)
+        assertEquals(emptyList(), FlowsheetEditing.attachableStreams(fs, valve.id, outlet)) // feed is already on this valve
+        assertEquals(listOf(feed).map { it.id }, FlowsheetEditing.attachableStreams(fs, sep.id, port(ObjectType.Separator, PortSide.Outlet)).map { it.id })
+        assertTrue(FlowsheetEditing.attachableStreams(fs, sep.id, port(ObjectType.Separator, PortSide.Inlet)).isEmpty()) // feed is consumed
+        assertEquals(listOf(q), FlowsheetEditing.attachableStreams(fs, valve.id, port(ObjectType.Heater, PortSide.Inlet, 1)))
+
+        assertEquals(360.0 to 0.0, FlowsheetEditing.newStreamPosition(valve, outlet))
+        assertEquals(120.0 to 0.0, FlowsheetEditing.newStreamPosition(valve, inlet))
+
+        fs = FlowsheetEditing.disconnectPort(fs, valve.id, inlet)
+        assertTrue(fs.connections.isEmpty())
+        assertTrue(fs.objects.any { it.id == feed.id }) // the stream stays
+    }
+
+    @Test
     fun refusesInvalidConnections() {
         var fs = base
         val (a, s1) = FlowsheetEditing.add(fs, ObjectType.MaterialStream, 0.0, 0.0); fs = a

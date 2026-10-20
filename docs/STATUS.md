@@ -67,8 +67,18 @@ _Last updated: 2026-10-20_
     - Export results as CSV or Excel (`.xlsx`), written on the phone and offline-capable (D21).
   - **Offline solve queue:** when the engine is unreachable, the solve is queued (WorkManager) and runs once back online. The solve bar shows "Queued" with Cancel (D22).
 
+- **M9 polish** (in progress):
+  - **Privacy policy:** `docs/privacy/privacy-policy.md`, also bundled in the app under About.
+  - **Play Store assets** in `docs/play-store/`:
+    - the 512 px icon and the 1024×500 feature graphic, rendered from HTML with the brand fonts;
+    - the listing text.
+    - Phone screenshots are still to do, taken against a real engine.
+  - **Accessibility:** unit-op editors gain a Connections list, so every port can be wired without dragging (TalkBack, keyboard, switch access).
+    - Already in place: canvas objects have TalkBack nodes with edit / more / delete actions.
+    - Already in place: 48 dp targets, live regions on solve and DOF status, and enforced text contrast (D14).
+
 ## Next
-- M9: accessibility pass, Play Store assets, privacy policy, toolchain upgrade.
+- M9 (rest): toolchain upgrade (AGP 9 / newer Compose BOM), a dark-theme screenshot check.
 - M10: on-device spike report.
 
 ## Known limitations

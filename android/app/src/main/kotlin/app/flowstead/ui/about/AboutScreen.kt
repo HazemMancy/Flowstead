@@ -29,6 +29,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.flowstead.BuildConfig
@@ -38,6 +39,9 @@ import app.flowstead.ui.components.Wordmark
 import app.flowstead.ui.theme.NumberStyles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+/** Bundled from docs/privacy/ (see app/build.gradle.kts). */
+const val PRIVACY_ASSET = "privacy-policy.md"
 
 /** One open-source component and where its licence text is bundled (assets/licenses). */
 data class OssEntry(val name: String, val licence: String, val asset: String?)
@@ -99,6 +103,22 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
                 "Flowstead is free software under the GNU GPL v3 or later. Source code: github.com/hazemmancy/flowstead",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            HorizontalDivider()
+            Column(
+                Modifier
+                    .clickable(role = Role.Button, onClickLabel = "Read privacy policy") { onOpenLicense("Privacy policy", PRIVACY_ASSET) }
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .padding(vertical = 6.dp)
+                    .testTag("privacy_policy"),
+            ) {
+                Text("Privacy policy", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Your projects stay on this phone and the engine you choose. No analytics or tracking. Tap to read.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             HorizontalDivider()
             Text("Open-source licences", style = MaterialTheme.typography.titleMedium)
             OPEN_SOURCE.forEach { e ->

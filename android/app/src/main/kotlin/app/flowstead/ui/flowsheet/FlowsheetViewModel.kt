@@ -185,6 +185,16 @@ class FlowsheetViewModel @Inject constructor(
         FlowsheetEditing.connectNewStream(fs, unitId, port, x, y).first
     }
 
+    /** Wiring from the editor's Connections list (no drag): an existing stream, or a new one placed beside the port. */
+    fun connectPort(unitId: String, port: Port, streamId: String?) = edit { fs ->
+        if (streamId != null) return@edit FlowsheetEditing.connect(fs, streamId, unitId, port)
+        val unit = fs.obj(unitId) ?: throw EditRejected("That unit operation no longer exists")
+        val (x, y) = FlowsheetEditing.newStreamPosition(unit, port)
+        FlowsheetEditing.connectNewStream(fs, unitId, port, x, y).first
+    }
+
+    fun disconnectPort(unitId: String, port: Port) = edit { FlowsheetEditing.disconnectPort(it, unitId, port) }
+
     /** A wire dragged from [port] on [unitId] was dropped on [target] at world ([x], [y]). */
     fun wire(unitId: String, port: Port, target: Hit, x: Double, y: Double) = edit { fs ->
         val unit = fs.obj(unitId) ?: throw EditRejected("That unit operation no longer exists")

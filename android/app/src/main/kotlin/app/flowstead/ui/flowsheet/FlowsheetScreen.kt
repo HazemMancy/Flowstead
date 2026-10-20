@@ -208,6 +208,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun normalise(id: String, fractions: Map<String, Double>) = vm.normaliseComposition(id, fractions)
             override fun delete(id: String) = vm.delete(id)
             override fun setRef(id: String, key: String, value: String?) = vm.setRef(id, key, value)
+            override fun connectPort(unitId: String, port: Port, streamId: String?) = vm.connectPort(unitId, port, streamId)
+            override fun disconnectPort(unitId: String, port: Port) = vm.disconnectPort(unitId, port)
         }
     }
 
