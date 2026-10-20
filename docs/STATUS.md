@@ -108,7 +108,7 @@ _Last updated: 2026-10-20_
   - Every rigorous column is checked against its specs and balances after the solve.
   - Benchmarks 11 (depropanizer: rigorous, shortcut and stripper) and 12 (lean-oil absorber).
   - The refluxed absorber stays "Coming".
-- **On-device engine:** the first emulator run crashed with a stack overflow in DWSIM on a normal thread. The engine now runs on its own 64 MB-stack thread; awaiting the next emulator run.
+- **On-device engine:** emulator runs crashed first with a stack overflow (fixed: the engine runs on its own 64 MB-stack thread), then because the app loaded the ARM64 base class library on the x86_64 emulator (fixed: the ABI now follows the device's own preference order, the same one the installer uses). Awaiting the next emulator run.
 
 - **M17 reactors (D29):**
   - Conversion, equilibrium, Gibbs, CSTR and PFR reactors, with reactions defined in the reactor editor.

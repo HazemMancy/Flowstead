@@ -107,7 +107,9 @@ class EmbeddedLocalEngine @Inject constructor(@ApplicationContext private val co
     private fun ensureStarted() {
         if (started) return
         if (!available) throw LocalEngineException("This build doesn't include the on-device engine")
-        val abi = ABIS.firstOrNull { it in Build.SUPPORTED_ABIS } ?: throw LocalEngineException("This phone's processor isn't supported by the on-device engine")
+        // The device's preference order is the one the installer used to pick the native libraries; the
+        // base class library must match them (x86_64 emulators also list arm64-v8a for translation).
+        val abi = Build.SUPPORTED_ABIS.firstOrNull { it in ABIS } ?: throw LocalEngineException("This phone's processor isn't supported by the on-device engine")
         val root = unpack(abi)
         NativeEngine.load()
         val native = context.applicationInfo.nativeLibraryDir
