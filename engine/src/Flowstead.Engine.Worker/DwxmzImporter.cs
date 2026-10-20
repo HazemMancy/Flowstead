@@ -46,13 +46,14 @@ public static class DwxmzImporter
             idOf[so.Name] = id;
             var specs = new Dictionary<string, Spec>();
             var composition = new Dictionary<string, double>();
+            var refs = new Dictionary<string, string>();
             switch (so)
             {
                 case MaterialStream ms when !connectedInto.Contains(so.Name):
                     StreamSpecs(ms, specs, composition, warnings);
                     break;
                 default:
-                    UnitSpecs(so, specs, warnings);
+                    UnitSpecs(so, specs, refs, warnings);
                     break;
             }
             objects.Add(new SimObject
@@ -64,6 +65,7 @@ public static class DwxmzImporter
                 Y = g.Y,
                 Specs = specs,
                 Composition = composition,
+                Refs = refs,
             });
         }
 
@@ -123,6 +125,8 @@ public static class DwxmzImporter
         DwsimObjectType.Expander => ObjectType.Expander,
         DwsimObjectType.HeatExchanger => ObjectType.HeatExchanger,
         DwsimObjectType.OT_Recycle => ObjectType.Recycle,
+        DwsimObjectType.Pipe => ObjectType.PipeSegment,
+        DwsimObjectType.OrificePlate => ObjectType.OrificePlate,
         _ => null,
     };
 
@@ -161,7 +165,7 @@ public static class DwxmzImporter
         }
     }
 
-    private static void UnitSpecs(ISimulationObject so, Dictionary<string, Spec> specs, List<string> warnings)
+    private static void UnitSpecs(ISimulationObject so, Dictionary<string, Spec> specs, Dictionary<string, string> refs, List<string> warnings)
     {
         void Put(string key, double? v, string unit)
         {
@@ -215,6 +219,34 @@ public static class DwxmzImporter
                 else if (hx.CalculationMode == HeatExchangerCalcMode.CalcTempHotOut) Put(SpecKeys.ColdOutletTemperature, hx.ColdSideOutletTemperature, "C");
                 else if (hx.CalculationMode == HeatExchangerCalcMode.CalcBothTemp) Put(SpecKeys.Duty, hx.Q * 1000.0, "kW"); // DWSIM kW
                 else Unsupported(hx.CalculationMode.ToString());
+                break;
+            case Pipe pipe:
+            {
+                var sections = pipe.Profile.Sections.Values.ToList();
+                if (sections.Count == 0) { Unsupported("no pipe profile"); break; }
+                if (sections.Count > 1 || sections.Any(x => x.TipoSegmento is not ("Straight Tube Section" or "Straight Tube" or "Tubulaosimples" or "")))
+                    warnings.Add($"{so.GraphicObject.Tag}: a pipe with {sections.Count} sections or fittings is imported as one straight section of the total length; check its pressure drop.");
+                var first = sections[0];
+                Put(SpecKeys.Length, sections.Sum(x => x.Comprimento * x.Quantidade), "m");
+                Put(SpecKeys.InnerDiameter, first.DI * 0.0254, "mm");                     // DWSIM inches
+                Put(SpecKeys.ElevationChange, sections.Sum(x => x.Elevacao * x.Quantidade), "m");
+                Put(SpecKeys.Roughness, pipe.GetRugosity(first.Material, first), "mm");
+                Put(SpecKeys.Increments, sections.Sum(x => x.Incrementos * x.Quantidade), "count");
+                if (pipe.ThermalProfile.TipoPerfil == DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.ThermalEditorDefinitions.ThermalProfileType.Definir_CGTC)
+                {
+                    Put(SpecKeys.HeatTransferCoefficient, pipe.ThermalProfile.CGTC_Definido, "W/m2.K");
+                    Put(SpecKeys.AmbientTemperature, pipe.ThermalProfile.Temp_amb_definir, "C");
+                }
+                else if (pipe.ThermalProfile.Calor_trocado != 0)
+                    warnings.Add($"{so.GraphicObject.Tag}: a specified pipe heat duty isn't supported; imported as adiabatic.");
+                if (pipe.Specification != Pipe.Specmode.Length) Unsupported(pipe.Specification.ToString());
+                refs[ChoiceKeys.PipeCorrelation] = Validator.PipeCorrelations.First(c => c.Value == pipe.SelectedFlowPackage.ToString()).Key;
+                break;
+            }
+            case OrificePlate op:
+                Put(SpecKeys.OrificeDiameter, op.OrificeDiameter, "mm");
+                Put(SpecKeys.PipeDiameter, op.InternalPipeDiameter, "mm");
+                refs[ChoiceKeys.OrificeTaps] = Validator.OrificeTaps.First(t => t.Value == op.OrifType.ToString()).Key;
                 break;
             case Splitter s:
                 if (s.OperationMode != Splitter.OpMode.SplitRatios) Unsupported(s.OperationMode.ToString());

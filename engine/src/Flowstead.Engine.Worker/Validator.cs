@@ -13,7 +13,20 @@ public static class Validator
         ObjectType.Cooler, ObjectType.Separator, ObjectType.ThreePhaseSeparator, ObjectType.Mixer,
         ObjectType.Splitter, ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander,
         ObjectType.HeatExchanger, ObjectType.Recycle, ObjectType.Adjust,
+        ObjectType.PipeSegment, ObjectType.OrificePlate,
     ];
+
+    /// <summary>Pipe flow correlations by Flowstead id (value = DWSIM FlowPackage name).</summary>
+    public static readonly IReadOnlyDictionary<string, string> PipeCorrelations = new Dictionary<string, string>
+    {
+        ["beggs_brill"] = "Beggs_Brill", ["lockhart_martinelli"] = "Lockhart_Martinelli", ["petalas_aziz"] = "Petalas_Aziz",
+    };
+
+    /// <summary>Orifice tap arrangements by Flowstead id (value = DWSIM OrificeType name).</summary>
+    public static readonly IReadOnlyDictionary<string, string> OrificeTaps = new Dictionary<string, string>
+    {
+        ["flange"] = "FlangeTaps", ["corner"] = "CornerTaps", ["radius"] = "RadiusTaps",
+    };
 
     public static List<SolverMessage> Validate(Flowsheet fs, IEnumerable<string> knownCompounds, IEnumerable<string> knownPackages)
     {
@@ -80,6 +93,11 @@ public static class Validator
     private static void ValidateUnitOp(SimObject o, Action<string, string?> err)
     {
         var s = o.Specs;
+        void Positive(string key, string what)
+        {
+            if (!s.TryGetValue(key, out var v)) err($"{o.Tag}: under-specified — give the {what}.", o.Id);
+            else if (v.Si <= 0) err($"{o.Tag}: {what} must be positive.", o.Id);
+        }
         void OneOf(string what, params string[] keys)
         {
             var given = keys.Count(s.ContainsKey);
@@ -110,6 +128,26 @@ public static class Validator
                 break;
             case ObjectType.HeatExchanger:
                 OneOf("duty or one outlet temperature", SpecKeys.Duty, SpecKeys.HotOutletTemperature, SpecKeys.ColdOutletTemperature);
+                break;
+            case ObjectType.PipeSegment:
+                Positive(SpecKeys.Length, "length");
+                Positive(SpecKeys.InnerDiameter, "inside diameter");
+                if (s.GetValueOrDefault(SpecKeys.Roughness) is { } rough && rough.Si < 0) err($"{o.Tag}: roughness can't be negative.", o.Id);
+                if (s.GetValueOrDefault(SpecKeys.Increments) is { } inc && (inc.Si < 1 || inc.Si > 500 || inc.Si != Math.Floor(inc.Si)))
+                    err($"{o.Tag}: increments must be a whole number from 1 to 500.", o.Id);
+                if (s.ContainsKey(SpecKeys.HeatTransferCoefficient) != s.ContainsKey(SpecKeys.AmbientTemperature))
+                    err($"{o.Tag}: give both the heat transfer coefficient and the ambient temperature, or neither (adiabatic).", o.Id);
+                if (s.GetValueOrDefault(SpecKeys.HeatTransferCoefficient) is { } u && u.Si < 0) err($"{o.Tag}: heat transfer coefficient can't be negative.", o.Id);
+                if (o.Refs.GetValueOrDefault(ChoiceKeys.PipeCorrelation) is { } corr && !PipeCorrelations.ContainsKey(corr))
+                    err($"{o.Tag}: unknown flow correlation '{corr}'.", o.Id);
+                break;
+            case ObjectType.OrificePlate:
+                Positive(SpecKeys.OrificeDiameter, "orifice diameter");
+                Positive(SpecKeys.PipeDiameter, "pipe inside diameter");
+                if (s.GetValueOrDefault(SpecKeys.OrificeDiameter)?.Si >= s.GetValueOrDefault(SpecKeys.PipeDiameter)?.Si)
+                    err($"{o.Tag}: the orifice must be smaller than the pipe.", o.Id);
+                if (o.Refs.GetValueOrDefault(ChoiceKeys.OrificeTaps) is { } taps && !OrificeTaps.ContainsKey(taps))
+                    err($"{o.Tag}: unknown tap arrangement '{taps}'.", o.Id);
                 break;
             case ObjectType.Splitter:
                 if (!s.ContainsKey(SpecKeys.Split1)) err($"{o.Tag}: under-specified — give the fraction to outlet 1.", o.Id);

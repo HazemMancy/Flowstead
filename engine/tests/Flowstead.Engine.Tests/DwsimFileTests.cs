@@ -81,16 +81,16 @@ public sealed class DwsimFileTests(EngineFixture engine, ITestOutputHelper outpu
         Assert.True((await r.Content.ReadAsByteArrayAsync()) is [0x50, 0x4B, ..]);
     }
 
-    /// <summary>shared/fixtures/with-pipe.dwxmz: FEED → VLV-100 → LP → PIPE-1 → END, saved by DWSIM 9.0.5.</summary>
+    /// <summary>shared/fixtures/with-script.dwxmz: FEED → VLV-100 → LP → SCRIPT-1 (a Python script unit op) → END, saved by DWSIM 9.0.5.</summary>
     [Fact]
     public async Task UnsupportedObjectsAreLeftOutWithAWarning()
     {
         using var client = engine.Authed();
-        var file = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(Dir, "..", "shared", "fixtures", "with-pipe.dwxmz")));
+        var file = Convert.ToBase64String(File.ReadAllBytes(Path.Combine(Dir, "..", "shared", "fixtures", "with-script.dwxmz")));
         var import = await Post<ImportResult>(client, "/import", new DwsimFile(file));
         Assert.Equal(["END", "FEED", "LP", "VLV-100"], import.Flowsheet.Objects.Select(o => o.Tag).Order());
-        Assert.Contains(import.Warnings, w => w.StartsWith("PIPE-1: Pipe is not supported"));
-        Assert.Contains(import.Warnings, w => w.StartsWith("END: it was fed by PIPE-1"));
+        Assert.Contains(import.Warnings, w => w.StartsWith("SCRIPT-1: CustomUO is not supported"));
+        Assert.Contains(import.Warnings, w => w.StartsWith("END: it was fed by SCRIPT-1"));
         Assert.Equal(2, import.Flowsheet.Connections.Count);
 
         var feed = import.Flowsheet.Objects.Single(o => o.Tag == "FEED");

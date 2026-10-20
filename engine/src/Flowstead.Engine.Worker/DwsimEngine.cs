@@ -36,6 +36,9 @@ public sealed class DwsimEngine
 
     private const string PrLkName = "Peng-Robinson / Lee-Kesler (PR/LK)";
 
+    /// <summary>Commercial steel, m (DWSIM's "Steel").</summary>
+    public const double DefaultRoughness = 4.57e-5;
+
     private readonly DWSIM.Automation.Automation3 _automation;
 
     public string DwsimVersion { get; }
@@ -419,6 +422,8 @@ public sealed class DwsimEngine
         ObjectType.Expander => DwsimObjectType.Expander,
         ObjectType.HeatExchanger => DwsimObjectType.HeatExchanger,
         ObjectType.Recycle => DwsimObjectType.OT_Recycle,
+        ObjectType.PipeSegment => DwsimObjectType.Pipe,
+        ObjectType.OrificePlate => DwsimObjectType.OrificePlate,
         _ => throw new NotSupportedException($"'{t}' is not supported by this engine version yet"),
     };
 
@@ -576,6 +581,49 @@ public sealed class DwsimEngine
                 rcy.MaximumIterations = 100;
                 break;
             }
+            case Pipe pipe:
+            {
+                // One straight section; DWSIM keeps diameters in inches and the heat model in its thermal profile.
+                var di = V(SpecKeys.InnerDiameter)!.Value;
+                var section = new DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeSection(
+                    1, "Straight Tube Section", 1, (int)(V(SpecKeys.Increments) ?? 10), "User",
+                    V(SpecKeys.Length)!.Value, V(SpecKeys.ElevationChange) ?? 0.0,
+                    di * 1.15 / 0.0254, di / 0.0254)                        // DWSIM inches; OD only sets the heat-transfer area
+                {
+                    PipeWallRugosity = V(SpecKeys.Roughness) ?? DefaultRoughness,
+                };
+                pipe.Profile.Sections.Clear();
+                pipe.Profile.Sections.Add(1, section);
+                pipe.Profile.Status = DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeEditorStatus.OK;
+                pipe.Specification = Pipe.Specmode.Length;
+                pipe.SelectedFlowPackage = Enum.Parse<FlowPackage>(
+                    Validator.PipeCorrelations[o.Refs.GetValueOrDefault(ChoiceKeys.PipeCorrelation) ?? "beggs_brill"]);
+                var thermal = pipe.ThermalProfile;
+                if (V(SpecKeys.HeatTransferCoefficient) is { } u)
+                {
+                    thermal.TipoPerfil = DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.ThermalEditorDefinitions.ThermalProfileType.Definir_CGTC;
+                    thermal.CGTC_Definido = u;                                // W/m²·K
+                    thermal.Temp_amb_definir = V(SpecKeys.AmbientTemperature)!.Value;
+                }
+                else
+                {
+                    thermal.TipoPerfil = DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.ThermalEditorDefinitions.ThermalProfileType.Definir_Q;
+                    thermal.Calor_trocado = 0.0;                              // adiabatic
+                }
+                break;
+            }
+            case OrificePlate orifice:
+            {
+                var d = V(SpecKeys.OrificeDiameter)!.Value;
+                var pipeD = V(SpecKeys.PipeDiameter)!.Value;
+                orifice.OrificeDiameter = d;                                  // m
+                orifice.InternalPipeDiameter = pipeD;
+                orifice.Beta = d / pipeD;
+                orifice.CorrectionFactor = 1.0;
+                orifice.OrifType = Enum.Parse<OrificePlate.OrificeType>(
+                    Validator.OrificeTaps[o.Refs.GetValueOrDefault(ChoiceKeys.OrificeTaps) ?? "flange"]);
+                break;
+            }
             case HeatExchanger hx:
                 hx.FlowDir = FlowDirection.CounterCurrent;
                 hx.HotSidePressureDrop = V(SpecKeys.HotPressureDrop) ?? 0.0;
@@ -690,6 +738,19 @@ public sealed class DwsimEngine
                 Properties = Props(("duty", hx.Q * 1000.0), ("lmtd", hx.LMTD), ("ua", hx.Q * 1000.0 / hx.LMTD),
                     ("hotOutletTemperature", hx.HotSideOutletTemperature), ("coldOutletTemperature", hx.ColdSideOutletTemperature),
                     ("hotPressureDrop", hx.HotSidePressureDrop), ("coldPressureDrop", hx.ColdSidePressureDrop)),
+            },
+            Pipe pipe => new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                Properties = Props(("pressureDrop", -pipe.DeltaP), ("temperatureChange", pipe.DeltaT),
+                    ("heatTransferred", pipe.DeltaQ * 1000.0),                // DWSIM kW; + = into the fluid
+                    ("frictionPressureDrop", pipe.PressureDrop_Friction), ("staticPressureDrop", pipe.PressureDrop_Static)),
+            },
+            OrificePlate op => new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                Properties = Props(("pressureDrop", op.OverallPressureDrop), ("orificePressureDrop", op.OrificePressureDrop),
+                    ("beta", op.Beta), ("temperatureChange", op.DeltaT)),
             },
             DWSIM.UnitOperations.SpecialOps.Recycle r => new ObjectResult
             {

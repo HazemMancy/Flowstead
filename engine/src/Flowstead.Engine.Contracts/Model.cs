@@ -91,6 +91,27 @@ public static class SpecKeys
     public const string ColdOutletTemperature = "coldOutletTemperature";
     public const string HotPressureDrop = "hotPressureDrop";
     public const string ColdPressureDrop = "coldPressureDrop";
+
+    // Pipe segment (SI: m, W/m²·K, K) and orifice plate.
+    public const string Length = "length";
+    public const string InnerDiameter = "innerDiameter";
+    public const string ElevationChange = "elevationChange";
+    public const string Roughness = "roughness";
+    /// <summary>Calculation increments along a pipe (whole number).</summary>
+    public const string Increments = "increments";
+    public const string HeatTransferCoefficient = "heatTransferCoefficient";
+    public const string AmbientTemperature = "ambientTemperature";
+    public const string OrificeDiameter = "orificeDiameter";
+    public const string PipeDiameter = "pipeDiameter";
+}
+
+/// <summary>Choices stored in SimObject.Refs for unit ops that have a method to pick.</summary>
+public static class ChoiceKeys
+{
+    /// <summary>Pipe: beggs_brill (default), lockhart_martinelli, petalas_aziz.</summary>
+    public const string PipeCorrelation = "correlation";
+    /// <summary>Orifice plate: flange (default), corner, radius.</summary>
+    public const string OrificeTaps = "taps";
 }
 
 public static class Json

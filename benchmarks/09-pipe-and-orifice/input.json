@@ -1,0 +1,108 @@
+{
+  "name": "Water line with orifice meter",
+  "description": "10 kg/s water at 25 °C, 5 bara through 1 km of 100 mm ID steel pipe (ε = 0.0457 mm), then a 60 mm flange-tapped orifice plate (β = 0.6). IAPWS-IF97.",
+  "flowsheet": {
+    "propertyPackage": "Steam Tables (IAPWS-IF97)",
+    "compounds": [
+      "Water"
+    ],
+    "objects": [
+      {
+        "id": "in",
+        "tag": "1",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 298.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 500000,
+            "unit": "kPa"
+          },
+          "massFlow": {
+            "si": 10,
+            "unit": "kg/s"
+          }
+        },
+        "composition": {
+          "Water": 1
+        }
+      },
+      {
+        "id": "p",
+        "tag": "PIPE-100",
+        "type": "pipe_segment",
+        "specs": {
+          "length": {
+            "si": 1000,
+            "unit": "m"
+          },
+          "innerDiameter": {
+            "si": 0.1,
+            "unit": "mm"
+          },
+          "roughness": {
+            "si": 4.57e-05,
+            "unit": "mm"
+          },
+          "increments": {
+            "si": 20,
+            "unit": "count"
+          }
+        }
+      },
+      {
+        "id": "out",
+        "tag": "2",
+        "type": "material_stream"
+      },
+      {
+        "id": "o",
+        "tag": "FO-100",
+        "type": "orifice_plate",
+        "specs": {
+          "orificeDiameter": {
+            "si": 0.06,
+            "unit": "mm"
+          },
+          "pipeDiameter": {
+            "si": 0.1,
+            "unit": "mm"
+          }
+        }
+      },
+      {
+        "id": "o2",
+        "tag": "3",
+        "type": "material_stream"
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "in",
+        "fromPort": 0,
+        "toObject": "p",
+        "toPort": 0
+      },
+      {
+        "fromObject": "p",
+        "fromPort": 0,
+        "toObject": "out",
+        "toPort": 0
+      },
+      {
+        "fromObject": "out",
+        "fromPort": 0,
+        "toObject": "o",
+        "toPort": 0
+      },
+      {
+        "fromObject": "o",
+        "fromPort": 0,
+        "toObject": "o2",
+        "toPort": 0
+      }
+    ]
+  }
+}

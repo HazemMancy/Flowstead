@@ -56,7 +56,7 @@ class OnDeviceBenchmarkTest {
         Log.i(TAG, "engine ready in ${(System.nanoTime() - t0) / 1_000_000} ms: ${health.value}")
 
         val cases = testAssets.list("benchmarks")!!.filter { it.first().isDigit() }.sorted()
-        assertEquals(8, cases.size, "benchmarks found: $cases")
+        assertTrue(cases.size >= 8, "benchmarks found: $cases")
         val failures = mutableListOf<String>()
         for (case in cases) {
             val input = FlowsheetJson.parseToJsonElement(read("benchmarks/$case/input.json")).jsonObject
