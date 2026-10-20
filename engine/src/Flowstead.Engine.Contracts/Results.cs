@@ -119,5 +119,5 @@ public sealed record ImportResult(Flowsheet Flowsheet, List<string> Warnings);
 
 public static class EngineInfo
 {
-    public const string Version = "0.1.0";
+    public const string Version = "0.2.0";
 }
