@@ -1,0 +1,150 @@
+{
+  "name": "Cstr pfr",
+  "description": "Ethylene oxide hydrolysis, first order in EO (k = 3e-4 1/s), 10 % EO in water at 55 °C, 5 bar (NRTL), 10 mol/s. CSTR-100 1 m³ and PFR-100 1 m³ (10 m long), both isothermal.",
+  "flowsheet": {
+    "propertyPackage": "NRTL",
+    "compounds": [
+      "Ethylene oxide",
+      "Water",
+      "Ethylene glycol"
+    ],
+    "objects": [
+      {
+        "id": "f",
+        "tag": "F",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 328.15,
+            "unit": ""
+          },
+          "pressure": {
+            "si": 500000.0,
+            "unit": ""
+          },
+          "molarFlow": {
+            "si": 10,
+            "unit": ""
+          }
+        },
+        "composition": {
+          "Ethylene oxide": 0.1,
+          "Water": 0.9,
+          "Ethylene glycol": 0
+        }
+      },
+      {
+        "id": "c",
+        "tag": "CSTR-100",
+        "type": "cstr",
+        "refs": {
+          "reactions": "eo",
+          "mode": "isothermal"
+        },
+        "specs": {
+          "volume": {
+            "si": 1.0,
+            "unit": ""
+          }
+        }
+      },
+      {
+        "id": "o",
+        "tag": "2",
+        "type": "material_stream"
+      },
+      {
+        "id": "f2",
+        "tag": "F2",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 328.15,
+            "unit": ""
+          },
+          "pressure": {
+            "si": 500000.0,
+            "unit": ""
+          },
+          "molarFlow": {
+            "si": 10,
+            "unit": ""
+          }
+        },
+        "composition": {
+          "Ethylene oxide": 0.1,
+          "Water": 0.9,
+          "Ethylene glycol": 0
+        }
+      },
+      {
+        "id": "p",
+        "tag": "PFR-100",
+        "type": "pfr",
+        "refs": {
+          "reactions": "eo",
+          "mode": "isothermal"
+        },
+        "specs": {
+          "volume": {
+            "si": 1.0,
+            "unit": ""
+          },
+          "reactorLength": {
+            "si": 10,
+            "unit": ""
+          }
+        }
+      },
+      {
+        "id": "o2",
+        "tag": "4",
+        "type": "material_stream"
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "f",
+        "fromPort": 0,
+        "toObject": "c",
+        "toPort": 0
+      },
+      {
+        "fromObject": "c",
+        "fromPort": 0,
+        "toObject": "o",
+        "toPort": 0
+      },
+      {
+        "fromObject": "f2",
+        "fromPort": 0,
+        "toObject": "p",
+        "toPort": 0
+      },
+      {
+        "fromObject": "p",
+        "fromPort": 0,
+        "toObject": "o2",
+        "toPort": 0
+      }
+    ],
+    "reactions": [
+      {
+        "id": "eo",
+        "name": "EO hydrolysis",
+        "type": "kinetic",
+        "stoichiometry": {
+          "Ethylene oxide": -1,
+          "Water": -1,
+          "Ethylene glycol": 1
+        },
+        "baseCompound": "Ethylene oxide",
+        "forwardOrders": {
+          "Ethylene oxide": 1
+        },
+        "forwardA": 0.0003,
+        "forwardE": 0
+      }
+    ]
+  }
+}

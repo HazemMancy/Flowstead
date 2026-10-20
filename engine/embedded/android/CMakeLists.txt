@@ -14,3 +14,8 @@ target_compile_options(flowstead_host PRIVATE -Wall -Werror -O2)
 target_link_libraries(flowstead_host monosgen log)
 # Android 15+ devices use 16 KB pages.
 target_link_options(flowstead_host PRIVATE "-Wl,-z,max-page-size=16384")
+
+# Stand-in for IPOPT (see engine/native/ipopt_stub.c): DWSIM P/Invokes "Ipopt39".
+add_library(Ipopt39 SHARED ${CMAKE_CURRENT_LIST_DIR}/../../native/ipopt_stub.c)
+target_compile_options(Ipopt39 PRIVATE -Wall -Werror -O2)
+target_link_options(Ipopt39 PRIVATE "-Wl,-z,max-page-size=16384")

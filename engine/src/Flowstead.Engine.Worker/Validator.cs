@@ -17,6 +17,7 @@ public static class Validator
         ObjectType.AirCooler, ObjectType.ComponentSplitter, ObjectType.Tank, ObjectType.Set,
         // Refluxed absorber: not yet. DWSIM reports a condenser duty (RR + 1) times what its own energy balance needs.
         ObjectType.DistillationColumn, ObjectType.Absorber, ObjectType.ReboiledAbsorber, ObjectType.ShortcutColumn,
+        ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor, ObjectType.Cstr, ObjectType.Pfr,
     ];
 
     /// <summary>The spec keys each type takes (component-splitter fractions aside). A Set can only drive one of these.</summary>
@@ -94,7 +95,75 @@ public static class Validator
                 if (!fs.Compounds.Contains(k[SpecKeys.SplitPrefix.Length..])) Err($"{o.Tag}: '{k[SpecKeys.SplitPrefix.Length..]}' is not in the component list.", o.Id);
         ValidateSets(fs, Err);
         foreach (var o in fs.Objects.Where(o => Columns.IsColumn(o.Type))) ValidateColumn(fs, o, Err);
+        ValidateReactions(fs, Err);
+        foreach (var o in fs.Objects.Where(o => Reactors.IsReactor(o.Type))) ValidateReactor(fs, o, Err);
         return m;
+    }
+
+    private static void ValidateReactions(Flowsheet fs, Action<string, string?> err)
+    {
+        foreach (var dup in fs.Reactions.GroupBy(r => r.Id).Where(g => g.Count() > 1)) err($"Reaction id '{dup.Key}' is used twice.", null);
+        foreach (var r in fs.Reactions)
+        {
+            var name = $"Reaction {r.Name}";
+            if (r.Stoichiometry.Count < 2) err($"{name}: give at least one reactant and one product.", null);
+            foreach (var c in r.Stoichiometry.Keys.Where(c => !fs.Compounds.Contains(c))) err($"{name}: '{c}' is not in the component list.", null);
+            if (r.Stoichiometry.Values.Any(v => !double.IsFinite(v) || v == 0)) err($"{name}: stoichiometric coefficients must be non-zero numbers.", null);
+            if (!(r.Stoichiometry.GetValueOrDefault(r.BaseCompound) < 0)) err($"{name}: the base compound must be a reactant (negative coefficient).", null);
+            switch (r.Type)
+            {
+                case ReactionType.Equilibrium when r.Phase == ReactionPhase.Mixture:
+                    err($"{name}: choose the vapour or the liquid phase for an equilibrium reaction.", null);
+                    break;
+                case ReactionType.Conversion:
+                    if (r.Conversion is not { } x) err($"{name}: give the conversion of {r.BaseCompound}.", null);
+                    else if (x is <= 0 or > 1) err($"{name}: conversion must be above 0 and at most 100 %.", null);
+                    break;
+                case ReactionType.Kinetic:
+                    if (r.ForwardA is not > 0) err($"{name}: give a positive pre-exponential factor A.", null);
+                    if (r.ForwardE is not { } e || !double.IsFinite(e)) err($"{name}: give the activation energy E.", null);
+                    if (r.ReverseA is < 0) err($"{name}: the reverse A can't be negative.", null);
+                    foreach (var c in r.ForwardOrders.Keys.Concat(r.ReverseOrders.Keys).Where(c => !r.Stoichiometry.ContainsKey(c)))
+                        err($"{name}: reaction order given for {c}, which is not in the reaction.", null);
+                    break;
+            }
+        }
+    }
+
+    private static void ValidateReactor(Flowsheet fs, SimObject o, Action<string, string?> err)
+    {
+        var s = o.Specs;
+        if (Reactors.ReactionTypeFor(o.Type) is { } type)
+        {
+            var ids = Reactors.ReactionIds(o);
+            if (ids.Count == 0) err($"{o.Tag}: under-specified — choose its {type.ToString().ToLowerInvariant()} reactions.", o.Id);
+            foreach (var id in ids)
+            {
+                var r = fs.Reactions.FirstOrDefault(x => x.Id == id);
+                if (r is null) err($"{o.Tag}: a reaction it uses no longer exists.", o.Id);
+                else if (r.Type != type) err($"{o.Tag}: {r.Name} is a {r.Type.ToString().ToLowerInvariant()} reaction; this reactor runs {type.ToString().ToLowerInvariant()} reactions.", o.Id);
+            }
+        }
+        switch (o.Refs.GetValueOrDefault(ReactorKeys.Mode))
+        {
+            case null or "adiabatic" or "isothermal": break;
+            case "outlet_temperature":
+                if (s.GetValueOrDefault(SpecKeys.OutletTemperature) is not { } t) err($"{o.Tag}: under-specified — give the outlet temperature.", o.Id);
+                else if (t.Si <= 0) err($"{o.Tag}: outlet temperature must be above absolute zero.", o.Id);
+                break;
+            case var mode: err($"{o.Tag}: unknown operating mode '{mode}'.", o.Id); break;
+        }
+        if (s.GetValueOrDefault(SpecKeys.PressureDrop) is { } dp && dp.Si < 0) err($"{o.Tag}: pressure drop can't be negative.", o.Id);
+        if (o.Type is ObjectType.Cstr or ObjectType.Pfr)
+        {
+            if (s.GetValueOrDefault(SpecKeys.Volume) is not { } v) err($"{o.Tag}: under-specified — give the reactor volume.", o.Id);
+            else if (v.Si <= 0) err($"{o.Tag}: volume must be positive.", o.Id);
+        }
+        if (o.Type == ObjectType.Pfr)
+        {
+            if (s.GetValueOrDefault(SpecKeys.ReactorLength) is not { } l) err($"{o.Tag}: under-specified — give the reactor length.", o.Id);
+            else if (l.Si <= 0) err($"{o.Tag}: length must be positive.", o.Id);
+        }
     }
 
     private static void ValidateColumn(Flowsheet fs, SimObject o, Action<string, string?> err)

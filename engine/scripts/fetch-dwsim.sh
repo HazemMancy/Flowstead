@@ -16,7 +16,16 @@ out="${1:-$here/dwsim-bin}"
 dl="$here/.dl"
 deb="$dl/dwsim_${VERSION}-amd64.deb"
 
+# IPOPT is not shipped: DWSIM's libIpopt39.so is a symlink to a system library. Replace it with
+# Flowstead's stand-in (engine/native/ipopt_stub.c), so a DWSIM path that reaches IPOPT fails
+# cleanly instead of crashing the worker from a finalizer.
+ipopt_stub() {
+  rm -f "$out/libIpopt39.so"
+  ${CC:-cc} -shared -fPIC -O2 -Wall -Werror -o "$out/libIpopt39.so" "$here/native/ipopt_stub.c"
+}
+
 if [[ -f "$out/.version" && "$(cat "$out/.version")" == "$SHA256" ]]; then
+  [[ -L "$out/libIpopt39.so" || ! -f "$out/libIpopt39.so" ]] && ipopt_stub
   echo "DWSIM $VERSION already present in $out"
   exit 0
 fi
@@ -40,5 +49,6 @@ src="$work/usr/local/lib/dwsim"
 cp -a "$src/." "$out/"
 ( cd "$out" && rm -rf ./*.pdb DWSIM.exe DWSIM.exe.* DWSIM.UI.Desktop.exe DWSIM.UI.Desktop.exe.* \
     libwebkit* libjavascriptcoregtk* libgeoclue* webkit-sharp* libscintilla* )
+ipopt_stub
 echo "$SHA256" > "$out/.version"
 echo "DWSIM $VERSION extracted to $out ($(du -sh "$out" | cut -f1))"

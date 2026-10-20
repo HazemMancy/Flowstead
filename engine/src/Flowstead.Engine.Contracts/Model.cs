@@ -15,6 +15,36 @@ public sealed record Flowsheet
     public double AtmosphericPressurePa { get; init; } = 101_325.0;
     public List<SimObject> Objects { get; init; } = [];
     public List<Connection> Connections { get; init; } = [];
+    /// <summary>Reactions reactors can use (each reactor names its own in Refs["reactions"]).</summary>
+    public List<Reaction> Reactions { get; init; } = [];
+}
+
+public enum ReactionType { Conversion, Equilibrium, Kinetic }
+
+public enum ReactionPhase { Mixture, Vapour, Liquid }
+
+/// <summary>
+/// A reaction. Stoichiometric coefficients are negative for reactants. Kinetic rates are in mol/(m³·s) with
+/// concentrations in mol/m³: r = A·exp(−E/RT)·Π c^order, E in J/mol.
+/// </summary>
+public sealed record Reaction
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required ReactionType Type { get; init; }
+    public Dictionary<string, double> Stoichiometry { get; init; } = [];
+    public required string BaseCompound { get; init; }
+    public ReactionPhase Phase { get; init; } = ReactionPhase.Mixture;
+    /// <summary>Conversion reactions: fraction of the base compound converted (0–1).</summary>
+    public double? Conversion { get; init; }
+    /// <summary>Equilibrium reactions: optional temperature approach (K) added to T when evaluating K from Gibbs energies.</summary>
+    public double? ApproachTemperature { get; init; }
+    public Dictionary<string, double> ForwardOrders { get; init; } = [];
+    public Dictionary<string, double> ReverseOrders { get; init; } = [];
+    public double? ForwardA { get; init; }
+    public double? ForwardE { get; init; }
+    public double? ReverseA { get; init; }
+    public double? ReverseE { get; init; }
 }
 
 public sealed record SimObject
@@ -106,6 +136,8 @@ public static class SpecKeys
 
     /// <summary>Tank: vessel volume (m³), for the liquid residence time.</summary>
     public const string Volume = "volume";
+    /// <summary>Plug-flow reactor length (m); the diameter follows from the volume.</summary>
+    public const string ReactorLength = "reactorLength";
 
     /// <summary>
     /// Component splitter: "split:&lt;compound&gt;" is the fraction of that compound's inlet flow sent
@@ -155,6 +187,15 @@ public static class SetKeys
     /// <summary>Optional specs: multiplier (default 1) and offset (SI difference, default 0).</summary>
     public const string Multiplier = "multiplier";
     public const string Offset = "offset";
+}
+
+/// <summary>Reactor settings stored in SimObject.Refs and Specs.</summary>
+public static class ReactorKeys
+{
+    /// <summary>Refs: comma-separated ids of the flowsheet reactions this reactor uses (not for Gibbs).</summary>
+    public const string Reactions = "reactions";
+    /// <summary>Refs: adiabatic (default), isothermal or outlet_temperature.</summary>
+    public const string Mode = "mode";
 }
 
 /// <summary>Choices stored in SimObject.Refs for unit ops that have a method to pick.</summary>

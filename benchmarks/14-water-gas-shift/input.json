@@ -1,0 +1,155 @@
+{
+  "name": "Water gas shift",
+  "description": "Water-gas shift at 400 °C, 20 bar (PR): CO/H2O/CO2/H2 = 0.25/0.5/0.05/0.2, 10 mol/s. ERV-100 (equilibrium, K from Gibbs energies of formation) and GBR-100 (Gibbs minimisation) side by side, both isothermal.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Carbon monoxide",
+      "Water",
+      "Carbon dioxide",
+      "Hydrogen"
+    ],
+    "objects": [
+      {
+        "id": "f",
+        "tag": "F",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 673.15,
+            "unit": ""
+          },
+          "pressure": {
+            "si": 2000000.0,
+            "unit": ""
+          },
+          "molarFlow": {
+            "si": 10,
+            "unit": ""
+          }
+        },
+        "composition": {
+          "Carbon monoxide": 0.25,
+          "Water": 0.5,
+          "Carbon dioxide": 0.05,
+          "Hydrogen": 0.2
+        }
+      },
+      {
+        "id": "r",
+        "tag": "ERV-100",
+        "type": "equilibrium_reactor",
+        "refs": {
+          "reactions": "wgs",
+          "mode": "isothermal"
+        }
+      },
+      {
+        "id": "v",
+        "tag": "2",
+        "type": "material_stream"
+      },
+      {
+        "id": "l",
+        "tag": "3",
+        "type": "material_stream"
+      },
+      {
+        "id": "f2",
+        "tag": "F2",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 673.15,
+            "unit": ""
+          },
+          "pressure": {
+            "si": 2000000.0,
+            "unit": ""
+          },
+          "molarFlow": {
+            "si": 10,
+            "unit": ""
+          }
+        },
+        "composition": {
+          "Carbon monoxide": 0.25,
+          "Water": 0.5,
+          "Carbon dioxide": 0.05,
+          "Hydrogen": 0.2
+        }
+      },
+      {
+        "id": "g",
+        "tag": "GBR-100",
+        "type": "gibbs_reactor",
+        "refs": {
+          "mode": "isothermal"
+        }
+      },
+      {
+        "id": "v2",
+        "tag": "4",
+        "type": "material_stream"
+      },
+      {
+        "id": "l2",
+        "tag": "5",
+        "type": "material_stream"
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "f",
+        "fromPort": 0,
+        "toObject": "r",
+        "toPort": 0
+      },
+      {
+        "fromObject": "r",
+        "fromPort": 0,
+        "toObject": "v",
+        "toPort": 0
+      },
+      {
+        "fromObject": "r",
+        "fromPort": 1,
+        "toObject": "l",
+        "toPort": 0
+      },
+      {
+        "fromObject": "f2",
+        "fromPort": 0,
+        "toObject": "g",
+        "toPort": 0
+      },
+      {
+        "fromObject": "g",
+        "fromPort": 0,
+        "toObject": "v2",
+        "toPort": 0
+      },
+      {
+        "fromObject": "g",
+        "fromPort": 1,
+        "toObject": "l2",
+        "toPort": 0
+      }
+    ],
+    "reactions": [
+      {
+        "id": "wgs",
+        "name": "Water-gas shift",
+        "type": "equilibrium",
+        "stoichiometry": {
+          "Carbon monoxide": -1,
+          "Water": -1,
+          "Carbon dioxide": 1,
+          "Hydrogen": 1
+        },
+        "baseCompound": "Carbon monoxide",
+        "phase": "vapour"
+      }
+    ]
+  }
+}

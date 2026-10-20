@@ -4,10 +4,11 @@
 # Keys:   docker exec <container> dotnet /app/Flowstead.Engine.Api.dll keys add <device>
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-RUN apt-get update && apt-get install -y --no-install-recommends binutils zstd curl ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends binutils zstd curl ca-certificates gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY scripts/ scripts/
+COPY native/ native/
 # Reuse a pre-downloaded package if the build context has one (CI cache), else download.
 COPY .dl/ .dl/
 RUN scripts/fetch-dwsim.sh /opt/dwsim

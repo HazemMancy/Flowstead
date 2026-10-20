@@ -1,0 +1,95 @@
+{
+  "name": "Conversion reactor",
+  "description": "Methane burnt with 50 % excess air (PR): 10 mol/s at 25 °C, 1 atm; 90 % methane conversion, adiabatic.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Methane",
+      "Oxygen",
+      "Nitrogen",
+      "Carbon dioxide",
+      "Water"
+    ],
+    "objects": [
+      {
+        "id": "f",
+        "tag": "1",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 298.15,
+            "unit": ""
+          },
+          "pressure": {
+            "si": 101325,
+            "unit": ""
+          },
+          "molarFlow": {
+            "si": 10,
+            "unit": ""
+          }
+        },
+        "composition": {
+          "Methane": 0.06535947712418301,
+          "Oxygen": 0.19607843137254902,
+          "Nitrogen": 0.738562091503268,
+          "Carbon dioxide": 0,
+          "Water": 0
+        }
+      },
+      {
+        "id": "r",
+        "tag": "CRV-100",
+        "type": "conversion_reactor",
+        "refs": {
+          "reactions": "comb"
+        }
+      },
+      {
+        "id": "v",
+        "tag": "2",
+        "type": "material_stream"
+      },
+      {
+        "id": "l",
+        "tag": "3",
+        "type": "material_stream"
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "f",
+        "fromPort": 0,
+        "toObject": "r",
+        "toPort": 0
+      },
+      {
+        "fromObject": "r",
+        "fromPort": 0,
+        "toObject": "v",
+        "toPort": 0
+      },
+      {
+        "fromObject": "r",
+        "fromPort": 1,
+        "toObject": "l",
+        "toPort": 0
+      }
+    ],
+    "reactions": [
+      {
+        "id": "comb",
+        "name": "Methane combustion",
+        "type": "conversion",
+        "stoichiometry": {
+          "Methane": -1,
+          "Oxygen": -2,
+          "Carbon dioxide": 1,
+          "Water": 2
+        },
+        "baseCompound": "Methane",
+        "conversion": 0.9
+      }
+    ]
+  }
+}

@@ -174,14 +174,16 @@ public sealed class DwsimEngine
         };
     }
 
-    private SolveResult SolveCore(Flowsheet model, List<SolverMessage> messages, Stopwatch sw)
+    private SolveResult SolveCore(Flowsheet model, List<SolverMessage> messages, Stopwatch sw, WaterMode? water = null)
     {
         model = SetSolver.Apply(model); // again: an Adjust may have moved a Set's source
+        var mode = water ?? WaterTreatment(model);
+        var given = messages.Count;
         IFlowsheet fs;
         Dictionary<string, ISimulationObject> objects;
         try
         {
-            (fs, objects) = Build(model);
+            (fs, objects) = Build(model, mode);
         }
         catch (Exception e)
         {
@@ -212,12 +214,20 @@ public sealed class DwsimEngine
         }
         AddTankResidenceTimes(model, results);
         Columns.Verify(model, results);
+        Reactors.Verify(model, results);
         foreach (var (id, r) in results.Where(r => r.Value.Status == ObjectStatus.Error))
         {
             messages.Add(new SolverMessage(MessageLevel.Error, r.Error ?? "Calculation failed", id));
         }
 
-        switch (WaterTreatment(model))
+        if (mode == WaterMode.FreeWater && FreeWaterUntrustworthy(results))
+        {
+            messages.RemoveRange(given, messages.Count - given);
+            messages.Add(new SolverMessage(MessageLevel.Info,
+                "Water above 150 °C: solved with the standard flash, because DWSIM's free-water flash is not valid hot. A cold free-water phase is not split out."));
+            return SolveCore(model, messages, sw, WaterMode.None);
+        }
+        switch (mode)
         {
             case WaterMode.FreeWater:
                 messages.Add(new SolverMessage(MessageLevel.Info,
@@ -349,13 +359,16 @@ public sealed class DwsimEngine
 
     // ------------------------------------------------------------------ build
 
-    private (IFlowsheet, Dictionary<string, ISimulationObject>) Build(Flowsheet model)
+    private (IFlowsheet, Dictionary<string, ISimulationObject>) Build(Flowsheet model, WaterMode? water = null)
     {
         var fs = _automation.CreateFlowsheet();
         foreach (var c in model.Compounds) fs.AddCompound(c);
         var ppName = MvpPackages.FirstOrDefault(p => p.Name == model.PropertyPackage).Dwsim ?? model.PropertyPackage!;
         var pp = (PropertyPackage)fs.CreateAndAddPropertyPackage(ppName);
-        switch (WaterTreatment(model))
+        // DWSIM's Gibbs-minimisation flashes (rigorous VLLE) default to IPOPT, a native library that is not in the
+        // engine (server or phone); its finalizer then crashed the process. DWSIM's managed L-BFGS instead.
+        pp.FlashSettings[FlashSetting.GM_OptimizationMethod] = "Limited_Memory_BGFS";
+        switch (water ?? WaterTreatment(model))
         {
             case WaterMode.FreeWater:
                 pp.FlashSettings[FlashSetting.ForceEquilibriumCalculationType] = "VLLE";
@@ -373,6 +386,8 @@ public sealed class DwsimEngine
             var so = fs.AddObject(ToDwsim(o.Type), (int)o.X, (int)o.Y, o.Tag);
             map[o.Id] = so;
         }
+
+        Reactors.AddReactions(fs, model, map);
 
         // Streams first (state + composition), then unit-op parameters, then connections.
         foreach (var o in model.Objects.Where(o => o.Type == ObjectType.MaterialStream))
@@ -394,10 +409,21 @@ public sealed class DwsimEngine
             Columns.Wire(fs, model, o, map[o.Id], map);
         }
         AddHiddenEnergyStreams(fs, model, map);
+        Reactors.AfterWiring(model, map);
         return (fs, map);
     }
 
     public enum WaterMode { None, FreeWater, RigorousVlle }
+
+    /// <summary>
+    /// DWSIM's free-water flash is only sound for cold water (D28): above about 150 °C it returned all-liquid
+    /// methane/steam at 300 °C, phase fractions summing to 1.18 and enthalpies of −719 MJ/kg.
+    /// </summary>
+    private const double FreeWaterMaxTemperatureK = 423.15;
+
+    private static bool FreeWaterUntrustworthy(Dictionary<string, ObjectResult> results) => results.Values.Any(r =>
+        r.Phases is { } ph && (r.Properties.GetValueOrDefault("temperature") > FreeWaterMaxTemperatureK
+            || Math.Abs(ph.Where(p => p.Key != "overall").Sum(p => p.Value.Properties.GetValueOrDefault("phaseMoleFraction")) - 1.0) > 1e-6));
 
     /// <summary>Water-soluble polar compounds: with these present, water is not an immiscible free phase.</summary>
     private static readonly HashSet<string> PolarSolvents =
@@ -433,6 +459,7 @@ public sealed class DwsimEngine
         ObjectType.Separator or ObjectType.ThreePhaseSeparator or ObjectType.Tank => DwsimObjectType.Vessel,
         ObjectType.ComponentSplitter => DwsimObjectType.ComponentSeparator,
         _ when Columns.IsColumn(t) => Columns.ToDwsim(t),
+        _ when Reactors.IsReactor(t) => Reactors.ToDwsim(t),
         ObjectType.Mixer => DwsimObjectType.NodeIn,
         ObjectType.Splitter => DwsimObjectType.NodeOut,
         ObjectType.Pump => DwsimObjectType.Pump,
@@ -642,6 +669,9 @@ public sealed class DwsimEngine
                     Validator.OrificeTaps[o.Refs.GetValueOrDefault(ChoiceKeys.OrificeTaps) ?? "flange"]);
                 break;
             }
+            case DWSIM.UnitOperations.Reactors.Reactor rx:
+                Reactors.Apply(o, rx, model.Compounds);
+                break;
             case DWSIM.UnitOperations.UnitOperations.Column col:
                 Columns.Apply(o, col);
                 break;
@@ -687,10 +717,10 @@ public sealed class DwsimEngine
     private static void AddHiddenEnergyStreams(IFlowsheet fs, Flowsheet model, Dictionary<string, ISimulationObject> map)
     {
         foreach (var o in model.Objects.Where(o => o.Type is ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler
-                     or ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander))
+                     or ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander || Reactors.IsReactor(o.Type)))
         {
-            // Energy flows in to heaters, pumps and compressors; out of coolers and expanders.
-            var isHeater = o.Type is ObjectType.Heater or ObjectType.Pump or ObjectType.Compressor;
+            // Energy flows in to heaters, pumps, compressors and reactors; out of coolers and expanders.
+            var isHeater = o.Type is ObjectType.Heater or ObjectType.Pump or ObjectType.Compressor || Reactors.IsReactor(o.Type);
             var drawn = model.Connections.Any(c => isHeater
                 ? c.ToObject == o.Id && c.ToPort == 1
                 : c.FromObject == o.Id && c.FromPort == 1);
@@ -804,6 +834,7 @@ public sealed class DwsimEngine
                     ("beta", op.Beta), ("temperatureChange", op.DeltaT)),
             },
             DWSIM.UnitOperations.UnitOperations.Column or ShortcutColumn => Columns.Result(o, so),
+            DWSIM.UnitOperations.Reactors.Reactor rx => Reactors.Result(rx),
             ComponentSeparator cs => new ObjectResult
             {
                 Status = ObjectStatus.Solved,

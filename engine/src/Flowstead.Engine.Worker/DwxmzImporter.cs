@@ -12,6 +12,8 @@ using Flowstead.Engine.Contracts;
 using DwsimObjectType = DWSIM.Interfaces.Enums.GraphicObjects.ObjectType;
 using EnergyStream = DWSIM.UnitOperations.Streams.EnergyStream;
 using Flowsheet = Flowstead.Engine.Contracts.Flowsheet;
+using ReactionPhase = Flowstead.Engine.Contracts.ReactionPhase;
+using ReactionType = Flowstead.Engine.Contracts.ReactionType;
 
 namespace Flowstead.Engine.Worker;
 
@@ -110,6 +112,7 @@ public static class DwxmzImporter
             Compounds = compounds,
             Objects = objects,
             Connections = connections.Distinct().ToList(),
+            Reactions = ImportReactions(fs, objects, warnings),
         };
         return new ImportResult(model, warnings);
     }
@@ -194,11 +197,66 @@ public static class DwxmzImporter
         DwsimObjectType.OrificePlate => ObjectType.OrificePlate,
         DwsimObjectType.ComponentSeparator => ObjectType.ComponentSplitter,
         DwsimObjectType.ShortcutColumn => ObjectType.ShortcutColumn,
+        DwsimObjectType.RCT_Conversion => ObjectType.ConversionReactor,
+        DwsimObjectType.RCT_Equilibrium => ObjectType.EquilibriumReactor,
+        DwsimObjectType.RCT_Gibbs => ObjectType.GibbsReactor,
+        DwsimObjectType.RCT_CSTR => ObjectType.Cstr,
+        DwsimObjectType.RCT_PFR => ObjectType.Pfr,
         DwsimObjectType.AbsorptionColumn => ObjectType.Absorber,
         DwsimObjectType.DistillationColumn => so is DistillationColumn { ReboiledAbsorber: true } ? ObjectType.ReboiledAbsorber
             : so is DistillationColumn { RefluxedAbsorber: true } ? ObjectType.RefluxedAbsorber : ObjectType.DistillationColumn,
         _ => null,
     };
+
+    /// <summary>The file's reactions used by an imported reactor, as Flowstead reactions (unsupported kinds are left out with a warning).</summary>
+    private static List<Reaction> ImportReactions(IFlowsheet fs, List<SimObject> objects, List<string> warnings)
+    {
+        var used = objects.Where(o => Reactors.IsReactor(o.Type)).SelectMany(Reactors.ReactionIds).ToHashSet();
+        var list = new List<Reaction>();
+        foreach (var id in used)
+        {
+            if (!fs.Reactions.TryGetValue(id, out var r)) continue;
+            var stoich = r.Components.Values.ToDictionary(c => c.CompName, c => c.StoichCoeff);
+            var phase = r.ReactionPhase switch
+            {
+                DWSIM.Interfaces.Enums.ReactionPhase.Vapor => ReactionPhase.Vapour,
+                DWSIM.Interfaces.Enums.ReactionPhase.Liquid => ReactionPhase.Liquid,
+                _ => ReactionPhase.Mixture,
+            };
+            var basic = new Reaction { Id = id, Name = r.Name, Type = ReactionType.Conversion, Stoichiometry = stoich, BaseCompound = r.BaseReactant, Phase = phase };
+            switch (r.ReactionType)
+            {
+                case DWSIM.Interfaces.Enums.ReactionType.Conversion:
+                    if (double.TryParse(r.Expression, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var pct))
+                        list.Add(basic with { Conversion = pct / 100.0 });
+                    else warnings.Add($"Reaction {r.Name}: conversion given as a function of temperature ({r.Expression}); only a constant conversion is supported. Set it in Flowstead.");
+                    break;
+                case DWSIM.Interfaces.Enums.ReactionType.Equilibrium:
+                    if (r.KExprType != DWSIM.Interfaces.Enums.KOpt.Gibbs)
+                        warnings.Add($"Reaction {r.Name}: K was given as {r.KExprType}; Flowstead calculates K from Gibbs energies of formation.");
+                    list.Add(basic with { Type = ReactionType.Equilibrium, ApproachTemperature = r.Approach == 0 ? null : r.Approach,
+                        Phase = phase == ReactionPhase.Liquid ? ReactionPhase.Liquid : ReactionPhase.Vapour });
+                    break;
+                case DWSIM.Interfaces.Enums.ReactionType.Kinetic
+                    when r.ReactionKinFwdType == DWSIM.Interfaces.Enums.ReactionKineticType.Arrhenius
+                         && r.ReactionBasis == DWSIM.Interfaces.Enums.ReactionBasis.MolarConc && r.ConcUnit == "mol/m3" && r.VelUnit == "mol/[m3.s]"
+                         && r.E_Forward_Unit == "J/mol":
+                    list.Add(basic with
+                    {
+                        Type = ReactionType.Kinetic,
+                        ForwardOrders = r.Components.Values.Where(c => c.DirectOrder != 0).ToDictionary(c => c.CompName, c => c.DirectOrder),
+                        ReverseOrders = r.Components.Values.Where(c => c.ReverseOrder != 0).ToDictionary(c => c.CompName, c => c.ReverseOrder),
+                        ForwardA = r.A_Forward, ForwardE = r.E_Forward,
+                        ReverseA = r.A_Reverse == 0 ? null : r.A_Reverse, ReverseE = r.A_Reverse == 0 ? null : r.E_Reverse,
+                    });
+                    break;
+                default:
+                    warnings.Add($"Reaction {r.Name}: this kind of {r.ReactionType} reaction (basis, units or rate expression) is not supported; it was left out.");
+                    break;
+            }
+        }
+        return list;
+    }
 
     private static void ColumnSpecs(Column col, Dictionary<string, Spec> specs, Dictionary<string, string> refs, List<string> warnings)
     {
@@ -291,9 +349,25 @@ public static class DwxmzImporter
         {
             if (v is { } x && double.IsFinite(x)) specs[key] = new Spec(x, unit);
         }
+        string Warn(string text, string value) { warnings.Add(text); return value; }
         void Unsupported(string what) => warnings.Add($"{so.GraphicObject.Tag}: calculation mode '{what}' is not supported; set its specification in Flowstead.");
         switch (so)
         {
+            case DWSIM.UnitOperations.Reactors.Reactor rx:
+                refs[ReactorKeys.Mode] = rx.ReactorOperationMode switch
+                {
+                    DWSIM.UnitOperations.Reactors.OperationMode.Isothermic => "isothermal",
+                    DWSIM.UnitOperations.Reactors.OperationMode.OutletTemperature => "outlet_temperature",
+                    DWSIM.UnitOperations.Reactors.OperationMode.Adiabatic => "adiabatic",
+                    var m => Warn($"{so.GraphicObject.Tag}: operating mode {m} is not supported; imported as adiabatic.", "adiabatic"),
+                };
+                if (rx.ReactorOperationMode == DWSIM.UnitOperations.Reactors.OperationMode.OutletTemperature) Put(SpecKeys.OutletTemperature, rx.OutletTemperature, "C");
+                Put(SpecKeys.PressureDrop, rx.DeltaP, "dkPa");
+                if (rx is DWSIM.UnitOperations.Reactors.Reactor_CSTR cstr) Put(SpecKeys.Volume, cstr.Volume, "m3");
+                if (rx is DWSIM.UnitOperations.Reactors.Reactor_PFR pfr) { Put(SpecKeys.Volume, pfr.Volume, "m3"); Put(SpecKeys.ReactorLength, pfr.Length, "m"); }
+                if (rx is not DWSIM.UnitOperations.Reactors.Reactor_Gibbs && ((DWSIM.SharedClasses.UnitOperations.BaseClass)so).FlowSheet.ReactionSets.TryGetValue(rx.ReactionSetID ?? "", out var set))
+                    refs[ReactorKeys.Reactions] = string.Join(",", set.Reactions.Values.Where(r => r.IsActive).OrderBy(r => r.Rank).Select(r => r.ReactionID));
+                break;
             case ShortcutColumn sc:
                 refs[ChoiceKeys.LightKey] = sc.m_lightkey;
                 refs[ChoiceKeys.HeavyKey] = sc.m_heavykey;
