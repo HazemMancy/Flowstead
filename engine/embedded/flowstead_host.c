@@ -66,6 +66,9 @@ int fh_start(const char *framework_dir, const char *app_dir, const char *dwsim_d
     const char *values[] = {tpa, app_paths, native_dirs, "true", "false"};
     /* Inside an Android app ART owns the signal handlers; Mono must chain to them, not replace them. */
     mono_set_signal_chaining(1);
+    /* Every managed thread, DWSIM's solver tasks included, gets a deep stack: its column and flash
+     * code recurses further than the ~1 MB default of an Android thread. */
+    mono_threads_set_default_stacksize(64u << 20);
     mono_set_crash_chaining(1);
     if (monovm_initialize(5, keys, values) != 0) {
         *error = "monovm_initialize failed";

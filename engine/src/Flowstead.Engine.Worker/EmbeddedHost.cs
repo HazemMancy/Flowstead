@@ -70,7 +70,12 @@ public static class EmbeddedHost
 
     // DWSIM types only appear inside these methods, so they load after the resolver is in place.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static object Create() => new DwsimEngine();
+    private static object Create()
+    {
+        // No worker pool to stop a runaway solve on the phone: DWSIM's own limit (default an hour) instead.
+        DWSIM.GlobalSettings.Settings.SolverTimeoutSeconds = 120;
+        return new DwsimEngine();
+    }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static string Version(object engine) => ((DwsimEngine)engine).DwsimVersion;
