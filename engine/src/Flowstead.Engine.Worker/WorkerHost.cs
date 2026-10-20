@@ -43,7 +43,7 @@ public sealed class WorkerHost(TextWriter output)
         return 0;
     }
 
-    private static JsonNode? Handle(DwsimEngine engine, WorkerRequest req) => req.Method switch
+    internal static JsonNode? Handle(DwsimEngine engine, WorkerRequest req) => req.Method switch
     {
         WorkerMethods.Ping => JsonValue.Create("pong"),
         WorkerMethods.PropertyPackages => JsonSerializer.SerializeToNode(engine.PropertyPackages(), Json.Options),
