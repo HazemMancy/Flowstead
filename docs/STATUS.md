@@ -85,9 +85,11 @@ _Last updated: 2026-10-20_
   - **Recommendation:** keep the remote engine for v1. The report also gives a device experiment with go/no-go criteria.
 - Benchmarks now include each case's `.dwxmz`, exported by the engine (it opens in desktop DWSIM for cross-checks).
 
+- **Toolchain upgrade (D15):** AGP 9.4.1 with built-in Kotlin, Gradle 9.8.2, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, compile/target SDK 37. The full CI run is green, end-to-end included.
+- **Screenshots:** `StoreScreenshots` renders projects, canvas, results and solver log in light and dark at 1080 × 2160, from benchmark 06 and its real engine response. CI uploads them as the `screenshots` artifact.
+
 ## Next
-- Toolchain upgrade to AGP 9.4.1 / Kotlin 2.4.21 / SDK 37 (D15): pending the full CI run (unit and UI tests already pass).
-- Play Store phone screenshots against a real engine; a dark-theme visual check.
+- Review the `screenshots` artifact (light and dark) and pick the Play Store set. I couldn't download artifacts from the dev sandbox: the network policy blocks the artifact host.
 - Owner input still needed:
   - HYSYS/UniSim and desktop-DWSIM reference values for the benchmarks (D6);
   - the support e-mail and a privacy-policy URL for the listing.
