@@ -7,6 +7,7 @@ using DWSIM.Interfaces;
 using DWSIM.Interfaces.Enums;
 using DWSIM.Thermodynamics.Streams;
 using DWSIM.UnitOperations.UnitOperations;
+using DWSIM.UnitOperations.UnitOperations.Auxiliary.SepOps;
 using Flowstead.Engine.Contracts;
 using DwsimObjectType = DWSIM.Interfaces.Enums.GraphicObjects.ObjectType;
 using EnergyStream = DWSIM.UnitOperations.Streams.EnergyStream;
@@ -78,15 +79,21 @@ public static class DwxmzImporter
         }
 
         var connections = new List<Connection>();
+        var byId = objects.ToDictionary(o => o.Id);
+        foreach (var so in fs.SimulationObjects.Values.Where(s => idOf.ContainsKey(s.Name) && Columns.IsColumn(byId[idOf[s.Name]].Type)))
+        {
+            ColumnConnections(so, byId[idOf[so.Name]], idOf, connections);
+        }
         foreach (var so in fs.SimulationObjects.Values)
         {
             if (!idOf.TryGetValue(so.Name, out var fromId)) continue;
+            if (Columns.IsColumn(byId[fromId].Type)) continue;
             var outs = so.GraphicObject.OutputConnectors;
             for (var i = 0; i < outs.Count; i++)
             {
                 if (!outs[i].IsAttached) continue;
                 var link = outs[i].AttachedConnector;
-                if (!idOf.TryGetValue(link.AttachedTo.Name, out var toId)) continue;
+                if (!idOf.TryGetValue(link.AttachedTo.Name, out var toId) || Columns.IsColumn(byId[toId].Type)) continue;
                 connections.Add(new Connection(fromId, i, toId, link.AttachedToConnectorIndex));
             }
             // DWSIM keeps the energy stream a unit sends out (cooler, expander) on its EnergyConnector; Flowstead calls it port 1.
@@ -105,6 +112,64 @@ public static class DwxmzImporter
             Connections = connections.Distinct().ToList(),
         };
         return new ImportResult(model, warnings);
+    }
+
+    /// <summary>Column streams by their role (DWSIM's StreamInformation), onto the ports of engine's Columns.cs; feed trays become specs.</summary>
+    private static void ColumnConnections(ISimulationObject so, SimObject col, Dictionary<string, string> idOf, List<Connection> connections)
+    {
+        void Link(string fromName, int fromPort, string toName, int toPort)
+        {
+            if (idOf.TryGetValue(fromName, out var a) && idOf.TryGetValue(toName, out var b)) connections.Add(new Connection(a, fromPort, b, toPort));
+        }
+        var g = so.GraphicObject;
+        if (so is ShortcutColumn)
+        {
+            if (g.InputConnectors[0].IsAttached) Link(g.InputConnectors[0].AttachedConnector.AttachedFrom.Name, 0, so.Name, 0);
+            for (var i = 0; i < 2; i++)
+                if (g.OutputConnectors[i].IsAttached) Link(so.Name, i, g.OutputConnectors[i].AttachedConnector.AttachedTo.Name, 0);
+            if (g.EnergyConnector.IsAttached) Link(so.Name, Columns.CondenserPort, g.EnergyConnector.AttachedConnector.AttachedTo.Name, 0);
+            if (g.InputConnectors.Count > 1 && g.InputConnectors[1].IsAttached) Link(g.InputConnectors[1].AttachedConnector.AttachedFrom.Name, 0, so.Name, Columns.ReboilerPort);
+            return;
+        }
+        var column = (Column)so;
+        var stageIndex = column.Stages.Select((st, i) => (st.Name, i)).ToDictionary(x => x.Name, x => x.i);
+        var offset = Columns.HasCondenser(col.Type) ? 1 : 0;
+        var feedPort = 0;
+        var feeds = column.MaterialStreams.Values.Where(m => m.StreamBehavior == StreamInformation.Behavior.Feed)
+            .OrderBy(m => stageIndex.GetValueOrDefault(m.AssociatedStage)).ToList();
+        foreach (var f in feeds)
+        {
+            var tray = stageIndex.GetValueOrDefault(f.AssociatedStage) - offset + 1;
+            // Absorbers: the top and bottom feeds take their fixed ports; others go on the free feed ports with a tray spec.
+            var port = col.Type switch
+            {
+                ObjectType.Absorber when tray == 1 && !connections.Any(c => c.ToObject == col.Id && c.ToPort == 0) => 0,
+                ObjectType.Absorber when tray == (int)col.Specs[SpecKeys.Trays].Si && !connections.Any(c => c.ToObject == col.Id && c.ToPort == 1) => 1,
+                ObjectType.Absorber => 2,
+                ObjectType.ReboiledAbsorber when tray == 1 && !connections.Any(c => c.ToObject == col.Id && c.ToPort == 0) => 0,
+                ObjectType.ReboiledAbsorber or ObjectType.RefluxedAbsorber => 1,
+                _ => feedPort++,
+            };
+            if (port > 2) continue;
+            Link(f.StreamID, 0, so.Name, port);
+            if (Columns.FixedFeedTray(col, port) is null) col.Specs[SpecKeys.FeedStage(port)] = new Spec(tray, "count");
+        }
+        foreach (var m in column.MaterialStreams.Values)
+        {
+            int? port = m.StreamBehavior switch
+            {
+                StreamInformation.Behavior.Distillate => 0,
+                StreamInformation.Behavior.BottomsLiquid => 1,
+                StreamInformation.Behavior.OverheadVapor => Columns.HasCondenser(col.Type) ? Columns.VapourPort : 0,
+                _ => null,
+            };
+            if (port is { } pp) Link(so.Name, pp, m.StreamID, 0);
+        }
+        foreach (var e in column.EnergyStreams.Values)
+        {
+            if (e.StreamBehavior == StreamInformation.Behavior.Distillate) Link(so.Name, Columns.CondenserPort, e.StreamID, 0);
+            else if (e.StreamBehavior == StreamInformation.Behavior.BottomsLiquid) Link(e.StreamID, 0, so.Name, Columns.ReboilerPort);
+        }
     }
 
     private static string? Name(IPropertyPackage? pp) => (pp as CapeOpen.ICapeIdentification)?.ComponentName;
@@ -128,8 +193,62 @@ public static class DwxmzImporter
         DwsimObjectType.Pipe => ObjectType.PipeSegment,
         DwsimObjectType.OrificePlate => ObjectType.OrificePlate,
         DwsimObjectType.ComponentSeparator => ObjectType.ComponentSplitter,
+        DwsimObjectType.ShortcutColumn => ObjectType.ShortcutColumn,
+        DwsimObjectType.AbsorptionColumn => ObjectType.Absorber,
+        DwsimObjectType.DistillationColumn => so is DistillationColumn { ReboiledAbsorber: true } ? ObjectType.ReboiledAbsorber
+            : so is DistillationColumn { RefluxedAbsorber: true } ? ObjectType.RefluxedAbsorber : ObjectType.DistillationColumn,
         _ => null,
     };
+
+    private static void ColumnSpecs(Column col, Dictionary<string, Spec> specs, Dictionary<string, string> refs, List<string> warnings)
+    {
+        var tag = col.GraphicObject.Tag;
+        var dc = col as DistillationColumn;
+        var cond = dc is { ReboiledAbsorber: false };
+        var reb = dc is { RefluxedAbsorber: false };
+        specs[SpecKeys.Trays] = new Spec(col.Stages.Count - (cond ? 1 : 0) - (reb ? 1 : 0), "count");
+        specs[SpecKeys.TopPressure] = new Spec(col.Stages.First().P, "kPa");
+        specs[SpecKeys.ColumnPressureDrop] = new Spec(col.Stages.Last().P - col.Stages.First().P, "dkPa");
+        if (col.Stages.Any(s => Math.Abs(s.Efficiency - 1.0) > 1e-9))
+            warnings.Add($"{tag}: stage efficiencies are not supported; imported as theoretical stages.");
+        if (dc is null) return;
+        if (dc.CondenserType == Column.condtype.Partial_Condenser)
+        {
+            refs[ChoiceKeys.Condenser] = "partial";
+            specs[SpecKeys.VapourRate] = new Spec(DWSIM.SharedClasses.SystemsOfUnits.Converter.ConvertToSI(dc.VaporFlowRateUnit ?? "mol/s", dc.VaporFlowRate), "kgmol/h");
+        }
+        else if (dc.CondenserType == Column.condtype.Full_Reflux) warnings.Add($"{tag}: full-reflux condensers are not supported; imported as total.");
+        void Side(string which, bool distillate)
+        {
+            if (!dc.Specs.TryGetValue(which, out var sp)) return;
+            var v = sp.SpecValue;
+            string? key = sp.SType switch
+            {
+                ColumnSpec.SpecType.Stream_Ratio => distillate ? SpecKeys.RefluxRatio : SpecKeys.BoilupRatio,
+                ColumnSpec.SpecType.Product_Molar_Flow_Rate => distillate ? SpecKeys.DistillateRate : SpecKeys.BottomsRate,
+                ColumnSpec.SpecType.Heat_Duty when !distillate => SpecKeys.ReboilerDuty,
+                ColumnSpec.SpecType.Component_Fraction when sp.SpecUnit is "M" or "Molar" => distillate ? SpecKeys.DistillateFraction : SpecKeys.BottomsFraction,
+                ColumnSpec.SpecType.Component_Recovery => distillate ? SpecKeys.DistillateRecovery : SpecKeys.BottomsRecovery,
+                _ => null,
+            };
+            if (key is null)
+            {
+                warnings.Add($"{tag}: the {(distillate ? "condenser" : "reboiler")} specification ({sp.SType}) is not supported; choose one in Flowstead.");
+                return;
+            }
+            var si = sp.SType switch
+            {
+                ColumnSpec.SpecType.Product_Molar_Flow_Rate => DWSIM.SharedClasses.SystemsOfUnits.Converter.ConvertToSI(sp.SpecUnit, v),
+                ColumnSpec.SpecType.Heat_Duty => DWSIM.SharedClasses.SystemsOfUnits.Converter.ConvertToSI(sp.SpecUnit, v) * 1000.0, // DWSIM kW
+                ColumnSpec.SpecType.Component_Recovery => v / 100.0,
+                _ => v,
+            };
+            specs[key] = new Spec(si, key.EndsWith("Rate") ? "kgmol/h" : key.EndsWith("Duty") ? "kW" : "frac");
+            if (sp.ComponentID is { Length: > 0 } c) refs[distillate ? ChoiceKeys.DistillateComponent : ChoiceKeys.BottomsComponent] = c;
+        }
+        if (cond) Side("C", true);
+        if (reb) Side("R", false);
+    }
 
     private static void StreamSpecs(MaterialStream ms, Dictionary<string, Spec> specs, Dictionary<string, double> composition, List<string> warnings)
     {
@@ -175,6 +294,19 @@ public static class DwxmzImporter
         void Unsupported(string what) => warnings.Add($"{so.GraphicObject.Tag}: calculation mode '{what}' is not supported; set its specification in Flowstead.");
         switch (so)
         {
+            case ShortcutColumn sc:
+                refs[ChoiceKeys.LightKey] = sc.m_lightkey;
+                refs[ChoiceKeys.HeavyKey] = sc.m_heavykey;
+                Put(SpecKeys.LightKeyInBottoms, sc.m_lightkeymolarfrac, "frac");
+                Put(SpecKeys.HeavyKeyInDistillate, sc.m_heavykeymolarfrac, "frac");
+                Put(SpecKeys.RefluxRatio, sc.m_refluxratio, "ratio");
+                Put(SpecKeys.TopPressure, sc.m_condenserpressure, "kPa");
+                Put(SpecKeys.ReboilerPressure, sc.m_boilerpressure, "kPa");
+                if (sc.condtype == ShortcutColumn.CondenserType.PartialCond) refs[ChoiceKeys.Condenser] = "partial";
+                break;
+            case Column col:
+                ColumnSpecs(col, specs, refs, warnings);
+                break;
             case ComponentSeparator cs:
                 foreach (var spec in cs.ComponentSepSpecs.Values)
                 {

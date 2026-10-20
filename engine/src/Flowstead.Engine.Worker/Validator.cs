@@ -15,6 +15,8 @@ public static class Validator
         ObjectType.HeatExchanger, ObjectType.Recycle, ObjectType.Adjust,
         ObjectType.PipeSegment, ObjectType.OrificePlate,
         ObjectType.AirCooler, ObjectType.ComponentSplitter, ObjectType.Tank, ObjectType.Set,
+        // Refluxed absorber: not yet. DWSIM reports a condenser duty (RR + 1) times what its own energy balance needs.
+        ObjectType.DistillationColumn, ObjectType.Absorber, ObjectType.ReboiledAbsorber, ObjectType.ShortcutColumn,
     ];
 
     /// <summary>The spec keys each type takes (component-splitter fractions aside). A Set can only drive one of these.</summary>
@@ -91,7 +93,90 @@ public static class Validator
             foreach (var k in o.Specs.Keys.Where(k => k.StartsWith(SpecKeys.SplitPrefix, StringComparison.Ordinal)))
                 if (!fs.Compounds.Contains(k[SpecKeys.SplitPrefix.Length..])) Err($"{o.Tag}: '{k[SpecKeys.SplitPrefix.Length..]}' is not in the component list.", o.Id);
         ValidateSets(fs, Err);
+        foreach (var o in fs.Objects.Where(o => Columns.IsColumn(o.Type))) ValidateColumn(fs, o, Err);
         return m;
+    }
+
+    private static void ValidateColumn(Flowsheet fs, SimObject o, Action<string, string?> err)
+    {
+        var s = o.Specs;
+        double? V(string k) => s.TryGetValue(k, out var v) ? v.Si : null;
+        void Need(string what) => err($"{o.Tag}: under-specified — give the {what}.", o.Id);
+        bool Whole(double x, double lo, double hi) => x >= lo && x <= hi && x == Math.Floor(x);
+        bool Fed(int port) => fs.Connections.Any(c => c.ToObject == o.Id && c.ToPort == port);
+        bool Drawn(int port) => fs.Connections.Any(c => c.FromObject == o.Id && c.FromPort == port);
+        void Compound(string refKey, string what)
+        {
+            var c = o.Refs.GetValueOrDefault(refKey);
+            if (string.IsNullOrWhiteSpace(c)) Need(what);
+            else if (!fs.Compounds.Contains(c)) err($"{o.Tag}: '{c}' is not in the component list.", o.Id);
+        }
+
+        if (V(SpecKeys.TopPressure) is not { } top) Need(o.Type == ObjectType.ShortcutColumn ? "condenser pressure" : "top pressure");
+        else if (top <= 0) err($"{o.Tag}: pressure must be above zero absolute.", o.Id);
+
+        if (o.Type == ObjectType.ShortcutColumn)
+        {
+            Compound(ChoiceKeys.LightKey, "light key");
+            Compound(ChoiceKeys.HeavyKey, "heavy key");
+            if (o.Refs.GetValueOrDefault(ChoiceKeys.LightKey) is { } lk && lk == o.Refs.GetValueOrDefault(ChoiceKeys.HeavyKey))
+                err($"{o.Tag}: the light and heavy keys must be different compounds.", o.Id);
+            foreach (var (k, what) in new[] { (SpecKeys.LightKeyInBottoms, "light key mole fraction in the bottoms"), (SpecKeys.HeavyKeyInDistillate, "heavy key mole fraction in the distillate") })
+            {
+                if (V(k) is not { } x) Need(what);
+                else if (x is <= 0 or >= 1) err($"{o.Tag}: {what} must be between 0 and 1.", o.Id);
+            }
+            if (V(SpecKeys.RefluxRatio) is not { } rr) Need("reflux ratio");
+            else if (rr <= 0) err($"{o.Tag}: reflux ratio must be positive.", o.Id);
+            if (!Fed(0)) Need("feed stream");
+            return;
+        }
+
+        if (V(SpecKeys.Trays) is not { } trays) { Need("number of trays"); return; }
+        if (!Whole(trays, 1, 200)) { err($"{o.Tag}: trays must be a whole number from 1 to 200.", o.Id); return; }
+        if (V(SpecKeys.ColumnPressureDrop) is < 0) err($"{o.Tag}: column pressure drop can't be negative.", o.Id);
+
+        var feeds = Enumerable.Range(0, 3).Where(Fed).ToList();
+        if (o.Type == ObjectType.Absorber)
+        {
+            if (!Fed(0)) Need("top (liquid) feed");
+            if (!Fed(1)) Need("bottom (gas) feed");
+        }
+        else if (feeds.Count == 0) Need("feed stream");
+        foreach (var port in feeds.Where(p => Columns.FixedFeedTray(o, p) is null))
+        {
+            if (V(SpecKeys.FeedStage(port)) is not { } tray) Need($"tray for feed {port + 1}");
+            else if (!Whole(tray, 1, trays)) err($"{o.Tag}: feed {port + 1} tray must be a whole number from 1 to {trays}.", o.Id);
+        }
+        if (!Drawn(0) || !Drawn(1)) err($"{o.Tag}: connect both the overhead and the bottoms product.", o.Id);
+
+        var partial = o.Refs.GetValueOrDefault(ChoiceKeys.Condenser) == "partial";
+        if (Columns.HasCondenser(o.Type))
+        {
+            OneSpec(Columns.CondenserSpecs, "condenser", ChoiceKeys.DistillateComponent);
+            if (partial && V(SpecKeys.VapourRate) is null) Need("vapour product rate (partial condenser)");
+            if (partial && !Drawn(Columns.VapourPort)) Need("vapour product stream (partial condenser)");
+        }
+        if (Columns.HasReboiler(o.Type)) OneSpec(Columns.ReboilerSpecs, "reboiler", ChoiceKeys.BottomsComponent);
+
+        void OneSpec(string[] keys, string where, string compoundRef)
+        {
+            var given = keys.Where(s.ContainsKey).ToList();
+            if (given.Count == 0) { Need($"{where} specification"); return; }
+            if (given.Count > 1) { err($"{o.Tag}: over-specified — give one {where} specification.", o.Id); return; }
+            var key = given[0];
+            var v = s[key].Si;
+            if (key.EndsWith("Fraction") || key.EndsWith("Recovery"))
+            {
+                Compound(compoundRef, $"component for the {where} specification");
+                if (v is <= 0 or >= 1 && key.EndsWith("Fraction")) err($"{o.Tag}: the {where} mole fraction must be between 0 and 1.", o.Id);
+                if (v is <= 0 or > 1 && key.EndsWith("Recovery")) err($"{o.Tag}: the {where} recovery must be above 0 and at most 100 %.", o.Id);
+            }
+            else if (key.EndsWith("Ratio") || key.EndsWith("Rate"))
+            {
+                if (v <= 0) err($"{o.Tag}: the {where} specification must be positive.", o.Id);
+            }
+        }
     }
 
     private static void ValidateSets(Flowsheet fs, Action<string, string?> err)

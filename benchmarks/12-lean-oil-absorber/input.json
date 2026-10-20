@@ -1,0 +1,119 @@
+{
+  "name": "Lean-oil absorber",
+  "description": "100 kgmol/h natural gas at 30 °C, 40 bar meets 20 kgmol/h n-decane in a 10-tray absorber (PR).",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Methane",
+      "Ethane",
+      "Propane",
+      "N-butane",
+      "N-decane"
+    ],
+    "objects": [
+      {
+        "id": "g",
+        "tag": "GAS",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 303.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 4000000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 27.77777777777778,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Methane": 0.85,
+          "Ethane": 0.08,
+          "Propane": 0.05,
+          "N-butane": 0.02,
+          "N-decane": 0.0
+        }
+      },
+      {
+        "id": "l",
+        "tag": "LEAN OIL",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 303.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 4000000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 5.555555555555555,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Methane": 0.0,
+          "Ethane": 0.0,
+          "Propane": 0.0,
+          "N-butane": 0.0,
+          "N-decane": 1
+        }
+      },
+      {
+        "id": "a",
+        "tag": "T-200",
+        "type": "absorber",
+        "specs": {
+          "trays": {
+            "si": 10,
+            "unit": "count"
+          },
+          "topPressure": {
+            "si": 4000000.0,
+            "unit": "bara"
+          }
+        }
+      },
+      {
+        "id": "o",
+        "tag": "LEAN GAS",
+        "type": "material_stream"
+      },
+      {
+        "id": "r",
+        "tag": "RICH OIL",
+        "type": "material_stream"
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "l",
+        "fromPort": 0,
+        "toObject": "a",
+        "toPort": 0
+      },
+      {
+        "fromObject": "g",
+        "fromPort": 0,
+        "toObject": "a",
+        "toPort": 1
+      },
+      {
+        "fromObject": "a",
+        "fromPort": 0,
+        "toObject": "o",
+        "toPort": 0
+      },
+      {
+        "fromObject": "a",
+        "fromPort": 1,
+        "toObject": "r",
+        "toPort": 0
+      }
+    ]
+  }
+}

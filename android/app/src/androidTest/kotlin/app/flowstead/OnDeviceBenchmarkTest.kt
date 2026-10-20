@@ -85,12 +85,13 @@ class OnDeviceBenchmarkTest {
         val path = c.getValue("path").jsonPrimitive.content
         val expected = c.getValue("expected").jsonPrimitive.double
         var actual = lookup(result, path)
-        val minus = when (val m = c["minus"]) {
-            is JsonArray -> m.map { it.jsonPrimitive.content }
-            is JsonPrimitive -> listOf(m.content)
+        fun paths(e: JsonElement?) = when (e) {
+            is JsonArray -> e.map { it.jsonPrimitive.content }
+            is JsonPrimitive -> listOf(e.content)
             else -> emptyList()
         }
-        for (m in minus) actual = actual?.let { a -> lookup(result, m)?.let { a - it } }
+        for (m in paths(c["minus"])) actual = actual?.let { a -> lookup(result, m)?.let { a - it } }
+        for (p in paths(c["plus"])) actual = actual?.let { a -> lookup(result, p)?.let { a + it } }
         if (actual == null) { failures += "$case $path: missing"; return }
         val tol = c.getValue("tol").jsonObject
         val allowed = max(tol["abs"]?.jsonPrimitive?.doubleOrNull ?: 0.0, (tol["rel"]?.jsonPrimitive?.doubleOrNull ?: 0.0) * abs(expected))

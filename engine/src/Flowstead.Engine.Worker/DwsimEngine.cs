@@ -211,6 +211,7 @@ public sealed class DwsimEngine
             else if (o.Type == ObjectType.Set) results[o.Id] = SetSolver.Result(o, model);
         }
         AddTankResidenceTimes(model, results);
+        Columns.Verify(model, results);
         foreach (var (id, r) in results.Where(r => r.Value.Status == ObjectStatus.Error))
         {
             messages.Add(new SolverMessage(MessageLevel.Error, r.Error ?? "Calculation failed", id));
@@ -382,9 +383,15 @@ public sealed class DwsimEngine
         {
             ApplyUnitOp(model, o, map[o.Id]);
         }
-        foreach (var c in model.Connections)
+        // Columns are wired through DWSIM's column API (feed stages, products, duties).
+        var columns = model.Objects.Where(o => Columns.IsColumn(o.Type)).Select(o => o.Id).ToHashSet();
+        foreach (var c in model.Connections.Where(c => !columns.Contains(c.FromObject) && !columns.Contains(c.ToObject)))
         {
             Connect(fs, map[c.FromObject], c.FromPort, map[c.ToObject], c.ToPort);
+        }
+        foreach (var o in model.Objects.Where(o => columns.Contains(o.Id)))
+        {
+            Columns.Wire(fs, model, o, map[o.Id], map);
         }
         AddHiddenEnergyStreams(fs, model, map);
         return (fs, map);
@@ -425,6 +432,7 @@ public sealed class DwsimEngine
         ObjectType.Cooler or ObjectType.AirCooler => DwsimObjectType.Cooler, // air cooler: process side only
         ObjectType.Separator or ObjectType.ThreePhaseSeparator or ObjectType.Tank => DwsimObjectType.Vessel,
         ObjectType.ComponentSplitter => DwsimObjectType.ComponentSeparator,
+        _ when Columns.IsColumn(t) => Columns.ToDwsim(t),
         ObjectType.Mixer => DwsimObjectType.NodeIn,
         ObjectType.Splitter => DwsimObjectType.NodeOut,
         ObjectType.Pump => DwsimObjectType.Pump,
@@ -634,6 +642,12 @@ public sealed class DwsimEngine
                     Validator.OrificeTaps[o.Refs.GetValueOrDefault(ChoiceKeys.OrificeTaps) ?? "flange"]);
                 break;
             }
+            case DWSIM.UnitOperations.UnitOperations.Column col:
+                Columns.Apply(o, col);
+                break;
+            case ShortcutColumn sc:
+                Columns.ApplyShortcut(o, sc);
+                break;
             case ComponentSeparator cs:
             {
                 // Every compound gets a spec (DWSIM leaves unspecified ones at stale values): 0 = all to outlet 2.
@@ -789,6 +803,7 @@ public sealed class DwsimEngine
                 Properties = Props(("pressureDrop", op.OverallPressureDrop), ("orificePressureDrop", op.OrificePressureDrop),
                     ("beta", op.Beta), ("temperatureChange", op.DeltaT)),
             },
+            DWSIM.UnitOperations.UnitOperations.Column or ShortcutColumn => Columns.Result(o, so),
             ComponentSeparator cs => new ObjectResult
             {
                 Status = ObjectStatus.Solved,

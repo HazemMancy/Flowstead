@@ -65,18 +65,18 @@ public sealed class BenchmarkTests(EngineFixture engine, ITestOutputHelper outpu
         var path = check["path"]!.GetValue<string>();
         var expected = check["expected"]!.GetValue<double>();
         var actual = Lookup(result, path);
-        // "minus": one path or a list of paths subtracted from "path" (differences and balances).
-        var minus = check["minus"] switch
+        // "minus" / "plus": one path or a list of paths subtracted from / added to "path" (differences and balances).
+        static List<string> Paths(JsonNode? n) => n switch
         {
-            JsonArray arr => arr.Select(n => n!.GetValue<string>()).ToList(),
+            JsonArray arr => arr.Select(x => x!.GetValue<string>()).ToList(),
             JsonValue v => [v.GetValue<string>()],
-            _ => new List<string>(),
+            _ => [],
         };
-        foreach (var m in minus)
+        foreach (var (m, sign) in Paths(check["minus"]).Select(m => (m, -1.0)).Concat(Paths(check["plus"]).Select(p => (p, 1.0))))
         {
             var b = Lookup(result, m);
-            actual = actual is null || b is null ? null : actual - b;
-            path = $"{path} − {m}";
+            actual = actual is null || b is null ? null : actual + sign * b;
+            path = $"{path} {(sign < 0 ? "−" : "+")} {m}";
         }
         if (actual is null)
         {

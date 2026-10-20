@@ -1,0 +1,261 @@
+{
+  "name": "Depropanizer: rigorous, shortcut and stripper",
+  "description": "100 kgmol/h C2–iC5 at its bubble point, 15 bar (PR). T-100: 20 trays, feed on tray 10, 14 bar top, 0.5 bar ΔP, total condenser, reflux ratio 2.5, bottoms 55 kgmol/h. T-101: the same feed through Fenske–Underwood–Gilliland (propane / isobutane keys, 2 % each). T-102: the same feed on top of a 10-tray reboiled absorber (stripper) at 14 bar, bottoms 55 kgmol/h.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Ethane",
+      "Propane",
+      "Isobutane",
+      "N-butane",
+      "Isopentane"
+    ],
+    "objects": [
+      {
+        "id": "f",
+        "tag": "1",
+        "type": "material_stream",
+        "specs": {
+          "pressure": {
+            "si": 1500000.0,
+            "unit": "kPa"
+          },
+          "vapourFraction": {
+            "si": 0,
+            "unit": "frac"
+          },
+          "molarFlow": {
+            "si": 27.77777777777778,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Ethane": 0.05,
+          "Propane": 0.4,
+          "Isobutane": 0.2,
+          "N-butane": 0.25,
+          "Isopentane": 0.1
+        }
+      },
+      {
+        "id": "t",
+        "tag": "T-100",
+        "type": "distillation_column",
+        "specs": {
+          "trays": {
+            "si": 20,
+            "unit": "count"
+          },
+          "feedStage1": {
+            "si": 10,
+            "unit": "count"
+          },
+          "topPressure": {
+            "si": 1400000.0,
+            "unit": "kPa"
+          },
+          "columnPressureDrop": {
+            "si": 50000.0,
+            "unit": "dkPa"
+          },
+          "refluxRatio": {
+            "si": 2.5,
+            "unit": "ratio"
+          },
+          "bottomsRate": {
+            "si": 15.277777777777779,
+            "unit": "kgmol/h"
+          }
+        }
+      },
+      {
+        "id": "d",
+        "tag": "2",
+        "type": "material_stream"
+      },
+      {
+        "id": "b",
+        "tag": "3",
+        "type": "material_stream"
+      },
+      {
+        "id": "f2",
+        "tag": "4",
+        "type": "material_stream",
+        "specs": {
+          "pressure": {
+            "si": 1500000.0,
+            "unit": "kPa"
+          },
+          "vapourFraction": {
+            "si": 0,
+            "unit": "frac"
+          },
+          "molarFlow": {
+            "si": 27.77777777777778,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Ethane": 0.05,
+          "Propane": 0.4,
+          "Isobutane": 0.2,
+          "N-butane": 0.25,
+          "Isopentane": 0.1
+        }
+      },
+      {
+        "id": "s",
+        "tag": "T-101",
+        "type": "shortcut_column",
+        "refs": {
+          "lightKey": "Propane",
+          "heavyKey": "Isobutane"
+        },
+        "specs": {
+          "topPressure": {
+            "si": 1400000.0,
+            "unit": "kPa"
+          },
+          "reboilerPressure": {
+            "si": 1450000.0,
+            "unit": "kPa"
+          },
+          "refluxRatio": {
+            "si": 2.5,
+            "unit": "ratio"
+          },
+          "lightKeyInBottoms": {
+            "si": 0.02,
+            "unit": "frac"
+          },
+          "heavyKeyInDistillate": {
+            "si": 0.02,
+            "unit": "frac"
+          }
+        }
+      },
+      {
+        "id": "d2",
+        "tag": "5",
+        "type": "material_stream"
+      },
+      {
+        "id": "b2",
+        "tag": "6",
+        "type": "material_stream"
+      },
+      {
+        "id": "f3",
+        "tag": "7",
+        "type": "material_stream",
+        "specs": {
+          "pressure": {
+            "si": 1500000.0,
+            "unit": "kPa"
+          },
+          "vapourFraction": {
+            "si": 0,
+            "unit": "frac"
+          },
+          "molarFlow": {
+            "si": 27.77777777777778,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Ethane": 0.05,
+          "Propane": 0.4,
+          "Isobutane": 0.2,
+          "N-butane": 0.25,
+          "Isopentane": 0.1
+        }
+      },
+      {
+        "id": "x",
+        "tag": "T-102",
+        "type": "reboiled_absorber",
+        "specs": {
+          "trays": {
+            "si": 10,
+            "unit": "count"
+          },
+          "topPressure": {
+            "si": 1400000.0,
+            "unit": "kPa"
+          },
+          "bottomsRate": {
+            "si": 15.277777777777779,
+            "unit": "kgmol/h"
+          }
+        }
+      },
+      {
+        "id": "ov",
+        "tag": "8",
+        "type": "material_stream"
+      },
+      {
+        "id": "bx",
+        "tag": "9",
+        "type": "material_stream"
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "f",
+        "fromPort": 0,
+        "toObject": "t",
+        "toPort": 0
+      },
+      {
+        "fromObject": "t",
+        "fromPort": 0,
+        "toObject": "d",
+        "toPort": 0
+      },
+      {
+        "fromObject": "t",
+        "fromPort": 1,
+        "toObject": "b",
+        "toPort": 0
+      },
+      {
+        "fromObject": "f2",
+        "fromPort": 0,
+        "toObject": "s",
+        "toPort": 0
+      },
+      {
+        "fromObject": "s",
+        "fromPort": 0,
+        "toObject": "d2",
+        "toPort": 0
+      },
+      {
+        "fromObject": "s",
+        "fromPort": 1,
+        "toObject": "b2",
+        "toPort": 0
+      },
+      {
+        "fromObject": "f3",
+        "fromPort": 0,
+        "toObject": "x",
+        "toPort": 0
+      },
+      {
+        "fromObject": "x",
+        "fromPort": 0,
+        "toObject": "ov",
+        "toPort": 0
+      },
+      {
+        "fromObject": "x",
+        "fromPort": 1,
+        "toObject": "bx",
+        "toPort": 0
+      }
+    ]
+  }
+}

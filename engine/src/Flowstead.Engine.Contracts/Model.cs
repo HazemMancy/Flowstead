@@ -112,6 +112,34 @@ public static class SpecKeys
     /// to outlet 1 (overhead); compounds without one all go to outlet 2.
     /// </summary>
     public const string SplitPrefix = "split:";
+
+    // Columns. Trays are theoretical stages counted from the top, condenser and reboiler excluded (HYSYS).
+    public const string Trays = "trays";
+    /// <summary>"feedStage1".."feedStage3": tray (1 = top) of the feed on inlet port 0..2 where the stage is not fixed.</summary>
+    public const string FeedStagePrefix = "feedStage";
+    public static string FeedStage(int port) => FeedStagePrefix + (port + 1);
+    public const string TopPressure = "topPressure";
+    /// <summary>Optional: pressure drop from top to bottom (default 0).</summary>
+    public const string ColumnPressureDrop = "columnPressureDrop";
+    // Condenser specs (one of)
+    public const string RefluxRatio = "refluxRatio";
+    public const string DistillateRate = "distillateRate";
+    public const string DistillateFraction = "distillateFraction";
+    public const string DistillateRecovery = "distillateRecovery";
+    // Reboiler specs (one of)
+    public const string BoilupRatio = "boilupRatio";
+    public const string BottomsRate = "bottomsRate";
+    public const string ReboilerDuty = "reboilerDuty";
+    public const string BottomsFraction = "bottomsFraction";
+    public const string BottomsRecovery = "bottomsRecovery";
+    /// <summary>Partial condenser: vapour product molar flow (required with a partial condenser).</summary>
+    public const string VapourRate = "vapourRate";
+    // Shortcut column (Fenske–Underwood–Gilliland)
+    /// <summary>Mole fraction of the light key in the bottoms.</summary>
+    public const string LightKeyInBottoms = "lightKeyInBottoms";
+    /// <summary>Mole fraction of the heavy key in the distillate.</summary>
+    public const string HeavyKeyInDistillate = "heavyKeyInDistillate";
+    public const string ReboilerPressure = "reboilerPressure";
     public static string Split(string compound) => SplitPrefix + compound;
 }
 
@@ -136,6 +164,16 @@ public static class ChoiceKeys
     public const string PipeCorrelation = "correlation";
     /// <summary>Orifice plate: flange (default), corner, radius.</summary>
     public const string OrificeTaps = "taps";
+    /// <summary>Columns with a condenser: total (default) or partial.</summary>
+    public const string Condenser = "condenser";
+    /// <summary>Compound of a distillate / bottoms fraction or recovery spec.</summary>
+    public const string DistillateComponent = "distillateComponent";
+    public const string BottomsComponent = "bottomsComponent";
+    /// <summary>Rigorous column solver: auto (default), bubble_point, modified_bubble_point, simultaneous_correction.</summary>
+    public const string ColumnSolver = "solver";
+    /// <summary>Shortcut column keys.</summary>
+    public const string LightKey = "lightKey";
+    public const string HeavyKey = "heavyKey";
 }
 
 public static class Json
