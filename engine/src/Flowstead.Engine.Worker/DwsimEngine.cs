@@ -205,6 +205,7 @@ public sealed class DwsimEngine
         {
             Connect(fs, map[c.FromObject], c.FromPort, map[c.ToObject], c.ToPort);
         }
+        AddHiddenEnergyStreams(fs, model, map);
         return (fs, map);
     }
 
@@ -297,6 +298,26 @@ public sealed class DwsimEngine
                 break;
             case Vessel:
                 break; // adiabatic flash at the lowest inlet pressure (DWSIM default)
+        }
+    }
+
+    /// <summary>
+    /// The app treats energy ports as optional; DWSIM requires them. Each heater or cooler without
+    /// a drawn energy stream gets a hidden one (not reported back) so its duty can be calculated.
+    /// </summary>
+    private static void AddHiddenEnergyStreams(IFlowsheet fs, Flowsheet model, Dictionary<string, ISimulationObject> map)
+    {
+        foreach (var o in model.Objects.Where(o => o.Type is ObjectType.Heater or ObjectType.Cooler))
+        {
+            var isHeater = o.Type == ObjectType.Heater;
+            var drawn = model.Connections.Any(c => isHeater
+                ? c.ToObject == o.Id && c.ToPort == 1
+                : c.FromObject == o.Id && c.FromPort == 1);
+            if (drawn) continue;
+            var unit = map[o.Id];
+            var es = fs.AddObject(DwsimObjectType.EnergyStream, (int)o.X, (int)o.Y + 50, $"{o.Tag}-Q");
+            if (isHeater) Connect(fs, es, 0, unit, 1);
+            else Connect(fs, unit, 1, es, 0);
         }
     }
 

@@ -153,4 +153,40 @@ public sealed class ApiTests(EngineFixture engine)
         Assert.InRange(outlet["temperature"], 273.15, 313.15 - 5); // cooled by more than 5 K
         Assert.Equal(r.Objects["in"].Properties["massEnthalpy"], outlet["massEnthalpy"], 0); // isenthalpic, J/kg
     }
+
+    [Theory]
+    [InlineData(ObjectType.Heater, 298.15, 353.15)]
+    [InlineData(ObjectType.Cooler, 353.15, 298.15)]
+    public async Task HeaterAndCoolerWithoutDrawnEnergyStream(ObjectType type, double tin, double tout)
+    {
+        // 1 kg/s water at 2 bar, 25 ↔ 80 °C. IAPWS-IF97: Δh = 334.9 − 104.9 ≈ 230.1 kJ/kg, so |Q| ≈ 230.1 kW.
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Steam Tables (IAPWS-IF97)",
+            Compounds = ["Water"],
+            Objects =
+            [
+                new SimObject
+                {
+                    Id = "in", Tag = "1", Type = ObjectType.MaterialStream,
+                    Specs = new()
+                    {
+                        [SpecKeys.Temperature] = new Spec(tin, "C"),
+                        [SpecKeys.Pressure] = new Spec(2e5, "bara"),
+                        [SpecKeys.MassFlow] = new Spec(1.0, "kg/s"),
+                    },
+                    Composition = new() { ["Water"] = 1.0 },
+                },
+                new SimObject { Id = "e", Tag = "E-100", Type = type, Specs = new() { [SpecKeys.OutletTemperature] = new Spec(tout, "C") } },
+                new SimObject { Id = "out", Tag = "2", Type = ObjectType.MaterialStream },
+            ],
+            Connections = [new Connection("in", 0, "e", 0), new Connection("e", 0, "out", 0)],
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        Assert.Equal(tout, r.Objects["out"].Properties["temperature"], 2);
+        var duty = r.Objects["e"].Properties["duty"];
+        Assert.InRange(Math.Abs(duty), 230_100 * 0.995, 230_100 * 1.005);
+        Assert.Equal(3, r.Objects.Count); // the hidden energy stream is not reported
+    }
 }
