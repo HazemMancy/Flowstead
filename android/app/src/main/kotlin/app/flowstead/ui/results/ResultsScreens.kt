@@ -132,8 +132,8 @@ fun StaleBanner(ui: ResultsUi) {
         ui.results.status != SolveStatus.Converged -> "Last solve ${ui.results.status?.name?.lowercase()}. See the solver log." to v.error
         else -> "Converged · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(ui.solve.solvedAtMillis))}" to v.convergedText
     }
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().testTag("results_banner")) {
-        Text(text, color = color, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
+        Text(text, color = color, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp).testTag("results_banner"))
     }
 }
 
