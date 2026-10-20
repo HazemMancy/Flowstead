@@ -99,8 +99,8 @@ enum class ObjectType(val category: Category, val available: Boolean = true, val
     @SerialName("expander") Expander(Category.Rotating),
 
     @SerialName("valve") Valve(Category.Piping),
-    @SerialName("pipe_segment") PipeSegment(Category.Piping, available = false),
-    @SerialName("orifice_plate") OrificePlate(Category.Piping, available = false),
+    @SerialName("pipe_segment") PipeSegment(Category.Piping),
+    @SerialName("orifice_plate") OrificePlate(Category.Piping),
     @SerialName("relief_valve") ReliefValve(Category.Piping, available = false),
 
     @SerialName("mixer") Mixer(Category.Mixing),

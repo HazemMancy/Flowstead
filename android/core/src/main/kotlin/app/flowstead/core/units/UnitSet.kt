@@ -42,6 +42,8 @@ data class UnitSet(val name: String, val units: Map<Quantity, String>) {
                 Quantity.Fraction to Units.fraction.id,
                 Quantity.Ratio to Units.ratio.id,
                 Quantity.Count to Units.count.id,
+                Quantity.Length to Units.m.id,
+                Quantity.HeatTransferCoefficient to Units.wPerM2K.id,
             ),
         )
 
@@ -67,6 +69,8 @@ data class UnitSet(val name: String, val units: Map<Quantity, String>) {
                 Quantity.Fraction to Units.fraction.id,
                 Quantity.Ratio to Units.ratio.id,
                 Quantity.Count to Units.count.id,
+                Quantity.Length to Units.ft.id,
+                Quantity.HeatTransferCoefficient to Units.btuPerHFt2F.id,
             ),
         )
 

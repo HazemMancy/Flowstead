@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasTestTag
 import androidx.lifecycle.SavedStateHandle
@@ -78,8 +79,8 @@ class FluidPackageTest {
         compose.onNodeWithContentDescription("Details of Methane").performClick()
         compose.onNodeWithTag("compound_sheet").assertIsDisplayed()
         compose.onNodeWithText("74-82-8").assertExists()
-        compose.onNodeWithText("190.56 K").assertExists() // SI unit set; ChemSep Tc (may be below the fold)
-        compose.onNodeWithTag("add_from_sheet").performClick()
+        compose.onNodeWithText("-82.59 °C").assertExists() // Tc 190.56 K in the SI set (°C); may be below the fold
+        compose.onNodeWithTag("add_from_sheet").performScrollTo().performClick()
         assertEquals("Methane", added)
     }
 }

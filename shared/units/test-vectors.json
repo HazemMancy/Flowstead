@@ -55,6 +55,12 @@
     { "quantity": "Density", "unit": "kg/m3", "value": 58.31, "si": 58.31 },
     { "quantity": "Density", "unit": "lb/ft3", "value": 1.0, "si": 16.018463373960138 },
     { "quantity": "Viscosity", "unit": "cP", "value": 1.0, "si": 0.001 },
-    { "quantity": "Fraction", "unit": "%", "value": 96.24, "si": 0.9624 }
+    { "quantity": "Fraction", "unit": "%", "value": 96.24, "si": 0.9624 },
+    { "quantity": "Length", "unit": "m", "value": 12.5, "si": 12.5 },
+    { "quantity": "Length", "unit": "mm", "value": 100.0, "si": 0.1 },
+    { "quantity": "Length", "unit": "ft", "value": 100.0, "si": 30.48 },
+    { "quantity": "Length", "unit": "in", "value": 4.0, "si": 0.1016 },
+    { "quantity": "HeatTransferCoefficient", "unit": "W/m2.K", "value": 25.0, "si": 25.0 },
+    { "quantity": "HeatTransferCoefficient", "unit": "Btu/h.ft2.F", "value": 1.0, "si": 5.678263341113487 }
   ]
 }

@@ -317,4 +317,6 @@ private fun label(q: Quantity): String = when (q) {
     Quantity.Fraction -> "Fractions"
     Quantity.Ratio -> "Ratios"
     Quantity.Count -> "Counts"
+    Quantity.Length -> "Length"
+    Quantity.HeatTransferCoefficient -> "Heat transfer coefficient"
 }

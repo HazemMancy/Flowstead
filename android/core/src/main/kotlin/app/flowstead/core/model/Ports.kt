@@ -69,6 +69,7 @@ object Ports {
         ObjectType.Compressor -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"), eIn(1, "Power"))
         ObjectType.Expander -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"), eOut(1, "Power"))
         ObjectType.Recycle -> listOf(mIn(0, "Calculated"), mOut(0, "Assumed"))
+        ObjectType.PipeSegment, ObjectType.OrificePlate -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"))
         // Ports for the remaining types arrive with their engine support (they are not placeable yet).
         else -> emptyList()
     }

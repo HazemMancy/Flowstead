@@ -31,6 +31,7 @@ object StandardConditions {
 object Conversions {
     const val LB_KG = 0.45359237
     const val FT_M = 0.3048
+    const val IN_M = 0.0254
     const val FT3_M3 = FT_M * FT_M * FT_M
     const val PSI_PA = 6_894.757293168361
     const val BAR_PA = 100_000.0

@@ -6,6 +6,21 @@ package app.flowstead.core.model
 
 import app.flowstead.core.units.Quantity
 
+/** Method choices stored in SimObject.refs. Same strings as the engine's ChoiceKeys. */
+object ChoiceKey {
+    /** Pipe flow correlation; Beggs & Brill when absent. */
+    const val PIPE_CORRELATION = "correlation"
+    /** Orifice tap arrangement; flange taps when absent. */
+    const val ORIFICE_TAPS = "taps"
+
+    val PIPE_CORRELATIONS = listOf(
+        "beggs_brill" to "Beggs & Brill",
+        "lockhart_martinelli" to "Lockhart & Martinelli",
+        "petalas_aziz" to "Petalas & Aziz",
+    )
+    val ORIFICE_TAP_OPTIONS = listOf("flange" to "Flange taps", "corner" to "Corner taps", "radius" to "Radius (D–D/2) taps")
+}
+
 /** Spec keys. Same strings as the engine's SpecKeys and shared/schema. */
 object SpecKey {
     const val TEMPERATURE = "temperature"
@@ -29,12 +44,26 @@ object SpecKey {
     const val COLD_OUTLET_TEMPERATURE = "coldOutletTemperature"
     const val HOT_PRESSURE_DROP = "hotPressureDrop"
     const val COLD_PRESSURE_DROP = "coldPressureDrop"
+    // Pipe segment and orifice plate
+    const val LENGTH = "length"
+    const val INNER_DIAMETER = "innerDiameter"
+    const val ELEVATION_CHANGE = "elevationChange"
+    const val ROUGHNESS = "roughness"
+    /** Calculation increments along a pipe (whole number). */
+    const val INCREMENTS = "increments"
+    const val HEAT_TRANSFER_COEFFICIENT = "heatTransferCoefficient"
+    const val AMBIENT_TEMPERATURE = "ambientTemperature"
+    const val ORIFICE_DIAMETER = "orificeDiameter"
+    const val PIPE_DIAMETER = "pipeDiameter"
+
+    /** Small lengths that read better in mm or inches than in m or ft. */
+    val SMALL_LENGTHS = setOf(INNER_DIAMETER, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER)
 
     val STREAM_STATE = listOf(TEMPERATURE, PRESSURE, VAPOUR_FRACTION, MASS_ENTHALPY)
     val STREAM_FLOW = listOf(MOLAR_FLOW, MASS_FLOW)
 
     fun quantity(key: String): Quantity = when (key) {
-        TEMPERATURE, OUTLET_TEMPERATURE, HOT_OUTLET_TEMPERATURE, COLD_OUTLET_TEMPERATURE -> Quantity.Temperature
+        TEMPERATURE, OUTLET_TEMPERATURE, HOT_OUTLET_TEMPERATURE, COLD_OUTLET_TEMPERATURE, AMBIENT_TEMPERATURE -> Quantity.Temperature
         PRESSURE, OUTLET_PRESSURE -> Quantity.Pressure
         PRESSURE_DROP, PRESSURE_RISE, HOT_PRESSURE_DROP, COLD_PRESSURE_DROP -> Quantity.PressureDifference
         VAPOUR_FRACTION, EFFICIENCY, SPLIT_1, SPLIT_2 -> Quantity.Fraction
@@ -43,6 +72,9 @@ object SpecKey {
         MOLAR_FLOW -> Quantity.MolarFlow
         MASS_FLOW -> Quantity.MassFlow
         DUTY -> Quantity.Power
+        LENGTH, INNER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER -> Quantity.Length
+        INCREMENTS -> Quantity.Count
+        HEAT_TRANSFER_COEFFICIENT -> Quantity.HeatTransferCoefficient
         else -> throw IllegalArgumentException("Unknown spec '$key'")
     }
 
@@ -66,6 +98,15 @@ object SpecKey {
         COLD_OUTLET_TEMPERATURE -> "Cold outlet temperature"
         HOT_PRESSURE_DROP -> "Hot side pressure drop"
         COLD_PRESSURE_DROP -> "Cold side pressure drop"
+        LENGTH -> "Length"
+        INNER_DIAMETER -> "Inside diameter"
+        ELEVATION_CHANGE -> "Elevation change"
+        ROUGHNESS -> "Wall roughness"
+        INCREMENTS -> "Calculation increments"
+        HEAT_TRANSFER_COEFFICIENT -> "Overall U (to ambient)"
+        AMBIENT_TEMPERATURE -> "Ambient temperature"
+        ORIFICE_DIAMETER -> "Orifice diameter"
+        PIPE_DIAMETER -> "Pipe inside diameter"
         else -> key
     }
 }
@@ -189,7 +230,42 @@ object Specification {
         for (k in listOf(SpecKey.SPLIT_1, SpecKey.SPLIT_2)) {
             s[k]?.let { if (it.si !in 0.0..1.0) return SpecStatus.Invalid("Split fractions must be between 0 and 1") }
         }
+        when (o.type) {
+            ObjectType.PipeSegment -> {
+                pipe(o, needs)?.let { return it }
+            }
+            ObjectType.OrificePlate -> {
+                for (k in listOf(SpecKey.ORIFICE_DIAMETER, SpecKey.PIPE_DIAMETER)) {
+                    val v = s[k] ?: run { needs += SpecKey.label(k).lowercase(); null } ?: continue
+                    if (v.si <= 0) return SpecStatus.Invalid("${SpecKey.label(k)} must be positive")
+                }
+                val d = s[SpecKey.ORIFICE_DIAMETER]?.si
+                val dp = s[SpecKey.PIPE_DIAMETER]?.si
+                if (d != null && dp != null && d >= dp) return SpecStatus.Invalid("The orifice must be smaller than the pipe")
+            }
+            else -> Unit
+        }
         return if (needs.isEmpty()) SpecStatus.Complete else SpecStatus.UnderSpecified(needs)
+    }
+
+    /** Mirrors the engine validator's pipe rules; adds what is missing to [needs]. */
+    private fun pipe(o: SimObject, needs: MutableList<String>): SpecStatus? {
+        val s = o.specs
+        for (k in listOf(SpecKey.LENGTH, SpecKey.INNER_DIAMETER)) {
+            val v = s[k]
+            if (v == null) needs += SpecKey.label(k).lowercase()
+            else if (v.si <= 0) return SpecStatus.Invalid("${SpecKey.label(k)} must be positive")
+        }
+        s[SpecKey.ROUGHNESS]?.let { if (it.si < 0) return SpecStatus.Invalid("Roughness can't be negative") }
+        s[SpecKey.INCREMENTS]?.let {
+            if (it.si < 1 || it.si > 500 || it.si != kotlin.math.floor(it.si)) return SpecStatus.Invalid("Increments must be a whole number from 1 to 500")
+        }
+        if ((SpecKey.HEAT_TRANSFER_COEFFICIENT in s) != (SpecKey.AMBIENT_TEMPERATURE in s)) {
+            needs += if (SpecKey.HEAT_TRANSFER_COEFFICIENT in s) "ambient temperature" else "heat transfer coefficient"
+        }
+        s[SpecKey.HEAT_TRANSFER_COEFFICIENT]?.let { if (it.si < 0) return SpecStatus.Invalid("Heat transfer coefficient can't be negative") }
+        s[SpecKey.AMBIENT_TEMPERATURE]?.let { if (it.si <= 0) return SpecStatus.Invalid("Ambient temperature must be above absolute zero") }
+        return null
     }
 
     /** Alternative specs per unit type: exactly one of each group must be given. Mirrors the engine validator. */

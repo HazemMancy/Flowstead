@@ -130,7 +130,7 @@
         },
         "specs": {
           "type": "object",
-          "description": "User specifications (SI). Streams: temperature, pressure, vapourFraction, massEnthalpy, molarFlow, massFlow. Valve: outletPressure | pressureDrop. Heater/cooler: outletTemperature | duty, pressureDrop. Pump: outletPressure | pressureRise, efficiency. Compressor: outletPressure | pressureRise | pressureRatio, efficiency. Expander: outletPressure | pressureDrop | pressureRatio, efficiency. Heat exchanger: duty | hotOutletTemperature | coldOutletTemperature, hotPressureDrop, coldPressureDrop. Splitter: split1, split2. Adjust: target, tolerance, minimum, maximum.",
+          "description": "User specifications (SI). Streams: temperature, pressure, vapourFraction, massEnthalpy, molarFlow, massFlow. Valve: outletPressure | pressureDrop. Heater/cooler: outletTemperature | duty, pressureDrop. Pump: outletPressure | pressureRise, efficiency. Compressor: outletPressure | pressureRise | pressureRatio, efficiency. Expander: outletPressure | pressureDrop | pressureRatio, efficiency. Heat exchanger: duty | hotOutletTemperature | coldOutletTemperature, hotPressureDrop, coldPressureDrop. Splitter: split1, split2. Pipe segment: length, innerDiameter, elevationChange, roughness, increments, heatTransferCoefficient + ambientTemperature. Orifice plate: orificeDiameter, pipeDiameter. Adjust: target, tolerance, minimum, maximum.",
           "additionalProperties": {
             "$ref": "#/$defs/Spec"
           }
@@ -146,7 +146,7 @@
         },
         "refs": {
           "type": "object",
-          "description": "References to other objects. Adjust: manipulatedObject, manipulatedSpec (a spec key on that object), controlledObject, controlledProperty (a result key). Its specs: target, optional tolerance, minimum, maximum (SI).",
+          "description": "References to other objects. Adjust: manipulatedObject, manipulatedSpec (a spec key on that object), controlledObject, controlledProperty (a result key). Its specs: target, optional tolerance, minimum, maximum (SI). Method choices: pipe segment correlation (beggs_brill | lockhart_martinelli | petalas_aziz), orifice plate taps (flange | corner | radius).",
           "additionalProperties": {
             "type": "string"
           }

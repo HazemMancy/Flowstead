@@ -30,6 +30,7 @@ object ResultKeys {
         "duty", "power", "pressureDrop", "pressureRise", "pressureRatio", "outletPressure", "outletTemperature",
         "temperatureChange", "efficiency", "adiabaticHead", "lmtd", "hotOutletTemperature", "coldOutletTemperature",
         "hotPressureDrop", "coldPressureDrop", "iterations",
+        "heatTransferred", "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop", "beta",
     )
 
     /** Unit-level results shown for each type, in display order. Streams use [STREAM]. */
@@ -41,6 +42,8 @@ object ResultKeys {
         ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
         ObjectType.HeatExchanger -> listOf("duty", "lmtd", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
+        ObjectType.PipeSegment -> listOf("pressureDrop", "frictionPressureDrop", "staticPressureDrop", "temperatureChange", "heatTransferred")
+        ObjectType.OrificePlate -> listOf("pressureDrop", "orificePressureDrop", "beta", "temperatureChange")
         ObjectType.Recycle -> listOf("iterations")
         ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
         else -> emptyList()
@@ -59,9 +62,10 @@ object ResultKeys {
         "temperature", "outletTemperature", "hotOutletTemperature", "coldOutletTemperature" -> Quantity.Temperature
         "temperatureChange", "lmtd" -> Quantity.TemperatureDifference
         "pressure", "outletPressure" -> Quantity.Pressure
-        "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop" -> Quantity.PressureDifference
+        "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop",
+        "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop" -> Quantity.PressureDifference
         "vapourFraction", "phaseMoleFraction", "efficiency" -> Quantity.Fraction
-        "compressibilityFactor", "pressureRatio" -> Quantity.Ratio
+        "compressibilityFactor", "pressureRatio", "beta" -> Quantity.Ratio
         "iterations" -> Quantity.Count
         "adiabaticHead" -> Quantity.MassEnthalpy
         "molarFlow" -> Quantity.MolarFlow
@@ -73,7 +77,7 @@ object ResultKeys {
         "density" -> Quantity.Density
         "molecularWeight" -> Quantity.MolecularWeight
         "viscosity" -> Quantity.Viscosity
-        "duty", "power", "energyFlow" -> Quantity.Power
+        "duty", "power", "energyFlow", "heatTransferred" -> Quantity.Power
         else -> Quantity.Fraction
     }
 
@@ -109,6 +113,11 @@ object ResultKeys {
         "hotPressureDrop" -> "Hot side pressure drop"
         "coldPressureDrop" -> "Cold side pressure drop"
         "iterations" -> "Iterations"
+        "heatTransferred" -> "Heat gained from surroundings"
+        "frictionPressureDrop" -> "Friction pressure drop"
+        "staticPressureDrop" -> "Static (elevation) pressure drop"
+        "orificePressureDrop" -> "Differential across the plate"
+        "beta" -> "Beta (d/D)"
         "manipulatedValue" -> "Varied value"
         "controlledValue" -> "Controlled value"
         else -> key

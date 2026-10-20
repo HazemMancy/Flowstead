@@ -88,7 +88,19 @@ _Last updated: 2026-10-20_
 - **Toolchain upgrade (D15):** AGP 9.4.1 with built-in Kotlin, Gradle 9.8.2, Kotlin 2.4.21, KSP 2.3.12, Hilt 2.60.1, compile/target SDK 37. The full CI run is green, end-to-end included.
 - **Screenshots:** `StoreScreenshots` renders projects, canvas, results and solver log in light and dark at 1080 × 2160, from benchmark 06 and its real engine response. CI uploads them as the `screenshots` artifact.
 
+- **M11 palette:** HYSYS-style symbols for every object type (`Icons.kt`), palette grouped by category (Streams, Heat transfer, Rotating, Piping, Mixing, Separators, Columns, Reactors, Logical). Types without engine support yet are shown greyed as "Coming".
+- **M12 compound library:** all 1,488 compounds DWSIM loads (ChemSep, ChEDL, CoolProp, Electrolytes, …) bundled offline in `shared/compounds/catalogue.json`, with Hill formula, family, aliases and a detail sheet of database constants (D23, D24).
+- **M13 solve on the phone (D25):** DWSIM runs inside the app on the Mono runtime (arm64-v8a, x86_64), bit-identical to the server on Linux.
+  - Settings → Engine: "On this phone" (default when built in) or "Remote engine".
+  - CI prepares the engine and runs every benchmark on an emulator (`device` job).
+- **M14 piping (in progress):**
+  - Pipe segment: one section; length, ID, elevation, roughness, increments; Beggs & Brill, Lockhart & Martinelli or Petalas & Aziz; adiabatic or U + ambient T.
+  - Orifice plate (ISO 5167): flange, corner or radius taps.
+  - Benchmark 09 checks both against hand references (Darcy–Weisbach/Colebrook within 0.5 %, ISO 5167 within 2 %).
+  - Next: relief valve (API 520 sizing in the engine layer; DWSIM's steady-state relief valve does no calculation).
+
 ## Next
+- M15 separators and logic, M16 columns, M17 reactors (owner's priority list).
 - Review the `screenshots` artifact (light and dark) and pick the Play Store set. I couldn't download artifacts from the dev sandbox: the network policy blocks the artifact host.
 - Owner input still needed:
   - HYSYS/UniSim and desktop-DWSIM reference values for the benchmarks (D6);
@@ -97,7 +109,8 @@ _Last updated: 2026-10-20_
 ## Known limitations
 
 - Benchmarks 01 and 03 have only engine-provisional expected values (D6). They need desktop-DWSIM `.dwxmz` files and HYSYS numbers.
-- Import supports the MVP unit ops only. Pipes, columns, reactors and other DWSIM objects are left out with a warning. The streams they fed need specifying again.
+- Pipe segments are one straight section: imported DWSIM pipes with several sections are left out with a warning. HYSYS Pipe Segment's fittings and multiple segments are not available yet.
+- Import supports the placeable unit ops only. Columns, reactors and other DWSIM objects are left out with a warning. The streams they fed need specifying again.
 - Exported `.dwxmz` files don't contain Adjusts, and the engine's hidden energy streams become visible after a round trip.
 
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).

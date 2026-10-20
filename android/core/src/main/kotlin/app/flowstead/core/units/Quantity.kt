@@ -29,4 +29,6 @@ enum class Quantity(val siUnitId: String) {
     Ratio("ratio"),
     /** Whole numbers such as iteration counts. */
     Count("count"),
+    Length("m"),
+    HeatTransferCoefficient("W/m2.K"),
 }

@@ -85,4 +85,21 @@ class SpecFieldTest {
         compose.onNodeWithTag("spec_pressure").performImeAction()
         assertEquals(Triple("s", SpecKey.PRESSURE, null), rec.specs.single())
     }
+
+    @Test
+    fun diametersDefaultToMillimetresOrInches() {
+        val rec = Recorder()
+        val obj = SimObject("p", "PIPE-100", ObjectType.PipeSegment)
+        compose.setContent {
+            FlowsteadTheme {
+                SpecField(obj, SpecKey.INNER_DIAMETER, UnitSet.SI, UnitContext(), rec)
+                SpecField(obj, SpecKey.LENGTH, UnitSet.FIELD, UnitContext(), rec)
+            }
+        }
+        compose.onNodeWithTag("spec_innerDiameter").performTextInput("100")
+        compose.onNodeWithTag("spec_innerDiameter").performImeAction()
+        compose.onNodeWithTag("spec_length").performTextInput("100")
+        compose.onNodeWithTag("spec_length").performImeAction()
+        assertEquals(listOf(Spec(0.1, "mm"), Spec(30.48, "ft")), rec.specs.map { it.third })
+    }
 }

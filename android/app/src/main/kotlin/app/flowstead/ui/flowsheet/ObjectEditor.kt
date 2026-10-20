@@ -62,6 +62,7 @@ import app.flowstead.core.model.ResultKeys
 import app.flowstead.core.model.ResultView
 import app.flowstead.ui.components.ValueText
 import app.flowstead.core.model.AdjustKeys
+import app.flowstead.core.model.ChoiceKey
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ObjectType
@@ -175,6 +176,13 @@ fun ObjectEditorSheet(
                     Calculated("Outlet 3, when connected, takes whatever is left.")
                 }
                 ObjectType.Mixer -> Calculated("Adiabatic mixing; the outlet is at the lowest inlet pressure. Nothing to specify.")
+                ObjectType.PipeSegment -> PipeEditor(obj, unitSet, ctx, actions)
+                ObjectType.OrificePlate -> {
+                    SpecField(obj, SpecKey.ORIFICE_DIAMETER, unitSet, ctx, actions)
+                    SpecField(obj, SpecKey.PIPE_DIAMETER, unitSet, ctx, actions)
+                    MethodChoice(obj, "Pressure taps", ChoiceKey.ORIFICE_TAPS, ChoiceKey.ORIFICE_TAP_OPTIONS, actions)
+                    Calculated("ISO 5167 orifice meter. The outlet is at the permanent (recovered) pressure.")
+                }
                 ObjectType.Adjust -> AdjustEditor(fs, obj, unitSet, ctx, actions)
                 ObjectType.Recycle -> Calculated(
                     "Tear stream: the engine iterates until the assumed and calculated streams agree (1e-6 kg/s, 0.001 K). " +
@@ -225,6 +233,29 @@ private fun ConnectionsSection(fs: Flowsheet, unit: SimObject, actions: EditorAc
 
 private const val NEW_STREAM = "__new"
 private const val DISCONNECT = "__disconnect"
+
+/** One pipe section: geometry, method and, optionally, heat exchange with the surroundings. */
+@Composable
+private fun PipeEditor(obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
+    SpecField(obj, SpecKey.LENGTH, unitSet, ctx, actions)
+    SpecField(obj, SpecKey.INNER_DIAMETER, unitSet, ctx, actions)
+    SpecField(obj, SpecKey.ELEVATION_CHANGE, unitSet, ctx, actions, optionalHint = "0 (horizontal) if empty")
+    SpecField(obj, SpecKey.ROUGHNESS, unitSet, ctx, actions, optionalHint = "0.0457 mm (commercial steel) if empty")
+    SpecField(obj, SpecKey.INCREMENTS, unitSet, ctx, actions, optionalHint = "10 if empty")
+    MethodChoice(obj, "Flow correlation", ChoiceKey.PIPE_CORRELATION, ChoiceKey.PIPE_CORRELATIONS, actions)
+    SectionLabel("Heat transfer")
+    SpecField(obj, SpecKey.HEAT_TRANSFER_COEFFICIENT, unitSet, ctx, actions, optionalHint = "adiabatic if empty")
+    SpecField(obj, SpecKey.AMBIENT_TEMPERATURE, unitSet, ctx, actions, optionalHint = "needed with U")
+}
+
+/** A method stored in the object's refs; the first option is the engine's default. */
+@Composable
+private fun MethodChoice(obj: SimObject, label: String, key: String, options: List<Pair<String, String>>, actions: EditorActions) {
+    val current = obj.refs[key] ?: options.first().first
+    Choice(label, options.firstOrNull { it.first == current }?.second, options, testTag = "choice_$key") { picked ->
+        actions.setRef(obj.id, key, picked.takeIf { it != options.first().first })
+    }
+}
 
 /** "Vary <object · spec> until <object · result> = target", with optional tolerance and bounds. */
 @Composable
@@ -458,7 +489,7 @@ fun SpecField(
         mutableStateOf(
             spec?.unit?.let { Units.byIdOrNull(it) }?.takeIf { it.quantity == quantity }
                 // Engineers think of efficiency in percent.
-                ?: if (key == SpecKey.EFFICIENCY) Units.percent else unitSet.unitFor(quantity),
+                ?: if (key == SpecKey.EFFICIENCY) Units.percent else defaultUnit(key, quantity, unitSet),
         )
     }
     val shown = spec?.let { ValueFormat.number(unit.fromSi(it.si, ctx), unit.decimals).replace(",", "") } ?: ""
@@ -508,6 +539,17 @@ fun SpecField(
             unit = picked
             spec?.let { actions.setSpec(obj.id, key, it.copy(unit = picked.id)) }
         }
+    }
+}
+
+/** The unit set's unit, except that diameters and roughness use mm or inches. */
+private fun defaultUnit(key: String, quantity: Quantity, unitSet: UnitSet): EngUnit {
+    val u = unitSet.unitFor(quantity)
+    if (key !in SpecKey.SMALL_LENGTHS) return u
+    return when (u) {
+        Units.m -> Units.mm
+        Units.ft -> Units.inch
+        else -> u
     }
 }
 

@@ -10,8 +10,10 @@ import app.flowstead.core.units.Conversions.BTU_IT_J
 import app.flowstead.core.units.Conversions.CAL_IT_J
 import app.flowstead.core.units.Conversions.DAY_S
 import app.flowstead.core.units.Conversions.FT3_M3
+import app.flowstead.core.units.Conversions.FT_M
 import app.flowstead.core.units.Conversions.HOUR_S
 import app.flowstead.core.units.Conversions.HP_W
+import app.flowstead.core.units.Conversions.IN_M
 import app.flowstead.core.units.Conversions.LB_KG
 import app.flowstead.core.units.Conversions.PSI_PA
 import app.flowstead.core.units.Conversions.US_GAL_M3
@@ -128,6 +130,16 @@ object Units {
     val percent = u("%", "%", Quantity.Fraction, 0.01, 2)
     val ratio = u("ratio", "", Quantity.Ratio, 1.0, 3)
     val count = u("count", "", Quantity.Count, 1.0, 0)
+
+    // Length (pipe lengths, diameters, roughness)
+    val m = u("m", "m", Quantity.Length, 1.0, 3)
+    val mm = u("mm", "mm", Quantity.Length, 1e-3, 3)
+    val ft = u("ft", "ft", Quantity.Length, FT_M, 3)
+    val inch = u("in", "in", Quantity.Length, IN_M, 4)
+
+    // Heat transfer coefficient
+    val wPerM2K = u("W/m2.K", "W/m²·K", Quantity.HeatTransferCoefficient, 1.0, 2)
+    val btuPerHFt2F = u("Btu/h.ft2.F", "Btu/h·ft²·°F", Quantity.HeatTransferCoefficient, BTU_IT_J / (HOUR_S * FT_M * FT_M * 5.0 / 9.0), 3)
 
     private val byId: Map<String, EngUnit> = all.associateBy { it.id }.also {
         check(it.size == all.size) { "Duplicate unit ids" }
