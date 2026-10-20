@@ -258,6 +258,41 @@ public sealed class ApiTests(EngineFixture engine)
         Assert.Equal(SolveStatus.Invalid, r.Status);
         Assert.Contains(r.Messages, m => m.Text.Contains("no vapourFraction specified"));
     }
+
+    private static SimObject Set(string id, string source, string target, string key) => new()
+    {
+        Id = id, Tag = id.ToUpperInvariant(), Type = ObjectType.Set,
+        Refs = new() { [SetKeys.SourceObject] = source, [SetKeys.TargetObject] = target, [SetKeys.Variable] = key },
+    };
+
+    [Fact]
+    public async Task SetsThatLoopOrDriveAnUnknownSpecAreRejected()
+    {
+        var fs = Water(300) with { };
+        fs.Objects.Add(Water(320).Objects[0] with { Id = "w2", Tag = "W-2" });
+        fs.Objects.Add(Set("s1", "w", "w2", SpecKeys.Temperature));
+        fs.Objects.Add(Set("s2", "w2", "w", SpecKeys.Temperature));
+        fs.Objects.Add(Set("s3", "w", "w2", SpecKeys.OutletPressure));
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.Equal(SolveStatus.Invalid, r.Status);
+        Assert.Contains(r.Messages, m => m.Text.Contains("Sets form a loop"));
+        Assert.Contains(r.Messages, m => m.Text == "S3: W-2 can't take outletPressure as a specification.");
+    }
+
+    [Fact]
+    public async Task SetCopiesTheSourceSpecWithMultiplierAndOffset()
+    {
+        var fs = Water(300) with { };
+        fs.Objects.Add(Water(400).Objects[0] with { Id = "w2", Tag = "W-2" });
+        fs.Objects.Add(Set("s1", "w", "w2", SpecKeys.Temperature) with
+        {
+            Specs = new() { [SetKeys.Multiplier] = new Spec(1.0, "ratio"), [SetKeys.Offset] = new Spec(15.0, "dC") },
+        });
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.Equal(SolveStatus.Converged, r.Status);
+        Assert.Equal(315.0, r.Objects["w2"].Properties["temperature"], 9);
+        Assert.Equal(315.0, r.Objects["s1"].Properties["targetValue"], 9);
+    }
 }
 
 internal static class AdjustSolverLimits

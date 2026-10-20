@@ -14,7 +14,28 @@ public static class Validator
         ObjectType.Splitter, ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander,
         ObjectType.HeatExchanger, ObjectType.Recycle, ObjectType.Adjust,
         ObjectType.PipeSegment, ObjectType.OrificePlate,
+        ObjectType.AirCooler, ObjectType.ComponentSplitter, ObjectType.Tank, ObjectType.Set,
     ];
+
+    /// <summary>The spec keys each type takes (component-splitter fractions aside). A Set can only drive one of these.</summary>
+    public static IReadOnlyList<string> SpecKeysFor(ObjectType t) => t switch
+    {
+        ObjectType.MaterialStream => [SpecKeys.Temperature, SpecKeys.Pressure, SpecKeys.VapourFraction, SpecKeys.MassEnthalpy,
+            SpecKeys.MolarFlow, SpecKeys.MassFlow],
+        ObjectType.Valve => [SpecKeys.OutletPressure, SpecKeys.PressureDrop],
+        ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler => [SpecKeys.OutletTemperature, SpecKeys.Duty, SpecKeys.PressureDrop],
+        ObjectType.Pump => [SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.Efficiency],
+        ObjectType.Compressor => [SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.PressureRatio, SpecKeys.Efficiency],
+        ObjectType.Expander => [SpecKeys.OutletPressure, SpecKeys.PressureDrop, SpecKeys.PressureRatio, SpecKeys.Efficiency],
+        ObjectType.HeatExchanger => [SpecKeys.Duty, SpecKeys.HotOutletTemperature, SpecKeys.ColdOutletTemperature,
+            SpecKeys.HotPressureDrop, SpecKeys.ColdPressureDrop],
+        ObjectType.Splitter => [SpecKeys.Split1, SpecKeys.Split2],
+        ObjectType.PipeSegment => [SpecKeys.Length, SpecKeys.InnerDiameter, SpecKeys.ElevationChange, SpecKeys.Roughness,
+            SpecKeys.Increments, SpecKeys.HeatTransferCoefficient, SpecKeys.AmbientTemperature],
+        ObjectType.OrificePlate => [SpecKeys.OrificeDiameter, SpecKeys.PipeDiameter],
+        ObjectType.Tank => [SpecKeys.Volume],
+        _ => [],
+    };
 
     /// <summary>Pipe flow correlations by Flowstead id (value = DWSIM FlowPackage name).</summary>
     public static readonly IReadOnlyDictionary<string, string> PipeCorrelations = new Dictionary<string, string>
@@ -66,7 +87,52 @@ public static class Validator
         var adjusts = fs.Objects.Where(o => o.Type == ObjectType.Adjust).ToList();
         if (adjusts.Count > 1) Err("Only one Adjust per flowsheet is supported in this version.", adjusts[1].Id);
         foreach (var a in adjusts) ValidateAdjust(fs, a, Err);
+        foreach (var o in fs.Objects.Where(o => o.Type == ObjectType.ComponentSplitter))
+            foreach (var k in o.Specs.Keys.Where(k => k.StartsWith(SpecKeys.SplitPrefix, StringComparison.Ordinal)))
+                if (!fs.Compounds.Contains(k[SpecKeys.SplitPrefix.Length..])) Err($"{o.Tag}: '{k[SpecKeys.SplitPrefix.Length..]}' is not in the component list.", o.Id);
+        ValidateSets(fs, Err);
         return m;
+    }
+
+    private static void ValidateSets(Flowsheet fs, Action<string, string?> err)
+    {
+        var sets = fs.Objects.Where(o => o.Type == ObjectType.Set).ToList();
+        var fed = fs.Connections.Select(c => c.ToObject).ToHashSet();
+        var targets = new Dictionary<(string, string), SimObject>();
+        foreach (var set in sets)
+        {
+            string? Ref(string k) => set.Refs.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) ? v : null;
+            var tId = Ref(SetKeys.TargetObject);
+            var sId = Ref(SetKeys.SourceObject);
+            var key = Ref(SetKeys.Variable);
+            if (tId is null || key is null) { err($"{set.Tag}: choose the target object and variable.", set.Id); continue; }
+            if (sId is null) { err($"{set.Tag}: choose the source object.", set.Id); continue; }
+            var target = fs.Objects.FirstOrDefault(o => o.Id == tId);
+            var source = fs.Objects.FirstOrDefault(o => o.Id == sId);
+            if (target is null || source is null) { err($"{set.Tag}: the {(target is null ? "target" : "source")} object no longer exists.", set.Id); continue; }
+            if (target.Id == source.Id) { err($"{set.Tag}: the source and the target must be different objects.", set.Id); continue; }
+            if (!SpecKeysFor(target.Type).Contains(key) || (target.Type == ObjectType.MaterialStream && fed.Contains(target.Id)))
+                err($"{set.Tag}: {target.Tag} can't take {key} as a specification.", set.Id);
+            if (!source.Specs.ContainsKey(key)) err($"{set.Tag}: {source.Tag} has no {key} specified to copy.", set.Id);
+            if (set.Specs.GetValueOrDefault(SetKeys.Multiplier) is { } mul && !double.IsFinite(mul.Si)) err($"{set.Tag}: multiplier is not a number.", set.Id);
+            if (!targets.TryAdd((target.Id, key), set)) err($"{set.Tag}: {target.Tag} {key} is already set by {targets[(target.Id, key)].Tag}.", set.Id);
+            if (fs.Objects.Any(a => a.Type == ObjectType.Adjust && a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedObject) == target.Id
+                    && a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedSpec) == key))
+                err($"{set.Tag}: {target.Tag} {key} is varied by an Adjust; a Set can't also drive it.", set.Id);
+        }
+        // A chain A→B→C is fine; a loop has no answer.
+        var edges = sets.Select(s => (From: s.Refs.GetValueOrDefault(SetKeys.SourceObject), To: s.Refs.GetValueOrDefault(SetKeys.TargetObject),
+            Key: s.Refs.GetValueOrDefault(SetKeys.Variable))).ToList();
+        foreach (var set in sets)
+        {
+            var key = set.Refs.GetValueOrDefault(SetKeys.Variable);
+            var start = set.Refs.GetValueOrDefault(SetKeys.TargetObject);
+            var seen = new HashSet<string?>();
+            var at = start;
+            while (at is not null && seen.Add(at))
+                at = edges.FirstOrDefault(e => e.From == at && e.Key == key).To;
+            if (at is not null && at == start) { err($"{set.Tag}: Sets form a loop on {key}.", set.Id); break; }
+        }
     }
 
     private static void ValidateAdjust(Flowsheet fs, SimObject a, Action<string, string?> err)
@@ -115,6 +181,7 @@ public static class Validator
                 break;
             case ObjectType.Heater:
             case ObjectType.Cooler:
+            case ObjectType.AirCooler:
                 OneOf("outlet temperature or duty", SpecKeys.OutletTemperature, SpecKeys.Duty);
                 break;
             case ObjectType.Pump:
@@ -148,6 +215,15 @@ public static class Validator
                     err($"{o.Tag}: the orifice must be smaller than the pipe.", o.Id);
                 if (o.Refs.GetValueOrDefault(ChoiceKeys.OrificeTaps) is { } taps && !OrificeTaps.ContainsKey(taps))
                     err($"{o.Tag}: unknown tap arrangement '{taps}'.", o.Id);
+                break;
+            case ObjectType.Tank:
+                if (s.GetValueOrDefault(SpecKeys.Volume) is { } vol && vol.Si <= 0) err($"{o.Tag}: volume must be positive.", o.Id);
+                break;
+            case ObjectType.ComponentSplitter:
+                if (!s.Keys.Any(k => k.StartsWith(SpecKeys.SplitPrefix, StringComparison.Ordinal)))
+                    err($"{o.Tag}: under-specified — give the fraction of each component sent to the overhead (outlet 1).", o.Id);
+                foreach (var (k, f) in s.Where(kv => kv.Key.StartsWith(SpecKeys.SplitPrefix, StringComparison.Ordinal)))
+                    if (f.Si is < 0 or > 1) err($"{o.Tag}: the fraction of {k[SpecKeys.SplitPrefix.Length..]} to the overhead must be between 0 and 1.", o.Id);
                 break;
             case ObjectType.Splitter:
                 if (!s.ContainsKey(SpecKeys.Split1)) err($"{o.Tag}: under-specified — give the fraction to outlet 1.", o.Id);

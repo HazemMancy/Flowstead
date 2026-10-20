@@ -64,9 +64,9 @@ public sealed class DwsimFileTests(EngineFixture engine, ITestOutputHelper outpu
         Assert.Equal(original.Connections.Count + HiddenEnergyStreams(original), back.Connections.Count);
     }
 
-    /// <summary>The engine adds an energy stream to each heater, cooler, pump, compressor or expander drawn without one; it is real in the file.</summary>
+    /// <summary>The engine adds an energy stream to each heater, cooler, air cooler, pump, compressor or expander drawn without one; it is real in the file.</summary>
     private static int HiddenEnergyStreams(Flowsheet fs) =>
-        fs.Objects.Count(o => o.Type is ObjectType.Heater or ObjectType.Cooler or ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander
+        fs.Objects.Count(o => o.Type is ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler or ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander
                               && !fs.Connections.Any(c => (c.ToObject == o.Id && c.ToPort == 1) || (c.FromObject == o.Id && c.FromPort == 1)));
 
     [Fact]

@@ -127,6 +127,7 @@ public static class DwxmzImporter
         DwsimObjectType.OT_Recycle => ObjectType.Recycle,
         DwsimObjectType.Pipe => ObjectType.PipeSegment,
         DwsimObjectType.OrificePlate => ObjectType.OrificePlate,
+        DwsimObjectType.ComponentSeparator => ObjectType.ComponentSplitter,
         _ => null,
     };
 
@@ -174,6 +175,19 @@ public static class DwxmzImporter
         void Unsupported(string what) => warnings.Add($"{so.GraphicObject.Tag}: calculation mode '{what}' is not supported; set its specification in Flowstead.");
         switch (so)
         {
+            case ComponentSeparator cs:
+                foreach (var spec in cs.ComponentSepSpecs.Values)
+                {
+                    if (spec.SepSpec != DWSIM.UnitOperations.UnitOperations.Auxiliary.SeparationSpec.PercentInletMolarFlow)
+                    {
+                        warnings.Add($"{so.GraphicObject.Tag}: {spec.ComponentID} is split by {spec.SepSpec}; only percent of inlet molar flow is supported. Set its fraction in Flowstead.");
+                        continue;
+                    }
+                    // Flowstead always states the fraction sent to outlet 1.
+                    var f = spec.SpecValue / 100.0;
+                    Put(SpecKeys.Split(spec.ComponentID), cs.SpecifiedStreamIndex == 0 ? f : 1.0 - f, "frac");
+                }
+                break;
             case Valve v:
                 if (v.CalcMode == Valve.CalculationMode.OutletPressure) Put(SpecKeys.OutletPressure, v.OutletPressure, "kPa");
                 else if (v.CalcMode == Valve.CalculationMode.DeltaP) Put(SpecKeys.PressureDrop, v.DeltaP, "dkPa");

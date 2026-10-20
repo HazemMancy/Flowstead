@@ -142,6 +142,8 @@ public sealed class DwsimEngine
     public SolveResult Solve(Flowsheet model)
     {
         var sw = Stopwatch.StartNew();
+        // Sets first, so the validator sees the specifications DWSIM will get.
+        model = SetSolver.Apply(model);
         var messages = Validator.Validate(model, _automation.AvailableCompounds.Keys, MvpPackages.Select(p => p.Name)
             .Concat(_automation.AvailablePropertyPackages.Keys));
         if (messages.Any(m => m.Level == MessageLevel.Error))
@@ -174,6 +176,7 @@ public sealed class DwsimEngine
 
     private SolveResult SolveCore(Flowsheet model, List<SolverMessage> messages, Stopwatch sw)
     {
+        model = SetSolver.Apply(model); // again: an Adjust may have moved a Set's source
         IFlowsheet fs;
         Dictionary<string, ISimulationObject> objects;
         try
@@ -205,7 +208,9 @@ public sealed class DwsimEngine
         foreach (var o in model.Objects)
         {
             if (objects.TryGetValue(o.Id, out var so)) results[o.Id] = Extract(o, so);
+            else if (o.Type == ObjectType.Set) results[o.Id] = SetSolver.Result(o, model);
         }
+        AddTankResidenceTimes(model, results);
         foreach (var (id, r) in results.Where(r => r.Value.Status == ObjectStatus.Error))
         {
             messages.Add(new SolverMessage(MessageLevel.Error, r.Error ?? "Calculation failed", id));
@@ -271,7 +276,7 @@ public sealed class DwsimEngine
     /// </summary>
     public ExportResult ExportDwsim(Flowsheet model)
     {
-        var messages = Validator.Validate(model, _automation.AvailableCompounds.Keys, MvpPackages.Select(p => p.Name)
+        var messages = Validator.Validate(SetSolver.Apply(model), _automation.AvailableCompounds.Keys, MvpPackages.Select(p => p.Name)
             .Concat(_automation.AvailablePropertyPackages.Keys));
         var errors = messages.Where(m => m.Level == MessageLevel.Error).Select(m => m.Text).ToList();
         if (errors.Count > 0) throw new InvalidDataException("The flowsheet can't be exported yet: " + string.Join(" ", errors));
@@ -280,7 +285,10 @@ public sealed class DwsimEngine
         var adjusts = model.Objects.Where(o => o.Type == ObjectType.Adjust).ToList();
         foreach (var a in adjusts)
             warnings.Add($"{a.Tag}: Adjust is not written to the DWSIM file; the varied specification keeps its value as entered.");
-        var plain = model with { Objects = model.Objects.Where(o => o.Type != ObjectType.Adjust).ToList() };
+        foreach (var set in model.Objects.Where(o => o.Type == ObjectType.Set))
+            warnings.Add($"{set.Tag}: Set is not written to the DWSIM file; its target keeps the value it gives now.");
+        var applied = SetSolver.Apply(model);
+        var plain = applied with { Objects = applied.Objects.Where(o => o.Type is not (ObjectType.Adjust or ObjectType.Set)).ToList() };
 
         var (fs, _) = Build(plain);
         var solveErrors = _automation.CalculateFlowsheet4(fs) ?? [];
@@ -358,7 +366,8 @@ public sealed class DwsimEngine
         }
 
         var map = new Dictionary<string, ISimulationObject>();
-        foreach (var o in model.Objects)
+        // Sets are applied by Flowstead before the build; DWSIM never sees them.
+        foreach (var o in model.Objects.Where(o => o.Type != ObjectType.Set))
         {
             var so = fs.AddObject(ToDwsim(o.Type), (int)o.X, (int)o.Y, o.Tag);
             map[o.Id] = so;
@@ -369,9 +378,9 @@ public sealed class DwsimEngine
         {
             ApplyStream(model, o, (MaterialStream)map[o.Id]);
         }
-        foreach (var o in model.Objects.Where(o => !o.Type.IsStream()))
+        foreach (var o in model.Objects.Where(o => !o.Type.IsStream() && map.ContainsKey(o.Id)))
         {
-            ApplyUnitOp(o, map[o.Id]);
+            ApplyUnitOp(model, o, map[o.Id]);
         }
         foreach (var c in model.Connections)
         {
@@ -413,8 +422,9 @@ public sealed class DwsimEngine
         ObjectType.EnergyStream => DwsimObjectType.EnergyStream,
         ObjectType.Valve => DwsimObjectType.Valve,
         ObjectType.Heater => DwsimObjectType.Heater,
-        ObjectType.Cooler => DwsimObjectType.Cooler,
-        ObjectType.Separator or ObjectType.ThreePhaseSeparator => DwsimObjectType.Vessel,
+        ObjectType.Cooler or ObjectType.AirCooler => DwsimObjectType.Cooler, // air cooler: process side only
+        ObjectType.Separator or ObjectType.ThreePhaseSeparator or ObjectType.Tank => DwsimObjectType.Vessel,
+        ObjectType.ComponentSplitter => DwsimObjectType.ComponentSeparator,
         ObjectType.Mixer => DwsimObjectType.NodeIn,
         ObjectType.Splitter => DwsimObjectType.NodeOut,
         ObjectType.Pump => DwsimObjectType.Pump,
@@ -458,7 +468,7 @@ public sealed class DwsimEngine
         else if (Has(SpecKeys.MassFlow)) ms.SetMassFlow(V(SpecKeys.MassFlow));
     }
 
-    private static void ApplyUnitOp(SimObject o, ISimulationObject so)
+    private static void ApplyUnitOp(Flowsheet model, SimObject o, ISimulationObject so)
     {
         var s = o.Specs;
         double? V(string k) => s.TryGetValue(k, out var v) ? v.Si : null;
@@ -624,6 +634,15 @@ public sealed class DwsimEngine
                     Validator.OrificeTaps[o.Refs.GetValueOrDefault(ChoiceKeys.OrificeTaps) ?? "flange"]);
                 break;
             }
+            case ComponentSeparator cs:
+            {
+                // Every compound gets a spec (DWSIM leaves unspecified ones at stale values): 0 = all to outlet 2.
+                cs.SpecifiedStreamIndex = 0;
+                cs.ComponentSepSpecs = model.Compounds.ToDictionary(c => c, c => new DWSIM.UnitOperations.UnitOperations.Auxiliary.ComponentSeparationSpec(
+                    c, DWSIM.UnitOperations.UnitOperations.Auxiliary.SeparationSpec.PercentInletMolarFlow,
+                    (V(SpecKeys.Split(c)) ?? 0.0) * 100.0, "%"));
+                break;
+            }
             case HeatExchanger hx:
                 hx.FlowDir = FlowDirection.CounterCurrent;
                 hx.HotSidePressureDrop = V(SpecKeys.HotPressureDrop) ?? 0.0;
@@ -653,7 +672,7 @@ public sealed class DwsimEngine
     /// </summary>
     private static void AddHiddenEnergyStreams(IFlowsheet fs, Flowsheet model, Dictionary<string, ISimulationObject> map)
     {
-        foreach (var o in model.Objects.Where(o => o.Type is ObjectType.Heater or ObjectType.Cooler
+        foreach (var o in model.Objects.Where(o => o.Type is ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler
                      or ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander))
         {
             // Energy flows in to heaters, pumps and compressors; out of coolers and expanders.
@@ -666,6 +685,24 @@ public sealed class DwsimEngine
             var es = fs.AddObject(DwsimObjectType.EnergyStream, (int)o.X, (int)o.Y + 50, $"{o.Tag}-Q");
             if (isHeater) Connect(fs, es, 0, unit, 1);
             else Connect(fs, unit, 1, es, 0);
+        }
+    }
+
+    /// <summary>Tank: liquid residence time = volume / actual liquid outflow (from the liquid product's solved volume flow).</summary>
+    private static void AddTankResidenceTimes(Flowsheet model, Dictionary<string, ObjectResult> results)
+    {
+        foreach (var t in model.Objects.Where(o => o.Type == ObjectType.Tank))
+        {
+            if (!results.TryGetValue(t.Id, out var r) || r.Status != ObjectStatus.Solved) continue;
+            var props = new Dictionary<string, double>(r.Properties);
+            var liquid = model.Connections.FirstOrDefault(c => c.FromObject == t.Id && c.FromPort == 1)?.ToObject;
+            var overall = liquid is null ? null : results.GetValueOrDefault(liquid)?.Phases?.GetValueOrDefault("overall");
+            if (overall?.Properties.GetValueOrDefault("volumeFlow") is { } q && q > 0)
+            {
+                props["liquidVolumeFlow"] = q;
+                if (t.Specs.GetValueOrDefault(SpecKeys.Volume) is { } v) props["liquidResidenceTime"] = v.Si / q;
+            }
+            results[t.Id] = r with { Properties = props };
         }
     }
 
@@ -751,6 +788,12 @@ public sealed class DwsimEngine
                 Status = ObjectStatus.Solved,
                 Properties = Props(("pressureDrop", op.OverallPressureDrop), ("orificePressureDrop", op.OrificePressureDrop),
                     ("beta", op.Beta), ("temperatureChange", op.DeltaT)),
+            },
+            ComponentSeparator cs => new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                // DWSIM's EnergyImb is in − out (kW); the duty that keeps both products at the feed temperature is out − in.
+                Properties = Props(("duty", -cs.EnergyImb * 1000.0)),
             },
             DWSIM.UnitOperations.SpecialOps.Recycle r => new ObjectResult
             {

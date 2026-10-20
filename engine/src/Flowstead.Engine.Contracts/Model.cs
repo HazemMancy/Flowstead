@@ -103,6 +103,30 @@ public static class SpecKeys
     public const string AmbientTemperature = "ambientTemperature";
     public const string OrificeDiameter = "orificeDiameter";
     public const string PipeDiameter = "pipeDiameter";
+
+    /// <summary>Tank: vessel volume (m³), for the liquid residence time.</summary>
+    public const string Volume = "volume";
+
+    /// <summary>
+    /// Component splitter: "split:&lt;compound&gt;" is the fraction of that compound's inlet flow sent
+    /// to outlet 1 (overhead); compounds without one all go to outlet 2.
+    /// </summary>
+    public const string SplitPrefix = "split:";
+    public static string Split(string compound) => SplitPrefix + compound;
+}
+
+/// <summary>
+/// Set (HYSYS-style): target.variable = multiplier × source.variable + offset, applied by Flowstead
+/// before each solve. The variable is a spec key both objects take.
+/// </summary>
+public static class SetKeys
+{
+    public const string TargetObject = "targetObject";
+    public const string SourceObject = "sourceObject";
+    public const string Variable = "variable";
+    /// <summary>Optional specs: multiplier (default 1) and offset (SI difference, default 0).</summary>
+    public const string Multiplier = "multiplier";
+    public const string Offset = "offset";
 }
 
 /// <summary>Choices stored in SimObject.Refs for unit ops that have a method to pick.</summary>

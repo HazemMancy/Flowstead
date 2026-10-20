@@ -1,0 +1,205 @@
+{
+  "name": "Component splitter, air cooler, tank and Set",
+  "description": "100 kgmol/h of gas condensate at 80 °C, 30 bara (PR). X-100 sends 98 % of the CO2 and 2 % of the methane overhead; AC-100 cools the rest to 45 °C (0.5 bar ΔP) into a 10 m³ tank; SET-1 holds E-101's outlet 5 °C above AC-100's.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Methane",
+      "Ethane",
+      "Propane",
+      "N-butane",
+      "N-pentane",
+      "N-hexane",
+      "Carbon dioxide"
+    ],
+    "objects": [
+      {
+        "id": "feed",
+        "tag": "1",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 353.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 3000000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 27.77777777777778,
+            "unit": "kgmol/h"
+          }
+        },
+        "composition": {
+          "Methane": 0.6,
+          "Ethane": 0.1,
+          "Propane": 0.1,
+          "N-butane": 0.05,
+          "N-pentane": 0.05,
+          "N-hexane": 0.05,
+          "Carbon dioxide": 0.05
+        }
+      },
+      {
+        "id": "cs",
+        "tag": "X-100",
+        "type": "component_splitter",
+        "specs": {
+          "split:Carbon dioxide": {
+            "si": 0.98,
+            "unit": "frac"
+          },
+          "split:Methane": {
+            "si": 0.02,
+            "unit": "frac"
+          }
+        }
+      },
+      {
+        "id": "acid",
+        "tag": "2",
+        "type": "material_stream"
+      },
+      {
+        "id": "sweet",
+        "tag": "3",
+        "type": "material_stream"
+      },
+      {
+        "id": "ac",
+        "tag": "AC-100",
+        "type": "air_cooler",
+        "specs": {
+          "outletTemperature": {
+            "si": 318.15,
+            "unit": "C"
+          },
+          "pressureDrop": {
+            "si": 50000,
+            "unit": "dkPa"
+          }
+        }
+      },
+      {
+        "id": "cold",
+        "tag": "4",
+        "type": "material_stream"
+      },
+      {
+        "id": "tk",
+        "tag": "TK-100",
+        "type": "tank",
+        "specs": {
+          "volume": {
+            "si": 10.0,
+            "unit": "m3"
+          }
+        }
+      },
+      {
+        "id": "gas",
+        "tag": "5",
+        "type": "material_stream"
+      },
+      {
+        "id": "liq",
+        "tag": "6",
+        "type": "material_stream"
+      },
+      {
+        "id": "e",
+        "tag": "E-101",
+        "type": "cooler",
+        "specs": {}
+      },
+      {
+        "id": "acid2",
+        "tag": "7",
+        "type": "material_stream"
+      },
+      {
+        "id": "set",
+        "tag": "SET-1",
+        "type": "set",
+        "refs": {
+          "sourceObject": "ac",
+          "targetObject": "e",
+          "variable": "outletTemperature"
+        },
+        "specs": {
+          "multiplier": {
+            "si": 1.0,
+            "unit": "ratio"
+          },
+          "offset": {
+            "si": 5.0,
+            "unit": "dC"
+          }
+        }
+      }
+    ],
+    "connections": [
+      {
+        "fromObject": "feed",
+        "fromPort": 0,
+        "toObject": "cs",
+        "toPort": 0
+      },
+      {
+        "fromObject": "cs",
+        "fromPort": 0,
+        "toObject": "acid",
+        "toPort": 0
+      },
+      {
+        "fromObject": "cs",
+        "fromPort": 1,
+        "toObject": "sweet",
+        "toPort": 0
+      },
+      {
+        "fromObject": "sweet",
+        "fromPort": 0,
+        "toObject": "ac",
+        "toPort": 0
+      },
+      {
+        "fromObject": "ac",
+        "fromPort": 0,
+        "toObject": "cold",
+        "toPort": 0
+      },
+      {
+        "fromObject": "cold",
+        "fromPort": 0,
+        "toObject": "tk",
+        "toPort": 0
+      },
+      {
+        "fromObject": "tk",
+        "fromPort": 0,
+        "toObject": "gas",
+        "toPort": 0
+      },
+      {
+        "fromObject": "tk",
+        "fromPort": 1,
+        "toObject": "liq",
+        "toPort": 0
+      },
+      {
+        "fromObject": "acid",
+        "fromPort": 0,
+        "toObject": "e",
+        "toPort": 0
+      },
+      {
+        "fromObject": "e",
+        "fromPort": 0,
+        "toObject": "acid2",
+        "toPort": 0
+      }
+    ]
+  }
+}
