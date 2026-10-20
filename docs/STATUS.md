@@ -103,8 +103,16 @@ _Last updated: 2026-10-20_
   - Benchmark 10 checks the component, mole and mass balances and the Set.
   - Filter, solids separator and energy recycle stay "Coming".
 
+- **M16 columns (D27):**
+  - Distillation column (total or partial condenser), absorber, reboiled absorber (stripper), shortcut column (Fenske–Underwood–Gilliland).
+  - Every rigorous column is checked against its specs and balances after the solve.
+  - Benchmarks 11 (depropanizer: rigorous, shortcut and stripper) and 12 (lean-oil absorber).
+  - The refluxed absorber stays "Coming".
+- **On-device engine:** the first emulator run crashed with a stack overflow in DWSIM on a normal thread. The engine now runs on its own 64 MB-stack thread; awaiting the next emulator run.
+
 ## Next
-- M16 columns, M17 reactors (owner's priority list).
+- M17 reactors (owner's priority list).
+- A time limit for on-device solves (a slow column solver can run for minutes).
 - Review the `screenshots` artifact (light and dark) and pick the Play Store set. I couldn't download artifacts from the dev sandbox: the network policy blocks the artifact host.
 - Owner input still needed:
   - HYSYS/UniSim and desktop-DWSIM reference values for the benchmarks (D6);

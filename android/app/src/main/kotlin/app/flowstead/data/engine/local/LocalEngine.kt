@@ -9,7 +9,7 @@ import android.os.Build
 import app.flowstead.BuildConfig
 import app.flowstead.core.model.FlowsheetJson
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -22,6 +22,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import java.util.concurrent.Executors
 import java.io.IOException
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
@@ -75,8 +76,16 @@ class EmbeddedLocalEngine @Inject constructor(@ApplicationContext private val co
     @Volatile override var dwsimVersion: String? = null
         private set
 
+    /**
+     * DWSIM runs on one thread with a deep stack: its solvers (columns, flashes) recurse further than the
+     * ~1 MB of an ordinary Android thread, which ends in a stack-overflow SIGSEGV inside Mono.
+     */
+    private val engineThread = Executors.newSingleThreadExecutor { r ->
+        Thread(null, r, "flowstead-engine", ENGINE_STACK_BYTES).apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+
     override suspend fun call(method: String, params: JsonElement?): JsonElement = lock.withLock {
-        withContext(Dispatchers.Default) {
+        withContext(engineThread) {
             ensureStarted()
             val request = buildJsonObject {
                 put("id", JsonPrimitive(nextId++))
@@ -147,5 +156,6 @@ class EmbeddedLocalEngine @Inject constructor(@ApplicationContext private val co
     private companion object {
         /** ABIs the engine is built for (engine/embedded/android/prepare.sh). */
         val ABIS = listOf("arm64-v8a", "x86_64")
+        const val ENGINE_STACK_BYTES = 64L shl 20
     }
 }

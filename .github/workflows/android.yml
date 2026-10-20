@@ -157,7 +157,7 @@ jobs:
             cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
       - name: Device log
         if: always()
-        run: grep -E "FlowsteadOnDevice|mono|DOTNET|FATAL|flowstead" logcat.txt | tail -200 || true
+        run: grep -E "FlowsteadOnDevice|mono|DOTNET|FATAL|flowstead| F/|AndroidRuntime" logcat.txt | tail -300 || true
       - name: Upload device test reports
         if: always()
         uses: actions/upload-artifact@v4

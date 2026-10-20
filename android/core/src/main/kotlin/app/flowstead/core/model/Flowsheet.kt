@@ -127,11 +127,11 @@ enum class ObjectType(val category: Category, val available: Boolean = true, val
     @SerialName("filter") Filter(Category.Separators, available = false),
     @SerialName("solids_separator") SolidsSeparator(Category.Separators, available = false),
 
-    @SerialName("shortcut_column") ShortcutColumn(Category.Columns, available = false),
-    @SerialName("distillation_column") DistillationColumn(Category.Columns, available = false),
-    @SerialName("absorber") Absorber(Category.Columns, available = false),
+    @SerialName("shortcut_column") ShortcutColumn(Category.Columns),
+    @SerialName("distillation_column") DistillationColumn(Category.Columns),
+    @SerialName("absorber") Absorber(Category.Columns),
     @SerialName("refluxed_absorber") RefluxedAbsorber(Category.Columns, available = false),
-    @SerialName("reboiled_absorber") ReboiledAbsorber(Category.Columns, available = false),
+    @SerialName("reboiled_absorber") ReboiledAbsorber(Category.Columns),
 
     @SerialName("conversion_reactor") ConversionReactor(Category.Reactors, available = false),
     @SerialName("equilibrium_reactor") EquilibriumReactor(Category.Reactors, available = false),

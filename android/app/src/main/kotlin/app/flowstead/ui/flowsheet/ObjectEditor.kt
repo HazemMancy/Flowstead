@@ -63,6 +63,7 @@ import app.flowstead.core.model.ResultView
 import app.flowstead.ui.components.ValueText
 import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.ChoiceKey
+import app.flowstead.core.model.Columns
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ObjectType
@@ -196,6 +197,9 @@ fun ObjectEditorSheet(
                     SpecField(obj, SpecKey.VOLUME, unitSet, ctx, actions, optionalHint = "optional")
                 }
                 ObjectType.Set -> SetEditor(fs, obj, unitSet, ctx, actions)
+                ObjectType.DistillationColumn, ObjectType.Absorber, ObjectType.ReboiledAbsorber, ObjectType.RefluxedAbsorber ->
+                    ColumnEditor(fs, obj, unitSet, ctx, actions)
+                ObjectType.ShortcutColumn -> ShortcutColumnEditor(fs, obj, unitSet, ctx, actions)
                 ObjectType.OrificePlate -> {
                     SpecField(obj, SpecKey.ORIFICE_DIAMETER, unitSet, ctx, actions)
                     SpecField(obj, SpecKey.PIPE_DIAMETER, unitSet, ctx, actions)
@@ -274,6 +278,69 @@ private fun MethodChoice(obj: SimObject, label: String, key: String, options: Li
     Choice(label, options.firstOrNull { it.first == current }?.second, options, testTag = "choice_$key") { picked ->
         actions.setRef(obj.id, key, picked.takeIf { it != options.first().first })
     }
+}
+
+/** A rigorous column, HYSYS-style: trays, feed trays, pressures, then one condenser and one reboiler specification. */
+@Composable
+private fun ColumnEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
+    Calculated(
+        when (obj.type) {
+            ObjectType.Absorber -> "No condenser or reboiler: liquid enters on tray 1, gas under the last tray."
+            ObjectType.ReboiledAbsorber -> "Stripper: liquid feed on tray 1, a reboiler at the bottom, vapour leaves the top."
+            else -> "Trays are theoretical stages counted from the top, condenser and reboiler not included."
+        },
+    )
+    SpecField(obj, SpecKey.TRAYS, unitSet, ctx, actions)
+    for (port in Columns.variableFeedPorts(obj.type)) {
+        if (fs.connections.any { it.toObject == obj.id && it.toPort == port }) SpecField(obj, SpecKey.feedStage(port), unitSet, ctx, actions)
+    }
+    SpecField(obj, SpecKey.TOP_PRESSURE, unitSet, ctx, actions)
+    SpecField(obj, SpecKey.COLUMN_PRESSURE_DROP, unitSet, ctx, actions, optionalHint = "0 if empty")
+    if (Columns.hasCondenser(obj.type)) {
+        SectionLabel("Condenser")
+        MethodChoice(obj, "Type", ChoiceKey.CONDENSER, ChoiceKey.CONDENSER_OPTIONS, actions)
+        if (obj.refs[ChoiceKey.CONDENSER] == "partial") SpecField(obj, SpecKey.VAPOUR_RATE, unitSet, ctx, actions)
+        SpecChoice(fs, obj, unitSet, ctx, actions, SpecKey.CONDENSER_SPECS, ChoiceKey.DISTILLATE_COMPONENT)
+    }
+    if (Columns.hasReboiler(obj.type)) {
+        SectionLabel("Reboiler")
+        SpecChoice(fs, obj, unitSet, ctx, actions, SpecKey.REBOILER_SPECS, ChoiceKey.BOTTOMS_COMPONENT)
+    }
+    if (obj.type != ObjectType.Absorber) {
+        SectionLabel("Solver")
+        MethodChoice(obj, "Method", ChoiceKey.COLUMN_SOLVER, ChoiceKey.COLUMN_SOLVERS, actions)
+        Calculated("Most reliable: reflux ratio with a bottoms rate, boil-up ratio or bottoms purity. A column that misses its specs or its balances is shown as an error, never with numbers.")
+    }
+}
+
+/** One of [keys] as the active spec, with a component picker for fractions and recoveries. */
+@Composable
+private fun SpecChoice(
+    fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions,
+    keys: List<String>, componentRef: String,
+) {
+    var chosen by remember(obj.id, keys) { mutableStateOf(keys.firstOrNull { it in obj.specs } ?: keys.first()) }
+    Choice("Specification", SpecKey.label(chosen), keys.map { it to SpecKey.label(it) }, testTag = "spec_choice_${keys.first()}") { chosen = it }
+    if (chosen.endsWith("Fraction") || chosen.endsWith("Recovery")) {
+        Choice("Component", obj.refs[componentRef], fs.compounds.map { it to it }, testTag = "choice_$componentRef") {
+            actions.setRef(obj.id, componentRef, it)
+        }
+    }
+    SpecField(obj, chosen, unitSet, ctx, actions, exclusiveGroup = keys)
+}
+
+/** Fenske–Underwood–Gilliland: keys, their purities, reflux and pressures. */
+@Composable
+private fun ShortcutColumnEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
+    Calculated("Shortcut design: minimum reflux and stages, the stages for this reflux, and the duties.")
+    Choice("Light key", obj.refs[ChoiceKey.LIGHT_KEY], fs.compounds.map { it to it }, testTag = "choice_lightKey") { actions.setRef(obj.id, ChoiceKey.LIGHT_KEY, it) }
+    Choice("Heavy key", obj.refs[ChoiceKey.HEAVY_KEY], fs.compounds.map { it to it }, testTag = "choice_heavyKey") { actions.setRef(obj.id, ChoiceKey.HEAVY_KEY, it) }
+    SpecField(obj, SpecKey.LIGHT_KEY_IN_BOTTOMS, unitSet, ctx, actions)
+    SpecField(obj, SpecKey.HEAVY_KEY_IN_DISTILLATE, unitSet, ctx, actions)
+    SpecField(obj, SpecKey.REFLUX_RATIO, unitSet, ctx, actions)
+    SpecField(obj, SpecKey.TOP_PRESSURE, unitSet, ctx, actions, labelOverride = "Condenser pressure")
+    SpecField(obj, SpecKey.REBOILER_PRESSURE, unitSet, ctx, actions, optionalHint = "condenser pressure if empty")
+    MethodChoice(obj, "Condenser", ChoiceKey.CONDENSER, ChoiceKey.CONDENSER_OPTIONS, actions)
 }
 
 /** "<target · variable> = multiplier × <source · variable> + offset", applied before every solve. */

@@ -32,6 +32,8 @@ object ResultKeys {
         "hotPressureDrop", "coldPressureDrop", "iterations",
         "heatTransferred", "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop", "beta",
         "liquidResidenceTime", "liquidVolumeFlow", "targetValue",
+        "condenserDuty", "reboilerDuty", "refluxRatio", "condenserTemperature", "reboilerTemperature", "topTemperature",
+        "bottomTemperature", "minimumRefluxRatio", "minimumStages", "actualStages", "optimalFeedStage",
     )
 
     /** Unit-level results shown for each type, in display order. Streams use [STREAM]. */
@@ -42,6 +44,14 @@ object ResultKeys {
         ObjectType.ComponentSplitter -> listOf("duty")
         ObjectType.Tank -> listOf("liquidResidenceTime", "liquidVolumeFlow")
         ObjectType.Set -> listOf("targetValue")
+        ObjectType.DistillationColumn -> listOf("condenserDuty", "reboilerDuty", "refluxRatio", "condenserTemperature", "reboilerTemperature")
+        ObjectType.RefluxedAbsorber -> listOf("condenserDuty", "refluxRatio", "condenserTemperature", "bottomTemperature")
+        ObjectType.ReboiledAbsorber -> listOf("reboilerDuty", "topTemperature", "reboilerTemperature")
+        ObjectType.Absorber -> listOf("topTemperature", "bottomTemperature")
+        ObjectType.ShortcutColumn -> listOf(
+            "minimumRefluxRatio", "minimumStages", "actualStages", "optimalFeedStage",
+            "condenserDuty", "reboilerDuty",
+        )
         ObjectType.Pump -> listOf("power", "pressureRise", "temperatureChange", "efficiency")
         ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
@@ -65,13 +75,15 @@ object ResultKeys {
     }
 
     fun quantity(key: String): Quantity = when (key) {
-        "temperature", "outletTemperature", "hotOutletTemperature", "coldOutletTemperature" -> Quantity.Temperature
+        "temperature", "outletTemperature", "hotOutletTemperature", "coldOutletTemperature",
+        "condenserTemperature", "reboilerTemperature", "topTemperature", "bottomTemperature" -> Quantity.Temperature
         "temperatureChange", "lmtd" -> Quantity.TemperatureDifference
         "pressure", "outletPressure" -> Quantity.Pressure
         "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop",
         "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop" -> Quantity.PressureDifference
         "vapourFraction", "phaseMoleFraction", "efficiency" -> Quantity.Fraction
-        "compressibilityFactor", "pressureRatio", "beta" -> Quantity.Ratio
+        "compressibilityFactor", "pressureRatio", "beta", "refluxRatio", "minimumRefluxRatio",
+        "minimumStages", "actualStages", "optimalFeedStage" -> Quantity.Ratio
         "iterations" -> Quantity.Count
         "adiabaticHead" -> Quantity.MassEnthalpy
         "molarFlow" -> Quantity.MolarFlow
@@ -84,7 +96,7 @@ object ResultKeys {
         "density" -> Quantity.Density
         "molecularWeight" -> Quantity.MolecularWeight
         "viscosity" -> Quantity.Viscosity
-        "duty", "power", "energyFlow", "heatTransferred" -> Quantity.Power
+        "duty", "power", "energyFlow", "heatTransferred", "condenserDuty", "reboilerDuty" -> Quantity.Power
         else -> Quantity.Fraction
     }
 
@@ -128,6 +140,17 @@ object ResultKeys {
         "liquidResidenceTime" -> "Liquid residence time"
         "liquidVolumeFlow" -> "Liquid outflow (actual)"
         "targetValue" -> "Value given to the target"
+        "condenserDuty" -> "Condenser duty"
+        "reboilerDuty" -> "Reboiler duty"
+        "refluxRatio" -> "Reflux ratio (L / total overhead)"
+        "condenserTemperature" -> "Condenser temperature"
+        "reboilerTemperature" -> "Reboiler temperature"
+        "topTemperature" -> "Top stage temperature"
+        "bottomTemperature" -> "Bottom stage temperature"
+        "minimumRefluxRatio" -> "Minimum reflux ratio"
+        "minimumStages" -> "Minimum stages"
+        "actualStages" -> "Theoretical stages"
+        "optimalFeedStage" -> "Optimal feed stage"
         "manipulatedValue" -> "Varied value"
         "controlledValue" -> "Controlled value"
         else -> key

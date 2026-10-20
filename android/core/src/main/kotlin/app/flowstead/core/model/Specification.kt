@@ -18,6 +18,20 @@ object ChoiceKey {
         "lockhart_martinelli" to "Lockhart & Martinelli",
         "petalas_aziz" to "Petalas & Aziz",
     )
+    /** Columns with a condenser: total (default) or partial. */
+    const val CONDENSER = "condenser"
+    val CONDENSER_OPTIONS = listOf("total" to "Total condenser", "partial" to "Partial condenser (vapour product)")
+    const val DISTILLATE_COMPONENT = "distillateComponent"
+    const val BOTTOMS_COMPONENT = "bottomsComponent"
+    const val LIGHT_KEY = "lightKey"
+    const val HEAVY_KEY = "heavyKey"
+    const val COLUMN_SOLVER = "solver"
+    val COLUMN_SOLVERS = listOf(
+        "auto" to "Automatic",
+        "bubble_point" to "Wang-Henke (bubble point)",
+        "modified_bubble_point" to "Modified Wang-Henke",
+        "simultaneous_correction" to "Naphtali-Sandholm (simultaneous correction)",
+    )
     val ORIFICE_TAP_OPTIONS = listOf("flange" to "Flange taps", "corner" to "Corner taps", "radius" to "Radius (D–D/2) taps")
 }
 
@@ -64,6 +78,28 @@ object SpecKey {
     fun split(compound: String) = SPLIT_PREFIX + compound
     fun splitCompound(key: String): String? = key.takeIf { it.startsWith(SPLIT_PREFIX) }?.removePrefix(SPLIT_PREFIX)
 
+    // Columns: trays are theoretical stages from the top, condenser and reboiler excluded (as in HYSYS).
+    const val TRAYS = "trays"
+    fun feedStage(port: Int) = "feedStage${port + 1}"
+    const val TOP_PRESSURE = "topPressure"
+    const val COLUMN_PRESSURE_DROP = "columnPressureDrop"
+    const val REFLUX_RATIO = "refluxRatio"
+    const val DISTILLATE_RATE = "distillateRate"
+    const val DISTILLATE_FRACTION = "distillateFraction"
+    const val DISTILLATE_RECOVERY = "distillateRecovery"
+    const val BOILUP_RATIO = "boilupRatio"
+    const val BOTTOMS_RATE = "bottomsRate"
+    const val REBOILER_DUTY = "reboilerDuty"
+    const val BOTTOMS_FRACTION = "bottomsFraction"
+    const val BOTTOMS_RECOVERY = "bottomsRecovery"
+    const val VAPOUR_RATE = "vapourRate"
+    const val LIGHT_KEY_IN_BOTTOMS = "lightKeyInBottoms"
+    const val HEAVY_KEY_IN_DISTILLATE = "heavyKeyInDistillate"
+    const val REBOILER_PRESSURE = "reboilerPressure"
+    // No condenser duty or stage temperature specs: DWSIM's column solvers don't handle them reliably (D27).
+    val CONDENSER_SPECS = listOf(REFLUX_RATIO, DISTILLATE_RATE, DISTILLATE_FRACTION, DISTILLATE_RECOVERY)
+    val REBOILER_SPECS = listOf(BOILUP_RATIO, BOTTOMS_RATE, REBOILER_DUTY, BOTTOMS_FRACTION, BOTTOMS_RECOVERY)
+
     /** Small lengths that read better in mm or inches than in m or ft. */
     val SMALL_LENGTHS = setOf(INNER_DIAMETER, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER)
 
@@ -83,15 +119,24 @@ object SpecKey {
         ObjectType.PipeSegment -> listOf(LENGTH, INNER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, INCREMENTS, HEAT_TRANSFER_COEFFICIENT, AMBIENT_TEMPERATURE)
         ObjectType.OrificePlate -> listOf(ORIFICE_DIAMETER, PIPE_DIAMETER)
         ObjectType.Tank -> listOf(VOLUME)
+        ObjectType.DistillationColumn -> listOf(TOP_PRESSURE, COLUMN_PRESSURE_DROP) + CONDENSER_SPECS + REBOILER_SPECS
+        ObjectType.RefluxedAbsorber -> listOf(TOP_PRESSURE, COLUMN_PRESSURE_DROP) + CONDENSER_SPECS
+        ObjectType.ReboiledAbsorber -> listOf(TOP_PRESSURE, COLUMN_PRESSURE_DROP) + REBOILER_SPECS
+        ObjectType.Absorber -> listOf(TOP_PRESSURE, COLUMN_PRESSURE_DROP)
+        ObjectType.ShortcutColumn -> listOf(TOP_PRESSURE, REBOILER_PRESSURE, REFLUX_RATIO, LIGHT_KEY_IN_BOTTOMS, HEAVY_KEY_IN_DISTILLATE)
         else -> emptyList()
     }
 
     fun quantity(key: String): Quantity = when (key) {
         TEMPERATURE, OUTLET_TEMPERATURE, HOT_OUTLET_TEMPERATURE, COLD_OUTLET_TEMPERATURE, AMBIENT_TEMPERATURE -> Quantity.Temperature
-        PRESSURE, OUTLET_PRESSURE -> Quantity.Pressure
-        PRESSURE_DROP, PRESSURE_RISE, HOT_PRESSURE_DROP, COLD_PRESSURE_DROP -> Quantity.PressureDifference
-        VAPOUR_FRACTION, EFFICIENCY, SPLIT_1, SPLIT_2 -> Quantity.Fraction
-        PRESSURE_RATIO -> Quantity.Ratio
+        PRESSURE, OUTLET_PRESSURE, TOP_PRESSURE, REBOILER_PRESSURE -> Quantity.Pressure
+        PRESSURE_DROP, PRESSURE_RISE, HOT_PRESSURE_DROP, COLD_PRESSURE_DROP, COLUMN_PRESSURE_DROP -> Quantity.PressureDifference
+        VAPOUR_FRACTION, EFFICIENCY, SPLIT_1, SPLIT_2, DISTILLATE_FRACTION, DISTILLATE_RECOVERY, BOTTOMS_FRACTION,
+        BOTTOMS_RECOVERY, LIGHT_KEY_IN_BOTTOMS, HEAVY_KEY_IN_DISTILLATE -> Quantity.Fraction
+        PRESSURE_RATIO, REFLUX_RATIO, BOILUP_RATIO -> Quantity.Ratio
+        TRAYS, "feedStage1", "feedStage2", "feedStage3" -> Quantity.Count
+        DISTILLATE_RATE, BOTTOMS_RATE, VAPOUR_RATE -> Quantity.MolarFlow
+        REBOILER_DUTY -> Quantity.Power
         MASS_ENTHALPY -> Quantity.MassEnthalpy
         MOLAR_FLOW -> Quantity.MolarFlow
         MASS_FLOW -> Quantity.MassFlow
@@ -133,6 +178,25 @@ object SpecKey {
         ORIFICE_DIAMETER -> "Orifice diameter"
         PIPE_DIAMETER -> "Pipe inside diameter"
         VOLUME -> "Volume"
+        TRAYS -> "Theoretical trays"
+        "feedStage1" -> "Feed 1 tray"
+        "feedStage2" -> "Feed 2 tray"
+        "feedStage3" -> "Feed 3 tray"
+        TOP_PRESSURE -> "Top pressure"
+        COLUMN_PRESSURE_DROP -> "Column pressure drop"
+        REFLUX_RATIO -> "Reflux ratio"
+        DISTILLATE_RATE -> "Distillate rate"
+        DISTILLATE_FRACTION -> "Distillate mole fraction"
+        DISTILLATE_RECOVERY -> "Recovery to distillate"
+        BOILUP_RATIO -> "Boil-up ratio"
+        BOTTOMS_RATE -> "Bottoms rate"
+        REBOILER_DUTY -> "Reboiler duty"
+        BOTTOMS_FRACTION -> "Bottoms mole fraction"
+        BOTTOMS_RECOVERY -> "Recovery to bottoms"
+        VAPOUR_RATE -> "Vapour product rate"
+        LIGHT_KEY_IN_BOTTOMS -> "Light key in bottoms"
+        HEAVY_KEY_IN_DISTILLATE -> "Heavy key in distillate"
+        REBOILER_PRESSURE -> "Reboiler pressure"
         else -> splitCompound(key)?.let { "$it to overhead" } ?: key
     }
 }
@@ -307,6 +371,8 @@ object Specification {
             ObjectType.PipeSegment -> {
                 pipe(o, needs)?.let { return it }
             }
+            ObjectType.ShortcutColumn, ObjectType.DistillationColumn, ObjectType.Absorber,
+            ObjectType.RefluxedAbsorber, ObjectType.ReboiledAbsorber -> Columns.check(fs, o, needs)?.let { return it }
             ObjectType.Tank -> s[SpecKey.VOLUME]?.let { if (it.si <= 0) return SpecStatus.Invalid("Volume must be positive") }
             ObjectType.ComponentSplitter -> {
                 val splits = s.filterKeys { it.startsWith(SpecKey.SPLIT_PREFIX) }

@@ -92,4 +92,30 @@ class SpecificationTest {
         assertIs<SpecStatus.Invalid>(st(cs("Water" to 0.5)))
         assertEquals("Carbon dioxide to overhead", SpecKey.label(SpecKey.split("Carbon dioxide")))
     }
+
+    @Test
+    fun columnNeedsTraysFeedTrayPressureAndOneSpecPerEnd() {
+        val col = SimObject("t", "T-100", ObjectType.DistillationColumn)
+        val fs = Flowsheet(
+            compounds = listOf("Propane", "Isobutane"),
+            objects = listOf(SimObject("f", "1", ObjectType.MaterialStream), col, SimObject("d", "2", ObjectType.MaterialStream), SimObject("b", "3", ObjectType.MaterialStream)),
+            connections = listOf(Connection("f", 0, "t", 0), Connection("t", 0, "d", 0), Connection("t", 1, "b", 0)),
+        )
+        fun st(vararg specs: Pair<String, Double>, refs: Map<String, String> = emptyMap()): SpecStatus {
+            val o = col.copy(specs = specs.associate { (k, v) -> k to Spec(v, "") }, refs = refs)
+            return Specification.status(fs.copy(objects = fs.objects.map { if (it.id == "t") o else it }), o)
+        }
+        assertEquals(
+            listOf("top pressure", "number of trays", "feed 1 tray", "condenser specification", "reboiler specification"),
+            assertIs<SpecStatus.UnderSpecified>(st()).needs,
+        )
+        val base = arrayOf(SpecKey.TRAYS to 20.0, SpecKey.feedStage(0) to 10.0, SpecKey.TOP_PRESSURE to 1.4e6, SpecKey.REFLUX_RATIO to 2.5)
+        assertEquals(SpecStatus.Complete, st(*base, SpecKey.BOTTOMS_RATE to 15.0))
+        assertIs<SpecStatus.OverSpecified>(st(*base, SpecKey.BOTTOMS_RATE to 15.0, SpecKey.BOILUP_RATIO to 2.0))
+        assertIs<SpecStatus.Invalid>(st(*base.copyOfRange(0, 3), SpecKey.feedStage(0) to 25.0, SpecKey.REFLUX_RATIO to 2.5, SpecKey.BOTTOMS_RATE to 15.0))
+        assertEquals(
+            listOf("component for the reboiler specification"),
+            assertIs<SpecStatus.UnderSpecified>(st(*base, SpecKey.BOTTOMS_FRACTION to 0.02)).needs,
+        )
+    }
 }

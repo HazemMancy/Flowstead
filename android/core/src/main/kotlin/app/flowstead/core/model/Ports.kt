@@ -73,9 +73,32 @@ object Ports {
         // The engine gives the air cooler a hidden energy stream (its duty is a result).
         ObjectType.AirCooler -> listOf(mIn(0, "Inlet"), mOut(0, "Outlet"))
         ObjectType.ComponentSplitter -> listOf(mIn(0, "Feed"), mOut(0, "Overhead", dx = 0f, dy = -0.5f), mOut(1, "Bottoms", dx = 0f, dy = 0.5f))
+        ObjectType.DistillationColumn, ObjectType.RefluxedAbsorber, ObjectType.ReboiledAbsorber,
+        ObjectType.Absorber, ObjectType.ShortcutColumn -> column(type)
         ObjectType.Tank -> listOf(mIn(0, "Feed"), mOut(0, "Vapour", dx = 0f, dy = -0.5f), mOut(1, "Liquid", dx = 0f, dy = 0.5f))
         // Ports for the remaining types arrive with their engine support (they are not placeable yet).
         else -> emptyList()
+    }
+
+    /** Ports as in the engine's Columns.cs: feeds in 0–2, products out 0–2, condenser duty out 3, reboiler duty in 4. */
+    private fun column(type: ObjectType): List<Port> = buildList {
+        val cond = Columns.hasCondenser(type)
+        val reb = Columns.hasReboiler(type)
+        when (type) {
+            ObjectType.Absorber -> {
+                add(mIn(0, "Top (liquid) feed", dy = -0.38f)); add(mIn(1, "Bottom (gas) feed", dy = 0.38f))
+                add(mIn(2, "Feed 3", dy = 0f, required = false))
+            }
+            ObjectType.RefluxedAbsorber -> { add(mIn(0, "Bottom (gas) feed", dy = 0.38f)); add(mIn(1, "Feed 2", dy = 0f, required = false)) }
+            ObjectType.ReboiledAbsorber -> { add(mIn(0, "Top (liquid) feed", dy = -0.38f)); add(mIn(1, "Feed 2", dy = 0f, required = false)) }
+            ObjectType.ShortcutColumn -> add(mIn(0, "Feed"))
+            else -> { add(mIn(0, "Feed 1", dy = -0.05f)); add(mIn(1, "Feed 2", dy = 0.12f, required = false)); add(mIn(2, "Feed 3", dy = 0.28f, required = false)) }
+        }
+        add(if (cond) mOut(0, "Distillate", dy = -0.4f) else mOut(0, "Overhead", dx = -0.27f, dy = -0.5f))
+        add(if (reb) mOut(1, "Bottoms", dy = 0.4f) else mOut(1, "Bottoms", dx = -0.27f, dy = 0.5f))
+        if (cond && type != ObjectType.ShortcutColumn) add(mOut(2, "Vapour product", dx = 0.37f, dy = -0.5f, required = false))
+        if (cond) add(eOut(3, "Condenser duty", dx = 0.5f, dy = -0.3f))
+        if (reb) add(eIn(4, "Reboiler duty", dx = 0.37f, dy = 0.5f))
     }
 
     fun find(type: ObjectType, side: PortSide, index: Int): Port? = of(type).firstOrNull { it.side == side && it.index == index }
