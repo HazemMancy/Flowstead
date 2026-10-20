@@ -4,6 +4,7 @@
  */
 package app.flowstead.data.engine.local
 
+import app.flowstead.BuildConfig
 import app.flowstead.core.api.CompoundInfo
 import app.flowstead.core.api.DwsimFile
 import app.flowstead.core.api.EngineHealth
@@ -68,6 +69,7 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
     }
 
     private companion object {
-        const val ENGINE_VERSION = "0.1.0 (on device)"
+        // The on-device engine ships inside the app, so it carries the app's version.
+        const val ENGINE_VERSION = "${BuildConfig.VERSION_NAME} (on device)"
     }
 }

@@ -108,7 +108,7 @@ _Last updated: 2026-10-20_
   - Every rigorous column is checked against its specs and balances after the solve.
   - Benchmarks 11 (depropanizer: rigorous, shortcut and stripper) and 12 (lean-oil absorber).
   - The refluxed absorber stays "Coming".
-- **On-device engine:** emulator runs crashed first with a stack overflow (fixed: the engine runs on its own 64 MB-stack thread), then because the app loaded the ARM64 base class library on the x86_64 emulator (fixed: the ABI now follows the device's own preference order, the same one the installer uses). Awaiting the next emulator run.
+- **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 
 - **M17 reactors (D29):**
   - Conversion, equilibrium, Gibbs, CSTR and PFR reactors, with reactions defined in the reactor editor.
