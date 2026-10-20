@@ -1,0 +1,43 @@
+name: engine
+
+on:
+  push:
+    paths: ["engine/**", "shared/**", "benchmarks/**", ".github/workflows/engine.yml"]
+  pull_request:
+    paths: ["engine/**", "shared/**", "benchmarks/**", ".github/workflows/engine.yml"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Cache DWSIM package
+        uses: actions/cache@v4
+        with:
+          path: engine/.dl
+          key: dwsim-9.0.5-52c041b1
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y zstd binutils
+      - name: Fetch pinned DWSIM binaries
+        run: engine/scripts/fetch-dwsim.sh
+      - name: Build
+        run: dotnet build engine/src/Flowstead.Engine.Spike -c Release
+      - name: Engine spike (headless solve)
+        run: dotnet engine/src/Flowstead.Engine.Spike/bin/Release/net8.0/linux-x64/Flowstead.Engine.Spike.dll
+
+  docker:
+    runs-on: ubuntu-24.04
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: engine/.dl
+          key: dwsim-9.0.5-52c041b1
+      - name: Build image
+        run: docker build -t flowstead-engine engine/
+      - name: Spike in container
+        run: docker run --rm flowstead-engine

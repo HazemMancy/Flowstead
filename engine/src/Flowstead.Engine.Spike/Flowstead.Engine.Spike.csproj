@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>DwsimBin</_Parameter1>
+      <_Parameter2>$(DwsimBin)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Compile against DWSIM; load at run time from DWSIM_HOME (see Program.cs). -->
+    <Reference Include="$(DwsimBin)/DWSIM.Automation.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.Interfaces.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.Thermodynamics.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.UnitOperations.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.GlobalSettings.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.SharedClasses.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.FlowsheetBase.dll" Private="false" />
+  </ItemGroup>
+</Project>
