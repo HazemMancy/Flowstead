@@ -1,0 +1,190 @@
+{
+ "status": "converged",
+ "elapsedMs": 652,
+ "engineVersion": "0.1.0",
+ "dwsimVersion": "9.0.5",
+ "messages": [],
+ "objects": {
+  "suc": {
+   "status": "solved",
+   "properties": {
+    "temperature": 303.15,
+    "pressure": 500000,
+    "vapourFraction": 1,
+    "molarFlow": 138.88888888888889,
+    "massFlow": 2.4813771388888886,
+    "massEnthalpy": 4719.333102310102
+   },
+   "phases": {
+    "overall": {
+     "properties": {
+      "temperature": 303.15,
+      "pressure": 500000,
+      "phaseMoleFraction": 1,
+      "molarFlow": 138.88888888888889,
+      "massFlow": 2.4813771388888886,
+      "volumeFlow": 0.6915100800078794,
+      "massEnthalpy": 4719.333102310102,
+      "massEntropy": -600.3954551449674,
+      "massHeatCapacity": 2181.3579647920897,
+      "density": 3.5883455796632995,
+      "molecularWeight": 17.8659154
+     },
+     "composition": {
+      "Methane": 0.9,
+      "Ethane": 0.07,
+      "Propane": 0.03
+     }
+    },
+    "vapour": {
+     "properties": {
+      "phaseMoleFraction": 1,
+      "molarFlow": 138.88888888888889,
+      "massFlow": 2.4813771388888886,
+      "volumeFlow": 0.6915100800078794,
+      "massEnthalpy": 4719.333102310102,
+      "massEntropy": -600.3954551449674,
+      "massHeatCapacity": 2181.3579647920897,
+      "density": 3.5883455796632995,
+      "molecularWeight": 17.8659154,
+      "viscosity": 1.1353507169362801e-05,
+      "compressibilityFactor": 0.9877190343460723
+     },
+     "composition": {
+      "Methane": 0.9,
+      "Ethane": 0.07,
+      "Propane": 0.03
+     }
+    }
+   }
+  },
+  "k": {
+   "status": "solved",
+   "properties": {
+    "power": 568963.9272422858,
+    "pressureRise": 1000000,
+    "outletPressure": 1500000,
+    "outletTemperature": 404.7620375052759,
+    "temperatureChange": 101.61203750527591,
+    "pressureRatio": 3,
+    "adiabaticHead": 18121.99300606778,
+    "polytropicHead": 18719.896246933815,
+    "efficiency": 0.75
+   }
+  },
+  "dis": {
+   "status": "solved",
+   "properties": {
+    "temperature": 404.7620375052759,
+    "pressure": 1500000,
+    "vapourFraction": 1,
+    "molarFlow": 138.88888888888886,
+    "massFlow": 2.4813771388888886,
+    "massEnthalpy": 234012.94523629814
+   },
+   "phases": {
+    "overall": {
+     "properties": {
+      "temperature": 404.7620375052759,
+      "pressure": 1500000,
+      "phaseMoleFraction": 1,
+      "molarFlow": 138.88888888888886,
+      "massFlow": 2.4813771388888886,
+      "volumeFlow": 0.30807587921515833,
+      "massEnthalpy": 234012.94523629814,
+      "massEntropy": -454.61047122608323,
+      "massHeatCapacity": 2520.710752119291,
+      "density": 8.054434982739787,
+      "molecularWeight": 17.8659154
+     },
+     "composition": {
+      "Methane": 0.9,
+      "Ethane": 0.07,
+      "Propane": 0.03
+     }
+    },
+    "vapour": {
+     "properties": {
+      "phaseMoleFraction": 1,
+      "molarFlow": 138.88888888888886,
+      "massFlow": 2.481377138888888,
+      "volumeFlow": 0.3080758792151583,
+      "massEnthalpy": 234012.94523629814,
+      "massEntropy": -454.61047122608323,
+      "massHeatCapacity": 2520.710752119291,
+      "density": 8.054434982739787,
+      "molecularWeight": 17.8659154,
+      "viscosity": 1.4422396316171336e-05,
+      "compressibilityFactor": 0.9887162191529086
+     },
+     "composition": {
+      "Methane": 0.9,
+      "Ethane": 0.07,
+      "Propane": 0.03
+     }
+    }
+   }
+  },
+  "e": {
+   "status": "solved",
+   "properties": {
+    "duty": 542084.3344325509,
+    "pressureDrop": 30000,
+    "outletTemperature": 313.15
+   }
+  },
+  "out": {
+   "status": "solved",
+   "properties": {
+    "temperature": 313.15,
+    "pressure": 1470000,
+    "vapourFraction": 1,
+    "molarFlow": 138.88888888888886,
+    "massFlow": 2.4813771388888886,
+    "massEnthalpy": 15551.863308508036
+   },
+   "phases": {
+    "overall": {
+     "properties": {
+      "temperature": 313.15,
+      "pressure": 1470000,
+      "phaseMoleFraction": 1,
+      "molarFlow": 138.88888888888886,
+      "massFlow": 2.4813771388888886,
+      "volumeFlow": 0.23817077489986568,
+      "massEnthalpy": 15551.863308508036,
+      "massEntropy": -1055.9209623996662,
+      "massHeatCapacity": 2265.0719387378326,
+      "density": 10.418478673263484,
+      "molecularWeight": 17.8659154
+     },
+     "composition": {
+      "Methane": 0.9,
+      "Ethane": 0.07,
+      "Propane": 0.03
+     }
+    },
+    "vapour": {
+     "properties": {
+      "phaseMoleFraction": 1,
+      "molarFlow": 138.88888888888886,
+      "massFlow": 2.481377138888888,
+      "volumeFlow": 0.23817077489986563,
+      "massEnthalpy": 15551.863308508036,
+      "massEntropy": -1055.9209623996662,
+      "massHeatCapacity": 2265.0719387378326,
+      "density": 10.418478673263484,
+      "molecularWeight": 17.8659154,
+      "viscosity": 1.1773228294947043e-05,
+      "compressibilityFactor": 0.9682240469446562
+     },
+     "composition": {
+      "Methane": 0.9,
+      "Ethane": 0.07,
+      "Propane": 0.03
+     }
+    }
+   }
+  }
+ }
+}

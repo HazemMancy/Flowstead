@@ -56,6 +56,12 @@ jobs:
             android/app/build/reports/
             android/core/build/reports/
             android/app/build/test-results/
+      - name: Upload screenshots (light and dark, from StoreScreenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: android/app/build/screenshots/
             android/app/schemas/
 
   e2e:

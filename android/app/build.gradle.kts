@@ -68,6 +68,7 @@ kotlin {
 
 tasks.withType<Test>().configureEach {
     systemProperty("flowstead.repoDir", rootDir.parentFile.canonicalPath)
+    systemProperty("flowstead.screenshotDir", layout.buildDirectory.dir("screenshots").get().asFile.path)
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.SHORT
