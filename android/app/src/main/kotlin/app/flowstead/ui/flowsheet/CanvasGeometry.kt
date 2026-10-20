@@ -27,11 +27,29 @@ object CanvasGeometry {
     const val MIN_ZOOM = 0.35f
     const val MAX_ZOOM = 3f
 
-    fun size(type: ObjectType): Size = when (type) {
-        ObjectType.MaterialStream, ObjectType.EnergyStream -> Size(STREAM_W, STREAM_H)
-        ObjectType.Separator -> Size(UNIT_SIZE * 0.7f, UNIT_SIZE * 1.2f)
-        ObjectType.ThreePhaseSeparator -> Size(UNIT_SIZE * 1.4f, UNIT_SIZE * 0.8f)
-        else -> Size(UNIT_SIZE, UNIT_SIZE)
+    /** Symbol box of each type (see Icons.kt); ports are placed as fractions of it. */
+    fun size(type: ObjectType): Size {
+        val u = UNIT_SIZE
+        return when (type) {
+            ObjectType.MaterialStream, ObjectType.EnergyStream -> Size(STREAM_W, STREAM_H)
+            ObjectType.Separator, ObjectType.SolidsSeparator -> Size(u * 0.7f, u * 1.2f)
+            ObjectType.ThreePhaseSeparator -> Size(u * 1.4f, u * 0.8f)
+            ObjectType.HeatExchanger -> Size(u * 1.3f, u * 0.8f)
+            ObjectType.AirCooler -> Size(u * 1.3f, u)
+            ObjectType.Compressor, ObjectType.Expander -> Size(u * 1.1f, u)
+            ObjectType.Valve -> Size(u, u * 0.85f)
+            ObjectType.PipeSegment -> Size(u * 1.5f, u * 0.5f)
+            ObjectType.OrificePlate -> Size(u, u * 0.6f)
+            ObjectType.ReliefValve -> Size(u * 0.85f, u)
+            ObjectType.Mixer, ObjectType.Splitter -> Size(u * 0.85f, u)
+            ObjectType.Tank -> Size(u * 0.95f, u * 1.1f)
+            ObjectType.ShortcutColumn, ObjectType.DistillationColumn, ObjectType.Absorber,
+            ObjectType.RefluxedAbsorber, ObjectType.ReboiledAbsorber -> Size(u * 1.1f, u * 2f)
+            ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor -> Size(u * 0.9f, u * 1.15f)
+            ObjectType.Cstr -> Size(u, u * 1.15f)
+            ObjectType.Pfr -> Size(u * 1.6f, u * 0.6f)
+            else -> Size(u, u)
+        }
     }
 
     fun center(o: SimObject) = Offset(o.x.toFloat(), o.y.toFloat())

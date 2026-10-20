@@ -14,7 +14,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
+import app.flowstead.ui.flowsheet.drawUnitIcon
+import app.flowstead.ui.theme.valueColors
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.Flowsheet
@@ -74,12 +81,14 @@ class StoreScreenshots {
     private val units = UnitSet.SI.with(Quantity.Pressure, Units.barg).with(Quantity.Temperature, Units.C)
     private val ui by lazy { ResultsUi("Compressor + aftercooler", flowsheet, solve, ResultView(solve, flowsheet.modelHash()), units, UnitContext()) }
 
-    private fun shoot(name: String, dark: Boolean, content: @Composable () -> Unit) {
+    private fun shoot(name: String, dark: Boolean, before: () -> Unit = {}, content: @Composable () -> Unit) {
         compose.setContent {
             FlowsteadTheme(if (dark) ThemeMode.Dark else ThemeMode.Light) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
             }
         }
+        compose.waitForIdle()
+        before()
         compose.waitForIdle()
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
         val file = File(out, "$name-${if (dark) "dark" else "light"}.png")
@@ -130,4 +139,46 @@ class StoreScreenshots {
     @Test fun resultsDark() = shoot("3-results", true) { ResultsContent(ui) }
     @Test fun logLight() = shoot("4-solver-log", false) { SolverLogContent(ui) }
     @Test fun logDark() = shoot("4-solver-log", true) { SolverLogContent(ui) }
+
+    /** Every palette group stacked, so all symbols can be reviewed in one image per theme. */
+    @Composable
+    private fun AllSymbols() {
+        androidx.compose.foundation.layout.Column(
+            Modifier.fillMaxSize(),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+        ) {
+            app.flowstead.core.model.Category.entries.forEach { g ->
+                androidx.compose.material3.Text(g.label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 12.dp))
+                SymbolRow(app.flowstead.core.model.ObjectType.entries.filter { it.category == g })
+            }
+        }
+    }
+
+    @Composable
+    private fun SymbolRow(types: List<app.flowstead.core.model.ObjectType>) {
+        val colors = MaterialTheme.colorScheme
+        val values = MaterialTheme.valueColors
+        androidx.compose.foundation.layout.Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+            types.forEach { t ->
+                androidx.compose.foundation.Canvas(Modifier.size(64.dp)) {
+                    val s = app.flowstead.ui.flowsheet.CanvasGeometry.size(t)
+                    val fit = minOf(size.width / (s.width + 8f), size.height / (s.height + 8f))
+                    val p = app.flowstead.ui.flowsheet.IconPalette(colors.surface, colors.onSurface, colors.secondary, values.vapour, values.liquid, values.energy)
+                    androidx.compose.ui.graphics.drawscope.scale(fit, fit, pivot = Offset.Zero) {
+                        drawUnitIcon(t, center / fit, s, p, 1.5f * density / fit)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun symbolsLight() = shoot("5-symbols", false) { AllSymbols() }
+    @Test fun symbolsDark() = shoot("5-symbols", true) { AllSymbols() }
+    @Test fun paletteColumns() = shoot("6-palette-columns", false, before = {
+        compose.onNodeWithTag("group_Columns").performClick()
+    }) {
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.BottomCenter) {
+            app.flowstead.ui.flowsheet.Palette(onAdd = {}, onDrag = { _, _ -> }, onDrop = { _, _ -> })
+        }
+    }
 }

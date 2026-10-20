@@ -55,24 +55,16 @@ public sealed record Connection(string FromObject, int FromPort, string ToObject
 
 public enum ObjectType
 {
-    MaterialStream,
-    EnergyStream,
-    Mixer,
-    Splitter,
-    Heater,
-    Cooler,
-    HeatExchanger,
-    Valve,
-    Pump,
-    Compressor,
-    Expander,
-    Separator,
-    ThreePhaseSeparator,
-    Recycle,
-    Adjust,
-    DistillationColumn,
-    Reactor,
-    PipeSegment,
+    // Same list and order as android/core ObjectType; Validator.Supported says which ones solve.
+    MaterialStream, EnergyStream,
+    Heater, Cooler, HeatExchanger, AirCooler,
+    Pump, Compressor, Expander,
+    Valve, PipeSegment, OrificePlate, ReliefValve,
+    Mixer, Splitter, ComponentSplitter,
+    Separator, ThreePhaseSeparator, Tank, Filter, SolidsSeparator,
+    ShortcutColumn, DistillationColumn, Absorber, RefluxedAbsorber, ReboiledAbsorber,
+    ConversionReactor, EquilibriumReactor, GibbsReactor, Cstr, Pfr,
+    Recycle, Adjust, Set, EnergyRecycle,
 }
 
 /// <summary>Spec keys understood by the engine. Values are SI.</summary>

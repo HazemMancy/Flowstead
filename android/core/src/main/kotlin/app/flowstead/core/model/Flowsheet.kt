@@ -67,27 +67,68 @@ data class Connection(
     val toPort: Int,
 )
 
-/** Object types. MVP set plus placeholders kept so the model is ready for later unit ops. */
+/** Palette groups, in HYSYS order. */
+enum class Category(val label: String) {
+    Streams("Streams"),
+    HeatTransfer("Heat transfer"),
+    Rotating("Rotating"),
+    Piping("Piping"),
+    Mixing("Mixing"),
+    Separators("Separators"),
+    Columns("Columns"),
+    Reactors("Reactors"),
+    Logical("Logical"),
+}
+
+/**
+ * Every object type Flowstead knows. [available] is true once the engine solves it; the palette
+ * shows the others as "coming" so the model and file format are ready for them.
+ */
 @Serializable
-enum class ObjectType(val isStream: Boolean = false, val mvp: Boolean = true) {
-    @SerialName("material_stream") MaterialStream(isStream = true),
-    @SerialName("energy_stream") EnergyStream(isStream = true),
-    @SerialName("mixer") Mixer,
-    @SerialName("splitter") Splitter,
-    @SerialName("heater") Heater,
-    @SerialName("cooler") Cooler,
-    @SerialName("heat_exchanger") HeatExchanger,
-    @SerialName("valve") Valve,
-    @SerialName("pump") Pump,
-    @SerialName("compressor") Compressor,
-    @SerialName("expander") Expander,
-    @SerialName("separator") Separator,
-    @SerialName("three_phase_separator") ThreePhaseSeparator,
-    @SerialName("recycle") Recycle,
-    @SerialName("adjust") Adjust,
-    @SerialName("distillation_column") DistillationColumn(mvp = false),
-    @SerialName("reactor") Reactor(mvp = false),
-    @SerialName("pipe_segment") PipeSegment(mvp = false),
+enum class ObjectType(val category: Category, val available: Boolean = true, val isStream: Boolean = false) {
+    @SerialName("material_stream") MaterialStream(Category.Streams, isStream = true),
+    @SerialName("energy_stream") EnergyStream(Category.Streams, isStream = true),
+
+    @SerialName("heater") Heater(Category.HeatTransfer),
+    @SerialName("cooler") Cooler(Category.HeatTransfer),
+    @SerialName("heat_exchanger") HeatExchanger(Category.HeatTransfer),
+    @SerialName("air_cooler") AirCooler(Category.HeatTransfer, available = false),
+
+    @SerialName("pump") Pump(Category.Rotating),
+    @SerialName("compressor") Compressor(Category.Rotating),
+    @SerialName("expander") Expander(Category.Rotating),
+
+    @SerialName("valve") Valve(Category.Piping),
+    @SerialName("pipe_segment") PipeSegment(Category.Piping, available = false),
+    @SerialName("orifice_plate") OrificePlate(Category.Piping, available = false),
+    @SerialName("relief_valve") ReliefValve(Category.Piping, available = false),
+
+    @SerialName("mixer") Mixer(Category.Mixing),
+    @SerialName("splitter") Splitter(Category.Mixing),
+    @SerialName("component_splitter") ComponentSplitter(Category.Mixing, available = false),
+
+    @SerialName("separator") Separator(Category.Separators),
+    @SerialName("three_phase_separator") ThreePhaseSeparator(Category.Separators),
+    @SerialName("tank") Tank(Category.Separators, available = false),
+    @SerialName("filter") Filter(Category.Separators, available = false),
+    @SerialName("solids_separator") SolidsSeparator(Category.Separators, available = false),
+
+    @SerialName("shortcut_column") ShortcutColumn(Category.Columns, available = false),
+    @SerialName("distillation_column") DistillationColumn(Category.Columns, available = false),
+    @SerialName("absorber") Absorber(Category.Columns, available = false),
+    @SerialName("refluxed_absorber") RefluxedAbsorber(Category.Columns, available = false),
+    @SerialName("reboiled_absorber") ReboiledAbsorber(Category.Columns, available = false),
+
+    @SerialName("conversion_reactor") ConversionReactor(Category.Reactors, available = false),
+    @SerialName("equilibrium_reactor") EquilibriumReactor(Category.Reactors, available = false),
+    @SerialName("gibbs_reactor") GibbsReactor(Category.Reactors, available = false),
+    @SerialName("cstr") Cstr(Category.Reactors, available = false),
+    @SerialName("pfr") Pfr(Category.Reactors, available = false),
+
+    @SerialName("recycle") Recycle(Category.Logical),
+    @SerialName("adjust") Adjust(Category.Logical),
+    @SerialName("set") Set(Category.Logical, available = false),
+    @SerialName("energy_recycle") EnergyRecycle(Category.Logical, available = false),
 }
 
 /** The one JSON configuration used for flowsheets everywhere (storage, API, export). */

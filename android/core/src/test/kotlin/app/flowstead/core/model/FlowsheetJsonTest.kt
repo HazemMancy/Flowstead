@@ -4,6 +4,9 @@
  */
 package app.flowstead.core.model
 
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -43,5 +46,17 @@ class OfflineCatalogueTest {
         assertEquals("N-butane", app.flowstead.core.api.OfflineCatalogue.search("butane").first())
         assertEquals("Triethylene glycol", app.flowstead.core.api.OfflineCatalogue.search("TEG").first())
         assertTrue(app.flowstead.core.api.OfflineCatalogue.search("zzz").isEmpty())
+    }
+}
+
+class ObjectTypeContractTest {
+    @Test
+    fun typesMatchTheSharedSchemaInOrder() {
+        val dir = System.getProperty("flowstead.sharedDir") ?: error("flowstead.sharedDir not set")
+        val schema = FlowsheetJson.parseToJsonElement(java.io.File(dir, "schema/flowsheet.schema.json").readText())
+        val enum = schema.jsonObject.getValue("\$defs").jsonObject.getValue("ObjectType").jsonObject.getValue("enum").jsonArray
+            .map { it.jsonPrimitive.content }
+        val kotlin = ObjectType.entries.map { FlowsheetJson.encodeToString(ObjectType.serializer(), it).trim('"') }
+        assertEquals(enum, kotlin)
     }
 }
