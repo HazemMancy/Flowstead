@@ -1,0 +1,56 @@
+# Publishes a GitHub Release with the debug APK when a version tag (v*) is pushed, or on demand.
+# The APK is signed with the public debug key in android/app/debug.keystore: fine for testing and
+# side-loading, never for the Play Store (that needs a release build signed with the owner's key).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create or update, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  debug-apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test and build the debug APK
+        working-directory: android
+        run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          version=$(grep -oE 'versionName = "[^"]+"' android/app/build.gradle.kts | cut -d'"' -f2)
+          apk="flowstead-${TAG}-debug.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          sha256sum "$apk" > "$apk.sha256"
+          notes=$(cat <<NOTES
+          Flowstead ${TAG} (app version ${version}) — **debug build for testing**.
+
+          **Install:** download \`${apk}\` on your Android phone (Android 8.0 or newer), open it and allow installing from this source. Later debug releases install as updates.
+
+          **Solving needs a Flowstead engine:** run it with Docker on a Linux x64 machine (see \`docs/engine-setup.md\`), then enter its HTTPS address and API key in Settings. Editing flowsheets and exporting results work offline.
+
+          Signed with the public debug key: not for the Play Store. Status and known limitations: \`docs/STATUS.md\`.
+
+          Commit: ${GITHUB_SHA}
+          NOTES
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$apk" "$apk.sha256" --clobber
+          else
+            gh release create "$TAG" "$apk" "$apk.sha256" --target "$GITHUB_SHA" --prerelease --title "Flowstead ${TAG} (debug)" --notes "$notes"
+          fi
