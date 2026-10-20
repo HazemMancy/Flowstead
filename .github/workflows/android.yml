@@ -56,13 +56,14 @@ jobs:
             android/app/build/reports/
             android/core/build/reports/
             android/app/build/test-results/
+            android/app/schemas/
       - name: Upload screenshots (light and dark, from StoreScreenshots)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
           path: android/app/build/screenshots/
-            android/app/schemas/
+          if-no-files-found: error
 
   e2e:
     # App client against a real engine container (brief §4: one end-to-end test).
