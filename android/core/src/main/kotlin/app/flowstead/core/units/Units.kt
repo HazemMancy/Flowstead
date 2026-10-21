@@ -150,6 +150,17 @@ object Units {
     val wPerM2K = u("W/m2.K", "W/m²·K", Quantity.HeatTransferCoefficient, 1.0, 2)
     val btuPerHFt2F = u("Btu/h.ft2.F", "Btu/h·ft²·°F", Quantity.HeatTransferCoefficient, BTU_IT_J / (HOUR_S * FT_M * FT_M * 5.0 / 9.0), 3)
 
+    // Line sizing: velocity, pressure gradient, momentum flux (ρv²)
+    val mPerS = u("m/s", "m/s", Quantity.Velocity, 1.0, 3)
+    val ftPerS = u("ft/s", "ft/s", Quantity.Velocity, FT_M, 2)
+    val paPerM = u("Pa/m", "Pa/m", Quantity.PressureGradient, 1.0, 2)
+    val kPaPer100m = u("kPa/100m", "kPa/100 m", Quantity.PressureGradient, 10.0, 3)
+    val kPaPerKm = u("kPa/km", "kPa/km", Quantity.PressureGradient, 1.0, 1)
+    val barPerKm = u("bar/km", "bar/km", Quantity.PressureGradient, BAR_PA / 1000.0, 4)
+    val psiPer100ft = u("psi/100ft", "psi/100 ft", Quantity.PressureGradient, PSI_PA / (100.0 * FT_M), 3)
+    val kgPerMS2 = u("kg/m.s2", "kg/m·s²", Quantity.MomentumFlux, 1.0, 0)
+    val lbPerFtS2 = u("lb/ft.s2", "lb/ft·s²", Quantity.MomentumFlux, LB_KG / FT_M, 0)
+
     private val byId: Map<String, EngUnit> = all.associateBy { it.id }.also {
         check(it.size == all.size) { "Duplicate unit ids" }
     }

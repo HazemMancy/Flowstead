@@ -109,6 +109,10 @@ interface EditorActions {
     /** Adds or replaces a flowsheet reaction. */
     fun upsertReaction(reaction: Reaction)
     fun deleteReaction(id: String)
+    /** NPS and schedule from ASME B36.10M/B36.19M; null [nps] = custom inside diameter. */
+    fun setPipeSize(id: String, nps: String?, schedule: String?)
+    /** Opens the flowsheet's line-sizing criteria. */
+    fun editSizingCriteria()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -195,7 +199,7 @@ fun ObjectEditorSheet(
                     Calculated("Outlet 3, when connected, takes whatever is left.")
                 }
                 ObjectType.Mixer -> Calculated("Adiabatic mixing; the outlet is at the lowest inlet pressure. Nothing to specify.")
-                ObjectType.PipeSegment -> PipeEditor(obj, unitSet, ctx, actions)
+                ObjectType.PipeSegment -> PipeEditor(fs, obj, unitSet, ctx, actions)
                 ObjectType.ComponentSplitter -> {
                     Calculated("Fraction of each component's feed sent to the overhead; the rest goes to the bottoms. Both leave at the feed temperature and pressure.")
                     if (fs.compounds.isEmpty()) Calculated("Add components in Fluid package first.")
@@ -226,6 +230,7 @@ fun ObjectEditorSheet(
             }
             if (!obj.type.isStream && Ports.of(obj.type).isNotEmpty()) ConnectionsSection(fs, obj, actions)
             ResultsSection(fs, obj, results, unitSet, ctx)
+            if (obj.type == ObjectType.PipeSegment) PipeSizingSection(fs, obj, results, unitSet, ctx, actions)
         }
     }
 }
@@ -268,23 +273,9 @@ private fun ConnectionsSection(fs: Flowsheet, unit: SimObject, actions: EditorAc
 private const val NEW_STREAM = "__new"
 private const val DISCONNECT = "__disconnect"
 
-/** One pipe section: geometry, method and, optionally, heat exchange with the surroundings. */
-@Composable
-private fun PipeEditor(obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
-    SpecField(obj, SpecKey.LENGTH, unitSet, ctx, actions)
-    SpecField(obj, SpecKey.INNER_DIAMETER, unitSet, ctx, actions)
-    SpecField(obj, SpecKey.ELEVATION_CHANGE, unitSet, ctx, actions, optionalHint = "0 (horizontal) if empty")
-    SpecField(obj, SpecKey.ROUGHNESS, unitSet, ctx, actions, optionalHint = "0.0457 mm (commercial steel) if empty")
-    SpecField(obj, SpecKey.INCREMENTS, unitSet, ctx, actions, optionalHint = "10 if empty")
-    MethodChoice(obj, "Flow correlation", ChoiceKey.PIPE_CORRELATION, ChoiceKey.PIPE_CORRELATIONS, actions)
-    SectionLabel("Heat transfer")
-    SpecField(obj, SpecKey.HEAT_TRANSFER_COEFFICIENT, unitSet, ctx, actions, optionalHint = "adiabatic if empty")
-    SpecField(obj, SpecKey.AMBIENT_TEMPERATURE, unitSet, ctx, actions, optionalHint = "needed with U")
-}
-
 /** A method stored in the object's refs; the first option is the engine's default. */
 @Composable
-private fun MethodChoice(obj: SimObject, label: String, key: String, options: List<Pair<String, String>>, actions: EditorActions) {
+internal fun MethodChoice(obj: SimObject, label: String, key: String, options: List<Pair<String, String>>, actions: EditorActions) {
     val current = obj.refs[key] ?: options.first().first
     Choice(label, options.firstOrNull { it.first == current }?.second, options, testTag = "choice_$key") { picked ->
         actions.setRef(obj.id, key, picked.takeIf { it != options.first().first })
@@ -559,7 +550,7 @@ private fun differenceOf(q: Quantity): Quantity = when (q) {
 }
 
 @Composable
-private fun Choice(
+internal fun Choice(
     label: String,
     selected: String?,
     options: List<Pair<String, String>>,
@@ -674,12 +665,12 @@ private fun StatusChip(status: SpecStatus?) {
 }
 
 @Composable
-private fun Calculated(text: String) {
+internal fun Calculated(text: String) {
     Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
 }
 
@@ -734,23 +725,54 @@ fun SpecField(
 ) {
     val quantity = quantityOverride ?: SpecKey.quantity(key)
     val spec = obj.specs[key]
-    var unit by remember(obj.id, key, spec?.unit, unitSet) {
-        mutableStateOf(
-            spec?.unit?.let { Units.byIdOrNull(it) }?.takeIf { it.quantity == quantity }
-                // Engineers think of efficiency in percent.
-                ?: if (key == SpecKey.EFFICIENCY) Units.percent else defaultUnit(key, quantity, unitSet),
-        )
+    QuantityField(
+        label = labelOverride ?: SpecKey.label(key),
+        spec = spec,
+        quantity = quantity,
+        // Engineers think of efficiency in percent.
+        defaultUnit = if (key == SpecKey.EFFICIENCY) Units.percent else defaultUnit(key, quantity, unitSet),
+        ctx = ctx,
+        stateKey = obj.id + key,
+        hint = optionalHint,
+        testTag = "spec_$key",
+    ) { newSpec ->
+        when {
+            newSpec == null -> actions.setSpec(obj.id, key, null)
+            exclusiveGroup != null && newSpec.si != spec?.si -> actions.setExclusiveSpec(obj.id, key, newSpec, exclusiveGroup)
+            else -> actions.setSpec(obj.id, key, newSpec)
+        }
+    }
+}
+
+/**
+ * A number with a unit picker. Blank means "not given" ([onCommit] null); the value is committed in SI with the
+ * unit typed in. Changing the unit re-expresses the stored value, keeping its physical size.
+ */
+@Composable
+fun QuantityField(
+    label: String,
+    spec: Spec?,
+    quantity: Quantity,
+    defaultUnit: EngUnit,
+    ctx: UnitContext,
+    stateKey: String,
+    hint: String? = null,
+    testTag: String? = null,
+    onCommit: (Spec?) -> Unit,
+) {
+    var unit by remember(stateKey, spec?.unit, defaultUnit) {
+        mutableStateOf(spec?.unit?.let { Units.byIdOrNull(it) }?.takeIf { it.quantity == quantity } ?: defaultUnit)
     }
     val shown = spec?.let { ValueFormat.number(unit.fromSi(it.si, ctx), unit.decimals).replace(",", "") } ?: ""
-    var text by remember(obj.id, key, spec, unit) { mutableStateOf(shown) }
-    var error by remember(obj.id, key) { mutableStateOf<String?>(null) }
+    var text by remember(stateKey, spec, unit) { mutableStateOf(shown) }
+    var error by remember(stateKey) { mutableStateOf<String?>(null) }
     val colors = MaterialTheme.valueColors
 
     fun commit() {
         val trimmed = text.trim().replace(',', '.')
         if (trimmed.isEmpty()) {
             error = null
-            if (spec != null) actions.setSpec(obj.id, key, null)
+            if (spec != null) onCommit(null)
             return
         }
         val v = trimmed.toDoubleOrNull()
@@ -760,17 +782,15 @@ fun SpecField(
         }
         error = null
         val newSpec = Spec(unit.toSi(v, ctx), unit.id)
-        if (newSpec == spec) return
-        if (exclusiveGroup != null) actions.setExclusiveSpec(obj.id, key, newSpec, exclusiveGroup)
-        else actions.setSpec(obj.id, key, newSpec)
+        if (newSpec != spec) onCommit(newSpec)
     }
 
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            label = { Text(labelOverride ?: SpecKey.label(key)) },
-            placeholder = { Text(optionalHint ?: "—") },
+            label = { Text(label) },
+            placeholder = { Text(hint ?: "—") },
             isError = error != null,
             supportingText = error?.let { { Text(it) } },
             singleLine = true,
@@ -780,19 +800,18 @@ fun SpecField(
             modifier = Modifier
                 .weight(1f)
                 .onFocusChanged { if (!it.isFocused) commit() }
-                .testTag("spec_$key"),
+                .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         )
         Spacer(Modifier.width(8.dp))
         UnitPicker(unit, Units.forQuantity(quantity)) { picked ->
-            // Keep the physical value: re-express the stored spec in the new unit.
             unit = picked
-            spec?.let { actions.setSpec(obj.id, key, it.copy(unit = picked.id)) }
+            spec?.let { onCommit(it.copy(unit = picked.id)) }
         }
     }
 }
 
 /** The unit set's unit, except that diameters and roughness use mm or inches. */
-private fun defaultUnit(key: String, quantity: Quantity, unitSet: UnitSet): EngUnit {
+internal fun defaultUnit(key: String, quantity: Quantity, unitSet: UnitSet): EngUnit {
     val u = unitSet.unitFor(quantity)
     if (key !in SpecKey.SMALL_LENGTHS) return u
     return when (u) {
@@ -803,7 +822,7 @@ private fun defaultUnit(key: String, quantity: Quantity, unitSet: UnitSet): EngU
 }
 
 @Composable
-private fun UnitPicker(selected: EngUnit, options: List<EngUnit>, onPick: (EngUnit) -> Unit) {
+internal fun UnitPicker(selected: EngUnit, options: List<EngUnit>, onPick: (EngUnit) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         TextButton(

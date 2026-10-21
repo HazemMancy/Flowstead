@@ -15,6 +15,7 @@ import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.Reaction
+import app.flowstead.core.model.SizingCriteria
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.obj
 import app.flowstead.core.model.Spec
@@ -81,6 +82,7 @@ data class FlowsheetUi(
     val solveState: SolveState,
     val engineConfigured: Boolean,
     val exporting: Boolean = false,
+    val editingSizingCriteria: Boolean = false,
 )
 
 sealed interface FlowsheetUiState {
@@ -113,6 +115,7 @@ class FlowsheetViewModel @Inject constructor(
         val undo: List<Flowsheet> = emptyList(),
         val solving: Boolean = false,
         val exporting: Boolean = false,
+        val editingSizingCriteria: Boolean = false,
     )
 
     private val local = MutableStateFlow(Local())
@@ -154,6 +157,7 @@ class FlowsheetViewModel @Inject constructor(
                 },
                 engineConfigured = settings.engineTarget.isNotBlank(),
                 exporting = l.exporting,
+                editingSizingCriteria = l.editingSizingCriteria,
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
@@ -170,6 +174,8 @@ class FlowsheetViewModel @Inject constructor(
     fun select(id: String?) = local.update { it.copy(selectedId = id) }
     fun openEditor(id: String) = local.update { it.copy(selectedId = id, editingId = id) }
     fun closeEditor() = local.update { it.copy(editingId = null) }
+    fun openSizingCriteria() = local.update { it.copy(editingSizingCriteria = true) }
+    fun closeSizingCriteria() = local.update { it.copy(editingSizingCriteria = false) }
 
     // ---- edits
 
@@ -242,6 +248,10 @@ class FlowsheetViewModel @Inject constructor(
         edit { FlowsheetEditing.setExclusiveSpec(it, id, key, spec, group) }
 
     fun setRef(id: String, key: String, value: String?) = edit { FlowsheetEditing.setRef(it, id, key, value) }
+
+    fun setPipeSize(id: String, nps: String?, schedule: String?) = edit { FlowsheetEditing.setPipeSize(it, id, nps, schedule) }
+
+    fun setSizingCriteria(c: SizingCriteria) = edit { FlowsheetEditing.setSizingCriteria(it, c) }
 
     fun upsertReaction(reaction: Reaction) = edit { FlowsheetEditing.upsertReaction(it, reaction) }
 

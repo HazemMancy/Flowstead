@@ -49,6 +49,10 @@
       "items": {
         "$ref": "#/$defs/Reaction"
       }
+    },
+    "sizingCriteria": {
+      "type": "object",
+      "description": "App-only line-sizing limits by service (gas, liquid, twoPhase), each a set of optional Specs in SI: maxVelocity, minVelocity (m/s), maxMomentumFlux (kg/m·s²), maxFrictionGradient (Pa/m), maxMach, erosionalC (API RP 14E). Not part of the solved model; the engine ignores it."
     }
   },
   "$defs": {

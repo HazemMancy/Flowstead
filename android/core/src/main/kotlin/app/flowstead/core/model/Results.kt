@@ -22,6 +22,11 @@ data class StoredSolve(
 
 /** Result property ids → display quantity and label. Keys match the engine's ObjectResult.properties. */
 object ResultKeys {
+    /** Pipe line-sizing results, from the engine's increment-by-increment profile. */
+    val PIPE_HYDRAULICS = listOf(
+        "pressureGradient", "frictionPressureGradient", "inletVelocity", "outletVelocity", "maxVelocity",
+        "gasVelocity", "liquidVelocity", "maxMomentumFlux", "mixtureDensity", "maxMachNumber", "liquidHoldup",
+    )
     val STREAM = listOf(
         "temperature", "pressure", "vapourFraction", "molarFlow", "massFlow", "volumeFlow",
         "massEnthalpy", "massEntropy", "massHeatCapacity", "density", "molecularWeight", "viscosity", "compressibilityFactor",
@@ -35,7 +40,8 @@ object ResultKeys {
         "residenceTime",
         "condenserDuty", "reboilerDuty", "refluxRatio", "condenserTemperature", "reboilerTemperature", "topTemperature",
         "bottomTemperature", "minimumRefluxRatio", "minimumStages", "actualStages", "optimalFeedStage",
-    )
+    ) + PIPE_HYDRAULICS
+
 
     /** Unit-level results shown for each type, in display order. Streams use [STREAM]. */
     fun forType(type: ObjectType): List<String> = when (type) {
@@ -59,7 +65,8 @@ object ResultKeys {
         ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
         ObjectType.HeatExchanger -> listOf("duty", "lmtd", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
-        ObjectType.PipeSegment -> listOf("pressureDrop", "frictionPressureDrop", "staticPressureDrop", "temperatureChange", "heatTransferred")
+        ObjectType.PipeSegment -> listOf("pressureDrop", "frictionPressureDrop", "staticPressureDrop") + PIPE_HYDRAULICS +
+            listOf("temperatureChange", "heatTransferred")
         ObjectType.OrificePlate -> listOf("pressureDrop", "orificePressureDrop", "beta", "temperatureChange")
         ObjectType.Recycle -> listOf("iterations")
         ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
@@ -100,6 +107,12 @@ object ResultKeys {
         "molecularWeight" -> Quantity.MolecularWeight
         "viscosity" -> Quantity.Viscosity
         "duty", "power", "energyFlow", "heatTransferred", "condenserDuty", "reboilerDuty" -> Quantity.Power
+        "pressureGradient", "frictionPressureGradient" -> Quantity.PressureGradient
+        "inletVelocity", "outletVelocity", "maxVelocity", "gasVelocity", "liquidVelocity" -> Quantity.Velocity
+        "maxMomentumFlux" -> Quantity.MomentumFlux
+        "mixtureDensity" -> Quantity.Density
+        "maxMachNumber" -> Quantity.Ratio
+        "liquidHoldup" -> Quantity.Fraction
         else -> Quantity.Fraction
     }
 
@@ -155,6 +168,17 @@ object ResultKeys {
         "minimumStages" -> "Minimum stages"
         "actualStages" -> "Theoretical stages"
         "optimalFeedStage" -> "Optimal feed stage"
+        "pressureGradient" -> "ΔP per length (total)"
+        "frictionPressureGradient" -> "ΔP per length (friction)"
+        "inletVelocity" -> "Inlet velocity"
+        "outletVelocity" -> "Outlet velocity"
+        "maxVelocity" -> "Maximum velocity"
+        "gasVelocity" -> "Gas superficial velocity (at max.)"
+        "liquidVelocity" -> "Liquid superficial velocity (at max.)"
+        "maxMomentumFlux" -> "Maximum ρv²"
+        "mixtureDensity" -> "Mixture density (at max. ρv², no-slip)"
+        "maxMachNumber" -> "Maximum Mach number"
+        "liquidHoldup" -> "Liquid holdup (mean)"
         "manipulatedValue" -> "Varied value"
         "controlledValue" -> "Controlled value"
         else -> key.removePrefix(CONVERSION_PREFIX).takeIf { key.startsWith(CONVERSION_PREFIX) }?.let { "$it conversion" } ?: key
@@ -188,6 +212,10 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
     fun composition(objectId: String, phase: String = Phases.OVERALL, compound: String): DisplayValue =
         lookup(objectId, absentReason = "${Phases.label(phase)} phase not present") { it.phases?.get(phase)?.composition?.get(compound) }
 
+    /** A text result (e.g. a pipe's "flowRegime"), only from a solved object. */
+    fun text(objectId: String, key: String): String? =
+        solve?.result?.objects?.get(objectId)?.takeIf { it.status == ObjectStatus.Solved }?.texts?.get(key)
+
     fun presentPhases(objectId: String): List<String> {
         val phases = solve?.result?.objects?.get(objectId)?.phases ?: return emptyList()
         return Phases.ORDER.filter { it in phases }
@@ -220,6 +248,7 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
 
 /** SHA-256 of the canonical flowsheet JSON: identifies exactly which flowsheet a result belongs to. */
 fun Flowsheet.modelHash(): String {
-    val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), this)
+    // Only what the engine solves counts: sizing criteria change the checks, not the results.
+    val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), copy(sizingCriteria = null))
     return java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
 }

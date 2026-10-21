@@ -61,6 +61,8 @@ object SpecKey {
     // Pipe segment and orifice plate
     const val LENGTH = "length"
     const val INNER_DIAMETER = "innerDiameter"
+    /** Pipe outside diameter: heat-transfer area only (1.15 × inside when absent). */
+    const val OUTER_DIAMETER = "outerDiameter"
     const val ELEVATION_CHANGE = "elevationChange"
     const val ROUGHNESS = "roughness"
     /** Calculation increments along a pipe (whole number). */
@@ -103,7 +105,7 @@ object SpecKey {
     val REBOILER_SPECS = listOf(BOILUP_RATIO, BOTTOMS_RATE, REBOILER_DUTY, BOTTOMS_FRACTION, BOTTOMS_RECOVERY)
 
     /** Small lengths that read better in mm or inches than in m or ft. */
-    val SMALL_LENGTHS = setOf(INNER_DIAMETER, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER)
+    val SMALL_LENGTHS = setOf(INNER_DIAMETER, OUTER_DIAMETER, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER)
 
     val STREAM_STATE = listOf(TEMPERATURE, PRESSURE, VAPOUR_FRACTION, MASS_ENTHALPY)
     val STREAM_FLOW = listOf(MOLAR_FLOW, MASS_FLOW)
@@ -118,7 +120,7 @@ object SpecKey {
         ObjectType.Expander -> listOf(OUTLET_PRESSURE, PRESSURE_DROP, PRESSURE_RATIO, EFFICIENCY)
         ObjectType.HeatExchanger -> listOf(DUTY, HOT_OUTLET_TEMPERATURE, COLD_OUTLET_TEMPERATURE, HOT_PRESSURE_DROP, COLD_PRESSURE_DROP)
         ObjectType.Splitter -> listOf(SPLIT_1, SPLIT_2)
-        ObjectType.PipeSegment -> listOf(LENGTH, INNER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, INCREMENTS, HEAT_TRANSFER_COEFFICIENT, AMBIENT_TEMPERATURE)
+        ObjectType.PipeSegment -> listOf(LENGTH, INNER_DIAMETER, OUTER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, INCREMENTS, HEAT_TRANSFER_COEFFICIENT, AMBIENT_TEMPERATURE)
         ObjectType.OrificePlate -> listOf(ORIFICE_DIAMETER, PIPE_DIAMETER)
         ObjectType.Tank -> listOf(VOLUME)
         ObjectType.DistillationColumn -> listOf(TOP_PRESSURE, COLUMN_PRESSURE_DROP) + CONDENSER_SPECS + REBOILER_SPECS
@@ -143,7 +145,7 @@ object SpecKey {
         MOLAR_FLOW -> Quantity.MolarFlow
         MASS_FLOW -> Quantity.MassFlow
         DUTY -> Quantity.Power
-        LENGTH, INNER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER, REACTOR_LENGTH -> Quantity.Length
+        LENGTH, INNER_DIAMETER, OUTER_DIAMETER, ELEVATION_CHANGE, ROUGHNESS, ORIFICE_DIAMETER, PIPE_DIAMETER, REACTOR_LENGTH -> Quantity.Length
         INCREMENTS -> Quantity.Count
         HEAT_TRANSFER_COEFFICIENT -> Quantity.HeatTransferCoefficient
         VOLUME -> Quantity.Volume
@@ -172,6 +174,7 @@ object SpecKey {
         COLD_PRESSURE_DROP -> "Cold side pressure drop"
         LENGTH -> "Length"
         INNER_DIAMETER -> "Inside diameter"
+        OUTER_DIAMETER -> "Outside diameter"
         ELEVATION_CHANGE -> "Elevation change"
         ROUGHNESS -> "Wall roughness"
         INCREMENTS -> "Calculation increments"
@@ -409,6 +412,12 @@ object Specification {
             if (v == null) needs += SpecKey.label(k).lowercase()
             else if (v.si <= 0) return SpecStatus.Invalid("${SpecKey.label(k)} must be positive")
         }
+        s[SpecKey.OUTER_DIAMETER]?.let { od ->
+            if (od.si <= (s[SpecKey.INNER_DIAMETER]?.si ?: 0.0)) return SpecStatus.Invalid("The outside diameter must be larger than the inside diameter")
+        }
+        val dz = s[SpecKey.ELEVATION_CHANGE]?.si
+        val len = s[SpecKey.LENGTH]?.si
+        if (dz != null && len != null && kotlin.math.abs(dz) >= len) return SpecStatus.Invalid("The elevation change must be smaller than the length")
         s[SpecKey.ROUGHNESS]?.let { if (it.si < 0) return SpecStatus.Invalid("Roughness can't be negative") }
         s[SpecKey.INCREMENTS]?.let {
             if (it.si < 1 || it.si > 500 || it.si != kotlin.math.floor(it.si)) return SpecStatus.Invalid("Increments must be a whole number from 1 to 500")

@@ -33,4 +33,9 @@ enum class Quantity(val siUnitId: String) {
     HeatTransferCoefficient("W/m2.K"),
     Volume("m3"),
     Time("s"),
+    Velocity("m/s"),
+    /** Pressure change per length of pipe. */
+    PressureGradient("Pa/m"),
+    /** ρv², the momentum flux used in line sizing (kg/m·s², numerically Pa). */
+    MomentumFlux("kg/m.s2"),
 }

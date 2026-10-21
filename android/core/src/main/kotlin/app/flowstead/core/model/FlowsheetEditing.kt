@@ -75,6 +75,26 @@ object FlowsheetEditing {
     }
 
     /** Adds [r], or replaces the reaction with its id. */
+    /**
+     * A pipe's size from ASME B36.10M/B36.19M: sets the inside and outside diameters and remembers the
+     * NPS and schedule. Null [nps] switches to a custom inside diameter (kept) without an outside diameter.
+     */
+    fun setPipeSize(fs: Flowsheet, id: String, nps: String?, schedule: String?): Flowsheet = update(fs, id) { o ->
+        val size = nps?.let { PipeSizes.size(it) }
+        val sch = size?.let { s -> schedule?.let { s.schedule(it) } ?: s.schedules.firstOrNull { "40" in it.label.split(" / ") } ?: s.schedules.first() }
+        if (size == null || sch == null) {
+            o.copy(refs = o.refs - LineSizing.NPS - LineSizing.SCHEDULE, specs = o.specs - SpecKey.OUTER_DIAMETER)
+        } else {
+            o.copy(
+                refs = o.refs + (LineSizing.NPS to size.nps) + (LineSizing.SCHEDULE to sch.label),
+                specs = o.specs + (SpecKey.INNER_DIAMETER to Spec(size.insideDiameterM(sch), "in")) +
+                    (SpecKey.OUTER_DIAMETER to Spec(size.outsideDiameterM, "in")),
+            )
+        }
+    }
+
+    fun setSizingCriteria(fs: Flowsheet, c: SizingCriteria): Flowsheet = fs.copy(sizingCriteria = c)
+
     fun upsertReaction(fs: Flowsheet, r: Reaction): Flowsheet =
         fs.copy(reactions = if (fs.reaction(r.id) == null) fs.reactions + r else fs.reactions.map { if (it.id == r.id) r else it })
 

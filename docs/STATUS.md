@@ -108,6 +108,12 @@ _Last updated: 2026-10-20_
   - Every rigorous column is checked against its specs and balances after the solve.
   - Benchmarks 11 (depropanizer: rigorous, shortcut and stripper) and 12 (lean-oil absorber).
   - The refluxed absorber stays "Coming".
+- **M18 line sizing (D30):**
+  - Pipe segment: NPS and schedule from dropdowns (ASME B36.10M/B36.19M); OD, wall and ID filled in; custom ID still possible.
+  - Results: velocities, ρv², ΔP per length (kPa/100 m, bar/km, psi/100 ft, …), Mach number, holdup, flow regime.
+  - Line sizing criteria per service (gas, liquid, two-phase) with ✓/✗ checks in the pipe editor, including API RP 14E.
+  - Benchmark 09 gains velocity, ρv² and gradient references; new benchmark 16: gas line (Colebrook ΔP within 0.1 %) and a two-phase line.
+
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 
 - **M17 reactors (D29):**
@@ -126,6 +132,7 @@ _Last updated: 2026-10-20_
 
 ## Known limitations
 
+- To investigate: with PR, DWSIM reports a liquid density of 742 kg/m³ for the C1/C2/C3 liquid at −40 °C / 30 bara (benchmarks 03 and 16), above what any of those liquids reaches (propane ≈ 580 kg/m³ at −40 °C). It feeds two-phase pipe ΔP. Likely DWSIM's default liquid-density method rather than the EOS; to compare with HYSYS.
 - Benchmarks 01 and 03 have only engine-provisional expected values (D6). They need desktop-DWSIM `.dwxmz` files and HYSYS numbers.
 - Pipe segments are one straight section: imported DWSIM pipes with several sections are left out with a warning. HYSYS Pipe Segment's fittings and multiple segments are not available yet.
 - Import supports the placeable unit ops only. Columns, reactors and other DWSIM objects are left out with a warning. The streams they fed need specifying again.

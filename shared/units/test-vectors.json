@@ -68,6 +68,15 @@
     { "quantity": "Volume", "unit": "USgal", "value": 1.0, "si": 0.003785411784 },
     { "quantity": "Time", "unit": "s", "value": 90.0, "si": 90.0 },
     { "quantity": "Time", "unit": "min", "value": 5.0, "si": 300.0 },
-    { "quantity": "Time", "unit": "h", "value": 2.0, "si": 7200.0 }
+    { "quantity": "Time", "unit": "h", "value": 2.0, "si": 7200.0 },
+    { "quantity": "Velocity", "unit": "m/s", "value": 3.0, "si": 3.0 },
+    { "quantity": "Velocity", "unit": "ft/s", "value": 10.0, "si": 3.048 },
+    { "quantity": "PressureGradient", "unit": "Pa/m", "value": 150.0, "si": 150.0 },
+    { "quantity": "PressureGradient", "unit": "kPa/100m", "value": 1.0, "si": 10.0 },
+    { "quantity": "PressureGradient", "unit": "kPa/km", "value": 5.0, "si": 5.0 },
+    { "quantity": "PressureGradient", "unit": "bar/km", "value": 1.0, "si": 100.0 },
+    { "quantity": "PressureGradient", "unit": "psi/100ft", "value": 1.0, "si": 226.2059479385945 },
+    { "quantity": "MomentumFlux", "unit": "kg/m.s2", "value": 15000.0, "si": 15000.0 },
+    { "quantity": "MomentumFlux", "unit": "lb/ft.s2", "value": 10000.0, "si": 14881.639435695537 }
   ]
 }

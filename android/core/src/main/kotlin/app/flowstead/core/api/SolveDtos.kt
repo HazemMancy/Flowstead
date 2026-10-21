@@ -43,6 +43,8 @@ data class ObjectResult(
     val error: String? = null,
     val properties: Map<String, Double> = emptyMap(),
     val phases: Map<String, PhaseResult>? = null,
+    /** Text results such as a pipe's "flowRegime". */
+    val texts: Map<String, String>? = null,
 )
 
 @Serializable

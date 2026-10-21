@@ -203,7 +203,7 @@ public static class ReactorKeys
 /// <summary>Choices stored in SimObject.Refs for unit ops that have a method to pick.</summary>
 public static class ChoiceKeys
 {
-    /// <summary>Pipe: beggs_brill (default), lockhart_martinelli, petalas_aziz.</summary>
+    /// <summary>Pipe: two-phase correlation beggs_brill (default), lockhart_martinelli, petalas_aziz. The app also keeps "nps", "schedule" and "service" in a pipe's refs; the engine ignores them.</summary>
     public const string PipeCorrelation = "correlation";
     /// <summary>Orifice plate: flange (default), corner, radius.</summary>
     public const string OrificeTaps = "taps";

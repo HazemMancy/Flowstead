@@ -67,6 +67,7 @@ import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.Reaction
+import app.flowstead.core.model.SizingCriteria
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.obj
 import app.flowstead.ui.components.BackButton
@@ -139,6 +140,12 @@ fun FlowsheetScreen(
                                 text = { Text("Export results (Excel)") },
                                 enabled = hasResults,
                                 onClick = { menu = false; xlsxFile.launch(viewModel.exportFileName("xlsx", " results")) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Line sizing criteria") },
+                                enabled = ready != null,
+                                onClick = { menu = false; viewModel.openSizingCriteria() },
+                                modifier = Modifier.testTag("menu_sizing_criteria"),
                             )
                         }
                     }
@@ -213,6 +220,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun disconnectPort(unitId: String, port: Port) = vm.disconnectPort(unitId, port)
             override fun upsertReaction(reaction: Reaction) = vm.upsertReaction(reaction)
             override fun deleteReaction(id: String) = vm.deleteReaction(id)
+            override fun setPipeSize(id: String, nps: String?, schedule: String?) = vm.setPipeSize(id, nps, schedule)
+            override fun editSizingCriteria() = vm.openSizingCriteria()
         }
     }
 
@@ -279,6 +288,16 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 onDismiss = vm::closeEditor,
             )
         }
+    }
+
+    if (ui.editingSizingCriteria) {
+        SizingCriteriaSheet(
+            criteria = ui.flowsheet.sizingCriteria ?: SizingCriteria(),
+            unitSet = ui.unitSet,
+            ctx = ui.unitContext,
+            onChange = vm::setSizingCriteria,
+            onDismiss = vm::closeSizingCriteria,
+        )
     }
 
     quickActionsFor?.let { id ->

@@ -28,6 +28,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val reactions: List<Reaction> = emptyList(),
+    /** Line-sizing limits by service. Not part of the solved model: excluded from [modelHash]. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val sizingCriteria: SizingCriteria? = null,
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
 
