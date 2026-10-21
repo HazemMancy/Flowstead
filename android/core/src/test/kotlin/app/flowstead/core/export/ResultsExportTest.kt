@@ -113,4 +113,19 @@ class ResultsExportTest {
     fun columnLetters() {
         assertEquals(listOf("A", "Z", "AA", "AZ", "BA", "ZZ", "AAA"), listOf(0, 25, 26, 51, 52, 701, 702).map(Xlsx::column))
     }
+
+    @Test
+    fun streamPropertiesReportedPerPhaseComeFromTheOverallPhase() {
+        val solve = StoredSolve(result, flowsheet.modelHash(), 1_760_000_000_000)
+        val view = app.flowstead.core.model.ResultView(solve, flowsheet.modelHash())
+        val overall = result.objects.getValue("feed").phases!!.getValue(Phases.OVERALL).properties
+        for (key in listOf("density", "volumeFlow", "molecularWeight", "massEntropy")) {
+            val v = view.value("feed", key)
+            assertTrue(v is app.flowstead.core.model.DisplayValue.Calculated, "$key: $v")
+            assertEquals(overall.getValue(key), v.si, 0.0)
+        }
+        val streams = sheets().first { it.name == "Streams" }
+        val density = streams.rows.first { (it.firstOrNull() as? Cell.Text)?.text?.startsWith("Density") == true }
+        assertTrue(density[1] is Cell.Number, "density exported: ${density[1]}")
+    }
 }

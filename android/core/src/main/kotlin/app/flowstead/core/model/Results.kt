@@ -202,8 +202,17 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
 
     fun objectStatus(id: String): ObjectStatus? = solve?.result?.objects?.get(id)?.status
 
-    /** Value of an object-level property, e.g. ("s1", "temperature"). */
-    fun value(objectId: String, key: String): DisplayValue = lookup(objectId) { it.properties[key] }
+    /**
+     * Value of an object-level property, e.g. ("s1", "temperature"). For a stream, properties the engine
+     * reports per phase (density, volume flow, molecular weight, entropy, Cp…) come from the overall phase,
+     * and viscosity and Z, which exist only per phase, from the stream's single phase when it has one.
+     */
+    fun value(objectId: String, key: String): DisplayValue = lookup(objectId) { r ->
+        r.properties[key] ?: r.phases?.let { phases ->
+            phases[Phases.OVERALL]?.properties?.get(key)
+                ?: phases.filterKeys { it != Phases.OVERALL }.values.singleOrNull()?.properties?.get(key)
+        }
+    }
 
     /** Value of a phase property, e.g. ("s1", "vapour", "density"). */
     fun phaseValue(objectId: String, phase: String, key: String): DisplayValue =

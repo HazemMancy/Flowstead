@@ -74,8 +74,13 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk "$apk"
           cp android/app/build/outputs/mapping/release/mapping.txt "flowstead-${TAG}-mapping.txt"
           sha256sum "$apk" > "$apk.sha256"
+          # What's new: docs/release-notes/<tag>.md when there is one.
+          news=""
+          if [ -f "docs/release-notes/${TAG}.md" ]; then news="$(cat "docs/release-notes/${TAG}.md")"; fi
           notes=$(cat <<NOTES
           Flowstead ${TAG} (app version ${version}).
+
+          ${news}
 
           **Install:** download \`${apk}\` on your Android phone (Android 8.0 or newer, 64-bit), open it and allow installing from this source.
 

@@ -26,7 +26,10 @@ fun interface UpdateChecker {
 @Singleton
 class GithubUpdateChecker @Inject constructor(private val http: HttpClient) : UpdateChecker {
     override suspend fun check(installed: String): Result<UpdateCheck> = runCatching {
-        val response = http.get(Updates.LATEST_RELEASE_URL) { header("Accept", "application/vnd.github+json") }
+        val response = http.get(Updates.LATEST_RELEASE_URL) {
+            header("Accept", "application/vnd.github+json")
+            header("User-Agent", "Flowstead/$installed") // GitHub's API requires one
+        }
         if (!response.status.isSuccess()) error("GitHub answered ${response.status.value}")
         Updates.check(installed, Updates.parse(response.bodyAsText()))
     }.recoverCatching { e ->
