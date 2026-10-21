@@ -51,6 +51,7 @@ class SpecFieldTest {
         override fun deleteReaction(id: String) = Unit
         override fun setPipeSize(id: String, nps: String?, schedule: String?) = Unit
         override fun editSizingCriteria() = Unit
+        override fun openDataSheet(id: String) = Unit
     }
 
     @Test

@@ -64,12 +64,15 @@ import androidx.compose.ui.unit.toSize
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.flowstead.core.api.SolveStatus
+import app.flowstead.core.export.DataSheets
+import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.Reaction
 import app.flowstead.core.model.SizingCriteria
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.obj
+import app.flowstead.ui.datasheet.DataSheetSheet
 import app.flowstead.ui.components.BackButton
 import app.flowstead.ui.theme.Brand
 import app.flowstead.ui.theme.NumberStyles
@@ -140,6 +143,12 @@ fun FlowsheetScreen(
                                 text = { Text("Export results (Excel)") },
                                 enabled = hasResults,
                                 onClick = { menu = false; xlsxFile.launch(viewModel.exportFileName("xlsx", " results")) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Data sheets — all equipment (PDF)") },
+                                enabled = ready != null,
+                                onClick = { menu = false; viewModel.openDataSheet(null) },
+                                modifier = Modifier.testTag("menu_data_sheets"),
                             )
                             DropdownMenuItem(
                                 text = { Text("Line sizing criteria") },
@@ -222,6 +231,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun deleteReaction(id: String) = vm.deleteReaction(id)
             override fun setPipeSize(id: String, nps: String?, schedule: String?) = vm.setPipeSize(id, nps, schedule)
             override fun editSizingCriteria() = vm.openSizingCriteria()
+            override fun openDataSheet(id: String) = vm.openDataSheet(id)
         }
     }
 
@@ -288,6 +298,24 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 onDismiss = vm::closeEditor,
             )
         }
+    }
+
+    val pdfFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        val target = ui.dataSheetFor
+        if (uri != null && target != null) vm.exportDataSheets(uri, target)
+    }
+    ui.dataSheetFor?.let { target ->
+        val equipment = ui.flowsheet.obj(target)
+        DataSheetSheet(
+            info = ui.flowsheet.documentInfo ?: DocumentInfo(),
+            equipment = equipment,
+            equipmentCount = ui.flowsheet.objects.count { DataSheets.isEquipment(it.type) },
+            exporting = ui.exporting,
+            onInfo = vm::setDocumentInfo,
+            onField = { key, value -> equipment?.let { vm.setSheetField(it.id, key, value) } },
+            onCreatePdf = { pdfFile.launch(vm.dataSheetFileName(target)) },
+            onDismiss = vm::closeDataSheet,
+        )
     }
 
     if (ui.editingSizingCriteria) {

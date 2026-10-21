@@ -8,8 +8,20 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.flowstead.core.api.SolveStatus
+import app.flowstead.core.export.DataSheets
+import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.FlowsheetJson
+import app.flowstead.core.model.LineCriteria
+import app.flowstead.core.model.SheetKeys
+import app.flowstead.core.model.SizingCriteria
+import app.flowstead.core.model.Spec
+import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.modelHash
+import app.flowstead.core.model.obj
+import app.flowstead.core.units.UnitSet
+import app.flowstead.ui.datasheet.DataSheetPdf
 import app.flowstead.data.engine.EngineResult
 import app.flowstead.data.engine.local.EmbeddedLocalEngine
 import app.flowstead.data.engine.local.LocalEngineClient
@@ -72,6 +84,7 @@ class OnDeviceBenchmarkTest {
                 failures += "$case: status ${r.value.status}, expected $status (${r.value.messages.joinToString { it.text }})"
                 continue
             }
+            if (case.startsWith("16-")) sampleDataSheets(flowsheet, r.value)
             val result = FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.SolveResult.serializer(), r.value)
             expected["checks"]?.jsonArray?.forEach { check(case, it.jsonObject, result, failures) }
             expected["reference"]?.jsonArray?.forEach { ref ->
@@ -79,6 +92,32 @@ class OnDeviceBenchmarkTest {
             }
         }
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
+    /**
+     * Renders the pipe data sheets of the line-sizing benchmark from the device's own solve and logs the PDF
+     * (base64, tag FlowsteadPdf) so CI shows a real sample for review.
+     */
+    private fun sampleDataSheets(input: Flowsheet, solved: app.flowstead.core.api.SolveResult) {
+        val fs = FlowsheetEditing.setPipeSize(input, "pg", "8", "40 / STD / 40S").copy(
+            documentInfo = DocumentInfo(
+                company = "Sample Engineering Ltd", project = "Gas Gathering Expansion", projectNumber = "P-0001",
+                client = "Sample Client", site = "Onshore", preparedBy = "Flowstead", checkedBy = "", approvedBy = "",
+            ),
+            sizingCriteria = SizingCriteria(
+                gas = LineCriteria(maxVelocity = Spec(20.0, "m/s"), maxMomentumFlux = Spec(15000.0, "kg/m.s2"), maxFrictionGradient = Spec(50.0, "kPa/100m")),
+                twoPhase = LineCriteria(erosionalC = Spec(100.0, "ratio"), maxMomentumFlux = Spec(10000.0, "kg/m.s2")),
+            ),
+        ).let { FlowsheetEditing.setSheetField(it, "pg", SheetKeys.SERVICE, "Export gas to pipeline") }
+            .let { FlowsheetEditing.setSheetField(it, "pg", SheetKeys.DOCUMENT_NUMBER, "P-0001-PR-DS-001") }
+        val stored = StoredSolve(solved, fs.modelHash(), System.currentTimeMillis())
+        val sheets = listOf("pg", "pt").map { DataSheets.build("Lines", fs, stored, UnitSet.SI, fs.obj(it)!!, "2026-10-21", BuildConfig.VERSION_NAME) }
+        val bytes = java.io.ByteArrayOutputStream().also { DataSheetPdf.write(sheets, it) }.toByteArray()
+        assertTrue(String(bytes, 0, 5, Charsets.US_ASCII) == "%PDF-", "not a PDF")
+        val b64 = java.util.Base64.getEncoder().encodeToString(bytes)
+        Log.i(PDF_TAG, "begin ${bytes.size} bytes")
+        b64.chunked(3000).forEach { Log.i(PDF_TAG, it) }
+        Log.i(PDF_TAG, "end")
     }
 
     private fun check(case: String, c: JsonObject, result: JsonElement, failures: MutableList<String>) {
@@ -110,5 +149,6 @@ class OnDeviceBenchmarkTest {
 
     private companion object {
         const val TAG = "FlowsteadOnDevice"
+        const val PDF_TAG = "FlowsteadPdf"
     }
 }

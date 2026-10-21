@@ -114,6 +114,11 @@ _Last updated: 2026-10-20_
   - Line sizing criteria per service (gas, liquid, two-phase) with ✓/✗ checks in the pipe editor, including API RP 14E.
   - Benchmark 09 gains velocity, ρv² and gradient references; new benchmark 16: gas line (Colebrook ΔP within 0.1 %) and a two-phase line.
 
+- **M19 equipment data sheets (D31):**
+  - PDF data sheet for any equipment (data-sheet icon in its editor), or every equipment in one PDF (⋮ menu).
+  - Title block, operating conditions per stream, design basis, performance, line sizing, reactions, composition, mechanical data, notes, revisions.
+  - The emulator job renders a sample (benchmark 16's two lines) and prints it as base64 in the job log for review.
+
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 
 - **M17 reactors (D29):**

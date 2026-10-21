@@ -153,14 +153,17 @@ jobs:
           disable-animations: true
           script: |
             adb logcat -c
-            (adb logcat -v time FlowsteadOnDevice:I FlowsteadEngine:V mono:V monodroid:W DOTNET:W '*:E' > logcat.txt &)
+            (adb logcat -v time FlowsteadOnDevice:I FlowsteadPdf:I FlowsteadEngine:V mono:V monodroid:W DOTNET:W '*:E' > logcat.txt &)
             cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
       - name: Device log
         if: always()
         # Repeated stack frames (a runaway recursion) are counted, not printed, so the callers stay visible.
         run: |
-          grep -E "FlowsteadOnDevice|FlowsteadEngine|mono|DOTNET|FATAL|flowstead| F/|AndroidRuntime" logcat.txt \
+          grep -v "FlowsteadPdf" logcat.txt | grep -E "FlowsteadOnDevice|FlowsteadEngine|mono|DOTNET|FATAL|flowstead| F/|AndroidRuntime" \
             | sed -E 's/^[0-9-]+ [0-9:.]+ //' | uniq -c | sed -E 's/^ +1 //' | tail -400 || true
+      - name: Sample data sheet PDF (base64, for review)
+        if: always()
+        run: grep "FlowsteadPdf" logcat.txt | sed -E 's/^.*FlowsteadPdf\( *[0-9]+\): //' || true
       - name: Upload device test reports
         if: always()
         uses: actions/upload-artifact@v4

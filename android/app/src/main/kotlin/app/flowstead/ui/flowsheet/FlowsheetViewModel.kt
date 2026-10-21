@@ -9,6 +9,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
+import app.flowstead.BuildConfig
+import app.flowstead.core.export.DataSheets
+import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
@@ -41,8 +44,10 @@ import app.flowstead.core.export.Xlsx
 import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.AppSettings
 import app.flowstead.data.settings.SettingsRepository
+import app.flowstead.ui.datasheet.DataSheetPdf
 import app.flowstead.ui.nav.FlowsheetRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +59,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 sealed interface SolveState {
@@ -83,7 +89,12 @@ data class FlowsheetUi(
     val engineConfigured: Boolean,
     val exporting: Boolean = false,
     val editingSizingCriteria: Boolean = false,
+    /** Data sheet being prepared: an equipment id, or [ALL_EQUIPMENT]; null when closed. */
+    val dataSheetFor: String? = null,
 )
+
+/** [FlowsheetUi.dataSheetFor] for one PDF with every equipment's data sheet. */
+const val ALL_EQUIPMENT = "__all"
 
 sealed interface FlowsheetUiState {
     data object Loading : FlowsheetUiState
@@ -116,6 +127,7 @@ class FlowsheetViewModel @Inject constructor(
         val solving: Boolean = false,
         val exporting: Boolean = false,
         val editingSizingCriteria: Boolean = false,
+        val dataSheetFor: String? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -158,6 +170,7 @@ class FlowsheetViewModel @Inject constructor(
                 engineConfigured = settings.engineTarget.isNotBlank(),
                 exporting = l.exporting,
                 editingSizingCriteria = l.editingSizingCriteria,
+                dataSheetFor = l.dataSheetFor?.takeIf { id -> id == ALL_EQUIPMENT || fs.objects.any { it.id == id } },
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
@@ -176,6 +189,8 @@ class FlowsheetViewModel @Inject constructor(
     fun closeEditor() = local.update { it.copy(editingId = null) }
     fun openSizingCriteria() = local.update { it.copy(editingSizingCriteria = true) }
     fun closeSizingCriteria() = local.update { it.copy(editingSizingCriteria = false) }
+    fun openDataSheet(id: String?) = local.update { it.copy(dataSheetFor = id ?: ALL_EQUIPMENT, editingId = null) }
+    fun closeDataSheet() = local.update { it.copy(dataSheetFor = null) }
 
     // ---- edits
 
@@ -252,6 +267,10 @@ class FlowsheetViewModel @Inject constructor(
     fun setPipeSize(id: String, nps: String?, schedule: String?) = edit { FlowsheetEditing.setPipeSize(it, id, nps, schedule) }
 
     fun setSizingCriteria(c: SizingCriteria) = edit { FlowsheetEditing.setSizingCriteria(it, c) }
+
+    fun setDocumentInfo(info: DocumentInfo) = edit { FlowsheetEditing.setDocumentInfo(it, info) }
+
+    fun setSheetField(id: String, key: String, value: String) = edit { FlowsheetEditing.setSheetField(it, id, key, value) }
 
     fun upsertReaction(reaction: Reaction) = edit { FlowsheetEditing.upsertReaction(it, reaction) }
 
@@ -348,6 +367,39 @@ class FlowsheetViewModel @Inject constructor(
         }
         documents.write(uri, bytes)
         _messages.send(if (fs.modelHash() == solve.modelHash) "Results exported" else "Results exported (out of date: the flowsheet changed after the solve)")
+    }
+
+    /** "<tag> data sheet.pdf", or "<project> data sheets.pdf" for every equipment. */
+    fun dataSheetFileName(id: String): String {
+        if (id == ALL_EQUIPMENT) return exportFileName("pdf", " data sheets")
+        val tag = current?.obj(id)?.tag?.replace(Regex("[\\\\/:*?\"<>|]"), "_")?.trim().orEmpty().ifEmpty { "equipment" }
+        return "$tag data sheet.pdf"
+    }
+
+    /** Equipment data sheets as a PDF, from the stored solve (or blank process data if there is none). */
+    fun exportDataSheets(uri: Uri, id: String) = export {
+        val fs = current ?: return@export
+        val unitSet = settingsRepository.settings.first().unitSet
+        val today = java.time.Instant.ofEpochMilli(clock.now()).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+        val targets = if (id == ALL_EQUIPMENT) fs.objects.filter { DataSheets.isEquipment(it.type) } else listOfNotNull(fs.obj(id))
+        if (targets.isEmpty()) {
+            _messages.send("There is no equipment to make a data sheet for")
+            return@export
+        }
+        val sheets = targets.map { DataSheets.build(currentName, fs, currentSolve, unitSet, it, today, BuildConfig.VERSION_NAME) }
+        val bytes = withContext(Dispatchers.Default) {
+            java.io.ByteArrayOutputStream().also { DataSheetPdf.write(sheets, it) }.toByteArray()
+        }
+        documents.write(uri, bytes)
+        val stale = currentSolve?.let { fs.modelHash() != it.modelHash } ?: false
+        _messages.send(
+            (if (sheets.size == 1) "Data sheet created" else "${sheets.size} data sheets created") +
+                when {
+                    currentSolve == null -> " (not solved: process data are blank)"
+                    stale -> " (results out of date)"
+                    else -> ""
+                },
+        )
     }
 
     private fun export(block: suspend () -> Unit) {

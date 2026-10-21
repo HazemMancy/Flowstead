@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -58,6 +59,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.flowstead.core.api.Phases
+import app.flowstead.core.export.DataSheets
 import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.ChoiceKey
@@ -113,6 +115,8 @@ interface EditorActions {
     fun setPipeSize(id: String, nps: String?, schedule: String?)
     /** Opens the flowsheet's line-sizing criteria. */
     fun editSizingCriteria()
+    /** Opens the data sheet of one piece of equipment. */
+    fun openDataSheet(id: String)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -634,6 +638,11 @@ private fun Header(obj: SimObject, actions: EditorActions) {
                     .onFocusChanged { if (!it.isFocused && tag != obj.tag) actions.rename(obj.id, tag) }
                     .testTag("tag_field"),
             )
+        }
+        if (DataSheets.isEquipment(obj.type)) {
+            IconButton(onClick = { actions.openDataSheet(obj.id) }, modifier = Modifier.testTag("open_data_sheet")) {
+                Icon(Icons.Filled.Description, contentDescription = "Data sheet for ${obj.tag}")
+            }
         }
         IconButton(onClick = { actions.delete(obj.id) }) {
             Icon(Icons.Filled.Delete, contentDescription = "Delete ${obj.tag}", tint = MaterialTheme.colorScheme.error)

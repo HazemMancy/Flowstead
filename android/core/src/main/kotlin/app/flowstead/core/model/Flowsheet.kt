@@ -32,6 +32,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val sizingCriteria: SizingCriteria? = null,
+    /** Title-block details for data sheets. Not part of the solved model: excluded from [modelHash]. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val documentInfo: DocumentInfo? = null,
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
 
@@ -54,6 +58,10 @@ data class SimObject(
     val composition: Map<String, Double> = emptyMap(),
     /** References to other objects; used by Adjust (see [AdjustKeys]). */
     val refs: Map<String, String> = emptyMap(),
+    /** Data-sheet fields typed by the user ([SheetKeys]). Not part of the solved model: excluded from [modelHash]. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val sheet: Map<String, String> = emptyMap(),
 )
 
 /**

@@ -95,6 +95,13 @@ object FlowsheetEditing {
 
     fun setSizingCriteria(fs: Flowsheet, c: SizingCriteria): Flowsheet = fs.copy(sizingCriteria = c)
 
+    fun setDocumentInfo(fs: Flowsheet, info: DocumentInfo): Flowsheet = fs.copy(documentInfo = info.takeIf { it != DocumentInfo() })
+
+    /** One data-sheet field of an object ([SheetKeys]); blank removes it. */
+    fun setSheetField(fs: Flowsheet, id: String, key: String, value: String): Flowsheet = update(fs, id) {
+        it.copy(sheet = if (value.isBlank()) it.sheet - key else it.sheet + (key to value.trim()))
+    }
+
     fun upsertReaction(fs: Flowsheet, r: Reaction): Flowsheet =
         fs.copy(reactions = if (fs.reaction(r.id) == null) fs.reactions + r else fs.reactions.map { if (it.id == r.id) r else it })
 

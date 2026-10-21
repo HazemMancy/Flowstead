@@ -1,0 +1,162 @@
+{
+ "schemaVersion": 1,
+ "propertyPackage": "Peng-Robinson (PR)",
+ "compounds": [
+  "Nitrogen",
+  "Carbon dioxide",
+  "Methane",
+  "Ethane",
+  "Propane"
+ ],
+ "objects": [
+  {
+   "id": "g1",
+   "tag": "GAS IN",
+   "type": "material_stream",
+   "specs": {
+    "temperature": {
+     "si": 313.15,
+     "unit": "C"
+    },
+    "pressure": {
+     "si": 7000000.0,
+     "unit": "bara"
+    },
+    "molarFlow": {
+     "si": 277.77777777777777,
+     "unit": "kgmol/h"
+    }
+   },
+   "composition": {
+    "Nitrogen": 0.01,
+    "Carbon dioxide": 0.02,
+    "Methane": 0.88,
+    "Ethane": 0.06,
+    "Propane": 0.03
+   }
+  },
+  {
+   "id": "pg",
+   "tag": "GAS LINE",
+   "type": "pipe_segment",
+   "specs": {
+    "length": {
+     "si": 5000.0,
+     "unit": "m"
+    },
+    "innerDiameter": {
+     "si": 0.2027174,
+     "unit": "in"
+    },
+    "outerDiameter": {
+     "si": 0.219075,
+     "unit": "in"
+    },
+    "roughness": {
+     "si": 4.57e-05,
+     "unit": "mm"
+    },
+    "increments": {
+     "si": 20,
+     "unit": "count"
+    }
+   }
+  },
+  {
+   "id": "g2",
+   "tag": "GAS OUT",
+   "type": "material_stream"
+  },
+  {
+   "id": "t1",
+   "tag": "2PH IN",
+   "type": "material_stream",
+   "specs": {
+    "temperature": {
+     "si": 233.15,
+     "unit": "C"
+    },
+    "pressure": {
+     "si": 3000000.0,
+     "unit": "bara"
+    },
+    "molarFlow": {
+     "si": 27.77777777777778,
+     "unit": "kgmol/h"
+    }
+   },
+   "composition": {
+    "Nitrogen": 0.0,
+    "Carbon dioxide": 0.0,
+    "Methane": 0.8,
+    "Ethane": 0.15,
+    "Propane": 0.05
+   }
+  },
+  {
+   "id": "pt",
+   "tag": "2PH LINE",
+   "type": "pipe_segment",
+   "specs": {
+    "length": {
+     "si": 500.0,
+     "unit": "m"
+    },
+    "innerDiameter": {
+     "si": 0.0779272,
+     "unit": "in"
+    },
+    "outerDiameter": {
+     "si": 0.08889999999999999,
+     "unit": "in"
+    },
+    "elevationChange": {
+     "si": 10.0,
+     "unit": "m"
+    },
+    "roughness": {
+     "si": 4.57e-05,
+     "unit": "mm"
+    },
+    "increments": {
+     "si": 20,
+     "unit": "count"
+    }
+   },
+   "refs": {
+    "correlation": "beggs_brill"
+   }
+  },
+  {
+   "id": "t2",
+   "tag": "2PH OUT",
+   "type": "material_stream"
+  }
+ ],
+ "connections": [
+  {
+   "fromObject": "g1",
+   "fromPort": 0,
+   "toObject": "pg",
+   "toPort": 0
+  },
+  {
+   "fromObject": "pg",
+   "fromPort": 0,
+   "toObject": "g2",
+   "toPort": 0
+  },
+  {
+   "fromObject": "t1",
+   "fromPort": 0,
+   "toObject": "pt",
+   "toPort": 0
+  },
+  {
+   "fromObject": "pt",
+   "fromPort": 0,
+   "toObject": "t2",
+   "toPort": 0
+  }
+ ]
+}
