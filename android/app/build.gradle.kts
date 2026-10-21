@@ -66,6 +66,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            testProguardFiles("proguard-test-rules.pro")
             // Without the owner's key a release build is signed with the debug key, so CI can test the
             // minified app; the release workflow refuses to publish such an APK.
             signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
