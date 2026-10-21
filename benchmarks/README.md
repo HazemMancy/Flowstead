@@ -28,6 +28,7 @@ Tolerances follow the brief: ±0.01 K on temperature, ±0.1 % relative elsewhere
 | 06-compressor-aftercooler | PR, 5 → 15 bara at 75 % adiabatic, cooled to 40 °C | Mass conserved; outlet P = 15 bara − cooler ΔP (blocking) |
 | 07-recycle-loop | PR, mixer, chiller, separator, 50 % liquid recycle | Plant mass balance closes; split = 50/50 (blocking) |
 | 08-steam-heater | IAPWS, water heated 25 → 120 °C by condensing 5 bara steam | Duty 399.0 kW and Tsat 424.98 K from IAPWS; heat balance (blocking) |
+| 16-gas-and-two-phase-lines | PR, 5 km of 8" Sch 40 gas line; 500 m of 3" Sch 40 two-phase line rising 10 m (Beggs & Brill) | Gas ΔP by Darcy–Weisbach/Colebrook; inlet velocity by continuity; ΔP = friction + static; mass conserved (blocking) |
 
 To regenerate the provisional values after an intentional engine change:
 

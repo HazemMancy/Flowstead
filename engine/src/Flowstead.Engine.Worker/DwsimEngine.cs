@@ -633,7 +633,7 @@ public sealed class DwsimEngine
                 var section = new DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeSection(
                     1, "Straight Tube Section", 1, (int)(V(SpecKeys.Increments) ?? 10), "User",
                     V(SpecKeys.Length)!.Value, V(SpecKeys.ElevationChange) ?? 0.0,
-                    di * 1.15 / 0.0254, di / 0.0254)                        // DWSIM inches; OD only sets the heat-transfer area
+                    (V(SpecKeys.OuterDiameter) ?? di * 1.15) / 0.0254, di / 0.0254)  // DWSIM inches; OD only sets the heat-transfer area
                 {
                     PipeWallRugosity = V(SpecKeys.Roughness) ?? DefaultRoughness,
                 };
@@ -820,13 +820,7 @@ public sealed class DwsimEngine
                     ("hotOutletTemperature", hx.HotSideOutletTemperature), ("coldOutletTemperature", hx.ColdSideOutletTemperature),
                     ("hotPressureDrop", hx.HotSidePressureDrop), ("coldPressureDrop", hx.ColdSidePressureDrop)),
             },
-            Pipe pipe => new ObjectResult
-            {
-                Status = ObjectStatus.Solved,
-                Properties = Props(("pressureDrop", -pipe.DeltaP), ("temperatureChange", pipe.DeltaT),
-                    ("heatTransferred", pipe.DeltaQ * 1000.0),                // DWSIM kW; + = into the fluid
-                    ("frictionPressureDrop", pipe.PressureDrop_Friction), ("staticPressureDrop", pipe.PressureDrop_Static)),
-            },
+            Pipe pipe => Pipes.Result(pipe),
             OrificePlate op => new ObjectResult
             {
                 Status = ObjectStatus.Solved,

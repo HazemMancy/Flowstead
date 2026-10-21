@@ -125,6 +125,8 @@ public static class SpecKeys
     // Pipe segment (SI: m, W/m²·K, K) and orifice plate.
     public const string Length = "length";
     public const string InnerDiameter = "innerDiameter";
+    /// <summary>Pipe outside diameter (m), for the heat-transfer area; 1.15 × the inside diameter when absent.</summary>
+    public const string OuterDiameter = "outerDiameter";
     public const string ElevationChange = "elevationChange";
     public const string Roughness = "roughness";
     /// <summary>Calculation increments along a pipe (whole number).</summary>

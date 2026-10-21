@@ -29,7 +29,8 @@ DEFAULT_TOL = {"rel": 1e-3, "abs": 1e-9}
 COMPOSITION_TOL = {"abs": 1e-4}
 STREAM_KEYS = ["temperature", "pressure", "vapourFraction", "molarFlow", "massFlow", "massEnthalpy"]
 PHASE_KEYS = ["phaseMoleFraction", "density", "molecularWeight", "massEnthalpy"]
-UNITOP_KEYS = ["duty", "pressureDrop", "outletPressure", "outletTemperature", "power"]
+UNITOP_KEYS = ["duty", "pressureDrop", "outletPressure", "outletTemperature", "power",
+               "pressureGradient", "maxVelocity", "maxMomentumFlux", "liquidHoldup"]
 
 
 def solve(flowsheet):

@@ -449,6 +449,8 @@ public static class DwxmzImporter
                 var first = sections[0];
                 Put(SpecKeys.Length, sections.Sum(x => x.Comprimento * x.Quantidade), "m");
                 Put(SpecKeys.InnerDiameter, first.DI * 0.0254, "mm");                     // DWSIM inches
+                // Flowstead writes 1.15 × ID when no outside diameter was given; don't turn that placeholder into a spec.
+                if (first.DE > first.DI && Math.Abs(first.DE - first.DI * 1.15) > 1e-6) Put(SpecKeys.OuterDiameter, first.DE * 0.0254, "mm");
                 Put(SpecKeys.ElevationChange, sections.Sum(x => x.Elevacao * x.Quantidade), "m");
                 Put(SpecKeys.Roughness, pipe.GetRugosity(first.Material, first), "mm");
                 Put(SpecKeys.Increments, sections.Sum(x => x.Incrementos * x.Quantidade), "count");

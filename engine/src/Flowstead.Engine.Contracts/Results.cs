@@ -49,6 +49,8 @@ public sealed record ObjectResult
     public Dictionary<string, double> Properties { get; init; } = [];
     /// <summary>Material streams only: per-phase results keyed "overall", "vapour", "liquid1", "liquid2".</summary>
     public Dictionary<string, PhaseResult>? Phases { get; init; }
+    /// <summary>Text results keyed by property id (pipe: "flowRegime"); absent when there are none.</summary>
+    public Dictionary<string, string>? Texts { get; init; }
 }
 
 public sealed record PhaseResult

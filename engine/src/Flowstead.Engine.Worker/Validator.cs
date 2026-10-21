@@ -33,7 +33,7 @@ public static class Validator
         ObjectType.HeatExchanger => [SpecKeys.Duty, SpecKeys.HotOutletTemperature, SpecKeys.ColdOutletTemperature,
             SpecKeys.HotPressureDrop, SpecKeys.ColdPressureDrop],
         ObjectType.Splitter => [SpecKeys.Split1, SpecKeys.Split2],
-        ObjectType.PipeSegment => [SpecKeys.Length, SpecKeys.InnerDiameter, SpecKeys.ElevationChange, SpecKeys.Roughness,
+        ObjectType.PipeSegment => [SpecKeys.Length, SpecKeys.InnerDiameter, SpecKeys.OuterDiameter, SpecKeys.ElevationChange, SpecKeys.Roughness,
             SpecKeys.Increments, SpecKeys.HeatTransferCoefficient, SpecKeys.AmbientTemperature],
         ObjectType.OrificePlate => [SpecKeys.OrificeDiameter, SpecKeys.PipeDiameter],
         ObjectType.Tank => [SpecKeys.Volume],
@@ -353,6 +353,10 @@ public static class Validator
             case ObjectType.PipeSegment:
                 Positive(SpecKeys.Length, "length");
                 Positive(SpecKeys.InnerDiameter, "inside diameter");
+                if (s.GetValueOrDefault(SpecKeys.OuterDiameter) is { } od && od.Si <= (s.GetValueOrDefault(SpecKeys.InnerDiameter)?.Si ?? 0))
+                    err($"{o.Tag}: the outside diameter must be larger than the inside diameter.", o.Id);
+                if (s.GetValueOrDefault(SpecKeys.ElevationChange) is { } dz && s.GetValueOrDefault(SpecKeys.Length) is { } len && Math.Abs(dz.Si) >= len.Si)
+                    err($"{o.Tag}: the elevation change must be smaller than the length.", o.Id);
                 if (s.GetValueOrDefault(SpecKeys.Roughness) is { } rough && rough.Si < 0) err($"{o.Tag}: roughness can't be negative.", o.Id);
                 if (s.GetValueOrDefault(SpecKeys.Increments) is { } inc && (inc.Si < 1 || inc.Si > 500 || inc.Si != Math.Floor(inc.Si)))
                     err($"{o.Tag}: increments must be a whole number from 1 to 500.", o.Id);
