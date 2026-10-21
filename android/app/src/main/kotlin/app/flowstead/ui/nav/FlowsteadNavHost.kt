@@ -55,7 +55,7 @@ fun FlowsteadNavHost() {
             FluidPackageScreen(onBack = { nav.popBackStack() })
         }
         composable<SettingsRoute> {
-            SettingsScreen(onBack = { nav.popBackStack() })
+            SettingsScreen(onBack = { nav.popBackStack() }, onOpenAbout = { nav.navigate(AboutRoute) })
         }
         composable<AboutRoute> {
             AboutScreen(

@@ -912,14 +912,23 @@ private fun CompositionEditor(fs: Flowsheet, obj: SimObject, actions: EditorActi
 
 /** Shown when a long-press opens the quick actions for an object. */
 @Composable
-fun ObjectQuickActions(obj: SimObject, onEdit: () -> Unit, onDisconnect: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+fun ObjectQuickActions(
+    obj: SimObject,
+    onEdit: () -> Unit,
+    onDisconnect: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+    onTable: (() -> Unit)? = null,
+    hasTable: Boolean = false,
+) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${obj.type.displayName()} ${obj.tag}") },
         text = {
             Column {
-                listOf(
+                listOfNotNull(
                     "Edit" to onEdit,
+                    onTable?.let { (if (hasTable) "Edit table on flowsheet…" else "Show table on flowsheet…") to it },
                     "Disconnect all" to onDisconnect,
                     "Delete" to onDelete,
                 ).forEach { (label, action) ->

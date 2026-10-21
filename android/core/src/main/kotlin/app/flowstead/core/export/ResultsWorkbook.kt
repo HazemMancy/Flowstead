@@ -6,6 +6,7 @@ package app.flowstead.core.export
 
 import app.flowstead.core.api.Phases
 import app.flowstead.core.model.DisplayValue
+import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.ResultKeys
@@ -36,10 +37,10 @@ data class Sheet(val name: String, val rows: List<List<Cell>>)
  * user's units; a value the engine did not return is an empty cell, never a guess (brief §4).
  */
 object ResultsWorkbook {
-    fun build(projectName: String, flowsheet: Flowsheet, solve: StoredSolve, units: UnitSet): List<Sheet> {
+    fun build(projectName: String, flowsheet: Flowsheet, solve: StoredSolve, units: UnitSet, appVersion: String = ""): List<Sheet> {
         val view = ResultView(solve, flowsheet.modelHash())
         val ctx = UnitContext(flowsheet.atmosphericPressurePa)
-        val header = header(projectName, solve, units, view.stale)
+        val header = header(projectName, flowsheet.documentInfo ?: DocumentInfo(), solve, units, view.stale, appVersion)
         return listOf(
             Sheet("Streams", header + streams(flowsheet, view, units, ctx)),
             Sheet("Unit operations", header + unitOps(flowsheet, view, units, ctx)),
@@ -49,9 +50,16 @@ object ResultsWorkbook {
 
     private fun t(s: String) = Cell.Text(s)
 
-    private fun header(projectName: String, solve: StoredSolve, units: UnitSet, stale: Boolean): List<List<Cell>> = buildList {
+    /** The project's title block (as on its data sheets, PFD and H&MB), then the solve it comes from. */
+    private fun header(projectName: String, info: DocumentInfo, solve: StoredSolve, units: UnitSet, stale: Boolean, appVersion: String): List<List<Cell>> = buildList {
         val r = solve.result
-        add(listOf(t("Project"), t(projectName)))
+        add(listOf(t("Project"), t(info.project.ifBlank { projectName })))
+        add(listOf(t("Company"), t(info.company)))
+        add(listOf(t("Project No."), t(info.projectNumber)))
+        add(listOf(t("Client"), t(info.client)))
+        add(listOf(t("Site / location"), t(info.site)))
+        add(listOf(t("Prepared / Checked / Approved"), t(listOf(info.preparedBy, info.checkedBy, info.approvedBy).joinToString(" / "))))
+        add(listOf(t("Software"), t("Flowstead" + (if (appVersion.isBlank()) "" else " $appVersion"))))
         add(listOf(t("Solved at (UTC)"), t(DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(Instant.ofEpochMilli(solve.solvedAtMillis).atOffset(ZoneOffset.UTC).withNano(0)))))
         add(listOf(t("Status"), t(r.status.name.lowercase())))
         add(listOf(t("Engine"), t("Flowstead engine ${r.engineVersion}, powered by DWSIM ${r.dwsimVersion}")))

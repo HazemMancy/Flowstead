@@ -18,10 +18,12 @@ import java.io.OutputStream
  * starts on a new page and is numbered "Sheet n of m" on its own.
  */
 object DataSheetPdf {
-    private const val PAGE_W = 595f // A4 in points
-    private const val PAGE_H = 842f
+    // Page of the sheet being drawn: A4 portrait (data sheets) or A3 landscape (heat and material balance).
+    private var paper = DataSheet.Paper.A4Portrait
+    private val PAGE_W get() = if (paper == DataSheet.Paper.A3Landscape) 1191f else 595f // points
+    private const val PAGE_H = 842f // the height of both A4 portrait and A3 landscape
     private const val MARGIN = 28f
-    private const val WIDTH = PAGE_W - 2 * MARGIN
+    private val WIDTH get() = PAGE_W - 2 * MARGIN
     private const val PAD = 3f
     private const val FOOTER_H = 16f
 
@@ -45,11 +47,13 @@ object DataSheetPdf {
     private val frame = Paint().apply { color = ink; strokeWidth = 1f; style = Paint.Style.STROKE }
     private val fill = Paint().apply { style = Paint.Style.FILL }
 
+    @Synchronized
     fun write(sheets: List<DataSheet>, out: OutputStream) {
         val doc = PdfDocument()
         try {
             var pageNo = 0
             for (sheet in sheets) {
+                paper = sheet.paper
                 val pages = paginate(sheet)
                 pages.forEachIndexed { i, blocks ->
                     pageNo++
@@ -224,13 +228,13 @@ object DataSheetPdf {
         c.drawLine(x + w1 + w2, y, x + w1 + w2, y + h1, line)
         // Flowstead's mark and name: every data sheet is a Flowstead document.
         FlowsteadLogo.drawLockup(c, x + PAD + 2, y + 6f, 24f)
-        c.drawText("PROCESS DATA SHEET", x + PAD + 2, y + h1 - 6f, small)
+        c.drawText(s.kind, x + PAD + 2, y + h1 - 6f, small)
         val titlePaint = text(11f, bold = true)
         wrap(s.title, titlePaint, w2 - 2 * PAD).take(2).forEachIndexed { k, t ->
             c.drawText(t, x + w1 + (w2 - titlePaint.measureText(t)) / 2, y + 16f + k * 13f, titlePaint)
         }
         val tagPaint = text(10f, bold = true)
-        val tag = "TAG: ${s.tag}"
+        val tag = s.heading
         c.drawText(tag, x + w1 + (w2 - tagPaint.measureText(tag)) / 2, y + h1 - 7f, tagPaint)
         val dx = x + w1 + w2
         val docLines = listOf(

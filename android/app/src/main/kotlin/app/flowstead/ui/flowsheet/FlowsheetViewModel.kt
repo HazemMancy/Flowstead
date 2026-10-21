@@ -10,7 +10,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import app.flowstead.BuildConfig
+import app.flowstead.core.export.DataSheet
 import app.flowstead.core.export.DataSheetWorkbook
+import app.flowstead.core.export.HeatMaterialBalance
 import app.flowstead.core.export.DataSheets
 import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.EditRejected
@@ -46,6 +48,7 @@ import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.AppSettings
 import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.ui.datasheet.DataSheetPdf
+import app.flowstead.ui.datasheet.PfdPdf
 import app.flowstead.ui.datasheet.FlowsteadLogo
 import app.flowstead.ui.nav.FlowsheetRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -208,6 +211,8 @@ class FlowsheetViewModel @Inject constructor(
     }
 
     fun move(id: String, x: Double, y: Double) = edit(undoable = true) { FlowsheetEditing.move(it, id, x, y) }
+    fun setTable(id: String, keys: List<String>) = edit { FlowsheetEditing.setTable(it, id, keys) }
+    fun moveTable(id: String, dx: Double, dy: Double) = edit { FlowsheetEditing.moveTable(it, id, dx, dy) }
 
     fun delete(id: String) = edit { fs ->
         local.update { it.copy(selectedId = null, editingId = null) }
@@ -367,7 +372,7 @@ class FlowsheetViewModel @Inject constructor(
             return@export
         }
         val unitSet = settingsRepository.settings.first().unitSet
-        val sheets = ResultsWorkbook.build(currentName, fs, solve, unitSet)
+        val sheets = ResultsWorkbook.build(currentName, fs, solve, unitSet, BuildConfig.VERSION_NAME)
         val bytes = when (format) {
             ResultsFormat.Csv -> Csv.write(sheets).toByteArray(Charsets.UTF_8)
             ResultsFormat.Xlsx -> Xlsx.write(sheets)
@@ -387,23 +392,13 @@ class FlowsheetViewModel @Inject constructor(
     fun exportDataSheets(uri: Uri, id: String, format: DataSheetFormat) = export {
         val fs = current ?: return@export
         val unitSet = settingsRepository.settings.first().unitSet
-        val today = java.time.Instant.ofEpochMilli(clock.now()).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
         val targets = if (id == ALL_EQUIPMENT) fs.objects.filter { DataSheets.isEquipment(it.type) } else listOfNotNull(fs.obj(id))
         if (targets.isEmpty()) {
             _messages.send("There is no equipment to make a data sheet for")
             return@export
         }
-        val sheets = targets.map { DataSheets.build(currentName, fs, currentSolve, unitSet, it, today, BuildConfig.VERSION_NAME) }
-        val bytes = withContext(Dispatchers.Default) {
-            when (format) {
-                DataSheetFormat.Pdf -> java.io.ByteArrayOutputStream().also { DataSheetPdf.write(sheets, it) }.toByteArray()
-                DataSheetFormat.Xlsx -> {
-                    val (png, size) = FlowsteadLogo.png(heightPx = 96)
-                    DataSheetWorkbook.write(sheets, DataSheetWorkbook.Logo(png, size[0], size[1]))
-                }
-            }
-        }
-        documents.write(uri, bytes)
+        val sheets = targets.map { DataSheets.build(currentName, fs, currentSolve, unitSet, it, today(), BuildConfig.VERSION_NAME) }
+        documents.write(uri, render(sheets, format))
         val stale = currentSolve?.let { fs.modelHash() != it.modelHash } ?: false
         _messages.send(
             (if (sheets.size == 1) "Data sheet created" else "${sheets.size} data sheets created") +
@@ -413,6 +408,59 @@ class FlowsheetViewModel @Inject constructor(
                     else -> ""
                 },
         )
+    }
+
+    /** The heat and material balance (all streams, energy streams, duties) as an A3 PDF or a workbook. */
+    fun exportHeatMaterialBalance(uri: Uri, format: DataSheetFormat) = export {
+        val fs = current ?: return@export
+        val unitSet = settingsRepository.settings.first().unitSet
+        val perSheet = if (format == DataSheetFormat.Pdf) HeatMaterialBalance.STREAMS_PER_PDF_SHEET else Int.MAX_VALUE
+        val sheets = HeatMaterialBalance.build(currentName, fs, currentSolve, unitSet, today(), BuildConfig.VERSION_NAME, perSheet)
+        documents.write(uri, render(sheets, format))
+        val stale = currentSolve?.let { fs.modelHash() != it.modelHash } ?: false
+        _messages.send(
+            "Heat and material balance created" + when {
+                currentSolve == null -> " (not solved: the balance is blank)"
+                stale -> " (results out of date)"
+                else -> ""
+            },
+        )
+    }
+
+    /** The flowsheet as an A3 landscape PFD (with its property tables) and the project title block. */
+    fun exportPfd(uri: Uri) = export {
+        val fs = current ?: return@export
+        val unitSet = settingsRepository.settings.first().unitSet
+        val solve = currentSolve
+        val view = ResultView(solve, fs.modelHash())
+        val header = PfdPdf.Header(
+            projectName = currentName,
+            info = fs.documentInfo ?: DocumentInfo(),
+            date = today(),
+            units = unitSet.name,
+            propertyPackage = fs.propertyPackage,
+            footer = "Flowstead ${BuildConfig.VERSION_NAME}" + (solve?.result?.let { " · DWSIM ${it.dwsimVersion}" } ?: ""),
+            stale = view.stale,
+            solved = solve != null,
+        )
+        val bytes = withContext(Dispatchers.Default) {
+            java.io.ByteArrayOutputStream().also { PfdPdf.write(fs, view, unitSet, header, it) }.toByteArray()
+        }
+        documents.write(uri, bytes)
+        _messages.send("PFD created")
+    }
+
+    private fun today(): String =
+        java.time.Instant.ofEpochMilli(clock.now()).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+
+    private suspend fun render(sheets: List<DataSheet>, format: DataSheetFormat): ByteArray = withContext(Dispatchers.Default) {
+        when (format) {
+            DataSheetFormat.Pdf -> java.io.ByteArrayOutputStream().also { DataSheetPdf.write(sheets, it) }.toByteArray()
+            DataSheetFormat.Xlsx -> {
+                val (png, size) = FlowsteadLogo.png(heightPx = 96)
+                DataSheetWorkbook.write(sheets, DataSheetWorkbook.Logo(png, size[0], size[1]))
+            }
+        }
     }
 
     private fun export(block: suspend () -> Unit) {

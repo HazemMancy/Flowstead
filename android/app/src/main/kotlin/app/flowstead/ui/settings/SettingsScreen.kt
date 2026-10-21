@@ -67,7 +67,7 @@ import app.flowstead.ui.theme.valueColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit = {}, viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
@@ -92,6 +92,8 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             UnitsSection(state, viewModel)
             HorizontalDivider()
             ThemeSection(state.settings.themeMode, viewModel::setTheme)
+            HorizontalDivider()
+            AboutSection(state, viewModel, onOpenAbout)
         }
     }
 }

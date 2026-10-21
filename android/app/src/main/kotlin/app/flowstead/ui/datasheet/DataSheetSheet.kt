@@ -58,6 +58,8 @@ fun DataSheetSheet(
     onCreatePdf: () -> Unit,
     onCreateExcel: () -> Unit,
     onDismiss: () -> Unit,
+    /** Project-wide documents, offered when [equipment] is null. */
+    projectDocuments: ProjectDocumentActions? = null,
 ) {
     // Fields commit when focus leaves them, and tapping a button doesn't take focus: commit before acting.
     val focus = LocalFocusManager.current
@@ -72,15 +74,37 @@ fun DataSheetSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                if (equipment == null) "Data sheets — all equipment" else "Data sheet — ${equipment.tag}",
+                if (equipment == null) "Project documents" else "Data sheet — ${equipment.tag}",
                 style = MaterialTheme.typography.titleLarge,
             )
-            Text(
-                if (equipment == null) "One document with a data sheet for each of the $equipmentCount pieces of equipment (Excel: one worksheet each)."
-                else "${equipment.type.displayName()}. Process data come from the last solve; anything the engine didn't return prints as “—”.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (equipment == null && projectDocuments != null) {
+                Text(
+                    "Every document carries the title block below and the Flowstead name. Process values come from the last solve; " +
+                        "anything the engine didn't return prints as “—”.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text("Process flow diagram (A3 landscape)", style = MaterialTheme.typography.titleSmall)
+                Button(onClick = committed(projectDocuments.onPfdPdf), enabled = !exporting, modifier = Modifier.testTag("create_pfd_pdf")) {
+                    Text("PFD as PDF")
+                }
+                Text("Heat and material balance", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = committed(projectDocuments.onHmbPdf), enabled = !exporting, modifier = Modifier.weight(1f).testTag("create_hmb_pdf")) {
+                        Text("PDF")
+                    }
+                    OutlinedButton(onClick = committed(projectDocuments.onHmbExcel), enabled = !exporting, modifier = Modifier.weight(1f).testTag("create_hmb_xlsx")) {
+                        Text("Excel")
+                    }
+                }
+                Text("Data sheets — all $equipmentCount pieces of equipment", style = MaterialTheme.typography.titleSmall)
+            } else {
+                Text(
+                    "${equipment?.type?.displayName()}. Process data come from the last solve; anything the engine didn't return prints as “—”.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             val canCreate = !exporting && (equipment != null || equipmentCount > 0)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = committed(onCreatePdf), enabled = canCreate, modifier = Modifier.weight(1f).testTag("create_data_sheet_pdf")) {
@@ -120,7 +144,7 @@ fun DataSheetSheet(
             }
 
             HorizontalDivider()
-            Text("Title block (all data sheets of this project)", style = MaterialTheme.typography.titleSmall)
+            Text("Title block (every document of this project)", style = MaterialTheme.typography.titleSmall)
             CommitField("Company", info.company, "doc.company", "Your company's name") { onInfo(info.copy(company = it)) }
             CommitField("Project", info.project, "doc.project", "Project name (defaults to this project's)") { onInfo(info.copy(project = it)) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -128,6 +152,11 @@ fun DataSheetSheet(
                 Column(Modifier.weight(1f)) { CommitField("Client", info.client, "doc.client") { onInfo(info.copy(client = it)) } }
             }
             CommitField("Site / location", info.site, "doc.site") { onInfo(info.copy(site = it)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(2f)) { CommitField("PFD doc. No.", info.pfdNumber, "doc.pfd") { onInfo(info.copy(pfdNumber = it)) } }
+                Column(Modifier.weight(2f)) { CommitField("H&MB doc. No.", info.hmbNumber, "doc.hmb") { onInfo(info.copy(hmbNumber = it)) } }
+                Column(Modifier.weight(1f)) { CommitField("Rev.", info.revision, "doc.rev", "A") { onInfo(info.copy(revision = it)) } }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f)) { CommitField("Prepared", info.preparedBy, "doc.prep") { onInfo(info.copy(preparedBy = it)) } }
                 Column(Modifier.weight(1f)) { CommitField("Checked", info.checkedBy, "doc.chk") { onInfo(info.copy(checkedBy = it)) } }
@@ -166,3 +195,6 @@ private fun CommitField(
             .testTag("sheet_$key"),
     )
 }
+
+/** The project-wide documents the sheet can create. */
+class ProjectDocumentActions(val onPfdPdf: () -> Unit, val onHmbPdf: () -> Unit, val onHmbExcel: () -> Unit)

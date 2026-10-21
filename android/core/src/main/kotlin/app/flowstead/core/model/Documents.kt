@@ -6,7 +6,7 @@ package app.flowstead.core.model
 
 import kotlinx.serialization.Serializable
 
-/** Title-block details shared by every data sheet of a project. */
+/** Title-block details shared by every document of a project: data sheets, the PFD and the H&MB. */
 @Serializable
 data class DocumentInfo(
     val company: String = "",
@@ -17,6 +17,11 @@ data class DocumentInfo(
     val preparedBy: String = "",
     val checkedBy: String = "",
     val approvedBy: String = "",
+    /** Document numbers of the process flow diagram and of the heat and material balance. */
+    val pfdNumber: String = "",
+    val hmbNumber: String = "",
+    /** Revision of the PFD and H&MB (data sheets carry their own). */
+    val revision: String = "",
 )
 
 /** Keys of [SimObject.sheet]: one equipment's own data-sheet fields, all free text. */

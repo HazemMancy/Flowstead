@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -42,6 +44,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
@@ -58,10 +61,12 @@ import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
 import app.flowstead.core.model.PortSide
 import app.flowstead.core.model.Ports
+import app.flowstead.core.model.PropertyTables
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.SpecKey
 import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.displayName
+import app.flowstead.core.units.UnitSet
 import app.flowstead.ui.theme.PlexMono
 import app.flowstead.ui.theme.valueColors
 import kotlin.math.roundToInt
@@ -76,6 +81,10 @@ interface CanvasActions {
     /** A wire dragged from [port] on [unitId] was released over [target] at [world]. */
     fun wire(unitId: String, port: Port, target: Hit, world: Offset)
     fun delete(objectId: String)
+    /** A property table was moved to ([dx], [dy]) from its object, in world units. */
+    fun moveTable(objectId: String, dx: Double, dy: Double) {}
+    /** A property table was tapped or long-pressed. */
+    fun editTable(objectId: String) {}
 }
 
 @Composable
@@ -88,6 +97,7 @@ fun FlowsheetCanvas(
     onViewport: (Viewport) -> Unit,
     actions: CanvasActions,
     modifier: Modifier = Modifier,
+    unitSet: UnitSet = UnitSet.SI,
 ) {
     val density = LocalDensity.current.density
     val colors = MaterialTheme.colorScheme
@@ -112,6 +122,9 @@ fun FlowsheetCanvas(
     // Transient gesture state: only committed to the flowsheet when the finger lifts.
     var dragging by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     var wire by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
+    var draggingTable by remember { mutableStateOf<Pair<String, Offset>?>(null) }
+    // Where each property table was last drawn (screen), for hit-testing; written while drawing.
+    val tableBoxes = remember { mutableMapOf<String, Rect>() }
 
     fun positionOf(o: SimObject): Offset = dragging?.takeIf { it.first == o.id }?.second ?: CanvasGeometry.center(o)
 
@@ -126,6 +139,7 @@ fun FlowsheetCanvas(
                         val startVp = vp
                         val startWorld = startVp.toWorld(down.position, density)
                         val hit = hitTest(fs, startWorld, startVp.zoom)
+                        val tableHit = tableBoxes.entries.lastOrNull { it.value.contains(down.position) }?.key
 
                         val outcome: Outcome? = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                             var travelled = Offset.Zero
@@ -147,19 +161,31 @@ fun FlowsheetCanvas(
 
                         when (outcome) {
                             null -> { // long press
-                                val id = when (hit) {
+                                val id = if (tableHit != null) null else when (hit) {
                                     is Hit.OnObject -> hit.objectId
                                     is Hit.OnPort -> hit.objectId
                                     Hit.Empty -> null
                                 }
-                                id?.let { act.longPress(it) }
+                                if (tableHit != null) act.editTable(tableHit) else id?.let { act.longPress(it) }
                                 do {
                                     val ev = awaitPointerEvent()
                                     ev.changes.forEach { it.consume() }
                                 } while (ev.changes.any { it.pressed })
                             }
-                            Outcome.Up -> act.tap(hit)
-                            Outcome.Drag -> {
+                            Outcome.Up -> if (tableHit != null) act.editTable(tableHit) else act.tap(hit)
+                            Outcome.Drag -> if (tableHit != null) {
+                                val table = fs.tables.firstOrNull { it.objectId == tableHit }
+                                val from = Offset(table?.dx?.toFloat() ?: 0f, table?.dy?.toFloat() ?: 0f)
+                                while (true) {
+                                    val ev = awaitPointerEvent()
+                                    val change = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) break
+                                    change.consume()
+                                    draggingTable = tableHit to (from + (vp.toWorld(change.position, density) - startWorld))
+                                }
+                                draggingTable?.let { (id, at) -> act.moveTable(id, at.x.toDouble(), at.y.toDouble()) }
+                                draggingTable = null
+                            } else {
                                 val obj = (hit as? Hit.OnObject)?.let { h -> fs.objects.firstOrNull { it.id == h.objectId } }
                                 val port = hit as? Hit.OnPort
                                 val portStart = port?.let { p ->
@@ -311,6 +337,42 @@ fun FlowsheetCanvas(
                 val anchor = viewport.toScreen(Offset(b.center.x, b.bottom + 4f), density)
                 val layout = textMeasurer.measure(o.tag, style)
                 drawText(layout, topLeft = Offset(anchor.x - layout.size.width / 2f, anchor.y))
+            }
+
+            // Property tables, also in screen space; they scale with the zoom and move with their object.
+            tableBoxes.clear()
+            val tableSize = (9f * viewport.zoom).coerceIn(6f, 14f)
+            val cell = TextStyle(fontFamily = PlexMono, fontSize = tableSize.sp, color = colors.onSurface)
+            val head = cell.copy(fontWeight = FontWeight.Bold)
+            val unitStyle = cell.copy(color = labelColor)
+            for (t in fs.tables) {
+                val o = fs.objects.firstOrNull { it.id == t.objectId } ?: continue
+                val rows = PropertyTables.rows(fs, t, results, unitSet)
+                val offset = draggingTable?.takeIf { it.first == t.objectId }?.second ?: Offset(t.dx.toFloat(), t.dy.toFloat())
+                val topLeft = viewport.toScreen(positionOf(o) + offset, density)
+                val title = textMeasurer.measure(o.tag, head)
+                val labels = rows.map { textMeasurer.measure(it.label, cell) }
+                val valueTexts = rows.map { textMeasurer.measure(it.value, cell) }
+                val unitsText = rows.map { textMeasurer.measure(it.unit, unitStyle) }
+                val rowH = title.size.height.toFloat()
+                val pad = rowH * 0.35f
+                val lw = labels.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
+                val vw = valueTexts.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
+                val uw = unitsText.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
+                val w = maxOf(title.size.width.toFloat(), lw + vw + uw + 3 * pad) + 2 * pad
+                val h = rowH * (rows.size + 1) + 2 * pad
+                val box = Rect(topLeft, Size(w, h))
+                tableBoxes[t.objectId] = box
+                drawRect(colors.surface, box.topLeft, box.size)
+                drawRect(if (t.objectId == selectedId) colors.secondary else colors.outline, box.topLeft, box.size, style = Stroke(1.2f))
+                drawText(title, topLeft = Offset(box.left + pad, box.top + pad))
+                drawLine(colors.outlineVariant, Offset(box.left, box.top + pad + rowH), Offset(box.right, box.top + pad + rowH), 1f)
+                rows.indices.forEach { i ->
+                    val y = box.top + pad + rowH * (i + 1)
+                    drawText(labels[i], topLeft = Offset(box.left + pad, y))
+                    drawText(valueTexts[i], topLeft = Offset(box.left + 2 * pad + lw + vw - valueTexts[i].size.width, y))
+                    drawText(unitsText[i], topLeft = Offset(box.left + 3 * pad + lw + vw, y))
+                }
             }
         }
 

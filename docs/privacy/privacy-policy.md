@@ -1,6 +1,6 @@
 # Flowstead privacy policy
 
-_Last updated: 2026-10-20_
+_Last updated: 2026-10-21_
 
 Flowstead is an Android app for steady-state process simulation. This policy explains what the app does with your data. In short: your data stays on your phone and on the engine server you choose. The Flowstead project does not receive it.
 
@@ -21,12 +21,14 @@ The app talks only to the **engine address you enter in Settings**. Over HTTPS, 
 - compound searches;
 - your API key, in the request header.
 
+The one other address is **GitHub**, and only when you tap **Settings → Check for updates**: the app asks api.github.com for the latest Flowstead release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. Downloading an update opens your browser.
+
 The engine is run by you or your organisation. Its operator can see what you send it. The engine keeps an API-key hash and, if you use stored flowsheets, those flowsheets and results. It does not keep the files you import or export.
 
 ## What the app does not do
 
 - No analytics, crash reporting, advertising or tracking SDKs.
-- No account with the Flowstead project, and no data sent to the Flowstead project or any third party.
+- No account with the Flowstead project, and no data sent to the Flowstead project or any third party (the update check above sends no data of yours).
 - No location, contacts, camera, microphone or other personal data.
 
 ## Files
@@ -37,7 +39,7 @@ When you import or export a file, Android's system file picker gives the app acc
 
 | Permission | Why |
 |---|---|
-| Internet | To reach your engine |
+| Internet | To reach your engine, and GitHub when you check for updates |
 | Network state | To run a queued solve once you're back online |
 
 ## Deleting your data

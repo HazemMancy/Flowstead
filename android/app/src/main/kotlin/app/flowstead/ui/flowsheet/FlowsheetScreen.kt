@@ -68,11 +68,13 @@ import app.flowstead.core.export.DataSheets
 import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
+import app.flowstead.core.model.PropertyTables
 import app.flowstead.core.model.Reaction
 import app.flowstead.core.model.SizingCriteria
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.obj
 import app.flowstead.ui.datasheet.DataSheetSheet
+import app.flowstead.ui.datasheet.ProjectDocumentActions
 import app.flowstead.ui.components.BackButton
 import app.flowstead.ui.theme.Brand
 import app.flowstead.ui.theme.NumberStyles
@@ -145,16 +147,10 @@ fun FlowsheetScreen(
                                 onClick = { menu = false; xlsxFile.launch(viewModel.exportFileName("xlsx", " results")) },
                             )
                             DropdownMenuItem(
-                                text = { Text("Data sheets — all equipment") },
+                                text = { Text("Project documents: PFD, H&MB, data sheets") },
                                 enabled = ready != null,
                                 onClick = { menu = false; viewModel.openDataSheet(null) },
                                 modifier = Modifier.testTag("menu_data_sheets"),
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Line sizing criteria") },
-                                enabled = ready != null,
-                                onClick = { menu = false; viewModel.openSizingCriteria() },
-                                modifier = Modifier.testTag("menu_sizing_criteria"),
                             )
                         }
                     }
@@ -186,6 +182,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
     var centred by remember { mutableStateOf(false) }
     var ghost by remember { mutableStateOf<Pair<ObjectType, Offset>?>(null) }
     var quickActionsFor by remember { mutableStateOf<String?>(null) }
+    var tableFor by remember { mutableStateOf<String?>(null) }
     var showIssues by remember { mutableStateOf(false) }
 
     // First layout: centre the drawing (or the world origin for an empty flowsheet).
@@ -213,6 +210,11 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun wire(unitId: String, port: Port, target: Hit, world: Offset) =
                 vm.wire(unitId, port, target, world.x.toDouble(), world.y.toDouble())
             override fun delete(objectId: String) = vm.delete(objectId)
+            override fun moveTable(objectId: String, dx: Double, dy: Double) = vm.moveTable(objectId, dx, dy)
+            override fun editTable(objectId: String) {
+                vm.select(objectId)
+                tableFor = objectId
+            }
         }
     }
     val editorActions = remember(vm) {
@@ -253,6 +255,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 onViewport = { viewport = it },
                 actions = canvasActions,
                 modifier = Modifier.fillMaxSize(),
+                unitSet = ui.unitSet,
             )
             if (ui.flowsheet.objects.isEmpty()) {
                 Text(
@@ -308,6 +311,15 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
         val target = ui.dataSheetFor
         if (uri != null && target != null) vm.exportDataSheets(uri, target, DataSheetFormat.Xlsx)
     }
+    val hmbPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(DataSheetFormat.Pdf.mimeType)) { uri ->
+        uri?.let { vm.exportHeatMaterialBalance(it, DataSheetFormat.Pdf) }
+    }
+    val hmbXlsx = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(DataSheetFormat.Xlsx.mimeType)) { uri ->
+        uri?.let { vm.exportHeatMaterialBalance(it, DataSheetFormat.Xlsx) }
+    }
+    val pfdPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(DataSheetFormat.Pdf.mimeType)) { uri ->
+        uri?.let(vm::exportPfd)
+    }
     ui.dataSheetFor?.let { target ->
         val equipment = ui.flowsheet.obj(target)
         DataSheetSheet(
@@ -320,6 +332,11 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             onCreatePdf = { pdfFile.launch(vm.dataSheetFileName(target, DataSheetFormat.Pdf)) },
             onCreateExcel = { xlsxSheetFile.launch(vm.dataSheetFileName(target, DataSheetFormat.Xlsx)) },
             onDismiss = vm::closeDataSheet,
+            projectDocuments = ProjectDocumentActions(
+                onPfdPdf = { pfdPdf.launch(vm.exportFileName("pdf", " PFD")) },
+                onHmbPdf = { hmbPdf.launch(vm.exportFileName("pdf", " heat and material balance")) },
+                onHmbExcel = { hmbXlsx.launch(vm.exportFileName("xlsx", " heat and material balance")) },
+            ),
         )
     }
 
@@ -341,6 +358,19 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 onDisconnect = { vm.disconnectAll(id) },
                 onDelete = { vm.delete(id) },
                 onDismiss = { quickActionsFor = null },
+                onTable = if (PropertyTables.available(ui.flowsheet, obj).isEmpty()) null else ({ tableFor = id }),
+                hasTable = ui.flowsheet.tables.any { it.objectId == id },
+            )
+        }
+    }
+
+    tableFor?.let { id ->
+        ui.flowsheet.obj(id)?.let { obj ->
+            PropertyTableSheet(
+                fs = ui.flowsheet,
+                obj = obj,
+                onApply = { keys -> vm.setTable(id, keys) },
+                onDismiss = { tableFor = null },
             )
         }
     }

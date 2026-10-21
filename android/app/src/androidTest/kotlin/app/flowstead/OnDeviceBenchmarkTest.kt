@@ -9,11 +9,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.export.DataSheets
+import app.flowstead.core.export.HeatMaterialBalance
 import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.FlowsheetJson
 import app.flowstead.core.model.LineCriteria
+import app.flowstead.core.model.PropertyTables
+import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SheetKeys
 import app.flowstead.core.model.SizingCriteria
 import app.flowstead.core.model.Spec
@@ -22,6 +25,7 @@ import app.flowstead.core.model.modelHash
 import app.flowstead.core.model.obj
 import app.flowstead.core.units.UnitSet
 import app.flowstead.ui.datasheet.DataSheetPdf
+import app.flowstead.ui.datasheet.PfdPdf
 import app.flowstead.data.engine.EngineResult
 import app.flowstead.data.engine.local.EmbeddedLocalEngine
 import app.flowstead.data.engine.local.LocalEngineClient
@@ -85,6 +89,7 @@ class OnDeviceBenchmarkTest {
                 continue
             }
             if (case.startsWith("16-")) sampleDataSheets(flowsheet, r.value)
+            if (case.startsWith("07-")) sampleProjectDocuments(flowsheet, r.value)
             val result = FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.SolveResult.serializer(), r.value)
             expected["checks"]?.jsonArray?.forEach { check(case, it.jsonObject, result, failures) }
             expected["reference"]?.jsonArray?.forEach { ref ->
@@ -112,12 +117,35 @@ class OnDeviceBenchmarkTest {
             .let { FlowsheetEditing.setSheetField(it, "pg", SheetKeys.DOCUMENT_NUMBER, "P-0001-PR-DS-001") }
         val stored = StoredSolve(solved, fs.modelHash(), System.currentTimeMillis())
         val sheets = listOf("pg", "pt").map { DataSheets.build("Lines", fs, stored, UnitSet.SI, fs.obj(it)!!, "2026-10-21", BuildConfig.VERSION_NAME) }
-        val bytes = java.io.ByteArrayOutputStream().also { DataSheetPdf.write(sheets, it) }.toByteArray()
-        assertTrue(String(bytes, 0, 5, Charsets.US_ASCII) == "%PDF-", "not a PDF")
+        logPdf("data-sheets", java.io.ByteArrayOutputStream().also { DataSheetPdf.write(sheets, it) }.toByteArray())
+    }
+
+    /** The recycle loop's PFD (with property tables) and heat and material balance, logged like the data sheets. */
+    private fun sampleProjectDocuments(input: Flowsheet, solved: app.flowstead.core.api.SolveResult) {
+        var fs = input.copy(
+            documentInfo = DocumentInfo(
+                company = "Sample Engineering Ltd", project = "Gas Plant Recycle Study", projectNumber = "P-0002",
+                client = "Sample Client", site = "Onshore", preparedBy = "Flowstead", pfdNumber = "P-0002-PR-PFD-001",
+                hmbNumber = "P-0002-PR-HMB-001", revision = "A",
+            ),
+        )
+        fs = FlowsheetEditing.setTable(fs, "feed", PropertyTables.defaults(fs, fs.obj("feed")!!))
+        fs = FlowsheetEditing.setTable(fs, "gas", listOf("temperature", "pressure", "massFlow"))
+        fs = FlowsheetEditing.setTable(fs, "chill", PropertyTables.available(fs, fs.obj("chill")!!))
+        val stored = StoredSolve(solved, fs.modelHash(), System.currentTimeMillis())
+        val view = ResultView(stored, fs.modelHash())
+        val header = PfdPdf.Header("Recycle", fs.documentInfo!!, "2026-10-21", UnitSet.SI.name, fs.propertyPackage, "Flowstead ${BuildConfig.VERSION_NAME}", false, true)
+        logPdf("pfd", java.io.ByteArrayOutputStream().also { PfdPdf.write(fs, view, UnitSet.SI, header, it) }.toByteArray())
+        val hmb = HeatMaterialBalance.build("Recycle", fs, stored, UnitSet.SI, "2026-10-21", BuildConfig.VERSION_NAME, HeatMaterialBalance.STREAMS_PER_PDF_SHEET)
+        logPdf("hmb", java.io.ByteArrayOutputStream().also { DataSheetPdf.write(hmb, it) }.toByteArray())
+    }
+
+    private fun logPdf(name: String, bytes: ByteArray) {
+        assertTrue(String(bytes, 0, 5, Charsets.US_ASCII) == "%PDF-", "$name is not a PDF")
         val b64 = java.util.Base64.getEncoder().encodeToString(bytes)
-        Log.i(PDF_TAG, "begin ${bytes.size} bytes")
+        Log.i(PDF_TAG, "begin $name ${bytes.size} bytes")
         b64.chunked(3000).forEach { Log.i(PDF_TAG, it) }
-        Log.i(PDF_TAG, "end")
+        Log.i(PDF_TAG, "end $name")
     }
 
     private fun check(case: String, c: JsonObject, result: JsonElement, failures: MutableList<String>) {

@@ -104,7 +104,7 @@ object DataSheetWorkbook {
             for (r in 1..3) for (c in 0..1) cells.getOrPut(r) { mutableMapOf() }[c] = Cell(null, null, 0)
             merges += "A1:B3"
             span(1, 2, last, s.title, TITLE)
-            span(2, 2, last, "TAG: ${s.tag}", SUBTITLE)
+            span(2, 2, last, s.heading, SUBTITLE)
             span(3, 2, last, listOf("Doc. No. ${s.documentNumber.ifBlank { "—" }}", "Rev. ${s.revision}", "Date ${s.date}", "Units ${s.unitSystem}").joinToString("   ·   "), SMALL)
             heights[1] = 24.0
             heights[2] = 18.0
@@ -217,9 +217,10 @@ object DataSheetWorkbook {
                 append("</mergeCells>")
             }
             append("""<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.6" header="0.3" footer="0.3"/>""")
-            append("""<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>""")
+            val a3 = s.paper == DataSheet.Paper.A3Landscape
+            append("""<pageSetup paperSize="${if (a3) 8 else 9}" orientation="${if (a3) "landscape" else "portrait"}" fitToWidth="1" fitToHeight="0"/>""")
             append("<headerFooter><oddFooter>")
-            append(esc("&L&8Generated with ${s.footer}. Process values are simulation results; verify before design use.&R&8${s.tag} · Page &P of &N"))
+            append(esc("&L&8Generated with ${s.footer}. Process values are simulation results; verify before design use.&R&8${s.tag.ifBlank { s.title }} · Page &P of &N"))
             append("</oddFooter></headerFooter>")
             if (logo != null) append("""<drawing r:id="rId1"/>""")
             append("</worksheet>")

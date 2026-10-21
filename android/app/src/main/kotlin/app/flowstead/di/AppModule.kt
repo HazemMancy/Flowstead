@@ -25,6 +25,8 @@ import app.flowstead.data.files.ContentResolverDocumentIo
 import app.flowstead.data.files.DocumentIo
 import app.flowstead.data.queue.SolveQueue
 import app.flowstead.data.queue.WorkManagerSolveQueue
+import app.flowstead.data.update.GithubUpdateChecker
+import app.flowstead.data.update.UpdateChecker
 import app.flowstead.data.settings.DataStoreSettingsRepository
 import app.flowstead.data.settings.EncryptedSecretStore
 import app.flowstead.data.settings.KeystoreCipher
@@ -105,4 +107,5 @@ abstract class BindingsModule {
     @Binds abstract fun documents(impl: ContentResolverDocumentIo): DocumentIo
     @Binds abstract fun compounds(impl: AssetCompoundLibrary): CompoundLibrary
     @Binds abstract fun solveQueue(impl: WorkManagerSolveQueue): SolveQueue
+    @Binds abstract fun updates(impl: GithubUpdateChecker): UpdateChecker
 }

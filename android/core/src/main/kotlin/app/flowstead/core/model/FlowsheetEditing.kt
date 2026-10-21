@@ -54,7 +54,23 @@ object FlowsheetEditing {
     fun delete(fs: Flowsheet, id: String): Flowsheet = fs.copy(
         objects = fs.objects.filterNot { it.id == id },
         connections = fs.connections.filterNot { it.fromObject == id || it.toObject == id },
+        tables = fs.tables.filterNot { it.objectId == id },
     )
+
+    /** Shows (or updates) [id]'s property table with [keys]; no keys removes it. Keeps its position. */
+    fun setTable(fs: Flowsheet, id: String, keys: List<String>): Flowsheet {
+        val o = fs.obj(id) ?: throw EditRejected("That object no longer exists")
+        val allowed = PropertyTables.available(fs, o)
+        val chosen = keys.distinct().filter { it in allowed }
+        val others = fs.tables.filterNot { it.objectId == id }
+        if (chosen.isEmpty()) return fs.copy(tables = others)
+        val table = fs.tables.firstOrNull { it.objectId == id }?.copy(keys = chosen) ?: PropertyTable(id, chosen)
+        return fs.copy(tables = others + table)
+    }
+
+    /** Moves [id]'s table to an offset from the object, in world units. */
+    fun moveTable(fs: Flowsheet, id: String, dx: Double, dy: Double): Flowsheet =
+        fs.copy(tables = fs.tables.map { if (it.objectId == id) it.copy(dx = dx, dy = dy) else it })
 
     /** Removes every connection on one unit-op port, or all connections of a stream end. */
     fun disconnect(fs: Flowsheet, connection: Connection): Flowsheet = fs.copy(connections = fs.connections - connection)

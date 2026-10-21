@@ -57,7 +57,16 @@ data class DataSheet(
     val sections: List<Section>,
     val notes: List<String>,
     val footer: String,
+    val paper: Paper = Paper.A4Portrait,
+    /** Caption under the Flowstead logo, naming the kind of document. */
+    val kind: String = "PROCESS DATA SHEET",
+    /** Second title line; "TAG: [tag]" when null. */
+    val subtitle: String? = null,
 ) {
+    enum class Paper { A4Portrait, A3Landscape }
+
+    val heading: String get() = subtitle ?: "TAG: $tag"
+
     /** [columns] head the value columns; each [Line] has a description, a unit and one value per column. */
     data class Section(val title: String, val columns: List<String>, val lines: List<Line>)
 

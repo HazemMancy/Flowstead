@@ -248,8 +248,8 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
 
 /** SHA-256 of the canonical flowsheet JSON: identifies exactly which flowsheet a result belongs to. */
 fun Flowsheet.modelHash(): String {
-    // Only what the engine solves counts: sizing criteria and data-sheet text change no result.
-    val solved = copy(sizingCriteria = null, documentInfo = null, objects = objects.map { if (it.sheet.isEmpty()) it else it.copy(sheet = emptyMap()) })
+    // Only what the engine solves counts: sizing criteria, data-sheet text and flowsheet tables change no result.
+    val solved = copy(sizingCriteria = null, documentInfo = null, tables = emptyList(), objects = objects.map { if (it.sheet.isEmpty()) it else it.copy(sheet = emptyMap()) })
     val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), solved)
     return java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
 }

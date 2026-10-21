@@ -43,6 +43,13 @@ import kotlinx.coroutines.withContext
 /** Bundled from docs/privacy/ (see app/build.gradle.kts). */
 const val PRIVACY_ASSET = "privacy-policy.md"
 
+/** Credits shown under About and in Settings. */
+object Credits {
+    const val DEVELOPER = "Developed by Hazem ElMancy, process engineer."
+    const val ENGINE = "Built on the DWSIM engine: every calculation runs on DWSIM 9.0.5, the open-source chemical " +
+        "process simulator (© Daniel Wagner and contributors, GPL-3.0)."
+}
+
 /** One open-source component and where its licence text is bundled (assets/licenses). */
 data class OssEntry(val name: String, val licence: String, val asset: String?)
 
@@ -83,6 +90,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
                 }
             }
             Text("Steady-state process simulation, in your pocket.", style = MaterialTheme.typography.bodyLarge)
+            Text(Credits.DEVELOPER, style = MaterialTheme.typography.bodyLarge)
             Text(
                 "Powered by DWSIM",
                 style = MaterialTheme.typography.titleMedium,

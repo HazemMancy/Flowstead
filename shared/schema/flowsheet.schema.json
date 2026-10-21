@@ -61,7 +61,21 @@
     },
     "documentInfo": {
       "type": "object",
-      "description": "App-only data-sheet title block: company, project, projectNumber, client, site, preparedBy, checkedBy, approvedBy (strings). Not part of the solved model; the engine ignores it."
+      "description": "App-only title block for every project document (data sheets, PFD, H&MB): company, project, projectNumber, client, site, preparedBy, checkedBy, approvedBy, pfdNumber, hmbNumber, revision (strings). Not part of the solved model; the engine ignores it."
+    },
+    "tables": {
+      "type": "array",
+      "description": "App-only property tables drawn on the flowsheet and the printed PFD: objectId, keys (result keys to show), dx and dy (offset from the object, world units). Not part of the solved model; the engine ignores it.",
+      "items": {
+        "type": "object",
+        "required": ["objectId", "keys"],
+        "properties": {
+          "objectId": { "type": "string" },
+          "keys": { "type": "array", "items": { "type": "string" } },
+          "dx": { "type": "number" },
+          "dy": { "type": "number" }
+        }
+      }
     }
   },
   "$defs": {

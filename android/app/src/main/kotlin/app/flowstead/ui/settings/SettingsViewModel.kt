@@ -6,6 +6,8 @@ package app.flowstead.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.flowstead.BuildConfig
+import app.flowstead.core.update.UpdateCheck
 import app.flowstead.core.units.EngUnit
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitSet
@@ -17,6 +19,7 @@ import app.flowstead.data.settings.EngineUrl
 import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.EngineMode
 import app.flowstead.data.settings.SettingsRepository
+import app.flowstead.data.update.UpdateChecker
 import app.flowstead.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +39,13 @@ sealed interface ConnectionState {
     data class Failed(val reason: String) : ConnectionState
 }
 
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data class Done(val result: UpdateCheck) : UpdateState
+    data class Failed(val reason: String) : UpdateState
+}
+
 data class SettingsUiState(
     val loaded: Boolean = false,
     val settings: AppSettings = AppSettings(),
@@ -43,6 +53,7 @@ data class SettingsUiState(
     val urlError: String? = null,
     val patmError: String? = null,
     val connection: ConnectionState = ConnectionState.Idle,
+    val update: UpdateState = UpdateState.Idle,
 )
 
 @HiltViewModel
@@ -50,6 +61,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val secrets: SecretStore,
     private val engine: EngineClient,
+    private val updates: UpdateChecker,
 ) : ViewModel() {
 
     private val transient = MutableStateFlow(SettingsUiState())
@@ -107,6 +119,14 @@ class SettingsViewModel @Inject constructor(
                     is EngineResult.Failed -> ConnectionState.Failed(result.reason)
                 },
             )
+        }
+    }
+
+    fun checkForUpdates() = viewModelScope.launch {
+        transient.update { it.copy(update = UpdateState.Checking) }
+        val r = updates.check(BuildConfig.VERSION_NAME)
+        transient.update {
+            it.copy(update = r.fold({ c -> UpdateState.Done(c) }, { e -> UpdateState.Failed(e.message ?: "No connection") }))
         }
     }
 

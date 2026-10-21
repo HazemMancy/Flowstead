@@ -40,6 +40,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val documentInfo: DocumentInfo? = null,
+    /** Property tables shown on the flowsheet (and the printed PFD). Not part of the solved model: excluded from [modelHash]. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val tables: List<PropertyTable> = emptyList(),
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
     fun hypothetical(name: String): Hypothetical? = hypotheticals.firstOrNull { it.name == name }
