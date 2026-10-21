@@ -153,6 +153,16 @@ paths:
         "200": { description: Mapped flowsheet, content: { application/json: { schema: { $ref: "#/components/schemas/ImportResult" } } } }
         "422": { $ref: "#/components/responses/FileError" }
         "503": { $ref: "#/components/responses/EngineUnavailable" }
+  /hypotheticals/estimate:
+    post:
+      summary: The constants DWSIM's petroleum correlations give hypothetical components (HYSYS "Estimate unknown properties").
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: array, items: { $ref: "schema/flowsheet.schema.json#/$defs/Hypothetical" } } } }
+      responses:
+        "200": { description: One entry per hypothetical, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/HypotheticalProperties" } } } } }
+        "422": { description: "Invalid input (code invalid_hypothetical)", content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } } }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
 
 components:
   securitySchemes:
@@ -222,6 +232,21 @@ components:
         molecularWeight: { type: number, description: kg/kmol }
         normalBoilingPointK: { type: number }
         database: { type: string }
+    HypotheticalProperties:
+      type: object
+      description: SI (K, Pa, m³/kmol); SG at 60 °F/60 °F.
+      properties:
+        name: { type: string }
+        normalBoilingPoint: { type: number }
+        molecularWeight: { type: number }
+        specificGravity: { type: number }
+        criticalTemperature: { type: number }
+        criticalPressure: { type: number }
+        acentricFactor: { type: number }
+        criticalVolume: { type: number }
+        watsonK: { type: number }
+        formula: { type: string }
+        estimated: { type: array, items: { type: string }, description: Fields estimated by the correlations rather than given }
     Flowsheet:
       $ref: "schema/flowsheet.schema.json"
     FlowsheetDocument:

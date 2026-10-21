@@ -50,6 +50,11 @@
         "$ref": "#/$defs/Reaction"
       }
     },
+    "hypotheticals": {
+      "type": "array",
+      "description": "User-defined pseudo-components (HYSYS hypotheticals); each name is also in compounds.",
+      "items": { "$ref": "#/$defs/Hypothetical" }
+    },
     "sizingCriteria": {
       "type": "object",
       "description": "App-only line-sizing limits by service (gas, liquid, twoPhase), each a set of optional Specs in SI: maxVelocity, minVelocity (m/s), maxMomentumFlux (kg/m·s²), maxFrictionGradient (Pa/m), maxMach, erosionalC (API RP 14E). Not part of the solved model; the engine ignores it."
@@ -198,6 +203,20 @@
           "type": "integer",
           "minimum": 0
         }
+      }
+    },
+    "Hypothetical": {
+      "type": "object",
+      "required": ["name"],
+      "description": "Give normalBoilingPoint (K) or molecularWeight, optionally specificGravity (60 °F/60 °F); DWSIM's correlations estimate the rest. criticalTemperature (K), criticalPressure (Pa) and acentricFactor override the estimates.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "normalBoilingPoint": { "type": "number" },
+        "molecularWeight": { "type": "number" },
+        "specificGravity": { "type": "number" },
+        "criticalTemperature": { "type": "number" },
+        "criticalPressure": { "type": "number" },
+        "acentricFactor": { "type": "number" }
       }
     },
     "Reaction": {

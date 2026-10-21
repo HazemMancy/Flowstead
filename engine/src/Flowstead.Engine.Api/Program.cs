@@ -120,6 +120,10 @@ api.MapGet("/flowsheets/{id}/export", async (string id, Store s, EngineService e
 api.MapPost("/import", async (DwsimFile file, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.ImportDwsimAsync(file, ct), "invalid_file"));
 
+// Hypothetical components: the constants DWSIM's correlations give (HYSYS "Estimate unknown properties").
+api.MapPost("/hypotheticals/estimate", async (List<Hypothetical> hypotheticals, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.EstimateHypotheticalsAsync(hypotheticals, ct), "invalid_hypothetical"));
+
 app.Run();
 return 0;
 

@@ -30,6 +30,7 @@ Tolerances follow the brief: ±0.01 K on temperature, ±0.1 % relative elsewhere
 | 08-steam-heater | IAPWS, water heated 25 → 120 °C by condensing 5 bara steam | Duty 399.0 kW and Tsat 424.98 K from IAPWS; heat balance (blocking) |
 | 16-gas-and-two-phase-lines | PR, 5 km of 8" Sch 40 gas line; 500 m of 3" Sch 40 two-phase line rising 10 m (Beggs & Brill) | Gas ΔP by Darcy–Weisbach/Colebrook; inlet velocity by continuity; ΔP = friction + static; mass conserved (blocking) |
 | 17-liquid-densities | PR, pure propane, n-hexane and water liquids; a cold C1/C2/C3 liquid with dissolved methane | NIST and IAPWS densities within 0.5 %; NGL liquid between 470 and 580 kg/m³ (blocking) |
+| 18-hypothetical-component | PR, a hypothetical built from n-decane's NBP, MW and SG, beside database n-decane | Boils at its given NBP (±1 K); liquid density at 60 °F = SG (±1 %); flash agrees with database n-decane (VF ±0.015, liquid density ±10 kg/m³) (blocking) |
 
 To regenerate the provisional values after an intentional engine change:
 

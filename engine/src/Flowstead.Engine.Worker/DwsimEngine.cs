@@ -321,6 +321,18 @@ public sealed class DwsimEngine
         }
     }
 
+    /// <summary>The constants DWSIM's correlations give each hypothetical (HYSYS's "Estimate unknown properties").</summary>
+    public List<HypotheticalProperties> EstimateHypotheticals(List<Hypothetical> hypotheticals)
+    {
+        var errors = new List<string>();
+        var probe = new Flowsheet { Compounds = hypotheticals.Select(h => h.Name).ToList(), Hypotheticals = hypotheticals };
+        Validator.Validate(probe, _automation.AvailableCompounds.Keys, [])
+            .Where(m => m.Level == MessageLevel.Error && m.Text.StartsWith("Hypothetical", StringComparison.Ordinal))
+            .ToList().ForEach(m => errors.Add(m.Text));
+        if (errors.Count > 0) throw new InvalidDataException(string.Join(" ", errors));
+        return hypotheticals.Select(h => Hypotheticals.Describe(h, Hypotheticals.Characterise(h))).ToList();
+    }
+
     /// <summary>A compound whose critical temperature is below the highest temperature specified in the flowsheet.</summary>
     private bool HasSupercriticalCompound(Flowsheet model)
     {
@@ -345,6 +357,7 @@ public sealed class DwsimEngine
         // .dwxmz is a zip ("PK"); anything else is treated as uncompressed .dwxml.
         var ext = bytes is [0x50, 0x4B, ..] ? ".dwxmz" : ".dwxml";
         var path = Path.Combine(Path.GetTempPath(), $"flowstead-{Guid.NewGuid():N}{ext}");
+        var database = _automation.AvailableCompounds.Keys.ToHashSet();
         try
         {
             File.WriteAllBytes(path, bytes);
@@ -357,11 +370,14 @@ public sealed class DwsimEngine
             {
                 throw new InvalidDataException("DWSIM could not open the file: " + e.GetBaseException().Message);
             }
-            return DwxmzImporter.Map(fs, FlowsteadPackageName);
+            return DwxmzImporter.Map(fs, FlowsteadPackageName, database.Contains);
         }
         finally
         {
             File.Delete(path);
+            // DWSIM's loader may register the file's own compounds (pseudo-components) in the engine-wide catalogue.
+            foreach (var extra in _automation.AvailableCompounds.Keys.Where(k => !database.Contains(k)).ToList())
+                _automation.AvailableCompounds.Remove(extra);
         }
     }
 
@@ -373,6 +389,13 @@ public sealed class DwsimEngine
     private (IFlowsheet, Dictionary<string, ISimulationObject>) Build(Flowsheet model, WaterMode? water = null, bool forExport = false)
     {
         var fs = _automation.CreateFlowsheet();
+        // DWSIM hands every flowsheet the engine's own compound dictionary; hypotheticals go into a copy so they
+        // never leak into later solves or the compound search.
+        if (model.Hypotheticals.Count > 0)
+        {
+            fs.AvailableCompounds = new Dictionary<string, ICompoundConstantProperties>(_automation.AvailableCompounds);
+            foreach (var h in model.Hypotheticals) fs.AvailableCompounds[h.Name] = Hypotheticals.Characterise(h);
+        }
         foreach (var c in model.Compounds) fs.AddCompound(c);
         var ppName = MvpPackages.FirstOrDefault(p => p.Name == model.PropertyPackage).Dwsim ?? model.PropertyPackage!;
         // Cubic packages solve with Flowstead's liquid-density rule (D32). A .dwxmz keeps DWSIM's own class,

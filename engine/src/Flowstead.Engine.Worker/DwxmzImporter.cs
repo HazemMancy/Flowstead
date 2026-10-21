@@ -19,13 +19,32 @@ namespace Flowstead.Engine.Worker;
 
 public static class DwxmzImporter
 {
-    public static ImportResult Map(IFlowsheet fs, Func<string, string> packageName)
+    public static ImportResult Map(IFlowsheet fs, Func<string, string> packageName, Func<string, bool> isDatabaseCompound)
     {
         var warnings = new List<string>();
         var pp = fs.PropertyPackages.Values.FirstOrDefault();
         if (fs.PropertyPackages.Count > 1)
             warnings.Add($"The file has {fs.PropertyPackages.Count} property packages; Flowstead uses one per flowsheet, the first ({Name(pp)}).");
         var compounds = fs.SelectedCompounds.Keys.ToList();
+        // A compound that is not in the engine's databases (a DWSIM pseudo-component or hypothetical) becomes a
+        // Flowstead hypothetical with the file's own constants, so nothing is re-estimated.
+        var hypotheticals = new List<Hypothetical>();
+        foreach (var (name, c) in fs.SelectedCompounds.Where(kv => !isDatabaseCompound(kv.Key)))
+        {
+            var sg = c.PF_SG is { } d && d > 0 ? d : (double?)null;
+            hypotheticals.Add(new Hypothetical
+            {
+                Name = name,
+                NormalBoilingPoint = c.Normal_Boiling_Point > 0 ? c.Normal_Boiling_Point : null,
+                MolecularWeight = c.Molar_Weight,
+                SpecificGravity = sg,
+                CriticalTemperature = c.Critical_Temperature,
+                CriticalPressure = c.Critical_Pressure,
+                AcentricFactor = c.Acentric_Factor,
+            });
+            warnings.Add($"{name} is not a database compound: imported as a hypothetical from its NBP, MW, SG, Tc, Pc and ω" +
+                (sg is null ? " (no SG in the file: estimated from MW)." : "."));
+        }
 
         var objects = new List<SimObject>();
         var idOf = new Dictionary<string, string>(); // DWSIM name → Flowstead id
@@ -110,6 +129,7 @@ public static class DwxmzImporter
         {
             PropertyPackage = packageName(Name(pp) ?? ""),
             Compounds = compounds,
+            Hypotheticals = hypotheticals,
             Objects = objects,
             Connections = connections.Distinct().ToList(),
             Reactions = ImportReactions(fs, objects, warnings),

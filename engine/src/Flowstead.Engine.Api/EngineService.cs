@@ -38,6 +38,9 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<ExportResult> ExportDwsimAsync(Flowsheet fs, CancellationToken ct) =>
         pool.CallAsync<ExportResult>(WorkerMethods.ExportDwsim, fs, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
+    public Task<List<HypotheticalProperties>> EstimateHypotheticalsAsync(List<Hypothetical> hypotheticals, CancellationToken ct) =>
+        pool.CallAsync<List<HypotheticalProperties>>(WorkerMethods.EstimateHypotheticals, hypotheticals, LookupTimeout, ct);
+
     public Task<ImportResult> ImportDwsimAsync(DwsimFile file, CancellationToken ct) =>
         pool.CallAsync<ImportResult>(WorkerMethods.ImportDwsim, file, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 

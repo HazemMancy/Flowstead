@@ -40,6 +40,32 @@ public static class Validator
         _ => [],
     };
 
+    /// <summary>Hypotheticals: unique names that are not database compounds, listed as compounds, inputs in range.</summary>
+    private static void ValidateHypotheticals(Flowsheet fs, IReadOnlySet<string> database, Action<string> err)
+    {
+        foreach (var dup in fs.Hypotheticals.GroupBy(h => h.Name).Where(g => g.Count() > 1)) err($"Hypothetical '{dup.Key}' is defined twice.");
+        foreach (var h in fs.Hypotheticals)
+        {
+            var n = h.Name;
+            if (string.IsNullOrWhiteSpace(n)) { err("A hypothetical needs a name."); continue; }
+            if (database.Contains(n)) err($"Hypothetical '{n}': a database compound has that name; choose another.");
+            if (!fs.Compounds.Contains(n)) err($"Hypothetical '{n}' is not in the component list.");
+            if (h.NormalBoilingPoint is null && h.MolecularWeight is null) err($"Hypothetical '{n}': give the normal boiling point or the molecular weight.");
+            void Range(double? v, double lo, double hi, string what)
+            {
+                if (v is { } x && !(x >= lo && x <= hi)) err($"Hypothetical '{n}': {what} must be between {lo} and {hi}.");
+            }
+            Range(h.NormalBoilingPoint, 150, 1500, "the normal boiling point (K)");
+            Range(h.MolecularWeight, 16, 2000, "the molecular weight");
+            Range(h.SpecificGravity, 0.3, 1.6, "the specific gravity");
+            Range(h.CriticalTemperature, 150, 2000, "the critical temperature (K)");
+            Range(h.CriticalPressure, 1e5, 1e8, "the critical pressure (Pa)");
+            Range(h.AcentricFactor, -0.5, 3, "the acentric factor");
+            if (h.CriticalTemperature is { } tc && h.NormalBoilingPoint is { } tb && tc <= tb)
+                err($"Hypothetical '{n}': the critical temperature must be above the normal boiling point.");
+        }
+    }
+
     /// <summary>Pipe flow correlations by Flowstead id (value = DWSIM FlowPackage name).</summary>
     public static readonly IReadOnlyDictionary<string, string> PipeCorrelations = new Dictionary<string, string>
     {
@@ -62,6 +88,8 @@ public static class Validator
 
         if (fs.Compounds.Count == 0) Err("Add at least one compound.");
         var known = knownCompounds.ToHashSet(StringComparer.Ordinal);
+        ValidateHypotheticals(fs, known, t => Err(t));
+        known.UnionWith(fs.Hypotheticals.Select(h => h.Name));
         foreach (var c in fs.Compounds.Where(c => !known.Contains(c))) Err($"Unknown compound '{c}'.");
         foreach (var dup in fs.Compounds.GroupBy(c => c).Where(g => g.Count() > 1)) Err($"Compound '{dup.Key}' is listed twice.");
 

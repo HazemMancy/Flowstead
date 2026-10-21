@@ -17,6 +17,24 @@ public sealed record Flowsheet
     public List<Connection> Connections { get; init; } = [];
     /// <summary>Reactions reactors can use (each reactor names its own in Refs["reactions"]).</summary>
     public List<Reaction> Reactions { get; init; } = [];
+    /// <summary>User-defined pseudo-components; each name also appears in <see cref="Compounds"/>.</summary>
+    public List<Hypothetical> Hypotheticals { get; init; } = [];
+}
+
+/// <summary>
+/// A hypothetical (pseudo) component, as in HYSYS: give the normal boiling point or the molecular weight, and
+/// optionally the specific gravity; DWSIM's petroleum correlations estimate the rest. Critical temperature,
+/// critical pressure and acentric factor may be given to override the estimates. SI: K, Pa; SG at 60 °F/60 °F.
+/// </summary>
+public sealed record Hypothetical
+{
+    public required string Name { get; init; }
+    public double? NormalBoilingPoint { get; init; }
+    public double? MolecularWeight { get; init; }
+    public double? SpecificGravity { get; init; }
+    public double? CriticalTemperature { get; init; }
+    public double? CriticalPressure { get; init; }
+    public double? AcentricFactor { get; init; }
 }
 
 public enum ReactionType { Conversion, Equilibrium, Kinetic }

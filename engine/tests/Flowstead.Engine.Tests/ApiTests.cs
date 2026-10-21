@@ -85,6 +85,24 @@ public sealed class ApiTests(EngineFixture engine)
     }
 
     [Fact]
+    public async Task HypotheticalEstimatesKeepTheInputsAndFillTheRest()
+    {
+        var client = engine.Authed();
+        var r = await client.PostAsJsonAsync("/hypotheticals/estimate",
+            new List<Hypothetical> { new() { Name = "C10*", NormalBoilingPoint = 447.3, MolecularWeight = 142.28, SpecificGravity = 0.734 } }, Json.Options);
+        var p = Assert.Single(await EngineFixture.Json<List<HypotheticalProperties>>(r));
+        Assert.Equal(447.3, p.NormalBoilingPoint, 6);
+        Assert.Equal(0.734, p.SpecificGravity, 6);
+        // n-decane: Tc 617.7 K, Pc 21.1 bar. Riazi–Daubert: within 1 % and 5 %.
+        Assert.InRange(p.CriticalTemperature, 611, 624);
+        Assert.InRange(p.CriticalPressure, 20.0e5, 22.2e5);
+        Assert.Equal(["criticalTemperature", "criticalPressure", "acentricFactor"], p.Estimated);
+
+        var bad = await client.PostAsJsonAsync("/hypotheticals/estimate", new List<Hypothetical> { new() { Name = "X", SpecificGravity = 0.8 } }, Json.Options);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, bad.StatusCode);
+    }
+
+    [Fact]
     public async Task UnderSpecifiedStreamIsRejectedBeforeSolving()
     {
         var fs = Water(300) with { };

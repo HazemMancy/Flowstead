@@ -104,11 +104,29 @@ public static class WorkerMethods
     public const string ExportDwsim = "exportDwsim";
     public const string CompoundCatalogue = "compoundCatalogue";
     public const string ImportDwsim = "importDwsim";
+    public const string EstimateHypotheticals = "estimateHypotheticals";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }
 
 public sealed record SearchCompoundsParams(string Query, int Limit = 25);
+
+/// <summary>
+/// The constants the engine uses for a hypothetical (SI: K, Pa, m³/kmol). <see cref="Estimated"/> lists the
+/// properties DWSIM estimated rather than took from the user (camelCase names of the fields).
+/// </summary>
+public sealed record HypotheticalProperties(
+    string Name,
+    double NormalBoilingPoint,
+    double MolecularWeight,
+    double SpecificGravity,
+    double CriticalTemperature,
+    double CriticalPressure,
+    double AcentricFactor,
+    double CriticalVolume,
+    double WatsonK,
+    string Formula,
+    List<string> Estimated);
 
 /// <summary>A DWSIM file (.dwxmz, or uncompressed .dwxml), base64-encoded.</summary>
 public sealed record DwsimFile(string Data);

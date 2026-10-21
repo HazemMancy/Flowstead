@@ -1,0 +1,130 @@
+{
+  "name": "Hypothetical component",
+  "description": "PR. A hypothetical defined only by n-decane's NBP (447.3 K), MW (142.28) and SG (0.734), against the database n-decane in a C1/C2/C3 flash at 40 °C / 20 bara; the pure hypothetical's bubble point at 1 atm and its liquid density at 60 °F.",
+  "flowsheet": {
+    "schemaVersion": 1,
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Methane",
+      "Ethane",
+      "Propane",
+      "N-decane",
+      "C10*"
+    ],
+    "hypotheticals": [
+      {
+        "name": "C10*",
+        "normalBoilingPoint": 447.3,
+        "molecularWeight": 142.28,
+        "specificGravity": 0.734
+      }
+    ],
+    "objects": [
+      {
+        "id": "db",
+        "tag": "DB C10 FEED",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 313.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 2000000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 100.0,
+            "unit": "mol/s"
+          }
+        },
+        "composition": {
+          "Methane": 0.6,
+          "Ethane": 0.1,
+          "Propane": 0.1,
+          "N-decane": 0.2,
+          "C10*": 0.0
+        }
+      },
+      {
+        "id": "hy",
+        "tag": "HYPO C10 FEED",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 313.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 2000000.0,
+            "unit": "bara"
+          },
+          "molarFlow": {
+            "si": 100.0,
+            "unit": "mol/s"
+          }
+        },
+        "composition": {
+          "Methane": 0.6,
+          "Ethane": 0.1,
+          "Propane": 0.1,
+          "N-decane": 0.0,
+          "C10*": 0.2
+        }
+      },
+      {
+        "id": "bp",
+        "tag": "HYPO AT NBP",
+        "type": "material_stream",
+        "specs": {
+          "pressure": {
+            "si": 101325.0,
+            "unit": "kPa"
+          },
+          "vapourFraction": {
+            "si": 0.0,
+            "unit": "frac"
+          },
+          "molarFlow": {
+            "si": 1.0,
+            "unit": "mol/s"
+          }
+        },
+        "composition": {
+          "Methane": 0.0,
+          "Ethane": 0.0,
+          "Propane": 0.0,
+          "N-decane": 0.0,
+          "C10*": 1
+        }
+      },
+      {
+        "id": "sg",
+        "tag": "HYPO AT 60F",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 288.706,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 101325.0,
+            "unit": "kPa"
+          },
+          "molarFlow": {
+            "si": 1.0,
+            "unit": "mol/s"
+          }
+        },
+        "composition": {
+          "Methane": 0.0,
+          "Ethane": 0.0,
+          "Propane": 0.0,
+          "N-decane": 0.0,
+          "C10*": 1
+        }
+      }
+    ],
+    "connections": []
+  }
+}
