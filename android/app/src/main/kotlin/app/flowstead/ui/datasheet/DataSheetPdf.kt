@@ -86,6 +86,8 @@ object DataSheetPdf {
         var current: Pair<String, Block?>? = null // section title and its column header, repeated after a break
         while (i < blocks.size) {
             val b = blocks[i]
+            // Spacing that falls on a page break is simply dropped.
+            if (b is Gap && used + b.height > usable) { i++; continue }
             if (b is SectionBar) current = b.title to (blocks.getOrNull(i + 1) as? HeaderRow)
             val need = b.height + if (b.keepWithNext) blocks.getOrNull(i + 1)?.height ?: 0f else 0f
             if (used + need > usable && pages.last().isNotEmpty()) {
@@ -123,7 +125,7 @@ object DataSheetPdf {
         sheet.notes.forEachIndexed { i, note -> add(NoteRow("${i + 1}.", note)) }
         add(Gap(8f))
         add(SectionBar("REVISIONS"))
-        val rw = listOf(28f, 62f, 205f, 80f, 80f, 80f)
+        val rw = listOf(28f, 62f, WIDTH - 28f - 62f - 3 * 80f, 80f, 80f, 80f)
         add(HeaderRow(listOf("Rev.", "Date", "Description", "Prepared", "Checked", "Approved"), rw))
         add(Row(listOf(sheet.revision, sheet.date, sheet.revisionDescription, sheet.info.preparedBy, sheet.info.checkedBy, sheet.info.approvedBy), rw))
     }
