@@ -8,3 +8,7 @@
 -keep class org.junit.** { *; }
 -keep class junit.** { *; }
 -keep class org.hamcrest.** { *; }
+# The test calls the app's classes directly (e.g. constructs the on-device engine client that Hilt builds in
+# the app), so their members must not be removed or rewritten. They are still renamed: the test APK is mapped
+# to the obfuscated names, so the engine bridge and serialization are exercised as obfuscated.
+-keep,allowobfuscation class app.flowstead.** { *; }
