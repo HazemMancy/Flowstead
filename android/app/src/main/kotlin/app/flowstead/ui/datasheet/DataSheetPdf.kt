@@ -24,7 +24,6 @@ object DataSheetPdf {
     private const val WIDTH = PAGE_W - 2 * MARGIN
     private const val PAD = 3f
     private const val FOOTER_H = 16f
-    private const val REVISION_COLUMNS = 6
 
     private val ink = Color.rgb(0x1A, 0x1A, 0x1A)
     private val grid = Color.rgb(0x80, 0x80, 0x80)
@@ -126,8 +125,8 @@ object DataSheetPdf {
         add(Gap(8f))
         add(SectionBar("REVISIONS"))
         val rw = listOf(28f, 62f, WIDTH - 28f - 62f - 3 * 80f, 80f, 80f, 80f)
-        add(HeaderRow(listOf("Rev.", "Date", "Description", "Prepared", "Checked", "Approved"), rw))
-        add(Row(listOf(sheet.revision, sheet.date, sheet.revisionDescription, sheet.info.preparedBy, sheet.info.checkedBy, sheet.info.approvedBy), rw))
+        add(HeaderRow(listOf("Rev.", "Date", "Description", "Prepared", "Checked", "Approved"), rw, plain = true))
+        add(Row(listOf(sheet.revision, sheet.date, sheet.revisionDescription, sheet.info.preparedBy, sheet.info.checkedBy, sheet.info.approvedBy), rw, plain = true))
     }
 
     /** No. | Description | Unit | values: the description column narrows as value columns are added. */
@@ -154,12 +153,22 @@ object DataSheetPdf {
         }
     }
 
-    private open class Row(val cells: List<String>, val widths: List<Float>, val bold: Boolean = false, val header: Boolean = false) : Block() {
+    /**
+     * One table line. Data tables are No. | Description | Unit | values: numbers and units centred, the unit in small
+     * print. A [plain] table (the revision block) is left-aligned text throughout.
+     */
+    private open class Row(
+        val cells: List<String>,
+        val widths: List<Float>,
+        val bold: Boolean = false,
+        val header: Boolean = false,
+        val plain: Boolean = false,
+    ) : Block() {
         private val paints = cells.indices.map { i ->
             when {
                 header -> bodyBold
                 bold -> bodyBold
-                i == 2 -> small // unit column
+                i == 2 && !plain -> small // unit column
                 else -> body
             }
         }
@@ -176,7 +185,7 @@ object DataSheetPdf {
                 val p = paints[i]
                 wrapped[i].forEachIndexed { k, s ->
                     // Descriptions (and the revision table) left-aligned; numbers and units centred.
-                    val tx = if (i == 1 || widths.size == REVISION_COLUMNS) cx + PAD else cx + (widths[i] - p.measureText(s)) / 2
+                    val tx = if (i == 1 || plain) cx + PAD else cx + (widths[i] - p.measureText(s)) / 2
                     c.drawText(s, tx, y + 9f + k * 8.6f, p)
                 }
                 cx += widths[i]
@@ -184,7 +193,7 @@ object DataSheetPdf {
         }
     }
 
-    private class HeaderRow(cells: List<String>, widths: List<Float>) : Row(cells, widths, header = true)
+    private class HeaderRow(cells: List<String>, widths: List<Float>, plain: Boolean = false) : Row(cells, widths, header = true, plain = plain)
 
     private class NoteRow(val label: String, val textValue: String) : Block() {
         private val lines = wrap(textValue, body, WIDTH - 22f - 2 * PAD)
