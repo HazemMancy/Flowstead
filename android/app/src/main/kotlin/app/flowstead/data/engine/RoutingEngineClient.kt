@@ -6,6 +6,7 @@ package app.flowstead.data.engine
 
 import app.flowstead.core.api.DwsimFile
 import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.Hypothetical
 import app.flowstead.data.engine.local.LocalEngineClient
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,4 +28,6 @@ class RoutingEngineClient @Inject constructor(
     override suspend fun solve(baseUrl: String, apiKey: String?, flowsheet: Flowsheet) = pick(baseUrl).solve(baseUrl, apiKey, flowsheet)
     override suspend fun exportDwsim(baseUrl: String, apiKey: String?, flowsheet: Flowsheet) = pick(baseUrl).exportDwsim(baseUrl, apiKey, flowsheet)
     override suspend fun importDwsim(baseUrl: String, apiKey: String?, file: DwsimFile) = pick(baseUrl).importDwsim(baseUrl, apiKey, file)
+    override suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>) =
+        pick(baseUrl).estimateHypotheticals(baseUrl, apiKey, hypotheticals)
 }

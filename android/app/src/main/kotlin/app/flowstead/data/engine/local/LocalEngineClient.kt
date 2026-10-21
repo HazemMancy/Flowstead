@@ -9,10 +9,12 @@ import app.flowstead.core.api.CompoundInfo
 import app.flowstead.core.api.DwsimFile
 import app.flowstead.core.api.EngineHealth
 import app.flowstead.core.api.ExportResult
+import app.flowstead.core.api.HypotheticalProperties
 import app.flowstead.core.api.ImportResult
 import app.flowstead.core.api.PropertyPackageInfo
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.Hypothetical
 import app.flowstead.core.model.FlowsheetJson
 import app.flowstead.data.engine.EngineClient
 import app.flowstead.data.engine.EngineResult
@@ -52,6 +54,11 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
 
     override suspend fun importDwsim(baseUrl: String, apiKey: String?, file: DwsimFile): EngineResult<ImportResult> =
         decode(ImportResult.serializer()) { engine.call("importDwsim", FlowsheetJson.encodeToJsonElement(DwsimFile.serializer(), file)) }
+
+    override suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>): EngineResult<List<HypotheticalProperties>> =
+        decode(ListSerializer(HypotheticalProperties.serializer())) {
+            engine.call("estimateHypotheticals", FlowsheetJson.encodeToJsonElement(ListSerializer(Hypothetical.serializer()), hypotheticals))
+        }
 
     private suspend fun <T> decode(serializer: KSerializer<T>, block: suspend () -> kotlinx.serialization.json.JsonElement): EngineResult<T> =
         attempt { FlowsheetJson.decodeFromJsonElement(serializer, block()) }

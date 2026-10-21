@@ -61,6 +61,22 @@ data class PhaseResult(
 )
 
 /** Phase keys the engine uses, in display order. */
+/** The constants the engine uses for a hypothetical (SI: K, Pa, m³/kmol); [estimated] names the fields it estimated. */
+@Serializable
+data class HypotheticalProperties(
+    val name: String,
+    val normalBoilingPoint: Double,
+    val molecularWeight: Double,
+    val specificGravity: Double,
+    val criticalTemperature: Double,
+    val criticalPressure: Double,
+    val acentricFactor: Double,
+    val criticalVolume: Double,
+    val watsonK: Double,
+    val formula: String = "",
+    val estimated: List<String> = emptyList(),
+)
+
 object Phases {
     const val OVERALL = "overall"
     const val VAPOUR = "vapour"

@@ -32,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -63,7 +64,9 @@ import app.flowstead.core.api.OfflineCatalogue
 import app.flowstead.core.compounds.Compound
 import app.flowstead.core.compounds.CompoundCatalogue
 import app.flowstead.core.format.ValueFormat
+import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.FlowsheetEditing
+import app.flowstead.core.model.Hypothetical
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitSet
 import app.flowstead.data.ProjectRepository
@@ -97,6 +100,7 @@ data class FluidUi(
     val loaded: Boolean = false,
     val propertyPackage: String? = null,
     val compounds: List<String> = emptyList(),
+    val hypotheticals: List<Hypothetical> = emptyList(),
     val packages: List<String> = OfflineCatalogue.propertyPackages,
     val query: String = "",
     /** Family filter; null = all, [CompoundCatalogue.COMMON] = the oil & gas favourites. */
@@ -141,6 +145,7 @@ class FluidPackageViewModel @Inject constructor(
             loaded = p != null,
             propertyPackage = p?.flowsheet?.propertyPackage,
             compounds = p?.flowsheet?.compounds.orEmpty(),
+            hypotheticals = p?.flowsheet?.hypotheticals.orEmpty(),
             packages = pk,
             query = s.query,
             family = s.family,
@@ -182,6 +187,37 @@ class FluidPackageViewModel @Inject constructor(
         projects.saveFlowsheet(projectId, FlowsheetEditing.setCompounds(p.flowsheet, p.flowsheet.compounds + name))
     }
 
+    private val _estimate = MutableStateFlow<EstimateState>(EstimateState.Idle)
+    val estimate: StateFlow<EstimateState> = _estimate
+
+    fun clearEstimate() { _estimate.value = EstimateState.Idle }
+
+    /** The engine's constants for [h], before it is saved (HYSYS "Estimate unknown properties"). */
+    fun estimate(h: Hypothetical) = viewModelScope.launch {
+        val url = settings.settings.first().engineTarget
+        if (url.isBlank()) {
+            _estimate.value = EstimateState.Failed("Choose an engine in Settings to estimate properties")
+            return@launch
+        }
+        _estimate.value = EstimateState.Working
+        _estimate.value = when (val r = engine.estimateHypotheticals(url, secrets.apiKey(), listOf(h))) {
+            is EngineResult.Ok -> r.value.singleOrNull()?.let { EstimateState.Done(h, it) } ?: EstimateState.Failed("The engine returned no estimate")
+            is EngineResult.Failed -> EstimateState.Failed(r.reason)
+        }
+    }
+
+    fun saveHypothetical(h: Hypothetical, onSaved: () -> Unit) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        try {
+            projects.saveFlowsheet(projectId, FlowsheetEditing.upsertHypothetical(p.flowsheet, h))
+            onSaved()
+        } catch (e: EditRejected) {
+            _messages.send(e.message ?: "Not saved")
+        }
+    }
+
+    fun deleteHypothetical(name: String) = remove(name)
+
     fun remove(name: String) = viewModelScope.launch {
         val p = projects.observeProject(projectId).first() ?: return@launch
         val used = p.flowsheet.objects.count { name in it.composition }
@@ -196,7 +232,26 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
     val ui by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
-    FluidPackageContent(ui, snackbar, viewModel::setPackage, viewModel::add, viewModel::remove, viewModel::setQuery, viewModel::setFamily, onBack)
+    val estimate by viewModel.estimate.collectAsStateWithLifecycle()
+    var editing by remember { mutableStateOf<Hypothetical?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    FluidPackageContent(
+        ui, snackbar, viewModel::setPackage, viewModel::add, viewModel::remove, viewModel::setQuery, viewModel::setFamily, onBack,
+        onNewHypothetical = { viewModel.clearEstimate(); creating = true },
+        onEditHypothetical = { viewModel.clearEstimate(); editing = it },
+    )
+    if (creating || editing != null) {
+        val close = { creating = false; editing = null }
+        HypotheticalSheet(
+            initial = editing,
+            unitSet = ui.unitSet,
+            estimate = estimate,
+            onEstimate = viewModel::estimate,
+            onSave = { h -> viewModel.saveHypothetical(h, close) },
+            onDelete = { name -> viewModel.deleteHypothetical(name); close() },
+            onDismiss = close,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -210,6 +265,8 @@ fun FluidPackageContent(
     onQuery: (String) -> Unit = {},
     onFamily: (String?) -> Unit = {},
     onBack: () -> Unit = {},
+    onNewHypothetical: () -> Unit = {},
+    onEditHypothetical: (Hypothetical) -> Unit = {},
 ) {
     var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
@@ -267,6 +324,31 @@ fun FluidPackageContent(
                 }
             }
             item { HorizontalDivider() }
+            item { Text("Hypothetical components (${ui.hypotheticals.size})", style = MaterialTheme.typography.titleMedium) }
+            item {
+                Text(
+                    "Pseudo-components for petroleum cuts or compounds not in the library, as in HYSYS: from the normal " +
+                        "boiling point, molecular weight and specific gravity.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            items(ui.hypotheticals, key = { "hypo_${it.name}" }) { h ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClickLabel = "Edit ${h.name}") { onEditHypothetical(h) },
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(h.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(hypoSummary(h, ui.unitSet), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(Hypothetical.TAG, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                }
+            }
+            item {
+                OutlinedButton(onClick = onNewHypothetical, modifier = Modifier.testTag("add_hypothetical")) { Text("Add hypothetical") }
+            }
+            item { HorizontalDivider() }
             item {
                 Text(
                     if (ui.libraryLoaded) "Compound library · ${ui.librarySize} compounds" else "Compound library",
@@ -307,6 +389,14 @@ fun FluidPackageContent(
         CompoundSheet(c, added = c.name in ui.compounds, unitSet = ui.unitSet, onAdd = { onAdd(c.name); details = null }, onDismiss = { details = null })
     }
 }
+
+/** "NBP 174.2 °C · MW 142.3 · SG 0.734": what the user gave. */
+private fun hypoSummary(h: Hypothetical, unitSet: UnitSet): String = buildList {
+    h.normalBoilingPoint?.let { add("NBP " + ValueFormat.si(it, unitSet.unitFor(Quantity.Temperature))) }
+    h.molecularWeight?.let { add("MW " + ValueFormat.number(it, 1)) }
+    h.specificGravity?.let { add("SG " + ValueFormat.number(it, 3)) }
+    if (h.criticalTemperature != null || h.criticalPressure != null || h.acentricFactor != null) add("critical constants given")
+}.joinToString("  ·  ")
 
 @Composable
 private fun FamilyChip(label: String, selected: Boolean, onClick: () -> Unit) {

@@ -4,6 +4,7 @@
  */
 package app.flowstead.data.engine
 
+import app.flowstead.core.api.HypotheticalProperties
 import app.flowstead.core.api.CompoundInfo
 import app.flowstead.core.api.DwsimFile
 import app.flowstead.core.api.ExportResult
@@ -12,6 +13,7 @@ import app.flowstead.core.api.EngineError
 import app.flowstead.core.api.EngineHealth
 import app.flowstead.core.api.PropertyPackageInfo
 import app.flowstead.core.api.SolveResult
+import app.flowstead.core.model.Hypothetical
 import app.flowstead.core.model.Flowsheet
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -46,6 +48,9 @@ interface EngineClient {
     suspend fun solve(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<SolveResult>
     suspend fun exportDwsim(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<ExportResult>
     suspend fun importDwsim(baseUrl: String, apiKey: String?, file: DwsimFile): EngineResult<ImportResult>
+    /** The constants the engine's correlations give these hypotheticals. */
+    suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>): EngineResult<List<HypotheticalProperties>> =
+        EngineResult.Failed("This engine can't estimate hypotheticals")
 }
 
 @Singleton
@@ -91,6 +96,15 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
             setBody(file)
         }
     }
+
+    override suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>): EngineResult<List<HypotheticalProperties>> =
+        call {
+            http.post("$baseUrl/hypotheticals/estimate") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(hypotheticals)
+            }
+        }
 
     private suspend inline fun <reified T> call(block: () -> HttpResponse): EngineResult<T> = try {
         val response = block()

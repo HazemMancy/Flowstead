@@ -102,6 +102,21 @@ object FlowsheetEditing {
         it.copy(sheet = if (value.isBlank()) it.sheet - key else it.sheet + (key to value.trim()))
     }
 
+    /**
+     * Adds or replaces a hypothetical (by name) and puts it in the component list. A name already used by another
+     * component is refused.
+     */
+    fun upsertHypothetical(fs: Flowsheet, h: Hypothetical): Flowsheet {
+        h.problem()?.let { throw EditRejected(it) }
+        val existing = fs.hypothetical(h.name)
+        if (existing == null && h.name in fs.compounds) throw EditRejected("A component called ${h.name} is already in the list")
+        val hypos = if (existing == null) fs.hypotheticals + h else fs.hypotheticals.map { if (it.name == h.name) h else it }
+        return fs.copy(hypotheticals = hypos, compounds = if (h.name in fs.compounds) fs.compounds else fs.compounds + h.name)
+    }
+
+    /** Removes a hypothetical and, like any component, its fractions and references. */
+    fun deleteHypothetical(fs: Flowsheet, name: String): Flowsheet = setCompounds(fs, fs.compounds - name)
+
     fun upsertReaction(fs: Flowsheet, r: Reaction): Flowsheet =
         fs.copy(reactions = if (fs.reaction(r.id) == null) fs.reactions + r else fs.reactions.map { if (it.id == r.id) r else it })
 
@@ -133,7 +148,8 @@ object FlowsheetEditing {
         val distinct = compounds.distinct()
         // Compositions keep only compounds that are still present.
         val objects = fs.objects.map { o -> o.copy(composition = o.composition.filterKeys { it in distinct }) }
-        return fs.copy(compounds = distinct, objects = objects)
+        // A hypothetical taken out of the list goes with it.
+        return fs.copy(compounds = distinct, objects = objects, hypotheticals = fs.hypotheticals.filter { it.name in distinct })
     }
 
     /**

@@ -28,6 +28,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val reactions: List<Reaction> = emptyList(),
+    /** User-defined pseudo-components (HYSYS hypotheticals); each name is also in [compounds]. Written only when there are some. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val hypotheticals: List<Hypothetical> = emptyList(),
     /** Line-sizing limits by service. Not part of the solved model: excluded from [modelHash]. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -38,6 +42,7 @@ data class Flowsheet(
     val documentInfo: DocumentInfo? = null,
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
+    fun hypothetical(name: String): Hypothetical? = hypotheticals.firstOrNull { it.name == name }
 
     companion object {
         const val SCHEMA_VERSION = 1
