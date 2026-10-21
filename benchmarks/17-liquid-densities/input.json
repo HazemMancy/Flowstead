@@ -1,0 +1,122 @@
+{
+  "name": "Liquid densities",
+  "description": "PR. Pure propane (−40 °C, 10 bar), n-hexane and water (25 °C, 1 atm) against NIST/IAPWS, and a cold C1/C2/C3 liquid carrying dissolved methane above its critical temperature (decision D32).",
+  "flowsheet": {
+    "schemaVersion": 1,
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": [
+      "Methane",
+      "Ethane",
+      "Propane",
+      "N-hexane",
+      "Water"
+    ],
+    "objects": [
+      {
+        "id": "c3",
+        "tag": "PROPANE",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 233.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 1000000.0,
+            "unit": "kPa"
+          },
+          "molarFlow": {
+            "si": 1.0,
+            "unit": "mol/s"
+          }
+        },
+        "composition": {
+          "Methane": 0.0,
+          "Ethane": 0.0,
+          "Propane": 1,
+          "N-hexane": 0.0,
+          "Water": 0.0
+        }
+      },
+      {
+        "id": "c6",
+        "tag": "HEXANE",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 298.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 101325,
+            "unit": "kPa"
+          },
+          "molarFlow": {
+            "si": 1.0,
+            "unit": "mol/s"
+          }
+        },
+        "composition": {
+          "Methane": 0.0,
+          "Ethane": 0.0,
+          "Propane": 0.0,
+          "N-hexane": 1,
+          "Water": 0.0
+        }
+      },
+      {
+        "id": "w",
+        "tag": "WATER",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 298.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 101325,
+            "unit": "kPa"
+          },
+          "molarFlow": {
+            "si": 1.0,
+            "unit": "mol/s"
+          }
+        },
+        "composition": {
+          "Methane": 0.0,
+          "Ethane": 0.0,
+          "Propane": 0.0,
+          "N-hexane": 0.0,
+          "Water": 1
+        }
+      },
+      {
+        "id": "ngl",
+        "tag": "C1-C2-C3",
+        "type": "material_stream",
+        "specs": {
+          "temperature": {
+            "si": 233.15,
+            "unit": "C"
+          },
+          "pressure": {
+            "si": 3000000.0,
+            "unit": "kPa"
+          },
+          "molarFlow": {
+            "si": 1.0,
+            "unit": "mol/s"
+          }
+        },
+        "composition": {
+          "Methane": 0.8,
+          "Ethane": 0.15,
+          "Propane": 0.05,
+          "N-hexane": 0.0,
+          "Water": 0.0
+        }
+      }
+    ],
+    "connections": []
+  }
+}

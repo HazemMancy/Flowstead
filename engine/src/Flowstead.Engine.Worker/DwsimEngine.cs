@@ -301,7 +301,10 @@ public sealed class DwsimEngine
         var applied = SetSolver.Apply(model);
         var plain = applied with { Objects = applied.Objects.Where(o => o.Type is not (ObjectType.Adjust or ObjectType.Set)).ToList() };
 
-        var (fs, _) = Build(plain);
+        if (LiquidDensity.CubicPackages.Contains(model.PropertyPackage ?? "") && HasSupercriticalCompound(model))
+            warnings.Add("Liquid densities: desktop DWSIM uses its default method; Flowstead's engine uses COSTALD for liquids that carry " +
+                "more than 1 mol % of components above their critical temperature, so liquid densities and two-phase pipe ΔP can differ.");
+        var (fs, _) = Build(plain, forExport: true);
         var solveErrors = _automation.CalculateFlowsheet4(fs) ?? [];
         var status = solveErrors.Count == 0 ? SolveStatus.Converged : SolveStatus.Failed;
         if (status != SolveStatus.Converged) warnings.Add("The flowsheet did not solve cleanly; the file is saved with partial results.");
@@ -316,6 +319,14 @@ public sealed class DwsimEngine
         {
             File.Delete(path);
         }
+    }
+
+    /// <summary>A compound whose critical temperature is below the highest temperature specified in the flowsheet.</summary>
+    private bool HasSupercriticalCompound(Flowsheet model)
+    {
+        var tMax = model.Objects.SelectMany(o => o.Specs).Where(kv => kv.Key.EndsWith("emperature", StringComparison.Ordinal))
+            .Select(kv => kv.Value.Si).DefaultIfEmpty(298.15).Max();
+        return model.Compounds.Any(c => _automation.AvailableCompounds.TryGetValue(c, out var cp) && cp.Critical_Temperature < tMax);
     }
 
     /// <summary>Opens a DWSIM file and maps what Flowstead supports (see DwxmzImporter).</summary>
@@ -359,12 +370,20 @@ public sealed class DwsimEngine
 
     // ------------------------------------------------------------------ build
 
-    private (IFlowsheet, Dictionary<string, ISimulationObject>) Build(Flowsheet model, WaterMode? water = null)
+    private (IFlowsheet, Dictionary<string, ISimulationObject>) Build(Flowsheet model, WaterMode? water = null, bool forExport = false)
     {
         var fs = _automation.CreateFlowsheet();
         foreach (var c in model.Compounds) fs.AddCompound(c);
         var ppName = MvpPackages.FirstOrDefault(p => p.Name == model.PropertyPackage).Dwsim ?? model.PropertyPackage!;
-        var pp = (PropertyPackage)fs.CreateAndAddPropertyPackage(ppName);
+        // Cubic packages solve with Flowstead's liquid-density rule (D32). A .dwxmz keeps DWSIM's own class,
+        // which desktop DWSIM can load.
+        PropertyPackage pp;
+        if (!forExport && LiquidDensity.Variant((PropertyPackage)_automation.AvailablePropertyPackages[ppName]) is { } variant)
+        {
+            fs.AddPropertyPackage(variant);
+            pp = variant;
+        }
+        else pp = (PropertyPackage)fs.CreateAndAddPropertyPackage(ppName);
         // DWSIM's Gibbs-minimisation flashes (rigorous VLLE) default to IPOPT, a native library that is not in the
         // engine (server or phone); its finalizer then crashed the process. DWSIM's managed L-BFGS instead.
         pp.FlashSettings[FlashSetting.GM_OptimizationMethod] = "Limited_Memory_BGFS";

@@ -459,7 +459,7 @@
     },
     {
       "path": "objects.t1.phases.overall.properties.density",
-      "expected": 40.050601689584006,
+      "expected": 39.951462199092866,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -591,7 +591,7 @@
     },
     {
       "path": "objects.t1.phases.liquid1.properties.density",
-      "expected": 742.3789635959514,
+      "expected": 483.3285351742749,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -650,7 +650,7 @@
     },
     {
       "path": "objects.pt.properties.pressureDrop",
-      "expected": 34677.28382123122,
+      "expected": 33729.343778396025,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -658,7 +658,7 @@
     },
     {
       "path": "objects.pt.properties.pressureGradient",
-      "expected": 69.35456764246244,
+      "expected": 67.45868755679206,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -666,7 +666,7 @@
     },
     {
       "path": "objects.pt.properties.maxVelocity",
-      "expected": 2.879433807071635,
+      "expected": 2.8854397494050104,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -674,7 +674,7 @@
     },
     {
       "path": "objects.pt.properties.maxMomentumFlux",
-      "expected": 327.84158386492066,
+      "expected": 328.5253986310081,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -682,7 +682,7 @@
     },
     {
       "path": "objects.pt.properties.liquidHoldup",
-      "expected": 0.061580278101985075,
+      "expected": 0.07440150542312648,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -690,14 +690,14 @@
     },
     {
       "path": "objects.t2.properties.temperature",
-      "expected": 232.88627724694172,
+      "expected": 232.8935108371436,
       "tol": {
         "abs": 0.01
       }
     },
     {
       "path": "objects.t2.properties.pressure",
-      "expected": 2965322.716178769,
+      "expected": 2966270.656221604,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -705,7 +705,7 @@
     },
     {
       "path": "objects.t2.properties.vapourFraction",
-      "expected": 0.9459760341447989,
+      "expected": 0.9459776537664432,
       "tol": {
         "abs": 0.0001
       }
@@ -728,7 +728,7 @@
     },
     {
       "path": "objects.t2.properties.massEnthalpy",
-      "expected": -222573.82132907838,
+      "expected": -222574.93935984746,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -743,7 +743,7 @@
     },
     {
       "path": "objects.t2.phases.overall.properties.density",
-      "expected": 39.54119957647083,
+      "expected": 39.45889601809125,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -759,7 +759,7 @@
     },
     {
       "path": "objects.t2.phases.overall.properties.massEnthalpy",
-      "expected": -222573.82132907838,
+      "expected": -222574.93935984746,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -802,14 +802,14 @@
     },
     {
       "path": "objects.t2.phases.vapour.properties.phaseMoleFraction",
-      "expected": 0.9459760341447989,
+      "expected": 0.9459776537664432,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.t2.phases.vapour.properties.density",
-      "expected": 36.304128098832656,
+      "expected": 36.31721329418671,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -817,7 +817,7 @@
     },
     {
       "path": "objects.t2.phases.vapour.properties.molecularWeight",
-      "expected": 18.886547679424,
+      "expected": 18.886661165548613,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -825,7 +825,7 @@
     },
     {
       "path": "objects.t2.phases.vapour.properties.massEnthalpy",
-      "expected": -194577.74240688758,
+      "expected": -194583.7617377918,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -847,35 +847,35 @@
     },
     {
       "path": "objects.t2.phases.vapour.composition.Methane",
-      "expected": 0.8295214467155025,
+      "expected": 0.8295168224968538,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.t2.phases.vapour.composition.Ethane",
-      "expected": 0.13819294884672756,
+      "expected": 0.1381941064932118,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.t2.phases.vapour.composition.Propane",
-      "expected": 0.03228560443776993,
+      "expected": 0.03228907100993454,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.t2.phases.liquid1.properties.phaseMoleFraction",
-      "expected": 0.054023965855201084,
+      "expected": 0.05402234623355684,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.t2.phases.liquid1.properties.density",
-      "expected": 740.5208158043048,
+      "expected": 483.9250440372768,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -883,7 +883,7 @@
     },
     {
       "path": "objects.t2.phases.liquid1.properties.molecularWeight",
-      "expected": 31.151173440595752,
+      "expected": 31.149554555226096,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -891,7 +891,7 @@
     },
     {
       "path": "objects.t2.phases.liquid1.properties.massEnthalpy",
-      "expected": -519787.6753670953,
+      "expected": -519763.40790792776,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -913,21 +913,21 @@
     },
     {
       "path": "objects.t2.phases.liquid1.composition.Methane",
-      "expected": 0.2830487346198246,
+      "expected": 0.28311329565187526,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.t2.phases.liquid1.composition.Ethane",
-      "expected": 0.3567537574602481,
+      "expected": 0.3567400509407524,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.t2.phases.liquid1.composition.Propane",
-      "expected": 0.3601975079199273,
+      "expected": 0.3601466534073723,
       "tol": {
         "abs": 0.0001
       }

@@ -119,6 +119,8 @@ _Last updated: 2026-10-20_
   - Title block, operating conditions per stream, design basis, performance, line sizing, reactions, composition, mechanical data, notes, revisions.
   - The emulator job renders a sample (benchmark 16's two lines) and prints it as base64 in the job log for review.
 
+- **Liquid density fix (D32):** cubic-EOS liquids carrying dissolved supercritical gas (methane in cold NGL, rich absorber oil) were up to 50 % too dense. Fixed with COSTALD for those liquids; benchmark 17 checks propane, n-hexane and water against NIST/IAPWS and bounds the NGL liquid. Benchmarks 03, 04, 07, 10, 11, 12 and 16 regenerated (densities, tank residence time and two-phase pipe ΔP moved; no blocking reference changed).
+
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 
 - **M17 reactors (D29):**
@@ -137,7 +139,6 @@ _Last updated: 2026-10-20_
 
 ## Known limitations
 
-- To investigate: with PR, DWSIM reports a liquid density of 742 kg/m³ for the C1/C2/C3 liquid at −40 °C / 30 bara (benchmarks 03 and 16), above what any of those liquids reaches (propane ≈ 580 kg/m³ at −40 °C). It feeds two-phase pipe ΔP. Likely DWSIM's default liquid-density method rather than the EOS; to compare with HYSYS.
 - Benchmarks 01 and 03 have only engine-provisional expected values (D6). They need desktop-DWSIM `.dwxmz` files and HYSYS numbers.
 - Pipe segments are one straight section: imported DWSIM pipes with several sections are left out with a warning. HYSYS Pipe Segment's fittings and multiple segments are not available yet.
 - Import supports the placeable unit ops only. Columns, reactors and other DWSIM objects are left out with a warning. The streams they fed need specifying again.
