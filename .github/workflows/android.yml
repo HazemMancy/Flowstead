@@ -155,6 +155,8 @@ jobs:
             adb logcat -c
             (adb logcat -v time FlowsteadOnDevice:I FlowsteadPdf:I FlowsteadEngine:V mono:V monodroid:W DOTNET:W '*:E' > logcat.txt &)
             cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
+            # The same benchmarks against the R8-minified release build that is published.
+            cd android && ./gradlew -PtestMinified :app:connectedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
       - name: Device log
         if: always()
         # Repeated stack frames (a runaway recursion) are counted, not printed, so the callers stay visible.

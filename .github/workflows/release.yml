@@ -1,6 +1,7 @@
-# Publishes a GitHub Release with the debug APK when a version tag (v*) is pushed, or on demand.
-# The APK is signed with the public debug key in android/app/debug.keystore: fine for testing and
-# side-loading, never for the Play Store (that needs a release build signed with the owner's key).
+# Publishes a GitHub Release with the signed, R8-minified release APK when a version tag (v*) is pushed,
+# or on demand. The APK is signed with the owner's release key (decision D34), held in two repository
+# secrets: FLOWSTEAD_KEYSTORE_BASE64 (the PKCS12 keystore, base64) and FLOWSTEAD_KEYSTORE_PASSWORD.
+# The workflow refuses to publish if they are missing or the APK's certificate isn't the release key's.
 name: release
 
 on:
@@ -9,14 +10,18 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to create or update, e.g. v0.1.0"
+        description: "Tag to create or update, e.g. v1.0.0"
         required: true
 
 permissions:
   contents: write
 
+env:
+  # SHA-256 of the release certificate (public; it identifies the key, it doesn't reveal it).
+  RELEASE_CERT_SHA256: d7883cfc24f1cb62db989086d69d217beed109b5b84164ff5394ad9e3e0bb921
+
 jobs:
-  debug-apk:
+  release-apk:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -37,32 +42,54 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Test and build the debug APK
+      - name: Release key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.FLOWSTEAD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.FLOWSTEAD_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Add the FLOWSTEAD_KEYSTORE_BASE64 and FLOWSTEAD_KEYSTORE_PASSWORD repository secrets."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          echo "FLOWSTEAD_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+      - name: Test and build the release APK
         working-directory: android
-        run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug
+        env:
+          FLOWSTEAD_KEYSTORE_PASSWORD: ${{ secrets.FLOWSTEAD_KEYSTORE_PASSWORD }}
+        run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleRelease
+      - name: Check the signature
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | tee certs.txt
+          grep -qi "certificate SHA-256 digest: $RELEASE_CERT_SHA256" certs.txt || { echo "::error::Not signed with the release key."; exit 1; }
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          rm -f "$RUNNER_TEMP/release.p12"
           version=$(grep -oE 'versionName = "[^"]+"' android/app/build.gradle.kts | cut -d'"' -f2)
-          apk="flowstead-${TAG}-debug.apk"
-          cp android/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          apk="flowstead-${TAG}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$apk"
+          cp android/app/build/outputs/mapping/release/mapping.txt "flowstead-${TAG}-mapping.txt"
           sha256sum "$apk" > "$apk.sha256"
           notes=$(cat <<NOTES
-          Flowstead ${TAG} (app version ${version}) — **debug build for testing**.
+          Flowstead ${TAG} (app version ${version}).
 
-          **Install:** download \`${apk}\` on your Android phone (Android 8.0 or newer), open it and allow installing from this source. Later debug releases install as updates.
+          **Install:** download \`${apk}\` on your Android phone (Android 8.0 or newer, 64-bit), open it and allow installing from this source.
+
+          **Coming from a 0.x test build?** Those were signed with the public debug key and this release is signed with the Flowstead release key, so Android can't install it over them: export each project you want to keep (project menu → Export DWSIM file), uninstall the old app, install this one and import the files (Projects → Import DWSIM file). Data-sheet fields and line-sizing criteria are not part of a DWSIM file. Later releases install as updates.
 
           **Solves on the phone:** DWSIM runs on the device (Settings → Engine → On this phone, the default); the first solve after starting the app takes a few seconds while DWSIM loads. A remote Flowstead engine (\`docs/engine-setup.md\`) is optional.
 
-          Signed with the public debug key: not for the Play Store. Status and known limitations: \`docs/STATUS.md\`.
+          Release certificate SHA-256: \`${RELEASE_CERT_SHA256}\`. \`flowstead-${TAG}-mapping.txt\` de-obfuscates crash reports. Status and known limitations: \`docs/STATUS.md\`.
 
           Commit: ${GITHUB_SHA}
           NOTES
           )
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$apk" "$apk.sha256" --clobber
+            gh release upload "$TAG" "$apk" "$apk.sha256" "flowstead-${TAG}-mapping.txt" --clobber
           else
-            gh release create "$TAG" "$apk" "$apk.sha256" --target "$GITHUB_SHA" --prerelease --title "Flowstead ${TAG} (debug)" --notes "$notes"
+            gh release create "$TAG" "$apk" "$apk.sha256" "flowstead-${TAG}-mapping.txt" --target "$GITHUB_SHA" --latest --title "Flowstead ${TAG}" --notes "$notes"
           fi

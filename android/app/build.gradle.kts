@@ -12,6 +12,8 @@ plugins {
 val localEngineDir = rootDir.resolve("../engine/embedded/android")
 val localEngine = localEngineDir.resolve("out/assets/engine/VERSION").exists()
 
+val releaseKeystore: String? = System.getenv("FLOWSTEAD_KEYSTORE")?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "app.flowstead"
     compileSdk = 37
@@ -30,8 +32,8 @@ android {
         applicationId = "app.flowstead"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "LOCAL_ENGINE", localEngine.toString())
         // The engine's runtime is built for 64-bit ARM (phones) and x86_64 (emulators).
@@ -47,6 +49,16 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // The owner's release key (decision D34), from the environment: CI decodes the
+        // FLOWSTEAD_KEYSTORE_BASE64 secret to a file. Store and key share one password (PKCS12).
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("FLOWSTEAD_KEYSTORE_PASSWORD")
+                keyAlias = "flowstead"
+                keyPassword = System.getenv("FLOWSTEAD_KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -54,8 +66,13 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Without the owner's key a release build is signed with the debug key, so CI can test the
+            // minified app; the release workflow refuses to publish such an APK.
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }
+    // -PtestMinified: instrumented tests (the on-device benchmarks) run against the R8 release build.
+    if (project.hasProperty("testMinified")) testBuildType = "release"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

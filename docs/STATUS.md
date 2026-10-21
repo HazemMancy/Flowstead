@@ -123,6 +123,8 @@ _Last updated: 2026-10-20_
 - **Liquid density fix (D32):** cubic-EOS liquids carrying dissolved supercritical gas (methane in cold NGL, rich absorber oil) were up to 50 % too dense. Fixed with COSTALD for those liquids; benchmark 17 checks propane, n-hexane and water against NIST/IAPWS and bounds the NGL liquid. Benchmarks 03, 04, 07, 10, 11, 12 and 16 regenerated (densities, tank residence time and two-phase pipe ΔP moved; no blocking reference changed).
 
 - **M20 hypothetical components (D33):** Fluid package → Hypothetical components: name, NBP and/or MW, SG, optional Tc/Pc/ω; "Estimate" shows the engine's constants; benchmark 18 checks one against database n-decane. DWSIM pseudo-components import as hypotheticals.
+- **Review fixes:** typed values are committed before Save/Estimate/PDF/Excel/tab changes; Pc shown in absolute units; the D32 density variant applies to DWSIM's exact PR/SRK/PR-LK classes only; the API request limit is configurable (the test suite had hit 429s).
+- **Release 1.0.0 (D34):** release builds are R8-minified and signed with the owner's release key from two repository secrets; CI runs every on-device benchmark against the minified release build as well as the debug build; the release workflow checks the certificate before publishing.
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 
