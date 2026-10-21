@@ -163,7 +163,8 @@ jobs:
             | sed -E 's/^[0-9-]+ [0-9:.]+ //' | uniq -c | sed -E 's/^ +1 //' | tail -400 || true
       - name: Sample data sheet PDF (base64, for review)
         if: always()
-        run: grep "FlowsteadPdf" logcat.txt | sed -E 's/^.*FlowsteadPdf\( *[0-9]+\): //' || true
+        run: |
+          grep "FlowsteadPdf" logcat.txt | sed -E 's/^.*FlowsteadPdf\( *[0-9]+\): //' || true
       - name: Upload device test reports
         if: always()
         uses: actions/upload-artifact@v4
