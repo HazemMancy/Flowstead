@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -199,7 +200,10 @@ fun SizingCriteriaSheet(
     onDismiss: () -> Unit,
 ) {
     var service by remember { mutableStateOf(LineService.Gas) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    // Fields commit when focus leaves them; a tap on a tab or button doesn't take focus, so commit first.
+    val focus = LocalFocusManager.current
+    val close = { focus.clearFocus(); onDismiss() }
+    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -214,7 +218,7 @@ fun SizingCriteriaSheet(
                 LineService.entries.forEachIndexed { i, s ->
                     SegmentedButton(
                         selected = service == s,
-                        onClick = { service = s },
+                        onClick = { focus.clearFocus(); service = s },
                         shape = SegmentedButtonDefaults.itemShape(i, LineService.entries.size),
                         modifier = Modifier.testTag("criteria_${s.name}"),
                     ) { Text(s.label) }
@@ -249,7 +253,7 @@ fun SizingCriteriaSheet(
                 "API RP 14E: v_e = C / √ρ_m (ft/s, ρ_m in lb/ft³), with the no-slip mixture density. " +
                     "Flowstead checks the highest v·√ρ_m along the line, i.e. the highest ρv².",
             )
-            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text("Done") }
+            TextButton(onClick = close, modifier = Modifier.align(Alignment.End)) { Text("Done") }
         }
     }
 }

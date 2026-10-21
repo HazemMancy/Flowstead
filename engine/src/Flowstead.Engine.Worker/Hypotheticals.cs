@@ -32,6 +32,8 @@ public static class Hypotheticals
             case ({ } t, { } m, null): (nbp, mw, sg) = (t, m, PropertyMethods.d15_Riazi(m)); break;
             case ({ } t, null, { } d): (nbp, mw, sg) = (t, PropertyMethods.MW_Riazi(t, d), d); break;
             case ({ } t, null, null):
+                // Riazi–Daubert's NBP–MW relation tops out at 1080 K (MW 2000 at about 1030 K).
+                if (t >= 1030) throw new ArgumentException($"{h.Name}: above about 1030 K the molecular weight can't be estimated from the boiling point alone; give it too.");
                 mw = Math.Pow((6.97996 - Math.Log(1080 - t)) / 0.01964, 1.5); // inverse of NBP = 1080 − exp(6.97996 − 0.01964 MW^⅔)
                 (nbp, sg) = (t, PropertyMethods.d15_Riazi(mw));
                 break;

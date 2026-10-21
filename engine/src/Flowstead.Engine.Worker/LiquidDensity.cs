@@ -24,14 +24,18 @@ public static class LiquidDensity
         "Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "Peng-Robinson / Lee-Kesler (PR/LK)",
     };
 
-    /// <summary>The Flowstead variant of a cubic package, or null for any other package.</summary>
-    public static PropertyPackage? Variant(PropertyPackage template) => template switch
+    /// <summary>
+    /// The Flowstead variant of a cubic package, or null for any other package. Exact types only: DWSIM's
+    /// derived packages (PR 1978, the PR/SRK variants with other mixing rules) must keep their own class.
+    /// </summary>
+    public static PropertyPackage? Variant(PropertyPackage template)
     {
-        PengRobinsonLKPropertyPackage => Copy(new FlowsteadPrLk(), template),
-        PengRobinsonPropertyPackage => Copy(new FlowsteadPr(), template),
-        SRKPropertyPackage => Copy(new FlowsteadSrk(), template),
-        _ => null,
-    };
+        var type = template.GetType();
+        if (type == typeof(PengRobinsonLKPropertyPackage)) return Copy(new FlowsteadPrLk(), template);
+        if (type == typeof(PengRobinsonPropertyPackage)) return Copy(new FlowsteadPr(), template);
+        if (type == typeof(SRKPropertyPackage)) return Copy(new FlowsteadSrk(), template);
+        return null;
+    }
 
     private static PropertyPackage Copy(PropertyPackage pp, PropertyPackage template)
     {

@@ -31,12 +31,14 @@ builder.Services.AddSingleton<WorkerPool>();
 builder.Services.AddSingleton<EngineService>();
 builder.Services.AddHostedService<WorkerWarmup>();
 builder.Services.Configure<JsonOptions>(o => Json.Configure(o.SerializerOptions));
+// Requests per minute per device (or address); configurable so the test suite, one device, isn't throttled.
+var perMinute = builder.Configuration.GetValue("Engine:RequestsPerMinute", 120);
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     o.AddPolicy("per-key", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Items[ApiKeyAuth.DeviceItem] as string ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 
 var app = builder.Build();

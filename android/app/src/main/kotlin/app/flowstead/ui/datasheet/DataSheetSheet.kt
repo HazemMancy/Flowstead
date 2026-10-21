@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -58,7 +59,10 @@ fun DataSheetSheet(
     onCreateExcel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    // Fields commit when focus leaves them, and tapping a button doesn't take focus: commit before acting.
+    val focus = LocalFocusManager.current
+    fun committed(action: () -> Unit): () -> Unit = { focus.clearFocus(); action() }
+    ModalBottomSheet(onDismissRequest = committed(onDismiss), sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -79,10 +83,10 @@ fun DataSheetSheet(
             )
             val canCreate = !exporting && (equipment != null || equipmentCount > 0)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onCreatePdf, enabled = canCreate, modifier = Modifier.weight(1f).testTag("create_data_sheet_pdf")) {
+                Button(onClick = committed(onCreatePdf), enabled = canCreate, modifier = Modifier.weight(1f).testTag("create_data_sheet_pdf")) {
                     Text(if (exporting) "Creating…" else "PDF")
                 }
-                OutlinedButton(onClick = onCreateExcel, enabled = canCreate, modifier = Modifier.weight(1f).testTag("create_data_sheet_xlsx")) {
+                OutlinedButton(onClick = committed(onCreateExcel), enabled = canCreate, modifier = Modifier.weight(1f).testTag("create_data_sheet_xlsx")) {
                     Text("Excel")
                 }
             }
@@ -129,7 +133,7 @@ fun DataSheetSheet(
                 Column(Modifier.weight(1f)) { CommitField("Checked", info.checkedBy, "doc.chk") { onInfo(info.copy(checkedBy = it)) } }
                 Column(Modifier.weight(1f)) { CommitField("Approved", info.approvedBy, "doc.appr") { onInfo(info.copy(approvedBy = it)) } }
             }
-            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text("Close") }
+            TextButton(onClick = committed(onDismiss), modifier = Modifier.align(Alignment.End)) { Text("Close") }
         }
     }
 }

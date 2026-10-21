@@ -247,10 +247,10 @@ object DataSheetWorkbook {
     private fun uniqueNames(names: List<String>): List<String> {
         val used = mutableSetOf<String>()
         return names.map { raw ->
-            val base = raw.replace(Regex("[:\\\\/?*\\[\\]]"), "_").take(31).ifBlank { "Sheet" }
+            val base = raw.replace(Regex("[:\\\\/?*\\[\\]]"), "_").trim('\'').take(31).trim('\'').ifBlank { "Sheet" }
             var name = base
             var i = 2
-            while (!used.add(name.lowercase())) name = base.take(28) + " ${i++}"
+            while (!used.add(name.lowercase())) name = base.take(27) + " ${i++}"
             name
         }
     }

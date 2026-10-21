@@ -27,6 +27,7 @@ public sealed class EngineFixture : WebApplicationFactory<Program>, IAsyncLifeti
         builder.UseSetting("Engine:Workers", "2");
         builder.UseSetting("Engine:SolveTimeoutSeconds", "60");
         builder.UseSetting("Engine:DatabasePath", _db);
+        builder.UseSetting("Engine:RequestsPerMinute", "100000");
     }
 
     public async Task InitializeAsync()

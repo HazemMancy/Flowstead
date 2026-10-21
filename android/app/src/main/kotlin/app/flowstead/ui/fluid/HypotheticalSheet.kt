@@ -30,12 +30,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.flowstead.core.api.HypotheticalProperties
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.Hypothetical
 import app.flowstead.core.model.Spec
+import app.flowstead.core.units.EngUnit
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
@@ -69,18 +71,27 @@ fun HypotheticalSheet(
     onDismiss: () -> Unit,
 ) {
     val ctx = UnitContext()
+    val focus = LocalFocusManager.current
+    val pressureUnit = absolute(unitSet.unitFor(Quantity.Pressure))
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     fun spec(si: Double?, unit: String) = si?.let { Spec(it, unit) }
     var nbp by remember { mutableStateOf(spec(initial?.normalBoilingPoint, unitSet.unitFor(Quantity.Temperature).id)) }
     var mw by remember { mutableStateOf(spec(initial?.molecularWeight, Units.kgPerKmol.id)) }
     var sg by remember { mutableStateOf(spec(initial?.specificGravity, Units.ratio.id)) }
     var tc by remember { mutableStateOf(spec(initial?.criticalTemperature, unitSet.unitFor(Quantity.Temperature).id)) }
-    var pc by remember { mutableStateOf(spec(initial?.criticalPressure, unitSet.unitFor(Quantity.Pressure).id)) }
+    var pc by remember { mutableStateOf(spec(initial?.criticalPressure, pressureUnit.id)) }
     var w by remember { mutableStateOf(spec(initial?.acentricFactor, Units.ratio.id)) }
-    val current = Hypothetical(name.trim(), nbp?.si, mw?.si, sg?.si, tc?.si, pc?.si, w?.si)
-    val problem = current.problem()
+    fun current() = Hypothetical(name.trim(), nbp?.si, mw?.si, sg?.si, tc?.si, pc?.si, w?.si)
+    val problem = current().problem()
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    // A button tap doesn't take focus from the field being typed in, so commit that field first.
+    fun withCommitted(action: (Hypothetical) -> Unit) {
+        focus.clearFocus()
+        val h = current()
+        if (h.problem() == null) action(h)
+    }
+
+    ModalBottomSheet(onDismissRequest = { focus.clearFocus(); onDismiss() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -107,22 +118,22 @@ fun HypotheticalSheet(
             QuantityField("Specific gravity (60 °F/60 °F)", sg, Quantity.Ratio, Units.ratio, ctx, "hypo.sg", hint = "estimated if empty", testTag = "hypo_sg") { sg = it }
             Text("Override the estimates (optional)", style = MaterialTheme.typography.titleSmall)
             QuantityField("Critical temperature", tc, Quantity.Temperature, unitSet.unitFor(Quantity.Temperature), ctx, "hypo.tc", hint = "Riazi–Daubert") { tc = it }
-            QuantityField("Critical pressure", pc, Quantity.Pressure, unitSet.unitFor(Quantity.Pressure), ctx, "hypo.pc", hint = "Riazi–Daubert") { pc = it }
+            QuantityField("Critical pressure", pc, Quantity.Pressure, pressureUnit, ctx, "hypo.pc", hint = "Riazi–Daubert") { pc = it }
             QuantityField("Acentric factor", w, Quantity.Ratio, Units.ratio, ctx, "hypo.w", hint = "fitted to the boiling point") { w = it }
             problem?.let { Text(it, color = MaterialTheme.valueColors.underSpecifiedText, style = MaterialTheme.typography.bodySmall) }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
-                    onClick = { onEstimate(current) },
+                    onClick = { withCommitted(onEstimate) },
                     enabled = problem == null && estimate !is EstimateState.Working,
                     modifier = Modifier.weight(1f).testTag("hypo_estimate"),
                 ) { Text(if (estimate is EstimateState.Working) "Estimating…" else "Estimate") }
-                Button(onClick = { onSave(current) }, enabled = problem == null, modifier = Modifier.weight(1f).testTag("hypo_save")) {
+                Button(onClick = { withCommitted(onSave) }, enabled = problem == null, modifier = Modifier.weight(1f).testTag("hypo_save")) {
                     Text(if (initial == null) "Add to components" else "Save")
                 }
             }
             when (estimate) {
-                is EstimateState.Done -> if (estimate.input == current) EstimateCard(estimate.properties, unitSet, ctx)
+                is EstimateState.Done -> if (estimate.input == current()) EstimateCard(estimate.properties, unitSet, ctx)
                 is EstimateState.Failed -> Text(estimate.reason, color = MaterialTheme.valueColors.error, style = MaterialTheme.typography.bodySmall)
                 else -> Unit
             }
@@ -144,7 +155,7 @@ private fun EstimateCard(p: HypotheticalProperties, unitSet: UnitSet, ctx: UnitC
         Triple("Molecular weight", "molecularWeight", p.molecularWeight to Units.kgPerKmol),
         Triple("Specific gravity", "specificGravity", p.specificGravity to Units.ratio),
         Triple("Critical temperature", "criticalTemperature", p.criticalTemperature to unitSet.unitFor(Quantity.Temperature)),
-        Triple("Critical pressure", "criticalPressure", p.criticalPressure to unitSet.unitFor(Quantity.Pressure)),
+        Triple("Critical pressure", "criticalPressure", p.criticalPressure to absolute(unitSet.unitFor(Quantity.Pressure))),
         Triple("Acentric factor", "acentricFactor", p.acentricFactor to Units.ratio),
         Triple("Watson K", "", p.watsonK to Units.ratio),
     )
@@ -161,4 +172,12 @@ private fun EstimateCard(p: HypotheticalProperties, unitSet: UnitSet, ctx: UnitC
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/** Critical pressures are absolute: show barg/psig/kPag users the matching absolute unit. */
+private fun absolute(unit: EngUnit): EngUnit = when (unit) {
+    Units.barg -> Units.bara
+    Units.psig -> Units.psia
+    Units.kPag -> Units.kPa
+    else -> unit
 }
