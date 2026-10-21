@@ -115,7 +115,8 @@ _Last updated: 2026-10-20_
   - Benchmark 09 gains velocity, ρv² and gradient references; new benchmark 16: gas line (Colebrook ΔP within 0.1 %) and a two-phase line.
 
 - **M19 equipment data sheets (D31):**
-  - PDF data sheet for any equipment (data-sheet icon in its editor), or every equipment in one PDF (⋮ menu).
+  - PDF or Excel data sheet for any equipment (data-sheet icon in its editor), or every equipment in one document (⋮ menu; Excel: one worksheet each).
+  - Flowstead logo and name on every sheet; the client's company goes in the title block.
   - Title block, operating conditions per stream, design basis, performance, line sizing, reactions, composition, mechanical data, notes, revisions.
   - The emulator job renders a sample (benchmark 16's two lines) and prints it as base64 in the job log for review.
 

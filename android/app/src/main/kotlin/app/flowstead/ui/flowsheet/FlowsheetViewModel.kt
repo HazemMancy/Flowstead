@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import app.flowstead.BuildConfig
+import app.flowstead.core.export.DataSheetWorkbook
 import app.flowstead.core.export.DataSheets
 import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.EditRejected
@@ -45,6 +46,7 @@ import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.AppSettings
 import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.ui.datasheet.DataSheetPdf
+import app.flowstead.ui.datasheet.FlowsteadLogo
 import app.flowstead.ui.nav.FlowsheetRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -93,8 +95,13 @@ data class FlowsheetUi(
     val dataSheetFor: String? = null,
 )
 
-/** [FlowsheetUi.dataSheetFor] for one PDF with every equipment's data sheet. */
+/** [FlowsheetUi.dataSheetFor] for one document with every equipment's data sheet. */
 const val ALL_EQUIPMENT = "__all"
+
+enum class DataSheetFormat(val extension: String, val mimeType: String) {
+    Pdf("pdf", "application/pdf"),
+    Xlsx("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+}
 
 sealed interface FlowsheetUiState {
     data object Loading : FlowsheetUiState
@@ -369,15 +376,15 @@ class FlowsheetViewModel @Inject constructor(
         _messages.send(if (fs.modelHash() == solve.modelHash) "Results exported" else "Results exported (out of date: the flowsheet changed after the solve)")
     }
 
-    /** "<tag> data sheet.pdf", or "<project> data sheets.pdf" for every equipment. */
-    fun dataSheetFileName(id: String): String {
-        if (id == ALL_EQUIPMENT) return exportFileName("pdf", " data sheets")
+    /** "<tag> data sheet.pdf|xlsx", or "<project> data sheets…" for every equipment. */
+    fun dataSheetFileName(id: String, format: DataSheetFormat): String {
+        if (id == ALL_EQUIPMENT) return exportFileName(format.extension, " data sheets")
         val tag = current?.obj(id)?.tag?.replace(Regex("[\\\\/:*?\"<>|]"), "_")?.trim().orEmpty().ifEmpty { "equipment" }
-        return "$tag data sheet.pdf"
+        return "$tag data sheet.${format.extension}"
     }
 
-    /** Equipment data sheets as a PDF, from the stored solve (or blank process data if there is none). */
-    fun exportDataSheets(uri: Uri, id: String) = export {
+    /** Equipment data sheets as a PDF or Excel workbook, from the stored solve (blank process data if there is none). */
+    fun exportDataSheets(uri: Uri, id: String, format: DataSheetFormat) = export {
         val fs = current ?: return@export
         val unitSet = settingsRepository.settings.first().unitSet
         val today = java.time.Instant.ofEpochMilli(clock.now()).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
@@ -388,7 +395,13 @@ class FlowsheetViewModel @Inject constructor(
         }
         val sheets = targets.map { DataSheets.build(currentName, fs, currentSolve, unitSet, it, today, BuildConfig.VERSION_NAME) }
         val bytes = withContext(Dispatchers.Default) {
-            java.io.ByteArrayOutputStream().also { DataSheetPdf.write(sheets, it) }.toByteArray()
+            when (format) {
+                DataSheetFormat.Pdf -> java.io.ByteArrayOutputStream().also { DataSheetPdf.write(sheets, it) }.toByteArray()
+                DataSheetFormat.Xlsx -> {
+                    val (png, size) = FlowsteadLogo.png(heightPx = 96)
+                    DataSheetWorkbook.write(sheets, DataSheetWorkbook.Logo(png, size[0], size[1]))
+                }
+            }
         }
         documents.write(uri, bytes)
         val stale = currentSolve?.let { fs.modelHash() != it.modelHash } ?: false

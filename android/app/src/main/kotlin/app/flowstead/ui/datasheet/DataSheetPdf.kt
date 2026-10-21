@@ -216,16 +216,15 @@ object DataSheetPdf {
         val h2 = 26f
         val h3 = 26f
         c.drawRect(x, y, x + WIDTH, y + h1 + h2 + h3, frame)
-        // Row 1: company | title and tag | document data
+        // Row 1: Flowstead | title and tag | document data
         val w1 = 170f
         val w3 = 150f
         val w2 = WIDTH - w1 - w3
         c.drawLine(x + w1, y, x + w1, y + h1, line)
         c.drawLine(x + w1 + w2, y, x + w1 + w2, y + h1, line)
-        val company = s.info.company.ifBlank { "Company" }
-        val companyPaint = text(10.5f, bold = true, color = if (s.info.company.isBlank()) muted else ink)
-        wrap(company, companyPaint, w1 - 2 * PAD - 2).take(2).forEachIndexed { k, t -> c.drawText(t, x + PAD + 1, y + 14f + k * 12f, companyPaint) }
-        c.drawText("PROCESS DATA SHEET", x + PAD + 1, y + h1 - 6f, small)
+        // Flowstead's mark and name: every data sheet is a Flowstead document.
+        FlowsteadLogo.drawLockup(c, x + PAD + 2, y + 6f, 24f)
+        c.drawText("PROCESS DATA SHEET", x + PAD + 2, y + h1 - 6f, small)
         val titlePaint = text(11f, bold = true)
         wrap(s.title, titlePaint, w2 - 2 * PAD).take(2).forEachIndexed { k, t ->
             c.drawText(t, x + w1 + (w2 - titlePaint.measureText(t)) / 2, y + 16f + k * 13f, titlePaint)
@@ -256,7 +255,10 @@ object DataSheetPdf {
                 wrap(value, body, w - 2 * PAD - 2).take(2).forEachIndexed { j, t -> c.drawText(t, bx + PAD + 1, top + 16.5f + j * 7.8f, body) }
             }
         }
-        boxes(y + h1, h2, listOf("Project" to s.info.project, "Project No." to s.info.projectNumber, "Client" to s.info.client, "Site / location" to s.info.site))
+        boxes(
+            y + h1, h2,
+            listOf("Company" to s.info.company, "Project" to s.info.project, "Project No." to s.info.projectNumber, "Client" to s.info.client, "Site / location" to s.info.site),
+        )
         boxes(
             y + h1 + h2, h3,
             listOf("Service" to s.service, "Units" to s.unitSystem, "Prepared" to s.info.preparedBy, "Checked" to s.info.checkedBy, "Approved" to s.info.approvedBy),

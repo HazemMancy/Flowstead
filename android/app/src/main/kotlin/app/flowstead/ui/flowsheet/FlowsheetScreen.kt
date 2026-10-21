@@ -145,7 +145,7 @@ fun FlowsheetScreen(
                                 onClick = { menu = false; xlsxFile.launch(viewModel.exportFileName("xlsx", " results")) },
                             )
                             DropdownMenuItem(
-                                text = { Text("Data sheets — all equipment (PDF)") },
+                                text = { Text("Data sheets — all equipment") },
                                 enabled = ready != null,
                                 onClick = { menu = false; viewModel.openDataSheet(null) },
                                 modifier = Modifier.testTag("menu_data_sheets"),
@@ -300,9 +300,13 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
         }
     }
 
-    val pdfFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+    val pdfFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(DataSheetFormat.Pdf.mimeType)) { uri ->
         val target = ui.dataSheetFor
-        if (uri != null && target != null) vm.exportDataSheets(uri, target)
+        if (uri != null && target != null) vm.exportDataSheets(uri, target, DataSheetFormat.Pdf)
+    }
+    val xlsxSheetFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(DataSheetFormat.Xlsx.mimeType)) { uri ->
+        val target = ui.dataSheetFor
+        if (uri != null && target != null) vm.exportDataSheets(uri, target, DataSheetFormat.Xlsx)
     }
     ui.dataSheetFor?.let { target ->
         val equipment = ui.flowsheet.obj(target)
@@ -313,7 +317,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             exporting = ui.exporting,
             onInfo = vm::setDocumentInfo,
             onField = { key, value -> equipment?.let { vm.setSheetField(it.id, key, value) } },
-            onCreatePdf = { pdfFile.launch(vm.dataSheetFileName(target)) },
+            onCreatePdf = { pdfFile.launch(vm.dataSheetFileName(target, DataSheetFormat.Pdf)) },
+            onCreateExcel = { xlsxSheetFile.launch(vm.dataSheetFileName(target, DataSheetFormat.Xlsx)) },
             onDismiss = vm::closeDataSheet,
         )
     }

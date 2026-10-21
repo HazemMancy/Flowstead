@@ -19,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,6 +55,7 @@ fun DataSheetSheet(
     onInfo: (DocumentInfo) -> Unit,
     onField: (key: String, value: String) -> Unit,
     onCreatePdf: () -> Unit,
+    onCreateExcel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -70,16 +72,20 @@ fun DataSheetSheet(
                 style = MaterialTheme.typography.titleLarge,
             )
             Text(
-                if (equipment == null) "One PDF with a data sheet for each of the $equipmentCount pieces of equipment."
+                if (equipment == null) "One document with a data sheet for each of the $equipmentCount pieces of equipment (Excel: one worksheet each)."
                 else "${equipment.type.displayName()}. Process data come from the last solve; anything the engine didn't return prints as “—”.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(
-                onClick = onCreatePdf,
-                enabled = !exporting && (equipment != null || equipmentCount > 0),
-                modifier = Modifier.fillMaxWidth().testTag("create_data_sheet_pdf"),
-            ) { Text(if (exporting) "Creating…" else "Create PDF") }
+            val canCreate = !exporting && (equipment != null || equipmentCount > 0)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onCreatePdf, enabled = canCreate, modifier = Modifier.weight(1f).testTag("create_data_sheet_pdf")) {
+                    Text(if (exporting) "Creating…" else "PDF")
+                }
+                OutlinedButton(onClick = onCreateExcel, enabled = canCreate, modifier = Modifier.weight(1f).testTag("create_data_sheet_xlsx")) {
+                    Text("Excel")
+                }
+            }
 
             if (equipment != null) {
                 HorizontalDivider()
