@@ -159,7 +159,7 @@ jobs:
             rm -rf android/app/build/outputs/androidTest-results
             cd android && timeout 1200 ./gradlew -PtestMinified :app:connectedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
             # A runner that crashes before any test still "passes": require a passed test in the release results.
-            r=$(find android/app/build/outputs/androidTest-results -name 'TEST-*.xml'); echo "$r"; test -n "$r" && grep -q '<testcase' $r && ! grep -q '<failure' $r
+            f=$(find android/app/build/outputs/androidTest-results -name 'TEST-*.xml' -print -quit); echo "$f"; test -n "$f" && grep -q '<testcase' "$f" && ! grep -q '<failure' "$f"
       - name: Device log
         if: always()
         # Repeated stack frames (a runaway recursion) are counted, not printed, so the callers stay visible.
