@@ -156,7 +156,10 @@ jobs:
             (adb logcat -v time FlowsteadOnDevice:I FlowsteadPdf:I FlowsteadEngine:V mono:V monodroid:W DOTNET:W '*:E' > logcat.txt &)
             cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
             # The same benchmarks against the R8-minified release build that is published.
+            rm -rf android/app/build/outputs/androidTest-results
             cd android && timeout 1200 ./gradlew -PtestMinified :app:connectedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
+            # A runner that crashes before any test still "passes": require a passed test in the release results.
+            r=$(find android/app/build/outputs/androidTest-results -name 'TEST-*.xml'); echo "$r"; test -n "$r" && grep -q '<testcase' $r && ! grep -q '<failure' $r
       - name: Device log
         if: always()
         # Repeated stack frames (a runaway recursion) are counted, not printed, so the callers stay visible.
