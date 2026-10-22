@@ -57,6 +57,7 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
         else PlotView(plot, unitSet, ctx, stale = state?.stale == true)
         val t = unitSet.unitFor(Quantity.Temperature)
         val p = unitSet.unitFor(Quantity.Pressure)
+        @Composable
         fun row(label: String, tv: Double?, pv: Double?) {
             if (tv == null || pv == null) return
             "$label: ${ValueFormat.number(p.fromSi(pv, ctx), p.decimals)} ${p.symbol} at ${ValueFormat.number(t.fromSi(tv, ctx), t.decimals)} ${t.symbol}"
