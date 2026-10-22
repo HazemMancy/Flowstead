@@ -38,4 +38,7 @@ enum class Quantity(val siUnitId: String) {
     PressureGradient("Pa/m"),
     /** ρv², the momentum flux used in line sizing (kg/m·s², numerically Pa). */
     MomentumFlux("kg/m.s2"),
+    ThermalConductivity("W/m.K"),
+    KinematicViscosity("m2/s"),
+    SurfaceTension("N/m"),
 }

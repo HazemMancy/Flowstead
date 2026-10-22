@@ -104,7 +104,11 @@ object ResultKeys {
         "molarEnthalpy" -> Quantity.MolarEnthalpy
         "stdLiquidVolumeFlow" -> Quantity.VolumeFlow
         "massEntropy" -> Quantity.MassEntropy
-        "massHeatCapacity" -> Quantity.MassHeatCapacity
+        "massHeatCapacity", "massHeatCapacityCv" -> Quantity.MassHeatCapacity
+        "heatCapacityRatio" -> Quantity.Ratio
+        "thermalConductivity" -> Quantity.ThermalConductivity
+        "kinematicViscosity" -> Quantity.KinematicViscosity
+        "surfaceTension" -> Quantity.SurfaceTension
         "density" -> Quantity.Density
         "molecularWeight" -> Quantity.MolecularWeight
         "viscosity" -> Quantity.Viscosity
@@ -131,6 +135,11 @@ object ResultKeys {
         "stdLiquidVolumeFlow" -> "Std ideal liquid volume flow"
         "massEntropy" -> "Mass entropy"
         "massHeatCapacity" -> "Cp (mass)"
+        "massHeatCapacityCv" -> "Cv (mass)"
+        "heatCapacityRatio" -> "Cp/Cv"
+        "thermalConductivity" -> "Thermal conductivity"
+        "kinematicViscosity" -> "Kinematic viscosity"
+        "surfaceTension" -> "Surface tension"
         "density" -> "Density"
         "molecularWeight" -> "Molecular weight"
         "viscosity" -> "Viscosity"

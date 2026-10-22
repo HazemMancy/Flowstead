@@ -73,5 +73,8 @@ class ResultViewTest {
         val a = Flowsheet(compounds = listOf("Methane"))
         assertEquals(a.modelHash(), a.copy().modelHash())
         assertNotEquals(a.modelHash(), a.copy(compounds = listOf("Ethane")).modelHash())
+        // The liquid density method changes results; unset, it is not written, so older flowsheets keep their hash.
+        assertNotEquals(a.modelHash(), a.copy(liquidDensity = LiquidDensityMethods.COSTALD).modelHash())
+        assertTrue("liquidDensity" !in FlowsheetJson.encodeToString(Flowsheet.serializer(), a))
     }
 }

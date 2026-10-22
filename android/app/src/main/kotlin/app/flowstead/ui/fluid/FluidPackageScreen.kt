@@ -67,6 +67,7 @@ import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.Hypothetical
+import app.flowstead.core.model.LiquidDensityMethods
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitSet
 import app.flowstead.data.ProjectRepository
@@ -99,6 +100,8 @@ import javax.inject.Inject
 data class FluidUi(
     val loaded: Boolean = false,
     val propertyPackage: String? = null,
+    /** Null: the engine default; [LiquidDensityMethods.COSTALD]: COSTALD. */
+    val liquidDensity: String? = null,
     val compounds: List<String> = emptyList(),
     val hypotheticals: List<Hypothetical> = emptyList(),
     val packages: List<String> = OfflineCatalogue.propertyPackages,
@@ -144,6 +147,7 @@ class FluidPackageViewModel @Inject constructor(
         FluidUi(
             loaded = p != null,
             propertyPackage = p?.flowsheet?.propertyPackage,
+            liquidDensity = p?.flowsheet?.liquidDensity,
             compounds = p?.flowsheet?.compounds.orEmpty(),
             hypotheticals = p?.flowsheet?.hypotheticals.orEmpty(),
             packages = pk,
@@ -176,6 +180,11 @@ class FluidPackageViewModel @Inject constructor(
     fun setPackage(name: String) = viewModelScope.launch {
         val p = projects.observeProject(projectId).first() ?: return@launch
         projects.saveFlowsheet(projectId, p.flowsheet.copy(propertyPackage = name))
+    }
+
+    fun setLiquidDensity(method: String?) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        projects.saveFlowsheet(projectId, p.flowsheet.copy(liquidDensity = method))
     }
 
     fun add(name: String) = viewModelScope.launch {
@@ -239,6 +248,7 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         ui, snackbar, viewModel::setPackage, viewModel::add, viewModel::remove, viewModel::setQuery, viewModel::setFamily, onBack,
         onNewHypothetical = { viewModel.clearEstimate(); creating = true },
         onEditHypothetical = { viewModel.clearEstimate(); editing = it },
+        onLiquidDensity = viewModel::setLiquidDensity,
     )
     if (creating || editing != null) {
         val close = { creating = false; editing = null }
@@ -267,6 +277,7 @@ fun FluidPackageContent(
     onBack: () -> Unit = {},
     onNewHypothetical: () -> Unit = {},
     onEditHypothetical: (Hypothetical) -> Unit = {},
+    onLiquidDensity: (String?) -> Unit = {},
 ) {
     var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
@@ -304,6 +315,24 @@ fun FluidPackageContent(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            item { HorizontalDivider() }
+            item { Text("Liquid density", style = MaterialTheme.typography.titleMedium) }
+            items(LIQUID_DENSITY_OPTIONS, key = { "ld_${it.method}" }) { o ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .selectable(selected = ui.liquidDensity == o.method, role = Role.RadioButton) { onLiquidDensity(o.method) }
+                        .testTag("liquid_density_${o.method ?: "default"}"),
+                ) {
+                    RadioButton(selected = ui.liquidDensity == o.method, onClick = null)
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(o.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(o.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
             item { HorizontalDivider() }
             item { Text("Components (${ui.compounds.size})", style = MaterialTheme.typography.titleMedium) }
@@ -389,6 +418,19 @@ fun FluidPackageContent(
         CompoundSheet(c, added = c.name in ui.compounds, unitSet = ui.unitSet, onAdd = { onAdd(c.name); details = null }, onDismiss = { details = null })
     }
 }
+
+private data class LiquidDensityOption(val method: String?, val label: String, val detail: String)
+
+private val LIQUID_DENSITY_OPTIONS = listOf(
+    LiquidDensityOption(
+        null, "DWSIM default",
+        "Pure-component liquid densities (experimental data, else Rackett). COSTALD when dissolved gas is above its critical temperature.",
+    ),
+    LiquidDensityOption(
+        LiquidDensityMethods.COSTALD, "COSTALD (as HYSYS)",
+        "COSTALD for every liquid, as HYSYS does for hydrocarbons. Closer to HYSYS for hydrocarbon mixtures; about 1 % high for water.",
+    ),
+)
 
 /** "NBP 174.2 °C · MW 142.3 · SG 0.734": what the user gave. */
 private fun hypoSummary(h: Hypothetical, unitSet: UnitSet): String = buildList {

@@ -21,18 +21,24 @@ object StreamLayout {
 
     data class Section(val title: String, val phase: String, val rows: List<Row>)
 
-    private fun liquid(name: String, phase: String) = Section(
-        "$name phase", phase,
-        listOf(
-            Row("$name phase molar flow", "molarFlow", phase),
-            Row("$name phase mass flow", "massFlow", phase),
-            Row("$name phase actual volume flow", "volumeFlow", phase),
-            Row("$name phase std ideal liquid volume flow", "stdLiquidVolumeFlow", phase),
-            Row("$name phase molecular weight", "molecularWeight", phase),
-            Row("$name phase mass density", "density", phase),
-            Row("$name phase viscosity", "viscosity", phase),
-        ),
-    )
+    private fun phaseRows(name: String, phase: String, vapour: Boolean): List<Row> = buildList {
+        add(Row("$name phase molar flow", "molarFlow", phase))
+        add(Row("$name phase mass flow", "massFlow", phase))
+        add(Row("$name phase actual volume flow", "volumeFlow", phase))
+        if (vapour) add(Row("$name phase std gas flow", "molarFlow", phase, standardGas = true))
+        add(Row("$name phase std ideal liquid volume flow", "stdLiquidVolumeFlow", phase))
+        add(Row("$name phase molecular weight", "molecularWeight", phase))
+        add(Row("$name phase mass density", "density", phase))
+        add(Row("$name phase viscosity", "viscosity", phase))
+        add(Row("$name phase kinematic viscosity", "kinematicViscosity", phase))
+        add(Row("$name phase Z factor", "compressibilityFactor", phase))
+        add(Row("$name phase mass Cp", "massHeatCapacity", phase))
+        add(Row("$name phase Cp/Cv", "heatCapacityRatio", phase))
+        add(Row("$name phase thermal conductivity", "thermalConductivity", phase))
+        if (!vapour) add(Row("$name phase surface tension", "surfaceTension", phase))
+        add(Row("$name phase molar enthalpy", "molarEnthalpy", phase))
+        add(Row("$name phase mass entropy", "massEntropy", phase))
+    }
 
     val SECTIONS: List<Section> = listOf(
         Section(
@@ -43,28 +49,23 @@ object StreamLayout {
                 Row("Pressure", "pressure", null),
                 Row("Molar flow", "molarFlow", null),
                 Row("Mass flow", "massFlow", null),
+                Row("Actual volume flow", "volumeFlow", Phases.OVERALL),
                 Row("Std ideal liquid volume flow", "stdLiquidVolumeFlow", Phases.OVERALL),
                 Row("Molecular weight", "molecularWeight", Phases.OVERALL),
+                Row("Mass density", "density", Phases.OVERALL),
                 Row("Molar enthalpy", "molarEnthalpy", Phases.OVERALL),
                 Row("Mass enthalpy", "massEnthalpy", null),
+                Row("Mass entropy", "massEntropy", Phases.OVERALL),
+                Row("Mass Cp", "massHeatCapacity", Phases.OVERALL),
+                // Single-phase streams only: these come from the one phase present.
+                Row("Viscosity", "viscosity", null),
+                Row("Z factor", "compressibilityFactor", null),
+                Row("Thermal conductivity", "thermalConductivity", null),
             ),
         ),
-        Section(
-            "Vapour phase", Phases.VAPOUR,
-            listOf(
-                Row("Vapour phase molar flow", "molarFlow", Phases.VAPOUR),
-                Row("Vapour phase mass flow", "massFlow", Phases.VAPOUR),
-                Row("Vapour phase actual volume flow", "volumeFlow", Phases.VAPOUR),
-                Row("Vapour phase std gas flow", "molarFlow", Phases.VAPOUR, standardGas = true),
-                Row("Vapour phase molecular weight", "molecularWeight", Phases.VAPOUR),
-                Row("Vapour phase std ideal liquid volume flow", "stdLiquidVolumeFlow", Phases.VAPOUR),
-                Row("Vapour phase mass density", "density", Phases.VAPOUR),
-                Row("Vapour phase viscosity", "viscosity", Phases.VAPOUR),
-                Row("Vapour phase Z factor", "compressibilityFactor", Phases.VAPOUR),
-            ),
-        ),
-        liquid("Liquid", Phases.LIQUID1),
-        liquid("Aqueous", Phases.LIQUID2),
+        Section("Vapour phase", Phases.VAPOUR, phaseRows("Vapour", Phases.VAPOUR, vapour = true)),
+        Section("Liquid phase", Phases.LIQUID1, phaseRows("Liquid", Phases.LIQUID1, vapour = false)),
+        Section("Aqueous phase", Phases.LIQUID2, phaseRows("Aqueous", Phases.LIQUID2, vapour = false)),
     )
 
     /** Sections to show for [streamIds]: Overall always, a phase block when any of the streams has that phase. */

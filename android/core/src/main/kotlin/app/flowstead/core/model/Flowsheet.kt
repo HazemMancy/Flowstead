@@ -32,6 +32,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val hypotheticals: List<Hypothetical> = emptyList(),
+    /** Liquid density method: null for the engine default, [LiquidDensityMethods.COSTALD] for COSTALD. Written only when set. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val liquidDensity: String? = null,
     /** Line-sizing limits by service. Not part of the solved model: excluded from [modelHash]. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -52,6 +56,11 @@ data class Flowsheet(
         const val SCHEMA_VERSION = 1
         val EMPTY = Flowsheet()
     }
+}
+
+/** Liquid density methods; same strings as the engine's LiquidDensityMethods. */
+object LiquidDensityMethods {
+    const val COSTALD = "costald"
 }
 
 @Serializable

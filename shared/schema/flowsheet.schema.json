@@ -55,6 +55,10 @@
       "description": "User-defined pseudo-components (HYSYS hypotheticals); each name is also in compounds.",
       "items": { "$ref": "#/$defs/Hypothetical" }
     },
+    "liquidDensity": {
+      "enum": ["costald"],
+      "description": "Liquid density method. Absent: the engine default (DWSIM's Rackett and experimental data, with Flowstead's supercritical rule for cubic packages). \"costald\": COSTALD for every liquid, as HYSYS does for hydrocarbons."
+    },
     "sizingCriteria": {
       "type": "object",
       "description": "App-only line-sizing limits by service (gas, liquid, twoPhase), each a set of optional Specs in SI: maxVelocity, minVelocity (m/s), maxMomentumFlux (kg/m·s²), maxFrictionGradient (Pa/m), maxMach, erosionalC (API RP 14E). Not part of the solved model; the engine ignores it."

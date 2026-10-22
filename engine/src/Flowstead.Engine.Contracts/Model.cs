@@ -19,6 +19,13 @@ public sealed record Flowsheet
     public List<Reaction> Reactions { get; init; } = [];
     /// <summary>User-defined pseudo-components; each name also appears in <see cref="Compounds"/>.</summary>
     public List<Hypothetical> Hypotheticals { get; init; } = [];
+    /// <summary>Liquid density method: null for DWSIM's default (with Flowstead's rule, D32); "costald" for COSTALD, as HYSYS (D39).</summary>
+    public string? LiquidDensity { get; init; }
+}
+
+public static class LiquidDensityMethods
+{
+    public const string Costald = "costald";
 }
 
 /// <summary>

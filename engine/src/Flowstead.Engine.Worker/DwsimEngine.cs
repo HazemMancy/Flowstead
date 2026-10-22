@@ -301,7 +301,7 @@ public sealed class DwsimEngine
         var applied = SetSolver.Apply(model);
         var plain = applied with { Objects = applied.Objects.Where(o => o.Type is not (ObjectType.Adjust or ObjectType.Set)).ToList() };
 
-        if (LiquidDensity.CubicPackages.Contains(model.PropertyPackage ?? "") && HasSupercriticalCompound(model))
+        if (model.LiquidDensity != LiquidDensityMethods.Costald && LiquidDensity.CubicPackages.Contains(model.PropertyPackage ?? "") && HasSupercriticalCompound(model))
             warnings.Add("Liquid densities: desktop DWSIM uses its default method; Flowstead's engine uses COSTALD for liquids that carry " +
                 "more than 1 mol % of components above their critical temperature, so liquid densities and two-phase pipe ΔP can differ.");
         var (fs, _) = Build(plain, forExport: true);
@@ -400,13 +400,16 @@ public sealed class DwsimEngine
         var ppName = MvpPackages.FirstOrDefault(p => p.Name == model.PropertyPackage).Dwsim ?? model.PropertyPackage!;
         // Cubic packages solve with Flowstead's liquid-density rule (D32). A .dwxmz keeps DWSIM's own class,
         // which desktop DWSIM can load.
+        // With the COSTALD option (D39), DWSIM's own package in its COSTALD mode, in the engine and in a .dwxmz alike.
+        var costald = model.LiquidDensity == LiquidDensityMethods.Costald;
         PropertyPackage pp;
-        if (!forExport && LiquidDensity.Variant((PropertyPackage)_automation.AvailablePropertyPackages[ppName]) is { } variant)
+        if (!forExport && !costald && LiquidDensity.Variant((PropertyPackage)_automation.AvailablePropertyPackages[ppName]) is { } variant)
         {
             fs.AddPropertyPackage(variant);
             pp = variant;
         }
         else pp = (PropertyPackage)fs.CreateAndAddPropertyPackage(ppName);
+        if (costald) pp.LiquidDensityCalculationMode_Subcritical = PropertyPackage.LiquidDensityCalcMode.COSTALD;
         // DWSIM's Gibbs-minimisation flashes (rigorous VLLE) default to IPOPT, a native library that is not in the
         // engine (server or phone); its finalizer then crashed the process. DWSIM's managed L-BFGS instead.
         pp.FlashSettings[FlashSetting.GM_OptimizationMethod] = "Limited_Memory_BGFS";
@@ -917,7 +920,13 @@ public sealed class DwsimEngine
                     ("density", p.density),
                     ("molecularWeight", p.molecularWeight),
                     ("viscosity", idx == 0 ? null : p.viscosity),
-                    ("compressibilityFactor", idx == 0 ? null : p.compressibilityFactor)),
+                    ("compressibilityFactor", idx == 0 ? null : p.compressibilityFactor),
+                    // HYSYS stream property pages: per phase only (meaningless for a two-phase mixture).
+                    ("massHeatCapacityCv", idx == 0 ? null : p.heatCapacityCv * 1000.0), // DWSIM kJ/kg·K
+                    ("heatCapacityRatio", idx == 0 ? null : p.heatCapacityCp / p.heatCapacityCv),
+                    ("thermalConductivity", idx == 0 ? null : p.thermalConductivity),       // W/m·K
+                    ("kinematicViscosity", idx == 0 ? null : p.kinematic_viscosity),        // m²/s
+                    ("surfaceTension", idx is 3 or 4 ? p.surfaceTension : null)),            // N/m
                 Composition = ph.Compounds.Values
                     .Where(c => c.MoleFraction.HasValue && double.IsFinite(c.MoleFraction.Value))
                     .ToDictionary(c => c.Name, c => c.MoleFraction!.Value),

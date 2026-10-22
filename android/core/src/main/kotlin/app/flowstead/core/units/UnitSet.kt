@@ -49,6 +49,9 @@ data class UnitSet(val name: String, val units: Map<Quantity, String>) {
                 Quantity.Velocity to Units.mPerS.id,
                 Quantity.PressureGradient to Units.kPaPer100m.id,
                 Quantity.MomentumFlux to Units.kgPerMS2.id,
+                Quantity.ThermalConductivity to Units.wPerMK.id,
+                Quantity.KinematicViscosity to Units.cSt.id,
+                Quantity.SurfaceTension to Units.mNPerM.id,
             ),
         )
 
@@ -81,6 +84,9 @@ data class UnitSet(val name: String, val units: Map<Quantity, String>) {
                 Quantity.Velocity to Units.ftPerS.id,
                 Quantity.PressureGradient to Units.psiPer100ft.id,
                 Quantity.MomentumFlux to Units.lbPerFtS2.id,
+                Quantity.ThermalConductivity to Units.btuPerHFtF.id,
+                Quantity.KinematicViscosity to Units.cSt.id,
+                Quantity.SurfaceTension to Units.dynePerCm.id,
             ),
         )
 

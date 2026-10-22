@@ -130,6 +130,9 @@ public static class DwxmzImporter
             PropertyPackage = packageName(Name(pp) ?? ""),
             Compounds = compounds,
             Hypotheticals = hypotheticals,
+            LiquidDensity = pp is DWSIM.Thermodynamics.PropertyPackages.PropertyPackage dpp
+                && dpp.LiquidDensityCalculationMode_Subcritical == DWSIM.Thermodynamics.PropertyPackages.PropertyPackage.LiquidDensityCalcMode.COSTALD
+                ? LiquidDensityMethods.Costald : null,
             Objects = objects,
             Connections = connections.Distinct().ToList(),
             Reactions = ImportReactions(fs, objects, warnings),

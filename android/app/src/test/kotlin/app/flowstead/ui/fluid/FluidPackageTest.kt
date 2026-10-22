@@ -23,6 +23,7 @@ import app.flowstead.FileCompoundLibrary
 import app.flowstead.MainDispatcherRule
 import app.flowstead.core.compounds.CompoundCatalogue
 import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.LiquidDensityMethods
 import app.flowstead.ui.theme.FlowsteadTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -82,5 +83,21 @@ class FluidPackageTest {
         compose.onNodeWithText("-82.59 °C").assertExists() // Tc 190.56 K in the SI set (°C); may be below the fold
         compose.onNodeWithTag("add_from_sheet").performScrollTo().performClick()
         assertEquals("Methane", added)
+    }
+
+    @Test
+    fun liquidDensityDefaultsToDwsimAndSwitchesToCostald() = runTest {
+        val vm = vm()
+        assertEquals(null, vm.state.first { it.loaded }.liquidDensity)
+        vm.setLiquidDensity(LiquidDensityMethods.COSTALD)
+        assertEquals(LiquidDensityMethods.COSTALD, vm.state.first { it.liquidDensity != null }.liquidDensity)
+        vm.setLiquidDensity(null)
+        assertEquals(null, vm.state.first { it.liquidDensity == null }.liquidDensity)
+
+        var picked: String? = "unset"
+        compose.setContent { FlowsteadTheme { FluidPackageContent(FluidUi(loaded = true), onLiquidDensity = { picked = it }) } }
+        compose.onNodeWithTag("fluid_list").performScrollToNode(hasTestTag("liquid_density_costald"))
+        compose.onNodeWithTag("liquid_density_costald").performClick()
+        assertEquals(LiquidDensityMethods.COSTALD, picked)
     }
 }

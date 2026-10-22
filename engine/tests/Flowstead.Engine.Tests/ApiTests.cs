@@ -6,11 +6,12 @@ using System.Net.Http.Json;
 using Flowstead.Engine.Api;
 using Flowstead.Engine.Contracts;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Flowstead.Engine.Tests;
 
 [Collection(EngineCollection.Name)]
-public sealed class ApiTests(EngineFixture engine)
+public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
 {
     private static Flowsheet Water(double tempK) => new()
     {
@@ -170,6 +171,50 @@ public sealed class ApiTests(EngineFixture engine)
         Assert.Equal(2e6, outlet["pressure"], 1);
         Assert.InRange(outlet["temperature"], 273.15, 313.15 - 5); // cooled by more than 5 K
         Assert.Equal(r.Objects["in"].Properties["massEnthalpy"], outlet["massEnthalpy"], 0); // isenthalpic, J/kg
+    }
+
+    [Fact]
+    public async Task CostaldIsOptInAndChangesLiquidDensity()
+    {
+        static Flowsheet Liquid(double tK, double pPa, Dictionary<string, double> x) => new()
+        {
+            PropertyPackage = "Peng-Robinson (PR)",
+            Compounds = x.Keys.ToList(),
+            Objects =
+            [
+                new SimObject
+                {
+                    Id = "l", Tag = "LIQ", Type = ObjectType.MaterialStream,
+                    Specs = new()
+                    {
+                        [SpecKeys.Temperature] = new Spec(tK, "C"),
+                        [SpecKeys.Pressure] = new Spec(pPa, "bara"),
+                        [SpecKeys.MassFlow] = new Spec(1.0, "kg/h"),
+                    },
+                    Composition = x,
+                },
+            ],
+        };
+        async Task<double> Density(Flowsheet f)
+        {
+            var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", f, Json.Options));
+            Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+            return r.Objects["l"].Phases!["liquid1"].Properties["density"];
+        }
+        // Pure n-hexane at 25 °C (measured about 655 kg/m³): both methods agree.
+        var hexane = Liquid(298.15, 1e5, new() { ["N-hexane"] = 1.0 });
+        Assert.Equal(await Density(hexane), await Density(hexane with { LiquidDensity = LiquidDensityMethods.Costald }), 0);
+        // Propane/n-decane 40/60 mol at 25 °C, 20 bar. DWSIM's default mixes pure-liquid densities by mole fraction
+        // (D39) and gives about 614 kg/m³; ideal mixing by mass gives about 675 and COSTALD a little more.
+        var mixture = Liquid(298.15, 2e6, new() { ["Propane"] = 0.4, ["N-decane"] = 0.6 });
+        var standard = await Density(mixture);
+        var costald = await Density(mixture with { LiquidDensity = LiquidDensityMethods.Costald });
+        output.WriteLine($"C3/nC10: default {standard:F1}, COSTALD {costald:F1} kg/m³");
+        Assert.InRange(standard, 600, 630);
+        Assert.InRange(costald, 675, 710);
+
+        var bad = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", hexane with { LiquidDensity = "rackett" }, Json.Options));
+        Assert.Equal(SolveStatus.Invalid, bad.Status);
     }
 
     [Theory]
