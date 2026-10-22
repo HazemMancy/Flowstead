@@ -411,6 +411,8 @@ public sealed class DwsimEngine
         }
         else pp = (PropertyPackage)fs.CreateAndAddPropertyPackage(ppName);
         if (costald) pp.LiquidDensityCalculationMode_Subcritical = PropertyPackage.LiquidDensityCalcMode.COSTALD;
+        // Without the volume shift (D41) PR and SRK densities and Z are the plain EOS values, as HYSYS reports them.
+        if (model.VolumeShift == VolumeShiftMethods.None) pp.LiquidDensity_UsePenelouxVolumeTranslation = false;
         // DWSIM's Gibbs-minimisation flashes (rigorous VLLE) default to IPOPT, a native library that is not in the
         // engine (server or phone); its finalizer then crashed the process. DWSIM's managed L-BFGS instead.
         pp.FlashSettings[FlashSetting.GM_OptimizationMethod] = "Limited_Memory_BGFS";

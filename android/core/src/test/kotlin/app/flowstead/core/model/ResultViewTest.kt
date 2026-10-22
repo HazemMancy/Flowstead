@@ -75,6 +75,8 @@ class ResultViewTest {
         assertNotEquals(a.modelHash(), a.copy(compounds = listOf("Ethane")).modelHash())
         // The liquid density method changes results; unset, it is not written, so older flowsheets keep their hash.
         assertNotEquals(a.modelHash(), a.copy(liquidDensity = LiquidDensityMethods.COSTALD).modelHash())
+        assertNotEquals(a.modelHash(), a.copy(volumeShift = VolumeShiftMethods.NONE).modelHash())
         assertTrue("liquidDensity" !in FlowsheetJson.encodeToString(Flowsheet.serializer(), a))
+        assertTrue("volumeShift" !in FlowsheetJson.encodeToString(Flowsheet.serializer(), a))
     }
 }

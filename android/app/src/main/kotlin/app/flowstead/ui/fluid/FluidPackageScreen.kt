@@ -68,6 +68,7 @@ import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.Hypothetical
 import app.flowstead.core.model.LiquidDensityMethods
+import app.flowstead.core.model.VolumeShiftMethods
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitSet
 import app.flowstead.data.ProjectRepository
@@ -102,6 +103,8 @@ data class FluidUi(
     val propertyPackage: String? = null,
     /** Null: the engine default; [LiquidDensityMethods.COSTALD]: COSTALD. */
     val liquidDensity: String? = null,
+    /** Null: DWSIM's Peneloux volume shift; [VolumeShiftMethods.NONE]: plain EOS. */
+    val volumeShift: String? = null,
     val compounds: List<String> = emptyList(),
     val hypotheticals: List<Hypothetical> = emptyList(),
     val packages: List<String> = OfflineCatalogue.propertyPackages,
@@ -148,6 +151,7 @@ class FluidPackageViewModel @Inject constructor(
             loaded = p != null,
             propertyPackage = p?.flowsheet?.propertyPackage,
             liquidDensity = p?.flowsheet?.liquidDensity,
+            volumeShift = p?.flowsheet?.volumeShift,
             compounds = p?.flowsheet?.compounds.orEmpty(),
             hypotheticals = p?.flowsheet?.hypotheticals.orEmpty(),
             packages = pk,
@@ -185,6 +189,11 @@ class FluidPackageViewModel @Inject constructor(
     fun setLiquidDensity(method: String?) = viewModelScope.launch {
         val p = projects.observeProject(projectId).first() ?: return@launch
         projects.saveFlowsheet(projectId, p.flowsheet.copy(liquidDensity = method))
+    }
+
+    fun setVolumeShift(method: String?) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        projects.saveFlowsheet(projectId, p.flowsheet.copy(volumeShift = method))
     }
 
     fun add(name: String) = viewModelScope.launch {
@@ -249,6 +258,7 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onNewHypothetical = { viewModel.clearEstimate(); creating = true },
         onEditHypothetical = { viewModel.clearEstimate(); editing = it },
         onLiquidDensity = viewModel::setLiquidDensity,
+        onVolumeShift = viewModel::setVolumeShift,
     )
     if (creating || editing != null) {
         val close = { creating = false; editing = null }
@@ -278,6 +288,7 @@ fun FluidPackageContent(
     onNewHypothetical: () -> Unit = {},
     onEditHypothetical: (Hypothetical) -> Unit = {},
     onLiquidDensity: (String?) -> Unit = {},
+    onVolumeShift: (String?) -> Unit = {},
 ) {
     var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
@@ -328,6 +339,24 @@ fun FluidPackageContent(
                         .testTag("liquid_density_${o.method ?: "default"}"),
                 ) {
                     RadioButton(selected = ui.liquidDensity == o.method, onClick = null)
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(o.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(o.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            item { HorizontalDivider() }
+            item { Text("Vapour and EOS density", style = MaterialTheme.typography.titleMedium) }
+            items(VOLUME_SHIFT_OPTIONS, key = { "vs_${it.method}" }) { o ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .selectable(selected = ui.volumeShift == o.method, role = Role.RadioButton) { onVolumeShift(o.method) }
+                        .testTag("volume_shift_${o.method ?: "default"}"),
+                ) {
+                    RadioButton(selected = ui.volumeShift == o.method, onClick = null)
                     Column(Modifier.padding(start = 12.dp)) {
                         Text(o.label, style = MaterialTheme.typography.bodyLarge)
                         Text(o.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -419,16 +448,27 @@ fun FluidPackageContent(
     }
 }
 
-private data class LiquidDensityOption(val method: String?, val label: String, val detail: String)
+private data class DensityOption(val method: String?, val label: String, val detail: String)
 
 private val LIQUID_DENSITY_OPTIONS = listOf(
-    LiquidDensityOption(
+    DensityOption(
         null, "DWSIM default",
         "Pure-component liquid densities (experimental data, else Rackett), mixed by mass. Cubic packages use COSTALD when dissolved gas is above its critical temperature.",
     ),
-    LiquidDensityOption(
+    DensityOption(
         LiquidDensityMethods.COSTALD, "COSTALD (as HYSYS)",
         "COSTALD for every liquid, as HYSYS does for hydrocarbons. About 1 % high for water.",
+    ),
+)
+
+private val VOLUME_SHIFT_OPTIONS = listOf(
+    DensityOption(
+        null, "Peneloux volume shift (DWSIM default)",
+        "PR and SRK densities and Z with the Peneloux shift. Closer to GERG-2008 for dense gas.",
+    ),
+    DensityOption(
+        VolumeShiftMethods.NONE, "Plain EOS (as HYSYS)",
+        "No volume shift: PR densities and Z as HYSYS reports them.",
     ),
 )
 

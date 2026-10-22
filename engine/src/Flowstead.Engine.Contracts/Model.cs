@@ -21,6 +21,13 @@ public sealed record Flowsheet
     public List<Hypothetical> Hypotheticals { get; init; } = [];
     /// <summary>Liquid density method: null for DWSIM's default (with Flowstead's rule, D32); "costald" for COSTALD, as HYSYS (D39).</summary>
     public string? LiquidDensity { get; init; }
+    /// <summary>Cubic EOS volume shift: null for DWSIM's Peneloux shift on vapour and liquid; "none" for the plain EOS, as HYSYS's PR (D41).</summary>
+    public string? VolumeShift { get; init; }
+}
+
+public static class VolumeShiftMethods
+{
+    public const string None = "none";
 }
 
 public static class LiquidDensityMethods

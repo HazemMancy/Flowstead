@@ -24,6 +24,7 @@ import app.flowstead.MainDispatcherRule
 import app.flowstead.core.compounds.CompoundCatalogue
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.LiquidDensityMethods
+import app.flowstead.core.model.VolumeShiftMethods
 import app.flowstead.ui.theme.FlowsteadTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -99,5 +100,19 @@ class FluidPackageTest {
         compose.onNodeWithTag("fluid_list").performScrollToNode(hasTestTag("liquid_density_costald"))
         compose.onNodeWithTag("liquid_density_costald").performClick()
         assertEquals(LiquidDensityMethods.COSTALD, picked)
+    }
+
+    @Test
+    fun volumeShiftDefaultsToPenelouxAndSwitchesOff() = runTest {
+        val vm = vm()
+        assertEquals(null, vm.state.first { it.loaded }.volumeShift)
+        vm.setVolumeShift(VolumeShiftMethods.NONE)
+        assertEquals(VolumeShiftMethods.NONE, vm.state.first { it.volumeShift != null }.volumeShift)
+
+        var picked: String? = "unset"
+        compose.setContent { FlowsteadTheme { FluidPackageContent(FluidUi(loaded = true), onVolumeShift = { picked = it }) } }
+        compose.onNodeWithTag("fluid_list").performScrollToNode(hasTestTag("volume_shift_none"))
+        compose.onNodeWithTag("volume_shift_none").performClick()
+        assertEquals(VolumeShiftMethods.NONE, picked)
     }
 }

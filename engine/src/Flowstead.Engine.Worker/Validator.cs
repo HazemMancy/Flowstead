@@ -87,6 +87,7 @@ public static class Validator
         else if (!knownPackages.Contains(fs.PropertyPackage)) Err($"Unknown property package '{fs.PropertyPackage}'.");
 
         if (fs.LiquidDensity is { } ld && ld != LiquidDensityMethods.Costald) Err($"Unknown liquid density method '{ld}'.");
+        if (fs.VolumeShift is { } vs && vs != VolumeShiftMethods.None) Err($"Unknown volume shift '{vs}'.");
         if (fs.Compounds.Count == 0) Err("Add at least one compound.");
         var known = knownCompounds.ToHashSet(StringComparer.Ordinal);
         ValidateHypotheticals(fs, known, t => Err(t));

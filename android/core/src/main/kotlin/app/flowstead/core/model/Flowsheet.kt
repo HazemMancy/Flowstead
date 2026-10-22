@@ -36,6 +36,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val liquidDensity: String? = null,
+    /** Cubic EOS volume shift: null for DWSIM's Peneloux shift, [VolumeShiftMethods.NONE] for the plain EOS (as HYSYS's PR). Written only when set. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val volumeShift: String? = null,
     /** Line-sizing limits by service. Not part of the solved model: excluded from [modelHash]. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -61,6 +65,11 @@ data class Flowsheet(
 /** Liquid density methods; same strings as the engine's LiquidDensityMethods. */
 object LiquidDensityMethods {
     const val COSTALD = "costald"
+}
+
+/** Volume shift settings; same strings as the engine's VolumeShiftMethods. */
+object VolumeShiftMethods {
+    const val NONE = "none"
 }
 
 @Serializable

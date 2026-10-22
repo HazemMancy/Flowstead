@@ -252,7 +252,15 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
         var g = r.Objects["g"];
         Assert.Equal(1.0, g.Properties["vapourFraction"]);
         Assert.Equal(["overall", "vapour"], g.Phases!.Keys.Order().ToArray());
-        Assert.InRange(g.Phases["vapour"].Properties["density"], 330, 370);
+        Assert.InRange(g.Phases["vapour"].Properties["density"], 330, 345); // DWSIM's Peneloux-shifted PR; GERG-2008 342.5
+
+        // Without the volume shift (D41): HYSYS's plain PR, 362.5 kg/m³ and Z 0.8335.
+        r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs with { VolumeShift = VolumeShiftMethods.None }, Json.Options));
+        var plain = r.Objects["g"].Phases!["vapour"].Properties;
+        Assert.Equal(362.5, plain["density"], 362.5 * 0.005);
+        Assert.Equal(0.8335, plain["compressibilityFactor"], 0.002);
+        var bad = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs with { VolumeShift = "peneloux" }, Json.Options));
+        Assert.Equal(SolveStatus.Invalid, bad.Status);
     }
 
     [Fact]
