@@ -134,6 +134,7 @@ _Last updated: 2026-10-20_
 - **1.3.3 (D44):** optional Lee–Gonzalez–Eakin vapour viscosity.
 - **1.3.4 (D45):** update notice when the app opens: once per launch, at most three times per version; can be turned off.
 - **1.4.0 (D46–D48):** HYSYS-style checks on every unit operation (errors and warnings on the unit, NPSH available, exchanger approach); control valve sizing (IEC 60534 Cv/Kv, choked flow, opening); heat-exchanger zone analysis (internal pinch); pump and compressor performance curves (run-out, surge, stonewall, NPSH required) with a chart in the editor.
+- **1.5.0 (D49–D51):** interactive simulation: Hold/Active solver switch (Active re-solves after every change); plots of exchanger T–Q diagrams, pipe and column profiles; stream phase envelopes with critical point, cricondenbar and cricondentherm; what-if sliders on every specification; case studies (vary one spec, record and plot any results).
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 

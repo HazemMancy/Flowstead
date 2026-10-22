@@ -54,7 +54,7 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
         fun si(key: String) = (results.value(obj.id, key) as? DisplayValue.Calculated)?.takeIf { !it.stale }?.si
         val plot = Plots.envelope(env, si("temperature"), si("pressure"))
         if (plot == null) Text("DWSIM traced no bubble or dew curve for this composition.", style = MaterialTheme.typography.bodySmall)
-        else PlotView(plot, unitSet, ctx, stale = state.stale)
+        else PlotView(plot, unitSet, ctx, stale = state?.stale == true)
         val t = unitSet.unitFor(Quantity.Temperature)
         val p = unitSet.unitFor(Quantity.Pressure)
         fun row(label: String, tv: Double?, pv: Double?) {

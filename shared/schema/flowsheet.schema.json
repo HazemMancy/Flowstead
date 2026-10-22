@@ -79,6 +79,11 @@
       "type": "boolean",
       "description": "App-only solver mode, as HYSYS: absent or false = Hold (solve on demand), true = Active (the app re-solves after every change). Not part of the solved model; the engine ignores it."
     },
+    "caseStudies": {
+      "type": "array",
+      "description": "App-only case studies (D51): id, name, objectId and specKey (the specification varied), from and to (SI), steps, outputs (objectId, key), and the last results (modelHash, x, values per output, errors per point). Not part of the solved model; the engine ignores it.",
+      "items": { "type": "object", "required": ["id", "name"] }
+    },
     "tables": {
       "type": "array",
       "description": "App-only property tables drawn on the flowsheet and the printed PFD: objectId, keys (result keys to show), dx and dy (offset from the object, world units). Not part of the solved model; the engine ignores it.",

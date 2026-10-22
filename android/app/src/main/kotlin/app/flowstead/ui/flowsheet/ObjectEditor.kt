@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -35,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
@@ -45,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -394,7 +397,7 @@ private fun ReactionFields(fs: Flowsheet, r: Reaction, actions: EditorActions, o
 
 /** A number without units conversion (coefficients, orders, kinetic constants): blank means "not given". */
 @Composable
-private fun PlainNumber(label: String, value: Double?, tag: String, unit: String? = null, hint: String? = null, onCommit: (Double?) -> Unit) {
+internal fun PlainNumber(label: String, value: Double?, tag: String, unit: String? = null, hint: String? = null, onCommit: (Double?) -> Unit) {
     val shown = value?.let { java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString() } ?: ""
     var text by remember(tag, value) { mutableStateOf(shown) }
     var error by remember(tag) { mutableStateOf(false) }
@@ -798,21 +801,66 @@ fun SpecField(
 ) {
     val quantity = quantityOverride ?: SpecKey.quantity(key)
     val spec = obj.specs[key]
+    val label = labelOverride ?: SpecKey.label(key)
+    val default = if (key == SpecKey.EFFICIENCY) Units.percent else defaultUnit(key, quantity, unitSet)
+    var sliding by rememberSaveable(obj.id + key) { mutableStateOf(false) }
+    fun commit(newSpec: Spec?) = when {
+        newSpec == null -> actions.setSpec(obj.id, key, null)
+        exclusiveGroup != null && newSpec.si != spec?.si -> actions.setExclusiveSpec(obj.id, key, newSpec, exclusiveGroup)
+        else -> actions.setSpec(obj.id, key, newSpec)
+    }
     QuantityField(
-        label = labelOverride ?: SpecKey.label(key),
+        label = label,
         spec = spec,
         quantity = quantity,
         // Engineers think of efficiency in percent.
-        defaultUnit = if (key == SpecKey.EFFICIENCY) Units.percent else defaultUnit(key, quantity, unitSet),
+        defaultUnit = default,
         ctx = ctx,
         stateKey = obj.id + key,
         hint = optionalHint,
         testTag = "spec_$key",
-    ) { newSpec ->
-        when {
-            newSpec == null -> actions.setSpec(obj.id, key, null)
-            exclusiveGroup != null && newSpec.si != spec?.si -> actions.setExclusiveSpec(obj.id, key, newSpec, exclusiveGroup)
-            else -> actions.setSpec(obj.id, key, newSpec)
+        trailing = if (spec == null || quantity == Quantity.Count) null else {
+            {
+                IconButton(onClick = { sliding = !sliding }, modifier = Modifier.testTag("slide_$key")) {
+                    Icon(Icons.Filled.Tune, contentDescription = if (sliding) "Hide the what-if slider for $label" else "What-if slider for $label")
+                }
+            }
+        },
+    ) { commit(it) }
+    if (sliding && spec != null) {
+        val unit = Units.byIdOrNull(spec.unit)?.takeIf { it.quantity == quantity } ?: default
+        WhatIfSlider(spec, unit, ctx, obj.id + key) { commit(it) }
+    }
+}
+
+/**
+ * What-if (D51): slide a specification around the value it had when the slider opened (±50 %, at least ±1 in the
+ * shown unit). The value is set when the finger lifts; with the Active solver the flowsheet then re-solves by itself.
+ */
+@Composable
+private fun WhatIfSlider(spec: Spec, unit: EngUnit, ctx: UnitContext, stateKey: String, onCommit: (Spec) -> Unit) {
+    val centre = remember(stateKey) { unit.fromSi(spec.si, ctx) }
+    val span = remember(stateKey) { maxOf(kotlin.math.abs(centre) * 0.5, 1.0) }
+    val range = (centre - span).toFloat()..(centre + span).toFloat()
+    val shown = unit.fromSi(spec.si, ctx)
+    var value by remember(stateKey, spec.si) { mutableStateOf(shown.toFloat().coerceIn(range)) }
+    Column(Modifier.fillMaxWidth().testTag("what_if_$stateKey")) {
+        Slider(
+            value = value,
+            onValueChange = { value = it },
+            onValueChangeFinished = { onCommit(Spec(unit.toSi(value.toDouble(), ctx), unit.id)) },
+            valueRange = range,
+            modifier = Modifier.semantics { contentDescription = "What-if ${ValueFormat.number(value.toDouble(), unit.decimals)} ${unit.symbol}" },
+        )
+        Row {
+            Text(ValueFormat.number(range.start.toDouble(), unit.decimals), style = MaterialTheme.typography.labelSmall)
+            Text(
+                "${ValueFormat.number(value.toDouble(), unit.decimals)} ${unit.symbol}",
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.weight(1f),
+            )
+            Text(ValueFormat.number(range.endInclusive.toDouble(), unit.decimals), style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -831,6 +879,7 @@ fun QuantityField(
     stateKey: String,
     hint: String? = null,
     testTag: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
     onCommit: (Spec?) -> Unit,
 ) {
     var unit by remember(stateKey, spec?.unit, defaultUnit) {
@@ -880,6 +929,7 @@ fun QuantityField(
             unit = picked
             spec?.let { onCommit(it.copy(unit = picked.id)) }
         }
+        trailing?.invoke()
     }
 }
 

@@ -113,6 +113,21 @@ object FlowsheetEditing {
 
     fun setDocumentInfo(fs: Flowsheet, info: DocumentInfo): Flowsheet = fs.copy(documentInfo = info.takeIf { it != DocumentInfo() })
 
+    /**
+     * Adds or replaces a case study (D51). Changing what it varies or records drops its old results, which no
+     * longer describe it; renaming keeps them.
+     */
+    fun upsertCaseStudy(fs: Flowsheet, cs: CaseStudy): Flowsheet {
+        val old = fs.caseStudies.firstOrNull { it.id == cs.id }
+        val kept = if (old != null && old.copy(name = cs.name, results = null) == cs.copy(results = null)) cs.copy(results = cs.results ?: old.results) else cs
+        return fs.copy(caseStudies = if (old == null) fs.caseStudies + kept else fs.caseStudies.map { if (it.id == cs.id) kept else it })
+    }
+
+    fun deleteCaseStudy(fs: Flowsheet, id: String): Flowsheet = fs.copy(caseStudies = fs.caseStudies.filterNot { it.id == id })
+
+    fun setCaseResults(fs: Flowsheet, id: String, results: CaseResults): Flowsheet =
+        fs.copy(caseStudies = fs.caseStudies.map { if (it.id == id) it.copy(results = results) else it })
+
     /** Sets or clears a pump or compressor curve (D48). Running on a curve replaces the outlet pressure spec. */
     fun setCurve(fs: Flowsheet, id: String, curve: PerformanceCurve?): Flowsheet = update(fs, id) {
         if (curve == null) it.copy(curve = null)

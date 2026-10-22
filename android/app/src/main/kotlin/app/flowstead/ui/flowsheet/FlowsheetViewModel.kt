@@ -17,6 +17,9 @@ import app.flowstead.core.export.DataSheets
 import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.CaseResults
+import app.flowstead.core.model.CaseStudies
+import app.flowstead.core.model.CaseStudy
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.PerformanceCurve
 import app.flowstead.core.model.ObjectType
@@ -102,6 +105,9 @@ data class FlowsheetUi(
     val dataSheetFor: String? = null,
     /** The last phase envelope asked for, while the project is open (D50). */
     val envelope: EnvelopeUi? = null,
+    val caseStudiesOpen: Boolean = false,
+    /** A case study running now (D51). */
+    val caseRun: CaseRunUi? = null,
 )
 
 /** [FlowsheetUi.dataSheetFor] for one document with every equipment's data sheet. */
@@ -147,6 +153,8 @@ class FlowsheetViewModel @Inject constructor(
         val envelope: EnvelopeUi? = null,
         /** Model hash the envelope was traced for. */
         val envelopeHash: String? = null,
+        val caseStudiesOpen: Boolean = false,
+        val caseRun: CaseRunUi? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -158,6 +166,7 @@ class FlowsheetViewModel @Inject constructor(
     private var currentSolve: StoredSolve? = null
     private var currentName: String = ""
     private var autoSolve: Job? = null
+    private var caseJob: Job? = null
     private var solveAgain = false
 
     val state: StateFlow<FlowsheetUiState> = combine(
@@ -193,6 +202,8 @@ class FlowsheetViewModel @Inject constructor(
                 editingSizingCriteria = l.editingSizingCriteria,
                 dataSheetFor = l.dataSheetFor?.takeIf { id -> id == ALL_EQUIPMENT || fs.objects.any { it.id == id } },
                 envelope = l.envelope?.copy(stale = l.envelopeHash != null && l.envelopeHash != fs.modelHash()),
+                caseStudiesOpen = l.caseStudiesOpen,
+                caseRun = l.caseRun,
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
@@ -387,6 +398,67 @@ class FlowsheetViewModel @Inject constructor(
     }
 
     fun cancelQueuedSolve() = queue.cancel(projectId)
+
+    // ---- case studies (D51)
+
+    fun openCaseStudies() = local.update { it.copy(caseStudiesOpen = true, editingId = null) }
+    fun closeCaseStudies() = local.update { it.copy(caseStudiesOpen = false) }
+    fun upsertCaseStudy(cs: CaseStudy) = edit { FlowsheetEditing.upsertCaseStudy(it, cs) }
+    fun deleteCaseStudy(id: String) = edit { FlowsheetEditing.deleteCaseStudy(it, id) }
+
+    /**
+     * Solves the flowsheet once per point of the study, in order, and saves what the engine returned. The project's
+     * own flowsheet and results are not touched; a point that fails is kept as a gap with its reason.
+     */
+    fun runCaseStudy(id: String) {
+        val base = current ?: return
+        if (caseJob?.isActive == true || local.value.solving) return
+        val cs = base.caseStudies.firstOrNull { it.id == id } ?: return
+        CaseStudies.problem(base, cs)?.let { _messages.trySend(it); return }
+        Specification.problems(base).firstOrNull()?.let { _messages.trySend("Fix the flowsheet first: ${it.second}"); return }
+        val xs = CaseStudies.points(cs)
+        local.update { it.copy(caseRun = CaseRunUi(id, 0, xs.size)) }
+        caseJob = viewModelScope.launch {
+            try {
+                val url = settingsRepository.settings.first().engineTarget
+                if (url.isBlank()) {
+                    _messages.send("Set the engine address in Settings to run a case study")
+                    return@launch
+                }
+                val key = secrets.apiKey()
+                val values = cs.outputs.map { mutableListOf<Double?>() }
+                val errors = mutableListOf<String?>()
+                for ((i, x) in xs.withIndex()) {
+                    val at = CaseStudies.at(base, cs, x)
+                    when (val r = engine.solve(url, key, at)) {
+                        is EngineResult.Ok -> {
+                            val (v, error) = CaseStudies.read(at, cs, r.value)
+                            v.forEachIndexed { k, value -> values[k] += value }
+                            errors += error
+                        }
+                        is EngineResult.Failed -> {
+                            if (r.unreachable) {
+                                _messages.send("Case study stopped: the engine is unreachable")
+                                return@launch
+                            }
+                            values.forEach { it += null }
+                            errors += r.reason
+                        }
+                    }
+                    local.update { it.copy(caseRun = CaseRunUi(id, i + 1, xs.size)) }
+                }
+                edit(undoable = false) { FlowsheetEditing.setCaseResults(it, id, CaseResults(base.modelHash(), xs, values, errors)) }
+                val failed = errors.count { it != null }
+                _messages.send("Case study done: ${xs.size} points" + if (failed > 0) ", $failed did not converge" else "")
+            } finally {
+                local.update { it.copy(caseRun = null) }
+            }
+        }
+    }
+
+    fun cancelCaseStudy() {
+        caseJob?.cancel()
+    }
 
     /**
      * Traces a stream's phase envelope (D50) from its composition: the solved one, or a feed's own as typed when it

@@ -63,6 +63,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val solverActive: Boolean = false,
+    /** Case studies and their last results (D51). Not part of the solved model: excluded from [modelHash]. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val caseStudies: List<CaseStudy> = emptyList(),
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
     fun hypothetical(name: String): Hypothetical? = hypotheticals.firstOrNull { it.name == name }

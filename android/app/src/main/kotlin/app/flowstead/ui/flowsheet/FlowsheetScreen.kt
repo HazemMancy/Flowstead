@@ -152,6 +152,12 @@ fun FlowsheetScreen(
                                 onClick = { menu = false; xlsxFile.launch(viewModel.exportFileName("xlsx", " results")) },
                             )
                             DropdownMenuItem(
+                                text = { Text("Case studies") },
+                                enabled = ready != null,
+                                onClick = { menu = false; viewModel.openCaseStudies() },
+                                modifier = Modifier.testTag("menu_case_studies"),
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Project documents: PFD, H&MB, data sheets") },
                                 enabled = ready != null,
                                 onClick = { menu = false; viewModel.openDataSheet(null) },
@@ -309,6 +315,19 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 envelope = ui.envelope,
             )
         }
+    }
+    if (ui.caseStudiesOpen) {
+        CaseStudySheet(
+            fs = ui.flowsheet,
+            run = ui.caseRun,
+            unitSet = ui.unitSet,
+            ctx = ui.unitContext,
+            onSave = vm::upsertCaseStudy,
+            onDelete = vm::deleteCaseStudy,
+            onRun = vm::runCaseStudy,
+            onCancel = vm::cancelCaseStudy,
+            onDismiss = vm::closeCaseStudies,
+        )
     }
 
     val pdfFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(DataSheetFormat.Pdf.mimeType)) { uri ->
