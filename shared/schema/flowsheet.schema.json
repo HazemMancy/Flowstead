@@ -190,6 +190,27 @@
             "maximum": 1
           }
         },
+        "curve": {
+          "type": "object",
+          "description": "Pump or compressor performance curve at its rated speed; the machine then runs on it (no outlet pressure spec). Points of actual inlet flow (m3/s) against head (m; compressors adiabatic head), with efficiency (fraction) and, for pumps, NPSH required (m) at every point or none. Lowest flow = surge (compressor) / minimum (pump); highest = stonewall / run-out.",
+          "properties": {
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["flow", "head"],
+                "properties": {
+                  "flow": { "type": "number", "exclusiveMinimum": 0 },
+                  "head": { "type": "number", "exclusiveMinimum": 0 },
+                  "efficiency": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+                  "npshr": { "type": "number", "minimum": 0 }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
         "refs": {
           "type": "object",
           "description": "References to other objects. Adjust: manipulatedObject, manipulatedSpec (a spec key on that object), controlledObject, controlledProperty (a result key). Its specs: target, optional tolerance, minimum, maximum (SI). Method choices: pipe segment correlation (beggs_brill | lockhart_martinelli | petalas_aziz), orifice plate taps (flange | corner | radius). App-only (ignored by the engine): pipe nps, schedule, service (gas | liquid | two_phase).",

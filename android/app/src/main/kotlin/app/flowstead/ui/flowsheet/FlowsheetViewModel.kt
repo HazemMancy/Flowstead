@@ -18,6 +18,7 @@ import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
+import app.flowstead.core.model.PerformanceCurve
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.Reaction
@@ -277,6 +278,8 @@ class FlowsheetViewModel @Inject constructor(
     fun setRef(id: String, key: String, value: String?) = edit { FlowsheetEditing.setRef(it, id, key, value) }
 
     fun setPipeSize(id: String, nps: String?, schedule: String?) = edit { FlowsheetEditing.setPipeSize(it, id, nps, schedule) }
+
+    fun setCurve(id: String, curve: PerformanceCurve?) = edit { FlowsheetEditing.setCurve(it, id, curve) }
 
     fun setSizingCriteria(c: SizingCriteria) = edit { FlowsheetEditing.setSizingCriteria(it, c) }
 

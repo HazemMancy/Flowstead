@@ -61,8 +61,8 @@ object ResultKeys {
             "minimumRefluxRatio", "minimumStages", "actualStages", "optimalFeedStage",
             "condenserDuty", "reboilerDuty",
         )
-        ObjectType.Pump -> listOf("power", "pressureRise", "temperatureChange", "efficiency", "npshAvailable", "feedBubblePressure")
-        ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency")
+        ObjectType.Pump -> listOf("power", "pressureRise", "head", "temperatureChange", "efficiency", "npshAvailable", "npshRequired", "feedBubblePressure", "inletVolumeFlow")
+        ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency", "inletVolumeFlow", "surgeMargin")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
         ObjectType.HeatExchanger -> listOf("duty", "lmtd", "minimumApproach", "pinchLocation", "pinchHotTemperature", "pinchColdTemperature", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
         ObjectType.PipeSegment -> listOf("pressureDrop", "frictionPressureDrop", "staticPressureDrop") + PIPE_HYDRAULICS +
@@ -103,7 +103,9 @@ object ResultKeys {
         "compressibilityFactor", "pressureRatio", "beta", "refluxRatio", "minimumRefluxRatio",
         "minimumStages", "actualStages", "optimalFeedStage" -> Quantity.Ratio
         "iterations" -> Quantity.Count
-        "adiabaticHead" -> Quantity.MassEnthalpy
+        "adiabaticHead", "polytropicHead", "head", "curveHead", "npshRequired" -> Quantity.Length
+        "inletVolumeFlow" -> Quantity.VolumeFlow
+        "surgeMargin" -> Quantity.Fraction
         "molarFlow" -> Quantity.MolarFlow
         "massFlow" -> Quantity.MassFlow
         "volumeFlow", "liquidVolumeFlow" -> Quantity.VolumeFlow
@@ -169,6 +171,11 @@ object ResultKeys {
         "pinchHotTemperature" -> "Hot side temperature at the pinch"
         "pinchColdTemperature" -> "Cold side temperature at the pinch"
         "npshAvailable" -> "NPSH available (at the pump inlet)"
+        "npshRequired" -> "NPSH required (from the curve)"
+        "head" -> "Head"
+        "curveHead" -> "Head on the curve at this flow"
+        "inletVolumeFlow" -> "Actual inlet flow"
+        "surgeMargin" -> "Surge margin (flow above the surge limit)"
         "requiredCv" -> "Required Cv (US, IEC 60534)"
         "requiredKv" -> "Required Kv (metric)"
         "valveOpening" -> "Opening (linear trim)"

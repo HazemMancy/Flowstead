@@ -355,7 +355,14 @@ object Specification {
         val unconnected = Ports.of(o.type).filter { it.required && fs.streamAt(o.id, it) == null }
         val needs = unconnected.map { "${it.label.lowercase()} stream" }.toMutableList()
         val s = o.specs
-        exclusiveGroups(o.type).forEach { (what, keys) ->
+        val onCurve = o.type in listOf(ObjectType.Pump, ObjectType.Compressor) && o.curve != null
+        if (onCurve) {
+            curveProblem(o)?.let { return SpecStatus.Invalid(it) }
+            if (listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE, SpecKey.PRESSURE_RATIO).any { it in s }) {
+                return SpecStatus.OverSpecified("It runs on its curve, which sets the outlet pressure; remove the outlet pressure or pressure rise")
+            }
+        }
+        exclusiveGroups(o.type).filterNot { onCurve }.forEach { (what, keys) ->
             when (keys.count { it in s }) {
                 0 -> needs += what
                 1 -> Unit
@@ -431,6 +438,21 @@ object Specification {
         s[SpecKey.HEAT_TRANSFER_COEFFICIENT]?.let { if (it.si < 0) return SpecStatus.Invalid("Heat transfer coefficient can't be negative") }
         s[SpecKey.AMBIENT_TEMPERATURE]?.let { if (it.si <= 0) return SpecStatus.Invalid("Ambient temperature must be above absolute zero") }
         return null
+    }
+
+    /** What is wrong with a pump or compressor curve, or null. Mirrors the engine validator (D48). */
+    fun curveProblem(o: SimObject): String? {
+        val p = o.curve?.points ?: return null
+        return when {
+            p.size < 2 -> "The performance curve needs at least two points"
+            p.any { !(it.flow > 0) || !(it.head > 0) } -> "Every curve point needs a positive flow and head"
+            p.map { it.flow }.distinct().size != p.size -> "Two curve points have the same flow"
+            p.any { it.efficiency != null } && p.any { it.efficiency == null || it.efficiency <= 0 || it.efficiency > 1 } ->
+                "Give the efficiency at every curve point (above 0, up to 100 %), or at none"
+            p.any { it.npshr != null } && (o.type != ObjectType.Pump || p.any { it.npshr == null || it.npshr < 0 }) ->
+                "Give NPSH required at every point (0 or more), or at none"
+            else -> null
+        }
     }
 
     /** Alternative specs per unit type: exactly one of each group must be given. Mirrors the engine validator. */

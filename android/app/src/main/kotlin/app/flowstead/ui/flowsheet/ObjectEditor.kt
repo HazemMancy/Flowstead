@@ -68,6 +68,7 @@ import app.flowstead.core.model.Columns
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.PerformanceCurve
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
 import app.flowstead.core.model.PortSide
@@ -119,6 +120,8 @@ interface EditorActions {
     fun editSizingCriteria()
     /** Opens the data sheet of one piece of equipment. */
     fun openDataSheet(id: String)
+    /** Sets or clears a pump or compressor performance curve (D48). */
+    fun setCurve(id: String, curve: PerformanceCurve?) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -177,15 +180,17 @@ fun ObjectEditorSheet(
                 ObjectType.Separator, ObjectType.ThreePhaseSeparator ->
                     Calculated("Adiabatic flash at the lowest feed pressure. Nothing to specify: connect the feed and the product streams.")
                 ObjectType.Pump -> {
-                    ExclusiveSpecs(obj, unitSet, ctx, actions, listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_RISE to "ΔP rise"))
-                    SpecField(obj, SpecKey.EFFICIENCY, unitSet, ctx, actions, optionalHint = "75 % if empty")
+                    if (obj.curve == null) ExclusiveSpecs(obj, unitSet, ctx, actions, listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_RISE to "ΔP rise"))
+                    SpecField(obj, SpecKey.EFFICIENCY, unitSet, ctx, actions, optionalHint = if (obj.curve == null) "75 % if empty" else "used if the curve has no efficiency")
+                    CurveSection(obj, results, unitSet, ctx, actions)
                 }
                 ObjectType.Compressor -> {
-                    ExclusiveSpecs(
+                    if (obj.curve == null) ExclusiveSpecs(
                         obj, unitSet, ctx, actions,
                         listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_RISE to "ΔP", SpecKey.PRESSURE_RATIO to "Ratio"),
                     )
-                    SpecField(obj, SpecKey.EFFICIENCY, unitSet, ctx, actions, optionalHint = "75 % adiabatic if empty")
+                    SpecField(obj, SpecKey.EFFICIENCY, unitSet, ctx, actions, optionalHint = if (obj.curve == null) "75 % adiabatic if empty" else "used if the curve has no efficiency")
+                    CurveSection(obj, results, unitSet, ctx, actions)
                 }
                 ObjectType.Expander -> {
                     ExclusiveSpecs(

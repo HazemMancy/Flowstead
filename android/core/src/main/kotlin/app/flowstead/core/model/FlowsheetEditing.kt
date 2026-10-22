@@ -113,6 +113,12 @@ object FlowsheetEditing {
 
     fun setDocumentInfo(fs: Flowsheet, info: DocumentInfo): Flowsheet = fs.copy(documentInfo = info.takeIf { it != DocumentInfo() })
 
+    /** Sets or clears a pump or compressor curve (D48). Running on a curve replaces the outlet pressure spec. */
+    fun setCurve(fs: Flowsheet, id: String, curve: PerformanceCurve?): Flowsheet = update(fs, id) {
+        if (curve == null) it.copy(curve = null)
+        else it.copy(curve = curve, specs = it.specs - listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE, SpecKey.PRESSURE_RATIO).toSet())
+    }
+
     /** One data-sheet field of an object ([SheetKeys]); blank removes it. */
     fun setSheetField(fs: Flowsheet, id: String, key: String, value: String): Flowsheet = update(fs, id) {
         it.copy(sheet = if (value.isBlank()) it.sheet - key else it.sheet + (key to value.trim()))

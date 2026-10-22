@@ -118,4 +118,29 @@ class SpecificationTest {
             assertIs<SpecStatus.UnderSpecified>(st(*base, SpecKey.BOTTOMS_FRACTION to 0.02)).needs,
         )
     }
+
+    @Test
+    fun aPumpOnItsCurveNeedsNoPressureSpec() {
+        val curve = PerformanceCurve(listOf(CurvePoint(0.01, 80.0, 0.6, 2.0), CurvePoint(0.03, 60.0, 0.75, 4.0)))
+        val pump = SimObject("u", "P-100", ObjectType.Pump, curve = curve)
+        assertEquals(SpecStatus.Complete, status(pump))
+        assertIs<SpecStatus.OverSpecified>(status(pump.copy(specs = mapOf(SpecKey.OUTLET_PRESSURE to Spec(5e5, "kPa")))))
+        assertIs<SpecStatus.Invalid>(status(pump.copy(curve = PerformanceCurve(curve.points.take(1)))))
+        assertIs<SpecStatus.Invalid>(status(pump.copy(curve = PerformanceCurve(listOf(curve.points[0], curve.points[1].copy(efficiency = null))))))
+        // NPSH required belongs to pumps only.
+        assertIs<SpecStatus.Invalid>(status(SimObject("u", "K-100", ObjectType.Compressor, curve = curve)))
+        assertEquals(SpecStatus.Complete, status(SimObject("u", "K-100", ObjectType.Compressor, curve = PerformanceCurve(curve.points.map { it.copy(npshr = null) }))))
+    }
+
+    @Test
+    fun settingACurveDropsThePressureSpecs() {
+        val pump = SimObject("u", "P-100", ObjectType.Pump, specs = mapOf(SpecKey.PRESSURE_RISE to Spec(2e5, "kPa"), SpecKey.EFFICIENCY to Spec(0.7, "%")))
+        val curve = PerformanceCurve(listOf(CurvePoint(0.01, 80.0), CurvePoint(0.03, 60.0)))
+        val on = FlowsheetEditing.setCurve(Flowsheet(objects = listOf(pump)), "u", curve).objects.single()
+        assertEquals(curve, on.curve)
+        assertEquals(setOf(SpecKey.EFFICIENCY), on.specs.keys)
+        val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), Flowsheet(objects = listOf(on)))
+        assertEquals(on, FlowsheetJson.decodeFromString(Flowsheet.serializer(), json).objects.single())
+        assertEquals(null, FlowsheetEditing.setCurve(Flowsheet(objects = listOf(on)), "u", null).objects.single().curve)
+    }
 }

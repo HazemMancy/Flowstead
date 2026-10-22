@@ -67,6 +67,7 @@ import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.export.DataSheets
 import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.PerformanceCurve
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.PropertyTables
 import app.flowstead.core.model.Reaction
@@ -231,6 +232,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun upsertReaction(reaction: Reaction) = vm.upsertReaction(reaction)
             override fun deleteReaction(id: String) = vm.deleteReaction(id)
             override fun setPipeSize(id: String, nps: String?, schedule: String?) = vm.setPipeSize(id, nps, schedule)
+            override fun setCurve(id: String, curve: PerformanceCurve?) = vm.setCurve(id, curve)
             override fun editSizingCriteria() = vm.openSizingCriteria()
             override fun openDataSheet(id: String) = vm.openDataSheet(id)
         }

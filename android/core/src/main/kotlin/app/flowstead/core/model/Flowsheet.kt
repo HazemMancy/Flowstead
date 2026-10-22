@@ -98,6 +98,26 @@ data class SimObject(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val sheet: Map<String, String> = emptyMap(),
+    /** Pump or compressor performance curve; when given, the machine runs on it (D48). Written only when set. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val curve: PerformanceCurve? = null,
+)
+
+/**
+ * A pump or compressor curve at its rated speed, as the vendor gives it. The lowest flow is the compressor's surge
+ * limit and the highest its stonewall; for a pump, its minimum and run-out flows. Same shape as the engine's.
+ */
+@Serializable
+data class PerformanceCurve(val points: List<CurvePoint> = emptyList())
+
+/** [flow]: actual inlet m³/s; [head]: m (compressors: adiabatic head); [efficiency]: fraction; [npshr]: pumps, m. */
+@Serializable
+data class CurvePoint(
+    val flow: Double,
+    val head: Double,
+    @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val efficiency: Double? = null,
+    @OptIn(ExperimentalSerializationApi::class) @EncodeDefault(EncodeDefault.Mode.NEVER) val npshr: Double? = null,
 )
 
 /**
