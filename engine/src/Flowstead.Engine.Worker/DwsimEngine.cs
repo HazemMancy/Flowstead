@@ -401,10 +401,10 @@ public sealed class DwsimEngine
         var ppName = MvpPackages.FirstOrDefault(p => p.Name == model.PropertyPackage).Dwsim ?? model.PropertyPackage!;
         // Cubic packages solve with Flowstead's liquid-density rule (D32). A .dwxmz keeps DWSIM's own class,
         // which desktop DWSIM can load.
-        // With the COSTALD option (D39), DWSIM's own package in its COSTALD mode, in the engine and in a .dwxmz alike.
+        // The COSTALD option (D39) sets the package's own COSTALD mode, in the engine and in a .dwxmz alike.
         var costald = model.LiquidDensity == LiquidDensityMethods.Costald;
         PropertyPackage pp;
-        if (!forExport && !costald && LiquidDensity.Variant((PropertyPackage)_automation.AvailablePropertyPackages[ppName]) is { } variant)
+        if (!forExport && LiquidDensity.Variant((PropertyPackage)_automation.AvailablePropertyPackages[ppName]) is { } variant)
         {
             fs.AddPropertyPackage(variant);
             pp = variant;

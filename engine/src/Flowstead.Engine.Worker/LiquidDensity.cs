@@ -71,7 +71,16 @@ public static class LiquidDensity
     /// nowhere else, so handing it mass fractions gives the volume-additive 1/Σ(wᵢ/ρᵢ). Cubic packages also
     /// switch to COSTALD for liquids carrying supercritical components (D32).
     /// </summary>
-    internal static double Density(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density)
+    internal static double Density(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density, Func<Array, double>? eosDensity = null)
+    {
+        var rho = Correlation(pp, t, vx, forceEos, cubic, density);
+        // Above the liquid's pseudo-critical temperature (a near-critical liquid, e.g. a rich gas split at 320 bar)
+        // Rackett and COSTALD have no value, and DWSIM then reported the stream density as 0. Cubic packages fall
+        // back to the EOS density, as DWSIM's documentation says it does (D40).
+        return eosDensity != null && !forceEos && !(double.IsFinite(rho) && rho > 0) ? eosDensity(vx) : rho;
+    }
+
+    private static double Correlation(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density)
     {
         if (forceEos || pp.LiquidDensityCalculationMode_Subcritical != PropertyPackage.LiquidDensityCalcMode.Rackett_and_ExpData)
             return density(vx);
@@ -82,10 +91,14 @@ public static class LiquidDensity
     }
 
     /// <summary>DWSIM's density with COSTALD for this call only.</summary>
-    internal static double WithCostald(PropertyPackage pp, Func<double> density)
+    internal static double WithCostald(PropertyPackage pp, Func<double> density) =>
+        WithMode(pp, PropertyPackage.LiquidDensityCalcMode.COSTALD, density);
+
+    /// <summary>DWSIM's density in another liquid-density mode for this call only.</summary>
+    internal static double WithMode(PropertyPackage pp, PropertyPackage.LiquidDensityCalcMode mode, Func<double> density)
     {
         var saved = pp.LiquidDensityCalculationMode_Subcritical;
-        pp.LiquidDensityCalculationMode_Subcritical = PropertyPackage.LiquidDensityCalcMode.COSTALD;
+        pp.LiquidDensityCalculationMode_Subcritical = mode;
         try { return density(); }
         finally { pp.LiquidDensityCalculationMode_Subcritical = saved; }
     }
@@ -95,21 +108,21 @@ public static class LiquidDensity
 public sealed class FlowsteadPr : PengRobinsonPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
-        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
+        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
 }
 
 [Serializable]
 public sealed class FlowsteadSrk : SRKPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
-        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
+        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
 }
 
 [Serializable]
 public sealed class FlowsteadPrLk : PengRobinsonLKPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
-        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
+        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
 }
 
 [Serializable]

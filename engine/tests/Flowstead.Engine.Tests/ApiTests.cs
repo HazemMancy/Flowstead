@@ -217,6 +217,48 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
         Assert.Equal(SolveStatus.Invalid, bad.Status);
     }
 
+    [Fact]
+    public async Task NearCriticalLiquidHasADensity()
+    {
+        // Rich gas at 321 bar and 35 °C: DWSIM splits it into two near-identical phases, and Rackett/COSTALD have
+        // no value for the "liquid" above its pseudo-critical temperature. The stream density read 0 (D40).
+        var x = new Dictionary<string, double>
+        {
+            ["Nitrogen"] = 0.014061, ["Carbon dioxide"] = 0.02, ["Methane"] = 0.723464, ["Ethane"] = 0.07, ["Propane"] = 0.04,
+            ["Isobutane"] = 0.008, ["N-butane"] = 0.01, ["Isopentane"] = 0.001979, ["N-pentane"] = 0.002248, ["N-decane"] = 0.03,
+        };
+        x["Methane"] += 1 - x.Values.Sum();
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Peng-Robinson (PR)",
+            Compounds = x.Keys.ToList(),
+            Objects =
+            [
+                new SimObject
+                {
+                    Id = "g", Tag = "GAS", Type = ObjectType.MaterialStream,
+                    Specs = new()
+                    {
+                        [SpecKeys.Temperature] = new Spec(308.15, "C"),
+                        [SpecKeys.Pressure] = new Spec(32_101_320, "kPa"),
+                        [SpecKeys.MolarFlow] = new Spec(470, "kgmol/h"),
+                    },
+                    Composition = x,
+                },
+            ],
+        };
+        foreach (var f in new[] { fs, fs with { LiquidDensity = LiquidDensityMethods.Costald } })
+        {
+            var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", f, Json.Options));
+            Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+            foreach (var (phase, p) in r.Objects["g"].Phases!)
+            {
+                output.WriteLine($"{f.LiquidDensity ?? "default"} {phase}: {p.Properties.GetValueOrDefault("phaseMoleFraction")} {p.Properties.GetValueOrDefault("density"):F1} kg/m³");
+                Assert.InRange(p.Properties["density"], 100, 900);
+            }
+        }
+    }
+
     [Theory]
     [InlineData(ObjectType.Heater, 298.15, 353.15)]
     [InlineData(ObjectType.Cooler, 353.15, 298.15)]
