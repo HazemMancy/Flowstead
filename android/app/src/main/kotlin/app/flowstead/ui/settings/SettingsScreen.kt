@@ -326,4 +326,7 @@ private fun label(q: Quantity): String = when (q) {
     Quantity.Velocity -> "Velocity"
     Quantity.PressureGradient -> "Pressure drop per length"
     Quantity.MomentumFlux -> "Momentum flux (ρv²)"
+    Quantity.ThermalConductivity -> "Thermal conductivity"
+    Quantity.KinematicViscosity -> "Kinematic viscosity"
+    Quantity.SurfaceTension -> "Surface tension"
 }
