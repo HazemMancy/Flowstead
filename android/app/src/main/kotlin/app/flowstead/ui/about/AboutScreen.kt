@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.material3.TextButton
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import app.flowstead.R
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,10 +52,7 @@ const val PRIVACY_ASSET = "privacy-policy.md"
 /** Credits shown under About and in Settings. */
 object Credits {
     const val DEVELOPER = "Developed by Hazem ElMancy, process engineer."
-    const val DEVELOPER_BIO = "Oil & gas process engineer and Aspen HYSYS Certified Expert User, working on concept, FEED and " +
-        "detailed engineering for onshore and offshore facilities."
     const val LINKEDIN_URL = "https://www.linkedin.com/in/hazemmancy/"
-    const val LINKEDIN_LABEL = "linkedin.com/in/hazemmancy"
     const val ENGINE = "Built on the DWSIM engine: every calculation runs on DWSIM 9.0.5, the open-source chemical " +
         "process simulator (© Daniel Wagner and contributors, GPL-3.0)."
 }
@@ -96,9 +96,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
                 }
             }
             Text("Steady-state process simulation, in your pocket.", style = MaterialTheme.typography.bodyLarge)
-            Text(Credits.DEVELOPER, style = MaterialTheme.typography.bodyLarge)
-            Text(Credits.DEVELOPER_BIO, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            LinkedInLink()
+            DeveloperLine()
             Text(
                 "Powered by DWSIM",
                 style = MaterialTheme.typography.titleMedium,
@@ -185,13 +183,18 @@ fun LicenseTextScreen(title: String, asset: String, onBack: () -> Unit) {
     }
 }
 
-/** The developer's LinkedIn profile; opens in the browser or the LinkedIn app. */
+/** "Developed by Hazem ElMancy, process engineer." with a LinkedIn icon that opens his profile. */
 @Composable
-fun LinkedInLink(modifier: Modifier = Modifier) {
+fun DeveloperLine(modifier: Modifier = Modifier) {
     val uri = LocalUriHandler.current
-    TextButton(
-        onClick = { uri.openUri(Credits.LINKEDIN_URL) },
-        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
-        modifier = modifier.heightIn(min = 48.dp).testTag("linkedin"),
-    ) { Text("LinkedIn: ${Credits.LINKEDIN_LABEL}", style = MaterialTheme.typography.bodyMedium) }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(Credits.DEVELOPER, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f, fill = false))
+        IconButton(onClick = { uri.openUri(Credits.LINKEDIN_URL) }, modifier = Modifier.testTag("linkedin")) {
+            Image(
+                painter = painterResource(R.drawable.ic_linkedin),
+                contentDescription = "Hazem ElMancy on LinkedIn",
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
 }
