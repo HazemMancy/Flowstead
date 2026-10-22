@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Switch
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -25,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -62,6 +65,22 @@ internal fun AboutSection(state: SettingsUiState, vm: SettingsViewModel, onOpenA
             modifier = Modifier.heightIn(min = 48.dp).testTag("check_updates"),
         ) { Text("Check for updates") }
         if (state.update == UpdateState.Checking) CircularProgressIndicator(Modifier.size(24.dp))
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .toggleable(value = state.checkUpdatesOnOpen, role = Role.Switch, onValueChange = vm::setCheckUpdatesOnOpen)
+            .testTag("check_updates_on_open"),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Check for updates when Flowstead opens", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Asks GitHub for the latest version; a new one is offered at most three times.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = state.checkUpdatesOnOpen, onCheckedChange = null)
     }
     val live = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
     when (val u = state.update) {

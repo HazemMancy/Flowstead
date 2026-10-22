@@ -15,6 +15,7 @@ import app.flowstead.data.settings.AppSettings
 import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.ui.nav.FlowsteadNavHost
 import app.flowstead.ui.theme.FlowsteadTheme
+import app.flowstead.ui.update.UpdatePromptHost
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -31,6 +32,7 @@ class MainActivity : ComponentActivity() {
             val settings by settingsRepository.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
             FlowsteadTheme(mode = settings.themeMode) {
                 FlowsteadNavHost()
+                UpdatePromptHost()
             }
         }
     }

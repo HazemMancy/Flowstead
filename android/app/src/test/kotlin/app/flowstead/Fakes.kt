@@ -29,6 +29,7 @@ import app.flowstead.data.settings.AppSettings
 import app.flowstead.data.settings.EngineMode
 import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.SettingsRepository
+import app.flowstead.data.update.UpdatePromptStore
 import app.flowstead.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -144,4 +145,13 @@ class FileCompoundLibrary : app.flowstead.data.compounds.CompoundLibrary {
         app.flowstead.core.compounds.CompoundCatalogue.parse(java.io.File(repo, "shared/compounds/catalogue.json").readText())
     }
     override suspend fun catalogue() = catalogue
+}
+
+class FakeUpdatePromptStore(onOpen: Boolean = true) : UpdatePromptStore {
+    private val enabled = kotlinx.coroutines.flow.MutableStateFlow(onOpen)
+    var seen = app.flowstead.core.update.UpdatePrompt.Seen()
+    override val checkOnOpen: kotlinx.coroutines.flow.Flow<Boolean> = enabled
+    override suspend fun setCheckOnOpen(enabled: Boolean) { this.enabled.value = enabled }
+    override suspend fun seen() = seen
+    override suspend fun remember(seen: app.flowstead.core.update.UpdatePrompt.Seen) { this.seen = seen }
 }

@@ -23,6 +23,7 @@ import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.data.update.AppUpdater
 import app.flowstead.data.update.InstallState
 import app.flowstead.data.update.UpdateChecker
+import app.flowstead.data.update.UpdatePromptStore
 import app.flowstead.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,6 +59,7 @@ data class SettingsUiState(
     val connection: ConnectionState = ConnectionState.Idle,
     val update: UpdateState = UpdateState.Idle,
     val install: InstallState = InstallState.Idle,
+    val checkUpdatesOnOpen: Boolean = true,
 )
 
 @HiltViewModel
@@ -66,6 +68,7 @@ class SettingsViewModel @Inject constructor(
     private val secrets: SecretStore,
     private val engine: EngineClient,
     private val updater: AppUpdater,
+    private val prompts: UpdatePromptStore,
     private val updates: UpdateChecker,
 ) : ViewModel() {
 
@@ -76,8 +79,9 @@ class SettingsViewModel @Inject constructor(
         secrets.hasApiKey,
         transient,
         updater.state,
-    ) { settings, hasKey, t, install ->
-        t.copy(loaded = true, settings = settings, hasApiKey = hasKey, install = install)
+        prompts.checkOnOpen,
+    ) { settings, hasKey, t, install, onOpen ->
+        t.copy(loaded = true, settings = settings, hasApiKey = hasKey, install = install, checkUpdatesOnOpen = onOpen)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     /** Returns true when the URL was valid and saved. */
@@ -140,6 +144,8 @@ class SettingsViewModel @Inject constructor(
     fun installUpdate(update: UpdateCheck.Available) = updater.start(update)
 
     fun retryInstall() = updater.install()
+
+    fun setCheckUpdatesOnOpen(enabled: Boolean) = viewModelScope.launch { prompts.setCheckOnOpen(enabled) }
 
     fun installPermissionSettings(): Intent = updater.permissionSettings()
 

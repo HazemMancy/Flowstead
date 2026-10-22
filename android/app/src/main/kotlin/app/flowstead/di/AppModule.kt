@@ -26,6 +26,8 @@ import app.flowstead.data.files.DocumentIo
 import app.flowstead.data.queue.SolveQueue
 import app.flowstead.data.queue.WorkManagerSolveQueue
 import app.flowstead.data.update.AppUpdater
+import app.flowstead.data.update.DataStoreUpdatePromptStore
+import app.flowstead.data.update.UpdatePromptStore
 import app.flowstead.data.update.GithubUpdateChecker
 import app.flowstead.data.update.UpdateInstaller
 import app.flowstead.data.update.UpdateChecker
@@ -111,4 +113,5 @@ abstract class BindingsModule {
     @Binds abstract fun solveQueue(impl: WorkManagerSolveQueue): SolveQueue
     @Binds abstract fun updates(impl: GithubUpdateChecker): UpdateChecker
     @Binds abstract fun updater(impl: UpdateInstaller): AppUpdater
+    @Binds abstract fun updatePrompts(impl: DataStoreUpdatePromptStore): UpdatePromptStore
 }

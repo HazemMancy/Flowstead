@@ -7,6 +7,7 @@ package app.flowstead.ui.settings
 import app.flowstead.FakeEngineClient
 import app.flowstead.FakeSecretStore
 import app.flowstead.FakeSettingsRepository
+import app.flowstead.FakeUpdatePromptStore
 import app.flowstead.MainDispatcherRule
 import app.flowstead.core.update.UpdateCheck
 import app.flowstead.core.units.Quantity
@@ -44,7 +45,8 @@ class SettingsViewModelTest {
         override fun install() = Unit
         override fun permissionSettings() = Intent()
     }
-    private val vm by lazy { SettingsViewModel(settings, secrets, engine, updater) { latest } }
+    private val prompts = FakeUpdatePromptStore()
+    private val vm by lazy { SettingsViewModel(settings, secrets, engine, updater, prompts) { latest } }
 
     private suspend fun loaded() = vm.state.first { it.loaded }
 
@@ -137,5 +139,12 @@ class SettingsViewModelTest {
         vm.installUpdate(release)
         assertEquals(listOf(release), updater.started)
         assertEquals(InstallState.Downloading("1.1.0", 0.5f), vm.state.first { it.install is InstallState.Downloading }.install)
+    }
+
+    @Test
+    fun checkingOnOpenCanBeTurnedOff() = runTest {
+        assertTrue(loaded().checkUpdatesOnOpen)
+        vm.setCheckUpdatesOnOpen(false).join()
+        assertFalse(vm.state.first { !it.checkUpdatesOnOpen }.checkUpdatesOnOpen)
     }
 }
