@@ -32,7 +32,7 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val hypotheticals: List<Hypothetical> = emptyList(),
-    /** Liquid density method: null for the engine default, [LiquidDensityMethods.COSTALD] for COSTALD. Written only when set. */
+    /** Liquid density method: null for the engine default, [LiquidDensityMethods.COSTALD] or [LiquidDensityMethods.EOS]. Written only when set. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val liquidDensity: String? = null,
@@ -80,6 +80,8 @@ data class Flowsheet(
 /** Liquid density methods; same strings as the engine's LiquidDensityMethods. */
 object LiquidDensityMethods {
     const val COSTALD = "costald"
+    /** Liquid density from the cubic EOS itself (D53). */
+    const val EOS = "eos"
 }
 
 /** Volume shift settings; same strings as the engine's VolumeShiftMethods. */

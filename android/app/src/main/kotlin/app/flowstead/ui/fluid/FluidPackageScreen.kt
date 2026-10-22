@@ -488,6 +488,10 @@ private val LIQUID_DENSITY_OPTIONS = listOf(
         LiquidDensityMethods.COSTALD, "COSTALD (as HYSYS)",
         "COSTALD for every liquid, as HYSYS does for hydrocarbons. About 1 % high for water.",
     ),
+    DensityOption(
+        LiquidDensityMethods.EOS, "Equation of state",
+        "Liquid from the cubic equation of state, like the vapour (with the volume shift unless off). What PVT analysis uses; less accurate for liquids alone.",
+    ),
 )
 
 private val VOLUME_SHIFT_OPTIONS = listOf(
