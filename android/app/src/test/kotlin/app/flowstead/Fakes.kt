@@ -114,6 +114,13 @@ class FakeEngineClient(var result: EngineResult<EngineHealth> = EngineResult.Ok(
         return solveResult
     }
 
+    var envelopeResult: EngineResult<app.flowstead.core.api.PhaseEnvelope> = EngineResult.Failed("No envelope in this test")
+    val envelopes = mutableListOf<Map<String, Double>>()
+    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, flowsheet: Flowsheet, composition: Map<String, Double>): EngineResult<app.flowstead.core.api.PhaseEnvelope> {
+        envelopes += composition
+        return envelopeResult
+    }
+
     var exportResult: EngineResult<ExportResult> = EngineResult.Ok(ExportResult("UEsDBA==", SolveStatus.Converged)) // "PK\u0003\u0004"
     override suspend fun exportDwsim(baseUrl: String, apiKey: String?, flowsheet: Flowsheet) = exportResult
 

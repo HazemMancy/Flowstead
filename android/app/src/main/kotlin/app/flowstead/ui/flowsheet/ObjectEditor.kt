@@ -69,6 +69,7 @@ import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.PerformanceCurve
+import app.flowstead.core.model.Plots
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
 import app.flowstead.core.model.PortSide
@@ -96,6 +97,7 @@ import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
 import app.flowstead.core.units.Units
 import app.flowstead.ui.components.ValueText
+import app.flowstead.ui.components.PlotsSection
 import app.flowstead.ui.theme.NumberStyles
 import app.flowstead.ui.theme.valueColors
 
@@ -122,6 +124,8 @@ interface EditorActions {
     fun openDataSheet(id: String)
     /** Sets or clears a pump or compressor performance curve (D48). */
     fun setCurve(id: String, curve: PerformanceCurve?) = Unit
+    /** Asks the engine for this stream's phase envelope (D50); the answer arrives as [EnvelopeUi]. */
+    fun phaseEnvelope(streamId: String) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,6 +139,7 @@ fun ObjectEditorSheet(
     ctx: UnitContext,
     actions: EditorActions,
     onDismiss: () -> Unit,
+    envelope: EnvelopeUi? = null,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
@@ -244,7 +249,7 @@ fun ObjectEditorSheet(
                 else -> Calculated("${obj.type.displayName()} editing arrives with the remaining unit operations.")
             }
             if (!obj.type.isStream && Ports.of(obj.type).isNotEmpty()) ConnectionsSection(fs, obj, actions)
-            ResultsSection(fs, obj, results, unitSet, ctx)
+            ResultsSection(fs, obj, results, unitSet, ctx, envelope?.takeIf { it.streamId == obj.id }, actions)
             if (obj.type == ObjectType.PipeSegment) PipeSizingSection(fs, obj, results, unitSet, ctx, actions)
         }
     }
@@ -604,7 +609,15 @@ internal fun Choice(
  * reason otherwise.
  */
 @Composable
-private fun ResultsSection(fs: Flowsheet, obj: SimObject, results: ResultView, unitSet: UnitSet, ctx: UnitContext) {
+private fun ResultsSection(
+    fs: Flowsheet,
+    obj: SimObject,
+    results: ResultView,
+    unitSet: UnitSet,
+    ctx: UnitContext,
+    envelope: EnvelopeUi?,
+    actions: EditorActions,
+) {
     val stream = obj.type == ObjectType.MaterialStream
     val keys = when {
         stream -> emptyList()
@@ -631,6 +644,7 @@ private fun ResultsSection(fs: Flowsheet, obj: SimObject, results: ResultView, u
     UnitMessages(results, obj.id)
     if (stream) {
         StreamResults(fs, obj.id, results, unitSet, ctx)
+        EnvelopeSection(obj, results, envelope, unitSet, ctx, actions)
         return
     }
     for (key in keys) {
@@ -639,6 +653,11 @@ private fun ResultsSection(fs: Flowsheet, obj: SimObject, results: ResultView, u
             Text(ResultKeys.label(key), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             ValueText(results.value(obj.id, key), unit, ctx = ctx)
         }
+    }
+    val plots = Plots.forObject(obj.type, results.profiles(obj.id))
+    if (plots.isNotEmpty()) {
+        SectionLabel(if (obj.type == ObjectType.HeatExchanger) "Temperature – heat flow (zone analysis)" else "Profiles")
+        PlotsSection(plots, unitSet, ctx, results.stale, obj.id)
     }
     if (worksheet.isNotEmpty()) UnitWorksheet(fs, worksheet, results, unitSet, ctx)
 }

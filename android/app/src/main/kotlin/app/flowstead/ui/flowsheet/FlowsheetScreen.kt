@@ -238,6 +238,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun deleteReaction(id: String) = vm.deleteReaction(id)
             override fun setPipeSize(id: String, nps: String?, schedule: String?) = vm.setPipeSize(id, nps, schedule)
             override fun setCurve(id: String, curve: PerformanceCurve?) = vm.setCurve(id, curve)
+            override fun phaseEnvelope(streamId: String) = vm.phaseEnvelope(streamId)
             override fun editSizingCriteria() = vm.openSizingCriteria()
             override fun openDataSheet(id: String) = vm.openDataSheet(id)
         }
@@ -305,6 +306,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 ctx = ui.unitContext,
                 actions = editorActions,
                 onDismiss = vm::closeEditor,
+                envelope = ui.envelope,
             )
         }
     }

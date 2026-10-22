@@ -34,6 +34,7 @@ import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.isFeed
 import app.flowstead.core.model.modelHash
 import app.flowstead.data.Clock
 import app.flowstead.data.ProjectRepository
@@ -99,6 +100,8 @@ data class FlowsheetUi(
     val editingSizingCriteria: Boolean = false,
     /** Data sheet being prepared: an equipment id, or [ALL_EQUIPMENT]; null when closed. */
     val dataSheetFor: String? = null,
+    /** The last phase envelope asked for, while the project is open (D50). */
+    val envelope: EnvelopeUi? = null,
 )
 
 /** [FlowsheetUi.dataSheetFor] for one document with every equipment's data sheet. */
@@ -141,6 +144,9 @@ class FlowsheetViewModel @Inject constructor(
         val exporting: Boolean = false,
         val editingSizingCriteria: Boolean = false,
         val dataSheetFor: String? = null,
+        val envelope: EnvelopeUi? = null,
+        /** Model hash the envelope was traced for. */
+        val envelopeHash: String? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -186,6 +192,7 @@ class FlowsheetViewModel @Inject constructor(
                 exporting = l.exporting,
                 editingSizingCriteria = l.editingSizingCriteria,
                 dataSheetFor = l.dataSheetFor?.takeIf { id -> id == ALL_EQUIPMENT || fs.objects.any { it.id == id } },
+                envelope = l.envelope?.copy(stale = l.envelopeHash != null && l.envelopeHash != fs.modelHash()),
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
@@ -380,6 +387,37 @@ class FlowsheetViewModel @Inject constructor(
     }
 
     fun cancelQueuedSolve() = queue.cancel(projectId)
+
+    /**
+     * Traces a stream's phase envelope (D50) from its composition: the solved one, or a feed's own as typed when it
+     * has not been solved. The engine returns every point; nothing is drawn that it did not trace.
+     */
+    fun phaseEnvelope(streamId: String) {
+        val fs = current ?: return
+        if (local.value.envelope?.loading == true) return
+        val stream = fs.objects.firstOrNull { it.id == streamId } ?: return
+        val solved = currentSolve?.takeIf { it.modelHash == fs.modelHash() }?.result?.objects?.get(streamId)
+            ?.phases?.get(app.flowstead.core.api.Phases.OVERALL)?.composition
+        val composition = solved ?: stream.composition.takeIf { fs.isFeed(stream) && it.values.sum() > 0 }
+        if (composition.isNullOrEmpty()) {
+            local.update { it.copy(envelope = EnvelopeUi(streamId, error = "Solve first: the stream's composition comes from the solve")) }
+            return
+        }
+        if (fs.propertyPackage == null) {
+            local.update { it.copy(envelope = EnvelopeUi(streamId, error = "Choose a fluid package first")) }
+            return
+        }
+        local.update { it.copy(envelope = EnvelopeUi(streamId, loading = true, envelope = it.envelope?.takeIf { e -> e.streamId == streamId }?.envelope)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val next = if (url.isBlank()) EnvelopeUi(streamId, error = "Set the engine address in Settings")
+            else when (val r = engine.phaseEnvelope(url, secrets.apiKey(), fs, composition)) {
+                is EngineResult.Ok -> EnvelopeUi(streamId, envelope = r.value)
+                is EngineResult.Failed -> EnvelopeUi(streamId, error = "No envelope: ${r.reason}")
+            }
+            local.update { it.copy(envelope = next, envelopeHash = fs.modelHash()) }
+        }
+    }
 
     /** Suggested file names for the system "save as" picker. */
     fun exportFileName(extension: String, suffix: String = ""): String {

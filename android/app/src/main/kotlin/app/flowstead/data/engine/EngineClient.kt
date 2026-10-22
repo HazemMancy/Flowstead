@@ -11,6 +11,8 @@ import app.flowstead.core.api.ExportResult
 import app.flowstead.core.api.ImportResult
 import app.flowstead.core.api.EngineError
 import app.flowstead.core.api.EngineHealth
+import app.flowstead.core.api.PhaseEnvelope
+import app.flowstead.core.api.PhaseEnvelopeRequest
 import app.flowstead.core.api.PropertyPackageInfo
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.Hypothetical
@@ -51,6 +53,9 @@ interface EngineClient {
     /** The constants the engine's correlations give these hypotheticals. */
     suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>): EngineResult<List<HypotheticalProperties>> =
         EngineResult.Failed("This engine can't estimate hypotheticals")
+    /** DWSIM's phase envelope of [composition] with [flowsheet]'s package and compounds (D50). */
+    suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, flowsheet: Flowsheet, composition: Map<String, Double>): EngineResult<PhaseEnvelope> =
+        EngineResult.Failed("This engine can't trace phase envelopes")
 }
 
 @Singleton
@@ -103,6 +108,15 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(hypotheticals)
+            }
+        }
+
+    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, flowsheet: Flowsheet, composition: Map<String, Double>): EngineResult<PhaseEnvelope> =
+        call {
+            http.post("$baseUrl/phase-envelope") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(PhaseEnvelopeRequest(flowsheet, composition))
             }
         }
 

@@ -45,6 +45,46 @@ data class ObjectResult(
     val phases: Map<String, PhaseResult>? = null,
     /** Text results such as a pipe's "flowRegime". */
     val texts: Map<String, String>? = null,
+    /** Profiles along the unit, SI, keyed by [ProfileKeys]; every list the same length (D50). */
+    val profiles: Map<String, List<Double>>? = null,
+)
+
+/** Profile series names; same strings as the engine's ProfileKeys. The first of each group is the x axis. */
+object ProfileKeys {
+    // Heat exchanger, from the hot inlet end: heat transferred (W), hot and cold temperatures (K).
+    const val HEAT_FLOW = "heatFlow"
+    const val HOT_TEMPERATURE = "hotTemperature"
+    const val COLD_TEMPERATURE = "coldTemperature"
+    // Pipe, from the inlet: distance (m), pressure (Pa), temperature (K), liquid holdup, mixture velocity (m/s).
+    const val LENGTH = "length"
+    const val PRESSURE = "pressure"
+    const val TEMPERATURE = "temperature"
+    const val LIQUID_HOLDUP = "liquidHoldup"
+    const val VELOCITY = "velocity"
+    // Column, top to bottom: stage number, temperature, pressure, vapour and liquid leaving (mol/s).
+    const val STAGE = "stage"
+    const val VAPOUR_FLOW = "vapourFlow"
+    const val LIQUID_FLOW = "liquidFlow"
+}
+
+/** Phase envelope of one composition; the flowsheet gives the package, compounds and options (D50). */
+@Serializable
+data class PhaseEnvelopeRequest(val flowsheet: app.flowstead.core.model.Flowsheet, val composition: Map<String, Double>)
+
+/** DWSIM's bubble and dew curves (K, Pa); the special points are null when DWSIM did not find them. */
+@Serializable
+data class PhaseEnvelope(
+    val bubbleTemperature: List<Double> = emptyList(),
+    val bubblePressure: List<Double> = emptyList(),
+    val dewTemperature: List<Double> = emptyList(),
+    val dewPressure: List<Double> = emptyList(),
+    val criticalTemperature: Double? = null,
+    val criticalPressure: Double? = null,
+    val cricondenbarTemperature: Double? = null,
+    val cricondenbarPressure: Double? = null,
+    val cricondenthermTemperature: Double? = null,
+    val cricondenthermPressure: Double? = null,
+    val warnings: List<String> = emptyList(),
 )
 
 @Serializable

@@ -11,6 +11,8 @@ import app.flowstead.core.api.EngineHealth
 import app.flowstead.core.api.ExportResult
 import app.flowstead.core.api.HypotheticalProperties
 import app.flowstead.core.api.ImportResult
+import app.flowstead.core.api.PhaseEnvelope
+import app.flowstead.core.api.PhaseEnvelopeRequest
 import app.flowstead.core.api.PropertyPackageInfo
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.Flowsheet
@@ -58,6 +60,11 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
     override suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>): EngineResult<List<HypotheticalProperties>> =
         decode(ListSerializer(HypotheticalProperties.serializer())) {
             engine.call("estimateHypotheticals", FlowsheetJson.encodeToJsonElement(ListSerializer(Hypothetical.serializer()), hypotheticals))
+        }
+
+    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, flowsheet: Flowsheet, composition: Map<String, Double>): EngineResult<PhaseEnvelope> =
+        decode(PhaseEnvelope.serializer()) {
+            engine.call("phaseEnvelope", FlowsheetJson.encodeToJsonElement(PhaseEnvelopeRequest.serializer(), PhaseEnvelopeRequest(flowsheet, composition)))
         }
 
     private suspend fun <T> decode(serializer: KSerializer<T>, block: suspend () -> kotlinx.serialization.json.JsonElement): EngineResult<T> =

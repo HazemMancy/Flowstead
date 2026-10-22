@@ -196,6 +196,33 @@ class FlowsheetViewModelTest {
     }
 
     @Test
+    fun phaseEnvelopeUsesTheSolvedCompositionAndGoesStaleOnEdits() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        val solvedX = mapOf("Methane" to 1.0)
+        engine.solveResult = app.flowstead.data.engine.EngineResult.Ok(
+            app.flowstead.core.api.SolveResult(
+                app.flowstead.core.api.SolveStatus.Converged,
+                objects = mapOf("f" to app.flowstead.core.api.ObjectResult(
+                    app.flowstead.core.api.ObjectStatus.Solved,
+                    phases = mapOf("overall" to app.flowstead.core.api.PhaseResult(composition = solvedX)))),
+            ),
+        )
+        engine.envelopeResult = app.flowstead.data.engine.EngineResult.Ok(
+            app.flowstead.core.api.PhaseEnvelope(bubbleTemperature = listOf(100.0, 150.0), bubblePressure = listOf(1e5, 2e6)),
+        )
+        val vm = vm(completeFeed())
+        vm.ui()
+        vm.solve()
+        vm.ui { it.results.status != null }
+        vm.phaseEnvelope("f")
+        val traced = vm.ui { it.envelope?.envelope != null }.envelope!!
+        assertEquals(solvedX, engine.envelopes.single())
+        assertFalse(traced.stale)
+        vm.setSpec("f", SpecKey.TEMPERATURE, Spec(310.0, "C"))
+        assertTrue(vm.ui { it.envelope?.stale == true }.envelope!!.stale)
+    }
+
+    @Test
     fun unreachableEngineQueuesTheSolve() = runTest {
         settings.setEngineUrl("https://engine.example.com")
         engine.solveResult = app.flowstead.data.engine.EngineResult.Failed("Cannot reach the engine: timeout", unreachable = true)

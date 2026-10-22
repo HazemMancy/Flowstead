@@ -282,6 +282,10 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
     fun text(objectId: String, key: String): String? =
         solve?.result?.objects?.get(objectId)?.takeIf { it.status == ObjectStatus.Solved }?.texts?.get(key)
 
+    /** Profiles along a solved unit (D50), or null; plots say when they are out of date via [stale]. */
+    fun profiles(objectId: String): Map<String, List<Double>>? =
+        solve?.result?.objects?.get(objectId)?.takeIf { it.status == ObjectStatus.Solved }?.profiles
+
     fun presentPhases(objectId: String): List<String> {
         val phases = solve?.result?.objects?.get(objectId)?.phases ?: return emptyList()
         return Phases.ORDER.filter { it in phases }
