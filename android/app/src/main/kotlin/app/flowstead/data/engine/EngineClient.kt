@@ -14,6 +14,8 @@ import app.flowstead.core.api.EngineHealth
 import app.flowstead.core.api.PhaseEnvelope
 import app.flowstead.core.api.PhaseEnvelopeRequest
 import app.flowstead.core.api.PropertyPackageInfo
+import app.flowstead.core.api.PvtRequest
+import app.flowstead.core.api.PvtResult
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.Hypothetical
 import app.flowstead.core.model.Flowsheet
@@ -53,9 +55,12 @@ interface EngineClient {
     /** The constants the engine's correlations give these hypotheticals. */
     suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>): EngineResult<List<HypotheticalProperties>> =
         EngineResult.Failed("This engine can't estimate hypotheticals")
-    /** DWSIM's phase envelope of [composition] with [flowsheet]'s package and compounds (D50). */
-    suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, flowsheet: Flowsheet, composition: Map<String, Double>): EngineResult<PhaseEnvelope> =
+    /** DWSIM's phase envelope of one composition with a flowsheet's package and compounds (D50, D52). */
+    suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, request: PhaseEnvelopeRequest): EngineResult<PhaseEnvelope> =
         EngineResult.Failed("This engine can't trace phase envelopes")
+    /** A PVT laboratory experiment (D53). */
+    suspend fun pvt(baseUrl: String, apiKey: String?, request: PvtRequest): EngineResult<PvtResult> =
+        EngineResult.Failed("This engine can't run PVT experiments")
 }
 
 @Singleton
@@ -111,12 +116,21 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
             }
         }
 
-    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, flowsheet: Flowsheet, composition: Map<String, Double>): EngineResult<PhaseEnvelope> =
+    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, request: PhaseEnvelopeRequest): EngineResult<PhaseEnvelope> =
         call {
             http.post("$baseUrl/phase-envelope") {
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
-                setBody(PhaseEnvelopeRequest(flowsheet, composition))
+                setBody(request)
+            }
+        }
+
+    override suspend fun pvt(baseUrl: String, apiKey: String?, request: PvtRequest): EngineResult<PvtResult> =
+        call {
+            http.post("$baseUrl/pvt") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
             }
         }
 

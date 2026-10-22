@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -81,6 +82,13 @@ fun PlotsSection(plots: List<Plot>, unitSet: UnitSet, ctx: UnitContext, stale: B
 fun PlotView(plot: Plot, unitSet: UnitSet, ctx: UnitContext, stale: Boolean = false, modifier: Modifier = Modifier) {
     val xu = unitSet.unitFor(plot.xQuantity)
     val yu = unitSet.unitFor(plot.yQuantity)
+    val pu = plot.parameterQuantity?.let { unitSet.unitFor(it) }
+    // A family of curves is told apart by its parameter ("FEED pressure 40 bar"), else by the series' own names.
+    fun name(s: app.flowstead.core.model.PlotSeries): String {
+        val value = s.parameter ?: return s.label
+        val unit = pu ?: return s.label
+        return "${plot.parameterLabel ?: ""} ${ValueFormat.number(unit.fromSi(value, ctx), unit.decimals)} ${unit.symbol}".trim()
+    }
     fun xs(v: Double) = xu.fromSi(v, ctx)
     fun ys(v: Double) = yu.fromSi(v, ctx)
     val allX = plot.series.flatMap { it.x }.map(::xs) + plot.markers.map { xs(it.x) }
@@ -89,7 +97,11 @@ fun PlotView(plot: Plot, unitSet: UnitSet, ctx: UnitContext, stale: Boolean = fa
     val yt = Plots.ticks(allY.min(), allY.max())
     if (xt.size < 2 || yt.size < 2) return
 
-    val colours = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.secondary)
+    // Theme colours first, then fixed hues that read on paper and ink alike (envelopes carry up to eight lines).
+    val colours = listOf(
+        MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.secondary,
+        Color(0xFF2E9E5B), Color(0xFF8E5BD6), Color(0xFF1F9BB0), Color(0xFFD08A1E), Color(0xFFC2457A),
+    )
     val markerColour = MaterialTheme.colorScheme.error
     val axis = MaterialTheme.colorScheme.outline
     val grid = MaterialTheme.colorScheme.outlineVariant
@@ -106,7 +118,7 @@ fun PlotView(plot: Plot, unitSet: UnitSet, ctx: UnitContext, stale: Boolean = fa
         }
     }.orEmpty()
     val readout = picks.takeIf { it.isNotEmpty() }?.joinToString(" · ") { (_, s, k) ->
-        "${s.label}: ${ValueFormat.number(ys(s.y[k]), yu.decimals)} ${yu.symbol} at ${ValueFormat.number(xs(s.x[k]), xu.decimals)} ${xu.symbol}".trimEnd()
+        "${name(s)}: ${ValueFormat.number(ys(s.y[k]), yu.decimals)} ${yu.symbol} at ${ValueFormat.number(xs(s.x[k]), xu.decimals)} ${xu.symbol}".trimEnd()
     }
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -167,12 +179,12 @@ fun PlotView(plot: Plot, unitSet: UnitSet, ctx: UnitContext, stale: Boolean = fa
             for ((i, s, k) in picks) drawCircle(colours[i % colours.size], 9f, Offset(px(xs(s.x[k])), py(ys(s.y[k]))))
             touch?.let { t -> drawLine(axis, Offset(t.x.coerceIn(left, left + w), top), Offset(t.x.coerceIn(left, left + w), top + h), 1.5f) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             plot.series.forEachIndexed { i, s ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(width = 14.dp, height = 3.dp).background(colours[i % colours.size]))
                     Spacer(Modifier.width(4.dp))
-                    Text(s.label + if (s.dashed) " (dashed)" else "", style = MaterialTheme.typography.labelSmall)
+                    Text(name(s) + if (s.dashed) " (dashed)" else "", style = MaterialTheme.typography.labelSmall)
                 }
             }
             if (plot.markers.isNotEmpty()) {

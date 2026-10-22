@@ -30,6 +30,8 @@ class RoutingEngineClient @Inject constructor(
     override suspend fun importDwsim(baseUrl: String, apiKey: String?, file: DwsimFile) = pick(baseUrl).importDwsim(baseUrl, apiKey, file)
     override suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>) =
         pick(baseUrl).estimateHypotheticals(baseUrl, apiKey, hypotheticals)
-    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, flowsheet: Flowsheet, composition: Map<String, Double>) =
-        pick(baseUrl).phaseEnvelope(baseUrl, apiKey, flowsheet, composition)
+    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PhaseEnvelopeRequest) =
+        pick(baseUrl).phaseEnvelope(baseUrl, apiKey, request)
+    override suspend fun pvt(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PvtRequest) =
+        pick(baseUrl).pvt(baseUrl, apiKey, request)
 }

@@ -244,7 +244,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun deleteReaction(id: String) = vm.deleteReaction(id)
             override fun setPipeSize(id: String, nps: String?, schedule: String?) = vm.setPipeSize(id, nps, schedule)
             override fun setCurve(id: String, curve: PerformanceCurve?) = vm.setCurve(id, curve)
-            override fun phaseEnvelope(streamId: String) = vm.phaseEnvelope(streamId)
+            override fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean) = vm.phaseEnvelope(streamId, qualities, hydrates)
+            override fun openPvt(streamId: String) = vm.openPvt(streamId)
             override fun editSizingCriteria() = vm.openSizingCriteria()
             override fun openDataSheet(id: String) = vm.openDataSheet(id)
         }
@@ -328,6 +329,19 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             onCancel = vm::cancelCaseStudy,
             onDismiss = vm::closeCaseStudies,
         )
+    }
+    ui.pvtFor?.let { id ->
+        ui.flowsheet.obj(id)?.let { stream ->
+            PvtSheet(
+                stream = stream,
+                results = ui.results,
+                state = ui.pvt?.takeIf { it.streamId == id },
+                unitSet = ui.unitSet,
+                ctx = ui.unitContext,
+                onRun = { experiment, t, stages -> vm.runPvt(id, experiment, t, stages) },
+                onDismiss = vm::closePvt,
+            )
+        }
     }
 
     val pdfFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(DataSheetFormat.Pdf.mimeType)) { uri ->

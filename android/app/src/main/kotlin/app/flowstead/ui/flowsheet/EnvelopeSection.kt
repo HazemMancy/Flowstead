@@ -12,11 +12,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -67,15 +75,35 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
             row("Cricondenbar", env.cricondenbarTemperature, env.cricondenbarPressure)
             row("Cricondentherm", env.cricondenthermTemperature, env.cricondenthermPressure)
             row("Critical point", env.criticalTemperature, env.criticalPressure)
+            env.hydrateTemperatureAtPressure?.let { th ->
+                Text(
+                    "Hydrates (${env.hydrateStructureAtPressure ?: "?"}) form below ${ValueFormat.number(t.fromSi(th, ctx), t.decimals)} ${t.symbol} at this stream's pressure",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.valueColors.underSpecifiedText,
+                    modifier = Modifier.testTag("hydrate_temperature"),
+                )
+            }
         }
         env.warnings.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText) }
     } else {
         Calculated("Bubble and dew curves of this stream's composition, from the engine.")
     }
     state?.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.error) }
+    // What to draw besides the envelope, as HYSYS's envelope utility: quality lines and the hydrate curve.
+    var hydrates by rememberSaveable { mutableStateOf(true) }
+    var qualities by remember { mutableStateOf(listOf(0.5)) }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        FilterChip(selected = hydrates, onClick = { hydrates = !hydrates }, label = { Text("Hydrate curve") }, modifier = Modifier.testTag("envelope_hydrates"))
+        for (q in listOf(0.1, 0.25, 0.5, 0.75, 0.9)) {
+            FilterChip(
+                selected = q in qualities,
+                onClick = { qualities = if (q in qualities) qualities - q else (qualities + q).sorted() },
+                label = { Text("VF ${ValueFormat.number(q, 2).trimEnd('0').trimEnd('.')}") },
+            )
+        }
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(
-            onClick = { actions.phaseEnvelope(obj.id) },
+            onClick = { actions.phaseEnvelope(obj.id, qualities, hydrates) },
             enabled = state?.loading != true,
             modifier = Modifier.heightIn(min = 48.dp).testTag("phase_envelope"),
         ) { Text(if (env == null) "Trace phase envelope" else "Trace again") }
@@ -86,4 +114,7 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
             Text("Tracing…", style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth())
         }
     }
+    SectionLabel("PVT laboratory")
+    Calculated("Saturation pressure, constant composition expansion, constant volume depletion, differential liberation and separator tests on this stream's fluid.")
+    OutlinedButton(onClick = { actions.openPvt(obj.id) }, modifier = Modifier.heightIn(min = 48.dp).testTag("open_pvt")) { Text("PVT analysis") }
 }

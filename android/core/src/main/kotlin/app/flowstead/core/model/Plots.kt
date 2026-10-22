@@ -13,8 +13,8 @@ import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
 
-/** One line on a plot, SI. */
-data class PlotSeries(val label: String, val x: List<Double>, val y: List<Double>, val dashed: Boolean = false)
+/** One line on a plot, SI. [parameter]: the value (SI) of the plot's parameter this line is drawn at, if any. */
+data class PlotSeries(val label: String, val x: List<Double>, val y: List<Double>, val dashed: Boolean = false, val parameter: Double? = null)
 
 /** A labelled point on a plot (critical point, operating point…), SI. */
 data class PlotMarker(val label: String, val x: Double, val y: Double)
@@ -28,6 +28,9 @@ data class Plot(
     val yQuantity: Quantity,
     val series: List<PlotSeries>,
     val markers: List<PlotMarker> = emptyList(),
+    /** A family of curves: what each line's [PlotSeries.parameter] is (a case study's second variable). */
+    val parameterLabel: String? = null,
+    val parameterQuantity: Quantity? = null,
 )
 
 object Plots {
@@ -70,11 +73,16 @@ object Plots {
 
     /** P–T phase envelope with its special points and, when given, the stream's own state. */
     fun envelope(env: PhaseEnvelope, streamTemperature: Double? = null, streamPressure: Double? = null): Plot? {
-        val series = listOfNotNull(
-            PlotSeries("Bubble point", env.bubbleTemperature, env.bubblePressure).takeIf { it.x.size >= 2 && it.x.size == it.y.size },
-            PlotSeries("Dew point", env.dewTemperature, env.dewPressure, dashed = true).takeIf { it.x.size >= 2 && it.x.size == it.y.size },
+        fun ok(s: PlotSeries) = s.takeIf { it.x.size >= 2 && it.x.size == it.y.size }
+        val envelope = listOfNotNull(
+            ok(PlotSeries("Bubble point", env.bubbleTemperature, env.bubblePressure)),
+            ok(PlotSeries("Dew point", env.dewTemperature, env.dewPressure, dashed = true)),
         )
-        if (series.isEmpty()) return null
+        if (envelope.isEmpty()) return null
+        // Quality lines (D52) dotted, then the hydrate curve (D52), each only where the engine traced it.
+        val series = envelope +
+            env.qualityLines.mapNotNull { ok(PlotSeries("VF ${"%.2f".format(java.util.Locale.ROOT, it.quality).trimEnd('0').trimEnd('.')}", it.temperature, it.pressure, dashed = true)) } +
+            listOfNotNull(ok(PlotSeries("Hydrate formation", env.hydrateTemperature, env.hydratePressure)))
         val markers = listOfNotNull(
             point("Critical point", env.criticalTemperature, env.criticalPressure),
             point("Cricondenbar", env.cricondenbarTemperature, env.cricondenbarPressure),

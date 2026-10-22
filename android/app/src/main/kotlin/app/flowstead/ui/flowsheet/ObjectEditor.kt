@@ -127,8 +127,10 @@ interface EditorActions {
     fun openDataSheet(id: String)
     /** Sets or clears a pump or compressor performance curve (D48). */
     fun setCurve(id: String, curve: PerformanceCurve?) = Unit
-    /** Asks the engine for this stream's phase envelope (D50); the answer arrives as [EnvelopeUi]. */
-    fun phaseEnvelope(streamId: String) = Unit
+    /** Asks the engine for this stream's phase envelope (D50, D52); the answer arrives as [EnvelopeUi]. */
+    fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean) = Unit
+    /** Opens the PVT laboratory (D53) on this stream's composition. */
+    fun openPvt(streamId: String) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

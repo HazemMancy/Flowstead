@@ -52,5 +52,21 @@ class PlotsTest {
         val plot = Plots.envelope(env, 280.0, 2e6)!!
         assertEquals(listOf("Cricondentherm", "This stream"), plot.markers.map { it.label })
         assertNull(Plots.envelope(PhaseEnvelope()))
+        val full = Plots.envelope(env.copy(
+            qualityLines = listOf(app.flowstead.core.api.QualityLine(0.5, listOf(220.0, 240.0), listOf(1e6, 3e6))),
+            hydrateTemperature = listOf(280.0, 290.0), hydratePressure = listOf(2e6, 8e6),
+        ))!!
+        assertEquals(listOf("Bubble point", "Dew point", "VF 0.5", "Hydrate formation"), full.series.map { it.label })
+    }
+
+    @Test
+    fun pvtPlotsSkipMissingSteps() {
+        val r = app.flowstead.core.api.PvtResult(
+            experiment = "cvd", columns = listOf("pressure", "liquidDropout"),
+            table = mapOf("pressure" to listOf(3e7, 2e7, 1e7), "liquidDropout" to listOf(0.0, null, 0.1)),
+        )
+        val plot = PvtTables.plots(r).single()
+        assertEquals(listOf(3e7, 1e7), plot.series.single().x)
+        assertEquals(Quantity.Fraction, plot.yQuantity)
     }
 }

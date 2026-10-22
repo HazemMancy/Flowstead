@@ -56,4 +56,25 @@ class CaseStudiesTest {
         // Case studies change no result.
         assertEquals(fs.modelHash(), saved.modelHash())
     }
+
+    @Test
+    fun aSecondVariableGivesAFamilyOfCurves() {
+        val two = study.copy(steps = 2, objectId2 = "f", specKey2 = SpecKey.PRESSURE, from2 = 4e6, to2 = 6e6, steps2 = 1)
+        assertNull(CaseStudies.problem(fs, two))
+        // The second variable is the outer loop.
+        assertEquals(
+            listOf(280.0 to 4e6, 300.0 to 4e6, 320.0 to 4e6, 280.0 to 6e6, 300.0 to 6e6, 320.0 to 6e6),
+            CaseStudies.grid(two),
+        )
+        val at = CaseStudies.at(fs, two, 300.0, 6e6).objects.single().specs
+        assertEquals(Spec(6e6, "bara"), at[SpecKey.PRESSURE])
+        assertEquals("The second variable must differ from the first", CaseStudies.problem(fs, two.copy(specKey2 = SpecKey.TEMPERATURE)))
+        assertEquals("At most 200 points in all: fewer steps, please", CaseStudies.problem(fs, two.copy(steps = 50, steps2 = 10)))
+
+        val results = CaseResults(fs.modelHash(), listOf(280.0, 300.0, 320.0, 280.0, 300.0, 320.0), listOf(listOf(0.1, 0.2, 0.3, 0.0, 0.1, 0.2)),
+            List(6) { null }, x2 = listOf(4e6, 4e6, 4e6, 6e6, 6e6, 6e6))
+        val plot = CaseStudies.plots(fs, two.copy(results = results)).single()
+        assertEquals(listOf(4e6, 6e6), plot.series.map { it.parameter })
+        assertEquals("FEED pressure", plot.parameterLabel)
+    }
 }

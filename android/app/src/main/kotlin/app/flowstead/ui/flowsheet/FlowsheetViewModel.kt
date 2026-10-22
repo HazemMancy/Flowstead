@@ -33,6 +33,9 @@ import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.Specification
 import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
+import app.flowstead.core.api.PhaseEnvelopeRequest
+import app.flowstead.core.api.PvtRequest
+import app.flowstead.core.api.SeparatorStage
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.model.ResultView
@@ -108,6 +111,9 @@ data class FlowsheetUi(
     val caseStudiesOpen: Boolean = false,
     /** A case study running now (D51). */
     val caseRun: CaseRunUi? = null,
+    /** The stream whose PVT sheet is open (D53), and the last experiment run. */
+    val pvtFor: String? = null,
+    val pvt: PvtUi? = null,
 )
 
 /** [FlowsheetUi.dataSheetFor] for one document with every equipment's data sheet. */
@@ -155,6 +161,9 @@ class FlowsheetViewModel @Inject constructor(
         val envelopeHash: String? = null,
         val caseStudiesOpen: Boolean = false,
         val caseRun: CaseRunUi? = null,
+        val pvtFor: String? = null,
+        val pvt: PvtUi? = null,
+        val pvtHash: String? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -204,6 +213,8 @@ class FlowsheetViewModel @Inject constructor(
                 envelope = l.envelope?.copy(stale = l.envelopeHash != null && l.envelopeHash != fs.modelHash()),
                 caseStudiesOpen = l.caseStudiesOpen,
                 caseRun = l.caseRun,
+                pvtFor = l.pvtFor?.takeIf { id -> fs.objects.any { it.id == id } },
+                pvt = l.pvt?.copy(stale = l.pvtHash != null && l.pvtHash != fs.modelHash()),
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
@@ -416,7 +427,8 @@ class FlowsheetViewModel @Inject constructor(
         val cs = base.caseStudies.firstOrNull { it.id == id } ?: return
         CaseStudies.problem(base, cs)?.let { _messages.trySend(it); return }
         Specification.problems(base).firstOrNull()?.let { _messages.trySend("Fix the flowsheet first: ${it.second}"); return }
-        val xs = CaseStudies.points(cs)
+        val grid = CaseStudies.grid(cs)
+        val xs = grid.map { it.first }
         local.update { it.copy(caseRun = CaseRunUi(id, 0, xs.size)) }
         caseJob = viewModelScope.launch {
             try {
@@ -428,8 +440,8 @@ class FlowsheetViewModel @Inject constructor(
                 val key = secrets.apiKey()
                 val values = cs.outputs.map { mutableListOf<Double?>() }
                 val errors = mutableListOf<String?>()
-                for ((i, x) in xs.withIndex()) {
-                    val at = CaseStudies.at(base, cs, x)
+                for ((i, point) in grid.withIndex()) {
+                    val at = CaseStudies.at(base, cs, point.first, point.second)
                     when (val r = engine.solve(url, key, at)) {
                         is EngineResult.Ok -> {
                             val (v, error) = CaseStudies.read(at, cs, r.value)
@@ -447,7 +459,8 @@ class FlowsheetViewModel @Inject constructor(
                     }
                     local.update { it.copy(caseRun = CaseRunUi(id, i + 1, xs.size)) }
                 }
-                edit(undoable = false) { FlowsheetEditing.setCaseResults(it, id, CaseResults(base.modelHash(), xs, values, errors)) }
+                val x2 = grid.map { it.second }.takeIf { CaseStudies.twoWay(cs) }?.map { it!! }
+                edit(undoable = false) { FlowsheetEditing.setCaseResults(it, id, CaseResults(base.modelHash(), xs, values, errors, x2)) }
                 val failed = errors.count { it != null }
                 _messages.send("Case study done: ${xs.size} points" + if (failed > 0) ", $failed did not converge" else "")
             } finally {
@@ -461,33 +474,70 @@ class FlowsheetViewModel @Inject constructor(
     }
 
     /**
-     * Traces a stream's phase envelope (D50) from its composition: the solved one, or a feed's own as typed when it
-     * has not been solved. The engine returns every point; nothing is drawn that it did not trace.
+     * The composition the engine's stream calculations use: the solved one, or a feed's own as typed when the flowsheet
+     * has not been solved since its last change. Null with the reason when there is none.
      */
-    fun phaseEnvelope(streamId: String) {
-        val fs = current ?: return
-        if (local.value.envelope?.loading == true) return
-        val stream = fs.objects.firstOrNull { it.id == streamId } ?: return
+    private fun streamComposition(fs: Flowsheet, streamId: String): Pair<Map<String, Double>?, String?> {
+        val stream = fs.objects.firstOrNull { it.id == streamId } ?: return null to "That stream no longer exists"
+        if (fs.propertyPackage == null) return null to "Choose a fluid package first"
         val solved = currentSolve?.takeIf { it.modelHash == fs.modelHash() }?.result?.objects?.get(streamId)
             ?.phases?.get(app.flowstead.core.api.Phases.OVERALL)?.composition
         val composition = solved ?: stream.composition.takeIf { fs.isFeed(stream) && it.values.sum() > 0 }
-        if (composition.isNullOrEmpty()) {
-            local.update { it.copy(envelope = EnvelopeUi(streamId, error = "Solve first: the stream's composition comes from the solve")) }
-            return
-        }
-        if (fs.propertyPackage == null) {
-            local.update { it.copy(envelope = EnvelopeUi(streamId, error = "Choose a fluid package first")) }
+        return if (composition.isNullOrEmpty()) null to "Solve first: the stream's composition comes from the solve" else composition to null
+    }
+
+    /** The stream's solved pressure, when the results are current. */
+    private fun streamPressure(fs: Flowsheet, streamId: String): Double? =
+        currentSolve?.takeIf { it.modelHash == fs.modelHash() }?.result?.objects?.get(streamId)?.properties?.get("pressure")
+
+    /**
+     * Traces a stream's phase envelope (D50) with the chosen quality lines and the hydrate curve (D52). The engine returns
+     * every point; nothing is drawn that it did not trace.
+     */
+    fun phaseEnvelope(streamId: String, qualities: List<Double> = emptyList(), hydrates: Boolean = false) {
+        val fs = current ?: return
+        if (local.value.envelope?.loading == true) return
+        val (composition, why) = streamComposition(fs, streamId)
+        if (composition == null) {
+            local.update { it.copy(envelope = EnvelopeUi(streamId, error = why)) }
             return
         }
         local.update { it.copy(envelope = EnvelopeUi(streamId, loading = true, envelope = it.envelope?.takeIf { e -> e.streamId == streamId }?.envelope)) }
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
+            val request = PhaseEnvelopeRequest(fs, composition, qualities, hydrates, streamPressure(fs, streamId))
             val next = if (url.isBlank()) EnvelopeUi(streamId, error = "Set the engine address in Settings")
-            else when (val r = engine.phaseEnvelope(url, secrets.apiKey(), fs, composition)) {
+            else when (val r = engine.phaseEnvelope(url, secrets.apiKey(), request)) {
                 is EngineResult.Ok -> EnvelopeUi(streamId, envelope = r.value)
                 is EngineResult.Failed -> EnvelopeUi(streamId, error = "No envelope: ${r.reason}")
             }
             local.update { it.copy(envelope = next, envelopeHash = fs.modelHash()) }
+        }
+    }
+
+    // ---- PVT (D53)
+
+    fun openPvt(streamId: String) = local.update { it.copy(pvtFor = streamId, editingId = null) }
+    fun closePvt() = local.update { it.copy(pvtFor = null) }
+
+    /** Runs one PVT experiment on the stream's composition at reservoir temperature [temperature] (K). */
+    fun runPvt(streamId: String, experiment: String, temperature: Double, stages: List<SeparatorStage>) {
+        val fs = current ?: return
+        if (local.value.pvt?.loading == true) return
+        val (composition, why) = streamComposition(fs, streamId)
+        if (composition == null) {
+            local.update { it.copy(pvt = PvtUi(streamId, experiment, error = why)) }
+            return
+        }
+        local.update { it.copy(pvt = PvtUi(streamId, experiment, loading = true)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val next = if (url.isBlank()) PvtUi(streamId, experiment, error = "Set the engine address in Settings")
+            else when (val r = engine.pvt(url, secrets.apiKey(), PvtRequest(fs, composition, experiment, temperature, stages = stages))) {
+                is EngineResult.Ok -> PvtUi(streamId, experiment, result = r.value)
+                is EngineResult.Failed -> PvtUi(streamId, experiment, error = "Not run: ${r.reason}")
+            }
+            local.update { it.copy(pvt = next, pvtHash = fs.modelHash()) }
         }
     }
 

@@ -216,7 +216,7 @@ class FlowsheetViewModelTest {
         vm.ui { it.results.status != null }
         vm.phaseEnvelope("f")
         val traced = vm.ui { it.envelope?.envelope != null }.envelope!!
-        assertEquals(solvedX, engine.envelopes.single())
+        assertEquals(solvedX, engine.envelopes.single().composition)
         assertFalse(traced.stale)
         vm.setSpec("f", SpecKey.TEMPERATURE, Spec(310.0, "C"))
         assertTrue(vm.ui { it.envelope?.stale == true }.envelope!!.stale)

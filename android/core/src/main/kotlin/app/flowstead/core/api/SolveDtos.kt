@@ -67,9 +67,22 @@ object ProfileKeys {
     const val LIQUID_FLOW = "liquidFlow"
 }
 
-/** Phase envelope of one composition; the flowsheet gives the package, compounds and options (D50). */
+/**
+ * Phase envelope of one composition; the flowsheet gives the package, compounds and options (D50). [qualities]: vapour
+ * fractions for quality lines; [hydrates]: also the hydrate curve (D52); [pressure]: the stream's, for its hydrate temperature.
+ */
 @Serializable
-data class PhaseEnvelopeRequest(val flowsheet: app.flowstead.core.model.Flowsheet, val composition: Map<String, Double>)
+data class PhaseEnvelopeRequest(
+    val flowsheet: app.flowstead.core.model.Flowsheet,
+    val composition: Map<String, Double>,
+    val qualities: List<Double> = emptyList(),
+    val hydrates: Boolean = false,
+    val pressure: Double? = null,
+)
+
+/** A line of constant vapour fraction (K, Pa). */
+@Serializable
+data class QualityLine(val quality: Double, val temperature: List<Double> = emptyList(), val pressure: List<Double> = emptyList())
 
 /** DWSIM's bubble and dew curves (K, Pa); the special points are null when DWSIM did not find them. */
 @Serializable
@@ -84,6 +97,49 @@ data class PhaseEnvelope(
     val cricondenbarPressure: Double? = null,
     val cricondenthermTemperature: Double? = null,
     val cricondenthermPressure: Double? = null,
+    val qualityLines: List<QualityLine> = emptyList(),
+    val hydrateTemperature: List<Double> = emptyList(),
+    val hydratePressure: List<Double> = emptyList(),
+    val hydrateStructure: List<String> = emptyList(),
+    val hydrateTemperatureAtPressure: Double? = null,
+    val hydrateStructureAtPressure: String? = null,
+    val warnings: List<String> = emptyList(),
+)
+
+/** PVT experiments (D53); same strings as the engine. */
+object PvtExperiments {
+    const val SATURATION = "saturation"
+    const val CCE = "cce"
+    const val CVD = "cvd"
+    const val DL = "dl"
+    const val SEPARATOR = "separator"
+}
+
+@Serializable
+data class SeparatorStage(val temperature: Double, val pressure: Double)
+
+/** A PVT experiment on one composition at reservoir [temperature] (K); [pressures] (Pa) empty for the engine's default steps. */
+@Serializable
+data class PvtRequest(
+    val flowsheet: app.flowstead.core.model.Flowsheet,
+    val composition: Map<String, Double>,
+    val experiment: String,
+    val temperature: Double,
+    val pressures: List<Double> = emptyList(),
+    val stages: List<SeparatorStage> = emptyList(),
+)
+
+/** One PVT experiment's results: [table] has one list per column (in [columns] order), null where DWSIM gave nothing. */
+@Serializable
+data class PvtResult(
+    val experiment: String,
+    val temperature: Double = 0.0,
+    val saturationPressure: Double? = null,
+    /** "bubble" or "dew". */
+    val saturationKind: String? = null,
+    val columns: List<String> = emptyList(),
+    val table: Map<String, List<Double?>> = emptyMap(),
+    val summary: Map<String, Double> = emptyMap(),
     val warnings: List<String> = emptyList(),
 )
 

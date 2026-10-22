@@ -162,6 +162,8 @@ private fun StudyEditor(
             }
         }
 
+        if (variable != null && key != null) SecondVariable(fs, cs, candidates, unitSet, ctx, onSave)
+
         SectionLabel("Record")
         cs.outputs.forEachIndexed { i, o ->
             val obj = fs.objects.firstOrNull { it.id == o.objectId }
@@ -199,6 +201,57 @@ private fun StudyEditor(
     }
 }
 
+/** The optional second variable, stepped in an outer loop: each of its values gives one curve on every plot. */
+@Composable
+private fun SecondVariable(
+    fs: Flowsheet,
+    cs: CaseStudy,
+    candidates: List<app.flowstead.core.model.SimObject>,
+    unitSet: UnitSet,
+    ctx: UnitContext,
+    onSave: (CaseStudy) -> Unit,
+) {
+    if (!CaseStudies.twoWay(cs)) {
+        TextButton(
+            onClick = { onSave(cs.copy(objectId2 = candidates.firstOrNull()?.id)) },
+            enabled = candidates.isNotEmpty(),
+            modifier = Modifier.heightIn(min = 48.dp).testTag("case_add_second"),
+        ) { Text("Add a second variable (a family of curves)") }
+        return
+    }
+    val second = fs.objects.firstOrNull { it.id == cs.objectId2 }
+    SectionLabel("And for each value of")
+    Choice("Object", second?.tag, candidates.map { it.id to "${it.tag} · ${it.type.displayName()}" }, testTag = "case_object2") {
+        onSave(cs.copy(objectId2 = it, specKey2 = null, from2 = null, to2 = null))
+    }
+    if (second != null) {
+        Choice("Specification", cs.specKey2?.let { SpecKey.label(it) }, second.specs.keys.map { it to SpecKey.label(it) }, testTag = "case_spec2") { k ->
+            val now = second.specs.getValue(k).si
+            onSave(cs.copy(specKey2 = k, from2 = now * 0.8, to2 = now * 1.2))
+        }
+    }
+    val key2 = cs.specKey2
+    if (second != null && key2 != null && key2 in second.specs) {
+        val q = SpecKey.quantity(key2)
+        val unit = second.specs.getValue(key2).unit
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                QuantityField("From", cs.from2?.let { Spec(it, unit) }, q, defaultUnit(key2, q, unitSet), ctx, "case_from2_${cs.id}") { s -> onSave(cs.copy(from2 = s?.si)) }
+            }
+            Column(Modifier.weight(1f)) {
+                QuantityField("To", cs.to2?.let { Spec(it, unit) }, q, defaultUnit(key2, q, unitSet), ctx, "case_to2_${cs.id}") { s -> onSave(cs.copy(to2 = s?.si)) }
+            }
+        }
+        PlainNumber("Steps", cs.steps2.toDouble(), "case_steps2", hint = "4") { v ->
+            onSave(cs.copy(steps2 = (v ?: 4.0).toInt().coerceIn(1, CaseStudies.MAX_STEPS)))
+        }
+    }
+    TextButton(
+        onClick = { onSave(cs.copy(objectId2 = null, specKey2 = null, from2 = null, to2 = null)) },
+        modifier = Modifier.heightIn(min = 48.dp),
+    ) { Text("Remove the second variable") }
+}
+
 @Composable
 private fun NameField(cs: CaseStudy, onCommit: (String) -> Unit) {
     var text by remember(cs.id, cs.name) { mutableStateOf(cs.name) }
@@ -234,9 +287,12 @@ private fun ResultsTable(fs: Flowsheet, cs: CaseStudy, unitSet: UnitSet, ctx: Un
     val key = cs.specKey ?: return
     val xu = defaultUnit(key, SpecKey.quantity(key), unitSet)
     val units = cs.outputs.map { o -> fs.objects.firstOrNull { it.id == o.objectId }?.let { unitSet.unitFor(ResultKeys.quantityFor(it, o.key)) } }
+    val key2 = cs.specKey2?.takeIf { r.x2 != null }
+    val x2u = key2?.let { defaultUnit(it, SpecKey.quantity(it), unitSet) }
     val scroll = rememberScrollState()
     Column(Modifier.horizontalScroll(scroll)) {
         Row {
+            if (key2 != null && x2u != null) Cell("${SpecKey.label(key2)}, ${x2u.symbol}", header = true)
             Cell("${SpecKey.label(key)}, ${xu.symbol}", header = true)
             cs.outputs.forEachIndexed { i, o ->
                 val tag = fs.objects.firstOrNull { it.id == o.objectId }?.tag ?: "?"
@@ -245,6 +301,8 @@ private fun ResultsTable(fs: Flowsheet, cs: CaseStudy, unitSet: UnitSet, ctx: Un
         }
         r.x.forEachIndexed { k, x ->
             Row {
+                val v2 = r.x2?.getOrNull(k)
+                if (x2u != null) Cell(if (v2 == null) "—" else ValueFormat.number(x2u.fromSi(v2, ctx), x2u.decimals))
                 Cell(ValueFormat.number(xu.fromSi(x, ctx), xu.decimals))
                 cs.outputs.indices.forEach { i ->
                     val v = r.values.getOrNull(i)?.getOrNull(k)

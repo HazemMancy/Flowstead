@@ -14,6 +14,8 @@ import app.flowstead.core.api.ImportResult
 import app.flowstead.core.api.PhaseEnvelope
 import app.flowstead.core.api.PhaseEnvelopeRequest
 import app.flowstead.core.api.PropertyPackageInfo
+import app.flowstead.core.api.PvtRequest
+import app.flowstead.core.api.PvtResult
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.Hypothetical
@@ -62,9 +64,14 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
             engine.call("estimateHypotheticals", FlowsheetJson.encodeToJsonElement(ListSerializer(Hypothetical.serializer()), hypotheticals))
         }
 
-    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, flowsheet: Flowsheet, composition: Map<String, Double>): EngineResult<PhaseEnvelope> =
+    override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, request: PhaseEnvelopeRequest): EngineResult<PhaseEnvelope> =
         decode(PhaseEnvelope.serializer()) {
-            engine.call("phaseEnvelope", FlowsheetJson.encodeToJsonElement(PhaseEnvelopeRequest.serializer(), PhaseEnvelopeRequest(flowsheet, composition)))
+            engine.call("phaseEnvelope", FlowsheetJson.encodeToJsonElement(PhaseEnvelopeRequest.serializer(), request))
+        }
+
+    override suspend fun pvt(baseUrl: String, apiKey: String?, request: PvtRequest): EngineResult<PvtResult> =
+        decode(PvtResult.serializer()) {
+            engine.call("pvt", FlowsheetJson.encodeToJsonElement(PvtRequest.serializer(), request))
         }
 
     private suspend fun <T> decode(serializer: KSerializer<T>, block: suspend () -> kotlinx.serialization.json.JsonElement): EngineResult<T> =
