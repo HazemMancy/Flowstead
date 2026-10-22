@@ -96,6 +96,7 @@ public static class UnitChecks
             try
             {
                 double minDt = double.PositiveInfinity, at = 0, thAt = 0, tcAt = 0;
+                List<double> fractions = [], hot = [], cold = [];
                 for (var k = 0; k <= Zones; k++)
                 {
                     var f = (double)k / Zones; // from the hot inlet end
@@ -103,6 +104,22 @@ public static class UnitChecks
                     var tc = Flash(co, ci, f); // counter-current: the cold outlet is at the hot inlet end
                     if (!double.IsFinite(th) || !double.IsFinite(tc)) throw new InvalidOperationException();
                     if (th - tc < minDt) (minDt, at, thAt, tcAt) = (th - tc, f, th, tc);
+                    fractions.Add(f);
+                    hot.Add(th);
+                    cold.Add(tc);
+                }
+                // The T-Q diagram: heat flow along the exchanger, when DWSIM gave the duty.
+                if (r.Properties.TryGetValue("duty", out var duty) && double.IsFinite(duty))
+                {
+                    results[hx.Id] = r with
+                    {
+                        Profiles = new()
+                        {
+                            [ProfileKeys.HeatFlow] = fractions.Select(f => f * Math.Abs(duty)).ToList(),
+                            [ProfileKeys.HotTemperature] = hot,
+                            [ProfileKeys.ColdTemperature] = cold,
+                        },
+                    };
                 }
                 r.Properties["minimumApproach"] = minDt;
                 r.Properties["pinchLocation"] = at;

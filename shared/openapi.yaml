@@ -164,6 +164,41 @@ paths:
         "422": { description: "Invalid input (code invalid_hypothetical)", content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } } }
         "503": { $ref: "#/components/responses/EngineUnavailable" }
 
+  /phase-envelope:
+    post:
+      summary: Phase envelope of one composition with the flowsheet's package, compounds and options (D50).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flowsheet, composition]
+              properties:
+                flowsheet: { $ref: "schema/flowsheet.schema.json" }
+                composition: { type: object, description: Mole fractions by compound, additionalProperties: { type: number } }
+      responses:
+        "200":
+          description: Bubble and dew curves (K, Pa), with the critical point, cricondenbar and cricondentherm where found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bubbleTemperature: { type: array, items: { type: number } }
+                  bubblePressure: { type: array, items: { type: number } }
+                  dewTemperature: { type: array, items: { type: number } }
+                  dewPressure: { type: array, items: { type: number } }
+                  criticalTemperature: { type: number }
+                  criticalPressure: { type: number }
+                  cricondenbarTemperature: { type: number }
+                  cricondenbarPressure: { type: number }
+                  cricondenthermTemperature: { type: number }
+                  cricondenthermPressure: { type: number }
+                  warnings: { type: array, items: { type: string } }
+        "422": { description: "Invalid input (code invalid_envelope)", content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } } }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+
 components:
   securitySchemes:
     apiKey:
@@ -316,3 +351,15 @@ components:
                 type: object
                 description: Mole fractions by compound
                 additionalProperties: { type: number }
+        texts:
+          type: object
+          description: Text results by key (pipe flowRegime).
+          additionalProperties: { type: string }
+        profiles:
+          type: object
+          description: |
+            Profiles along the unit (D50), SI, every list the same length; the first key of each group is the x axis.
+            Heat exchanger: heatFlow (W from the hot inlet end), hotTemperature, coldTemperature.
+            Pipe: length (m from the inlet), pressure, temperature, liquidHoldup, velocity (mixture, m/s).
+            Column: stage (1 = top), temperature, pressure, vapourFlow, liquidFlow (leaving each stage, mol/s).
+          additionalProperties: { type: array, items: { type: number } }

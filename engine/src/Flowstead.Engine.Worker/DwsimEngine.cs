@@ -335,6 +335,35 @@ public sealed class DwsimEngine
     }
 
     /// <summary>The constants DWSIM's correlations give each hypothetical (HYSYS's "Estimate unknown properties").</summary>
+    /// <summary>
+    /// The phase envelope of one composition (D50) with the flowsheet's package, compounds and package options. Only
+    /// a single stream is built: no solve is needed, as the envelope depends on composition alone.
+    /// </summary>
+    public PhaseEnvelope PhaseEnvelope(PhaseEnvelopeRequest req)
+    {
+        var model = req.Flowsheet;
+        if (model.PropertyPackage is null) throw new InvalidDataException("Choose a fluid package first");
+        var x = req.Composition.Where(c => c.Value > 0 && double.IsFinite(c.Value)).ToDictionary();
+        if (x.Count == 0) throw new InvalidDataException("The composition is empty");
+        if (x.Keys.FirstOrDefault(c => !model.Compounds.Contains(c)) is { } unknown) throw new InvalidDataException($"{unknown} is not in the flowsheet's compounds");
+        var stream = new SimObject
+        {
+            Id = "envelope", Tag = "ENVELOPE", Type = ObjectType.MaterialStream,
+            Specs = new()
+            {
+                [SpecKeys.Temperature] = new Spec(298.15, "K"),
+                [SpecKeys.Pressure] = new Spec(101325, "Pa"),
+                [SpecKeys.MolarFlow] = new Spec(1, "mol/s"),
+            },
+            Composition = x,
+        };
+        var (fs, map) = Build(model with { Objects = [stream], Connections = [], Reactions = [] }, WaterMode.None);
+        var ms = (MaterialStream)map[stream.Id];
+        var pp = (PropertyPackage)fs.PropertyPackages.Values.First();
+        ms.PropertyPackage = pp;
+        return PhaseEnvelopes.Read(pp, ms);
+    }
+
     public List<HypotheticalProperties> EstimateHypotheticals(List<Hypothetical> hypotheticals)
     {
         var errors = new List<string>();

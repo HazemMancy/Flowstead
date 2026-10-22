@@ -55,7 +55,43 @@ public static class Pipes
             Status = ObjectStatus.Solved,
             Properties = props.Where(i => i.Item2 is { } v && double.IsFinite(v)).ToDictionary(i => i.Item1, i => i.Item2!.Value),
             Texts = regimes.Count > 0 ? new Dictionary<string, string> { ["flowRegime"] = string.Join(" → ", regimes) } : null,
+            Profiles = Profile(pipe),
         };
+    }
+
+    /// <summary>
+    /// Pressure, temperature, holdup and velocity at each increment boundary, against distance from the inlet.
+    /// A record is kept only when DWSIM gave both its pressure and temperature; holdup and velocity are those
+    /// of the same records (a section's last record is the next one's first, so it is taken once).
+    /// </summary>
+    private static Dictionary<string, List<double>>? Profile(Pipe pipe)
+    {
+        List<double> x = [], p = [], t = [], holdup = [], v = [];
+        var start = 0.0;
+        foreach (var s in pipe.Profile.Sections.Values)
+        {
+            var length = s.Comprimento * s.Quantidade;
+            var n = s.Results.Count;
+            for (var k = 0; k < n; k++)
+            {
+                var r = s.Results[k];
+                var at = start + (n > 1 ? length * k / (n - 1) : 0);
+                if (x.Count > 0 && Math.Abs(at - x[^1]) < 1e-9) continue;
+                if (r.Pressure_Initial is not { } pk || r.Temperature_Initial is not { } tk || !double.IsFinite(pk) || !double.IsFinite(tk)) continue;
+                x.Add(at);
+                p.Add(pk);
+                t.Add(tk);
+                holdup.Add(r.LiquidHoldup is { } h && double.IsFinite(h) ? h : double.NaN);
+                v.Add(Point(r)?.Velocity ?? double.NaN);
+            }
+            start += length;
+        }
+        if (x.Count < 2) return null;
+        var profile = new Dictionary<string, List<double>> { [ProfileKeys.Length] = x, [ProfileKeys.Pressure] = p, [ProfileKeys.Temperature] = t };
+        // A series with a gap would put a guess on the plot; it is left out instead.
+        if (holdup.All(double.IsFinite)) profile[ProfileKeys.LiquidHoldup] = holdup;
+        if (v.All(double.IsFinite)) profile[ProfileKeys.Velocity] = v;
+        return profile;
     }
 
     private readonly record struct ProfilePoint(double Gas, double Liquid, double Velocity, double Density, double MomentumFlux, double Mach);

@@ -126,6 +126,10 @@ api.MapPost("/import", async (DwsimFile file, EngineService e, CancellationToken
 api.MapPost("/hypotheticals/estimate", async (List<Hypothetical> hypotheticals, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.EstimateHypotheticalsAsync(hypotheticals, ct), "invalid_hypothetical"));
 
+// Phase envelope of one composition (D50).
+api.MapPost("/phase-envelope", async (PhaseEnvelopeRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.PhaseEnvelopeAsync(req, ct), "invalid_envelope"));
+
 app.Run();
 return 0;
 

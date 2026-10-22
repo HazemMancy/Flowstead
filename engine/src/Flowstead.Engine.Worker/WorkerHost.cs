@@ -54,6 +54,7 @@ public sealed class WorkerHost(TextWriter output)
         WorkerMethods.ExportDwsim => JsonSerializer.SerializeToNode(engine.ExportDwsim(Params<Flowsheet>(req)), Json.Options),
         WorkerMethods.ImportDwsim => JsonSerializer.SerializeToNode(engine.ImportDwsim(Params<DwsimFile>(req)), Json.Options),
         WorkerMethods.EstimateHypotheticals => JsonSerializer.SerializeToNode(engine.EstimateHypotheticals(Params<List<Hypothetical>>(req)), Json.Options),
+        WorkerMethods.PhaseEnvelope => JsonSerializer.SerializeToNode(engine.PhaseEnvelope(Params<PhaseEnvelopeRequest>(req)), Json.Options),
         WorkerMethods.TestSleep when TestHooks => Sleep(req.Params!.GetValue<int>()),
         _ => throw new InvalidOperationException($"Unknown method '{req.Method}'"),
     };

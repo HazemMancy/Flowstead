@@ -41,6 +41,10 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<List<HypotheticalProperties>> EstimateHypotheticalsAsync(List<Hypothetical> hypotheticals, CancellationToken ct) =>
         pool.CallAsync<List<HypotheticalProperties>>(WorkerMethods.EstimateHypotheticals, hypotheticals, LookupTimeout, ct);
 
+    /// <summary>A phase envelope traces hundreds of flashes, so it gets the solve timeout.</summary>
+    public Task<PhaseEnvelope> PhaseEnvelopeAsync(PhaseEnvelopeRequest req, CancellationToken ct) =>
+        pool.CallAsync<PhaseEnvelope>(WorkerMethods.PhaseEnvelope, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+
     public Task<ImportResult> ImportDwsimAsync(DwsimFile file, CancellationToken ct) =>
         pool.CallAsync<ImportResult>(WorkerMethods.ImportDwsim, file, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 

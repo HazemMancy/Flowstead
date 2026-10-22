@@ -51,6 +51,52 @@ public sealed record ObjectResult
     public Dictionary<string, PhaseResult>? Phases { get; init; }
     /// <summary>Text results keyed by property id (pipe: "flowRegime"); absent when there are none.</summary>
     public Dictionary<string, string>? Texts { get; init; }
+    /// <summary>
+    /// Profiles along the unit, SI, every list the same length (see <see cref="ProfileKeys"/>): heat exchanger
+    /// zones, pipe increments, column stages. Absent when the unit has none.
+    /// </summary>
+    public Dictionary<string, List<double>>? Profiles { get; init; }
+}
+
+/// <summary>Profile series names. The first of each group is the x axis.</summary>
+public static class ProfileKeys
+{
+    // Heat exchanger, from the hot inlet end: heat transferred so far (W), then each side's temperature (K).
+    public const string HeatFlow = "heatFlow";
+    public const string HotTemperature = "hotTemperature";
+    public const string ColdTemperature = "coldTemperature";
+    // Pipe, from the inlet: distance (m), pressure (Pa), temperature (K), liquid holdup (fraction), mixture velocity (m/s).
+    public const string Length = "length";
+    public const string Pressure = "pressure";
+    public const string Temperature = "temperature";
+    public const string LiquidHoldup = "liquidHoldup";
+    public const string Velocity = "velocity";
+    // Column, top to bottom (condenser first): stage number, temperature (K), pressure (Pa), vapour and liquid leaving (mol/s).
+    public const string Stage = "stage";
+    public const string VapourFlow = "vapourFlow";
+    public const string LiquidFlow = "liquidFlow";
+}
+
+/// <summary>Phase envelope of one composition: the flowsheet gives the package, compounds and settings.</summary>
+public sealed record PhaseEnvelopeRequest(Flowsheet Flowsheet, Dictionary<string, double> Composition);
+
+/// <summary>
+/// DWSIM's phase envelope (K, Pa). Bubble and dew curves run from low pressure up towards the critical point;
+/// the critical point, cricondenbar and cricondentherm are absent when DWSIM did not find them.
+/// </summary>
+public sealed record PhaseEnvelope
+{
+    public List<double> BubbleTemperature { get; init; } = [];
+    public List<double> BubblePressure { get; init; } = [];
+    public List<double> DewTemperature { get; init; } = [];
+    public List<double> DewPressure { get; init; } = [];
+    public double? CriticalTemperature { get; init; }
+    public double? CriticalPressure { get; init; }
+    public double? CricondenbarTemperature { get; init; }
+    public double? CricondenbarPressure { get; init; }
+    public double? CricondenthermTemperature { get; init; }
+    public double? CricondenthermPressure { get; init; }
+    public List<string> Warnings { get; init; } = [];
 }
 
 public sealed record PhaseResult
@@ -105,6 +151,7 @@ public static class WorkerMethods
     public const string CompoundCatalogue = "compoundCatalogue";
     public const string ImportDwsim = "importDwsim";
     public const string EstimateHypotheticals = "estimateHypotheticals";
+    public const string PhaseEnvelope = "phaseEnvelope";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

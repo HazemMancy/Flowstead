@@ -329,6 +329,28 @@ public static class Columns
                 Put("reboilerDuty", sc.m_Qb * 1000.0);
                 break;
         }
-        return new ObjectResult { Status = ObjectStatus.Solved, Properties = props };
+        return new ObjectResult { Status = ObjectStatus.Solved, Properties = props, Profiles = so is Column c ? Profile(c) : null };
+    }
+
+    /// <summary>
+    /// Stage by stage, top (condenser, when there is one) to bottom, as DWSIM solved them. Flows are the solver's
+    /// final vapour and liquid leaving each stage (its Vf and Lf, mol/s); the Stage objects' own flows stay empty.
+    /// </summary>
+    private static Dictionary<string, List<double>>? Profile(Column c)
+    {
+        var stages = c.Stages;
+        if (stages.Count < 2) return null;
+        var t = stages.Select(s => s.T).ToList();
+        var p = stages.Select(s => s.P).ToList();
+        if (!t.Concat(p).All(double.IsFinite)) return null;
+        var profile = new Dictionary<string, List<double>>
+        {
+            [ProfileKeys.Stage] = Enumerable.Range(1, stages.Count).Select(i => (double)i).ToList(),
+            [ProfileKeys.Temperature] = t,
+            [ProfileKeys.Pressure] = p,
+        };
+        if (c.Vf is { } v && v.Length == stages.Count && v.All(double.IsFinite)) profile[ProfileKeys.VapourFlow] = [.. v];
+        if (c.Lf is { } l && l.Length == stages.Count && l.All(double.IsFinite)) profile[ProfileKeys.LiquidFlow] = [.. l];
+        return profile;
     }
 }
