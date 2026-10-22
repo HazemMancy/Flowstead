@@ -370,6 +370,13 @@ public static class Validator
             case ObjectType.AirCooler:
                 OneOf("outlet temperature or duty", SpecKeys.OutletTemperature, SpecKeys.Duty);
                 break;
+            case ObjectType.Pump when o.Curve is not null:
+            case ObjectType.Compressor when o.Curve is not null:
+                // On its curve, the machine's head (so its outlet pressure) comes from the curve (D48).
+                if (new[] { SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.PressureRatio }.Any(s.ContainsKey))
+                    err($"{o.Tag}: over-specified — it runs on its curve, which sets the outlet pressure; remove the outlet pressure or pressure rise.", o.Id);
+                ValidateCurve(o, o.Curve, err);
+                break;
             case ObjectType.Pump:
                 OneOf("outlet pressure or pressure rise", SpecKeys.OutletPressure, SpecKeys.PressureRise);
                 break;
@@ -470,5 +477,18 @@ public static class Validator
             if (sum <= 0) err($"{o.Tag}: composition is all zero.", o.Id);
             else if (Math.Abs(sum - 1.0) > 1e-6) err($"{o.Tag}: mole fractions add up to {sum:0.######}, not 1.", o.Id);
         }
+    }
+
+    private static void ValidateCurve(SimObject o, PerformanceCurve curve, Action<string, string?> err)
+    {
+        var p = curve.Points;
+        if (p.Count < 2) { err($"{o.Tag}: the performance curve needs at least two points.", o.Id); return; }
+        if (p.Any(x => !(x.Flow > 0) || !(x.Head > 0) || !double.IsFinite(x.Flow) || !double.IsFinite(x.Head)))
+            err($"{o.Tag}: every curve point needs a positive flow and head.", o.Id);
+        if (p.Select(x => x.Flow).Distinct().Count() != p.Count) err($"{o.Tag}: two curve points have the same flow.", o.Id);
+        if (p.Any(x => x.Efficiency is not null) && p.Any(x => x.Efficiency is not (> 0 and <= 1)))
+            err($"{o.Tag}: give the efficiency at every curve point (above 0, up to 100 %), or at none.", o.Id);
+        if (p.Any(x => x.Npshr is not null) && (o.Type != ObjectType.Pump || p.Any(x => x.Npshr is not (>= 0))))
+            err($"{o.Tag}: NPSH required belongs to pumps; give it at every point (0 or more), or at none.", o.Id);
     }
 }

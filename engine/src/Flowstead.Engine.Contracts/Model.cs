@@ -98,7 +98,25 @@ public sealed record SimObject
     public Dictionary<string, double> Composition { get; init; } = [];
     /// <summary>References to other objects (Adjust: manipulated/controlled object and property).</summary>
     public Dictionary<string, string> Refs { get; init; } = [];
+    /// <summary>Pump or compressor performance curve; when given, the machine runs on it (D48).</summary>
+    public PerformanceCurve? Curve { get; init; }
 }
+
+/// <summary>
+/// A pump or compressor curve at its rated speed, as the vendor gives it: points of actual inlet volumetric flow
+/// against head, with efficiency (and NPSH required for a pump) where known. The lowest flow is the compressor's
+/// surge limit and the highest its stonewall; for a pump, the minimum and the end-of-curve (run-out) flows.
+/// </summary>
+public sealed record PerformanceCurve
+{
+    public List<CurvePoint> Points { get; init; } = [];
+}
+
+/// <param name="Flow">Actual volumetric flow at the inlet, m³/s.</param>
+/// <param name="Head">Head, m (compressors: adiabatic head).</param>
+/// <param name="Efficiency">Adiabatic efficiency as a fraction (0–1), or null.</param>
+/// <param name="Npshr">Pumps: NPSH required, m, or null.</param>
+public sealed record CurvePoint(double Flow, double Head, double? Efficiency = null, double? Npshr = null);
 
 /// <summary>Keys of <see cref="SimObject.Refs"/> and specs used by an Adjust.</summary>
 public static class AdjustKeys

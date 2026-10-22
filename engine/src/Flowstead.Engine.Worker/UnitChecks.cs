@@ -164,6 +164,16 @@ public static class UnitChecks
                 else if (i.Vf <= 0) Err("the feed is all liquid; a compressor needs gas. Use a pump.");
                 else if (i.Vf < 1) Warn($"liquid in the feed ({Pct(i.LiquidMass)} of it by mass); a compressor needs dry gas. Put a separator (scrubber) upstream.");
                 if (x.Vf < 1 && x.P > i.P && i.Vf > 0) Warn($"liquid forms during compression (outlet {Pct(x.LiquidMass)} liquid by mass).");
+                if (o.Curve is { Points.Count: >= 2 } curve && double.IsFinite(i.Q))
+                {
+                    var p = Curves.Sorted(curve);
+                    double surge = p[0].Flow, stonewall = p[^1].Flow;
+                    r.Properties["inletVolumeFlow"] = i.Q;
+                    r.Properties["surgeMargin"] = (i.Q - surge) / surge;
+                    if (i.Q < surge) Err($"surge: the inlet flow ({M3h(i.Q)}) is below the surge limit ({M3h(surge)}, the lowest flow on its curve). Recycle gas through an anti-surge valve or raise the throughput.");
+                    else if (i.Q > stonewall) Err($"stonewall: the inlet flow ({M3h(i.Q)}) is beyond the end of its curve ({M3h(stonewall)}); the machine cannot pass it.");
+                    else if (i.Q < surge * 1.1) Warn($"only {(i.Q - surge) / surge:P1} above the surge limit ({M3h(surge)}); 10 % is the usual minimum margin.");
+                }
                 break;
             }
             case ObjectType.Expander:
@@ -184,8 +194,28 @@ public static class UnitChecks
                 if (x.P <= i.P) Err($"the outlet pressure ({Bar(x.P)}) is not above the inlet ({Bar(i.P)}); a pump raises pressure. Use a valve to lower it.");
                 else if (i.Vf > PumpVapourLimit) Err($"the feed is {Pct(i.Vf)} vapour (molar); a pump needs liquid. Use a compressor, or cool or pressurise the feed first.");
                 else if (i.Vf > 0) Warn($"vapour in the feed ({Pct(i.Vf, 2)} molar); the pump will cavitate. Subcool the feed or raise its pressure.");
-                else if (r.Properties.TryGetValue("npshAvailable", out var npsh) && npsh < NpshWarning)
-                    Warn($"NPSH available is only {npsh:0.00} m of liquid (feed {Bar(i.P)}, bubble point {Bar(r.Properties["feedBubblePressure"])}); the pump will cavitate unless it sits well below the source or the feed is subcooled.");
+                else
+                {
+                    var hasNpsh = r.Properties.TryGetValue("npshAvailable", out var npsh);
+                    double? npshr = null;
+                    if (o.Curve is { Points.Count: >= 2 } curve && double.IsFinite(i.Q))
+                    {
+                        var p = Curves.Sorted(curve);
+                        r.Properties["inletVolumeFlow"] = i.Q;
+                        if (i.Q > p[^1].Flow) Err($"run-out: the flow ({M3h(i.Q)}) is beyond the end of its curve ({M3h(p[^1].Flow)}); the pump cannot deliver it.");
+                        else if (i.Q < p[0].Flow) Warn($"the flow ({M3h(i.Q)}) is below the lowest on its curve ({M3h(p[0].Flow)}); below its minimum continuous flow a pump overheats. Add a minimum-flow bypass.");
+                        npshr = Curves.At(curve, i.Q, x => x.Npshr);
+                        if (npshr is { } req) r.Properties["npshRequired"] = req;
+                    }
+                    if (hasNpsh && npshr is { } need && npsh < need)
+                        Err($"it cavitates: NPSH available is {npsh:0.00} m but the pump needs {need:0.00} m at this flow. Raise the suction pressure (or the vessel), subcool the feed, or choose a pump with a lower NPSH required.");
+                    else if (hasNpsh && npshr is { } need2 && npsh < need2 + 1.0)
+                        Warn($"NPSH margin is only {npsh - need2:0.00} m (available {npsh:0.00} m, required {need2:0.00} m); 1 m or more is the usual minimum.");
+                    else if (hasNpsh && npshr is null && npsh < NpshWarning)
+                        Warn($"NPSH available is only {npsh:0.00} m of liquid (feed {Bar(i.P)}, bubble point {Bar(r.Properties["feedBubblePressure"])}); the pump will cavitate unless it sits well below the source or the feed is subcooled.");
+                }
+                if (r.Properties.TryGetValue("pressureRise", out var rise) && results.GetValueOrDefault(Inlet(model, o.Id, 0)!)?.Phases?.GetValueOrDefault("overall")?.Properties.GetValueOrDefault("density", double.NaN) is > 0 and var rhoIn)
+                    r.Properties["head"] = rise / (rhoIn * G);
                 break;
             }
             case ObjectType.Valve:
@@ -294,11 +324,12 @@ public static class UnitChecks
         model.Connections.FirstOrDefault(c => c.FromObject == unit && c.FromPort == port)?.ToObject;
 
     private static string Bar(double pa) => $"{pa / 1e5:0.###} bar";
+    private static string M3h(double m3s) => $"{m3s * 3600:0.##} m³/h";
     private static string K(double k) => $"{k - 273.15:0.##} °C";
     private static string Pct(double f, int decimals = 1) => (f * 100).ToString("0." + new string('#', decimals)) + " %";
 
     /// <summary>The parts of a solved material stream's result the checks read.</summary>
-    private sealed record Stream(double T, double P, double Vf, double LiquidMass)
+    private sealed record Stream(double T, double P, double Vf, double LiquidMass, double Q)
     {
         public static Stream? Of(Dictionary<string, ObjectResult> results, string? id)
         {
@@ -308,7 +339,8 @@ public static class UnitChecks
             var total = r.Properties.GetValueOrDefault("massFlow", double.NaN);
             var vapour = r.Phases?.GetValueOrDefault("vapour")?.Properties.GetValueOrDefault("massFlow", 0.0) ?? 0.0;
             var liquid = total > 0 ? Math.Clamp(1 - vapour / total, 0, 1) : double.NaN;
-            return double.IsFinite(vf) ? new Stream(t, p, vf, liquid) : null;
+            var q = r.Phases?.GetValueOrDefault("overall")?.Properties.GetValueOrDefault("volumeFlow", double.NaN) ?? double.NaN;
+            return double.IsFinite(vf) ? new Stream(t, p, vf, liquid, q) : null;
         }
     }
 }

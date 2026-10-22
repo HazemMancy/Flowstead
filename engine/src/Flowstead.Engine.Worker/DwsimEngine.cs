@@ -152,11 +152,11 @@ public sealed class DwsimEngine
         }
 
         var adjust = model.Objects.FirstOrDefault(o => o.Type == ObjectType.Adjust);
-        if (adjust is null) return SolveCore(model, messages, sw);
+        if (adjust is null) return CurveSolver.Solve(model, m => SolveCore(m, [.. messages], sw));
 
         // Adjust: DWSIM never sees the Adjust object; each iteration is a full solve of the rest.
         var withoutAdjust = model with { Objects = model.Objects.Where(o => o.Id != adjust.Id).ToList() };
-        var outcome = AdjustSolver.Solve(withoutAdjust, adjust, m => SolveCore(m, [], Stopwatch.StartNew()));
+        var outcome = AdjustSolver.Solve(withoutAdjust, adjust, m => CurveSolver.Solve(m, mm => SolveCore(mm, [], Stopwatch.StartNew())));
         var objects = new Dictionary<string, ObjectResult>(outcome.Result.Objects) { [adjust.Id] = outcome.AdjustResult };
         var all = messages.Concat(outcome.Result.Messages).ToList();
         if (outcome.AdjustResult.Status == ObjectStatus.Error)

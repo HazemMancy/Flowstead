@@ -246,4 +246,93 @@ public sealed class UnitChecksTests(EngineFixture engine)
         Assert.InRange(e["minimumApproach"], 30, 60);
         Assert.True(e["minimumApproach"] < Math.Min(e["hotOutletTemperature"] - 303.15, 423.15 - e["coldOutletTemperature"]));
     }
+
+    private static readonly PerformanceCurve PumpCurve = new()
+    {
+        Points =
+        [
+            new(0.01, 80, 0.55, 2.0), new(0.02, 75, 0.70, 3.0), new(0.03, 65, 0.75, 4.5), new(0.04, 50, 0.68, 7.0),
+        ],
+    };
+
+    private async Task<SolveResult> OnCurve(SimObject feed, ObjectType type, PerformanceCurve curve, string package)
+    {
+        var fs = new Flowsheet
+        {
+            PropertyPackage = package,
+            Compounds = feed.Composition.Keys.ToList(),
+            Objects = [feed, new SimObject { Id = "u", Tag = "U-100", Type = type, Curve = curve }, Product("o")],
+            Connections = [new Connection(feed.Id, 0, "u", 0), new Connection("u", 0, "o", 0)],
+        };
+        return await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+    }
+
+    [Fact]
+    public async Task PumpRunsOnItsCurve()
+    {
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        // 100 m³/h (0.0278 m³/s): head 75 − 0.78 × 10 = 67.2 m and efficiency 0.70 + 0.78 × 0.05 = 0.739 (linear on the curve).
+        var r = await OnCurve(Feed("f", water, 300, 2e5, 5540), ObjectType.Pump, PumpCurve, "Steam Tables (IAPWS-IF97)");
+        Assert.Equal(SolveStatus.Converged, r.Status);
+        var p = r.Objects["u"].Properties;
+        Assert.Equal(67.2, p["head"], 0.1);
+        Assert.Equal(0.739, p["efficiency"], 0.002);
+        // Power = Q ΔP / η, and it heats the liquid (DWSIM's own curve mode reported zero).
+        Assert.Equal(p["inletVolumeFlow"] * p["pressureRise"] / p["efficiency"], p["power"], p["power"] * 0.01);
+        Assert.True(r.Objects["o"].Properties["temperature"] > 300);
+        Assert.Equal(4.17, p["npshRequired"], 0.02);
+
+        var runout = await OnCurve(Feed("f", water, 300, 2e5, 10800), ObjectType.Pump, PumpCurve, "Steam Tables (IAPWS-IF97)");
+        Assert.StartsWith("Run-out", runout.Objects["u"].Error);
+    }
+
+    [Fact]
+    public async Task PumpWithTooLittleNpshCavitates()
+    {
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        // Water at 90 °C and 0.75 bar: Pv 0.70 bar leaves about 0.5 m, against 4.2 m required at 100 m³/h.
+        var r = await OnCurve(Feed("f", water, 363.15, 0.75e5, 5440), ObjectType.Pump, PumpCurve, "Steam Tables (IAPWS-IF97)");
+        Assert.Equal(ObjectStatus.Error, r.Objects["u"].Status);
+        Assert.StartsWith("It cavitates", r.Objects["u"].Error);
+    }
+
+    [Fact]
+    public async Task CompressorRunsOnItsCurveAndSurgesBelowIt()
+    {
+        var methane = new Dictionary<string, double> { ["Methane"] = 1.0 };
+        var curve = new PerformanceCurve
+        {
+            Points = [new(0.08, 9000, 0.70), new(0.10, 8800, 0.76), new(0.12, 8400, 0.78), new(0.14, 7800, 0.76), new(0.16, 7000, 0.70)],
+        };
+        var r = await OnCurve(Feed("f", methane, 300, 20e5, 360), ObjectType.Compressor, curve, "Peng-Robinson (PR)");
+        Assert.Equal(SolveStatus.Converged, r.Status);
+        var c = r.Objects["u"].Properties;
+        Assert.Equal(c["curveHead"], c["adiabaticHead"], c["curveHead"] * 1e-3);
+        var q = c["inletVolumeFlow"];
+        var (lo, hi) = (curve.Points.Last(p => p.Flow <= q), curve.Points.First(p => p.Flow >= q));
+        Assert.Equal(lo.Head + (q - lo.Flow) / (hi.Flow - lo.Flow) * (hi.Head - lo.Head), c["curveHead"], 1e-3);
+
+        var surge = await OnCurve(Feed("f", methane, 300, 20e5, 180), ObjectType.Compressor, curve, "Peng-Robinson (PR)");
+        Assert.StartsWith("Surge", surge.Objects["u"].Error);
+    }
+
+    [Fact]
+    public async Task CurveAndOutletPressureTogetherAreOverSpecified()
+    {
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Steam Tables (IAPWS-IF97)",
+            Compounds = ["Water"],
+            Objects =
+            [
+                Feed("f", water, 300, 2e5, 5540),
+                new SimObject { Id = "u", Tag = "P-100", Type = ObjectType.Pump, Curve = PumpCurve, Specs = new() { [SpecKeys.OutletPressure] = new Spec(10e5, "Pa") } },
+                Product("o"),
+            ],
+            Connections = [new Connection("f", 0, "u", 0), new Connection("u", 0, "o", 0)],
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.Equal(SolveStatus.Invalid, r.Status);
+    }
 }
