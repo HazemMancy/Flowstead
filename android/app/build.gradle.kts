@@ -18,9 +18,10 @@ android {
     namespace = "app.flowstead"
     compileSdk = 37
 
-    // Shipped from their single sources: the privacy policy (shown under About) and the compound
-    // library built from DWSIM's databases (engine/tools/compounds/build_catalogue.py).
+    // Shipped from their single sources: the privacy policy and the feature overview (shown under About)
+    // and the compound library built from DWSIM's databases (engine/tools/compounds/build_catalogue.py).
     sourceSets.getByName("main").assets.srcDir("../../docs/privacy")
+    sourceSets.getByName("main").assets.srcDir("../../docs/features")
     sourceSets.getByName("main").assets.srcDir("../../shared/compounds")
     if (localEngine) {
         sourceSets.getByName("main").assets.srcDir(localEngineDir.resolve("out/assets"))

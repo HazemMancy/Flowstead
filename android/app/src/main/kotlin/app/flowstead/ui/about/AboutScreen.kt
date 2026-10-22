@@ -37,6 +37,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.flowstead.BuildConfig
 import app.flowstead.ui.components.BackButton
@@ -48,6 +53,9 @@ import kotlinx.coroutines.withContext
 
 /** Bundled from docs/privacy/ (see app/build.gradle.kts). */
 const val PRIVACY_ASSET = "privacy-policy.md"
+
+/** Bundled from docs/features/: what Flowstead adds to DWSIM, what works like HYSYS, and where it differs. */
+const val FEATURES_ASSET = "flowstead-features.md"
 
 /** Credits shown under About and in Settings. */
 object Credits {
@@ -97,6 +105,21 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
             }
             Text("Steady-state process simulation, in your pocket.", style = MaterialTheme.typography.bodyLarge)
             DeveloperLine()
+            Column(
+                Modifier
+                    .clickable(role = Role.Button, onClickLabel = "Read what Flowstead adds") { onOpenLicense("What Flowstead adds", FEATURES_ASSET) }
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .padding(vertical = 6.dp)
+                    .testTag("features"),
+            ) {
+                Text("What Flowstead adds", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
+                Text(
+                    "Beyond the DWSIM engine, what works like HYSYS, and where it still differs. Tap to read.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 "Powered by DWSIM",
                 style = MaterialTheme.typography.titleMedium,
@@ -174,16 +197,20 @@ fun LicenseTextScreen(title: String, asset: String, onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         SelectionContainer {
-            Text(
-                text,
-                style = NumberStyles.tag,
-                modifier = Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            )
+            if (asset.endsWith(".md")) {
+                MarkdownText(text, Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp))
+            } else {
+                Text(
+                    text,
+                    style = NumberStyles.tag,
+                    modifier = Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+                )
+            }
         }
     }
 }
 
-/** "Developed by Hazem ElMancy, process engineer." with a LinkedIn icon that opens his profile. */
+/** "Developed by Hazem ElMancy, process engineer." with a LinkedIn icon that opens the developer's profile. */
 @Composable
 fun DeveloperLine(modifier: Modifier = Modifier) {
     val uri = LocalUriHandler.current
@@ -196,5 +223,41 @@ fun DeveloperLine(modifier: Modifier = Modifier) {
                 modifier = Modifier.size(24.dp),
             )
         }
+    }
+}
+
+/**
+ * The few Markdown forms the bundled documents use: "#" and "##" headings, "- " bullets, **bold** and `code`, and
+ * paragraphs separated by blank lines. Anything else shows as plain text.
+ */
+@Composable
+private fun MarkdownText(markdown: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (block in markdown.lines()) {
+            val line = block.trimEnd()
+            when {
+                line.isBlank() -> Spacer(Modifier.height(4.dp))
+                line.startsWith("# ") -> Text(inline(line.removePrefix("# ")), style = MaterialTheme.typography.headlineSmall)
+                line.startsWith("## ") -> Text(
+                    inline(line.removePrefix("## ")),
+                    style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                line.startsWith("### ") -> Text(inline(line.removePrefix("### ")), style = MaterialTheme.typography.titleSmall)
+                line.trimStart().startsWith("- ") -> Row {
+                    Text("•", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 8.dp))
+                    Text(inline(line.trimStart().removePrefix("- ")), style = MaterialTheme.typography.bodyMedium)
+                }
+                else -> Text(inline(line), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+/** **bold** spans become bold; `code` loses its backticks. */
+private fun inline(text: String): AnnotatedString = buildAnnotatedString {
+    val parts = text.replace("`", "").split("**")
+    parts.forEachIndexed { i, part ->
+        if (i % 2 == 1) withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(part) } else append(part)
     }
 }

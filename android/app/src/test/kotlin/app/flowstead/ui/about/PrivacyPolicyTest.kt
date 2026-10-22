@@ -20,4 +20,13 @@ class PrivacyPolicyTest {
         assertTrue(text.startsWith("# Flowstead privacy policy"))
         assertTrue("No analytics" in text)
     }
+
+    @Test
+    fun featureOverviewIsBundledFromDocs() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val text = context.assets.open(FEATURES_ASSET).bufferedReader().use { it.readText() }
+        assertTrue("## What Flowstead adds to the DWSIM engine" in text)
+        assertTrue("## Works like HYSYS" in text)
+        assertTrue("## Where Flowstead still differs from HYSYS" in text)
+    }
 }
