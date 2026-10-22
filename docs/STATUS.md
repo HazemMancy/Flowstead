@@ -130,6 +130,7 @@ _Last updated: 2026-10-20_
 - **1.3.0 stream results (D38):** HYSYS workbook layout by phase (Overall / Vapour / Liquid / Aqueous) on the Results screen, in exports and the H&MB; molar enthalpy, std ideal liquid volume flow and std gas flow added. Per-phase kinematic viscosity, Z, Cp, Cp/Cv, thermal conductivity, surface tension and entropy; optional COSTALD liquid density; default liquid densities of mixtures mixed by mass instead of mole fraction (D39).
 - **1.3.1 (D40):** dense-gas splits into two copies of one fluid are reported as one phase (as HYSYS); near-critical liquids get the EOS density where Rackett/COSTALD have none, so densities no longer read 0. Optional plain-EOS (no Peneloux shift) densities, as HYSYS (D41).
 - **1.3.2 (D42):** each stream editor shows its full workbook and phase compositions; each unit editor shows all its results and a worksheet of its connected streams.
+- **1.3.2 (D43):** in-app updates: background download, SHA-256 check, Android install prompt; browser as fallback.
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 

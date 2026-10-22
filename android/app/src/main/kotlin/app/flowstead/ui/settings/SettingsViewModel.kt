@@ -4,6 +4,7 @@
  */
 package app.flowstead.ui.settings
 
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.flowstead.BuildConfig
@@ -19,6 +20,8 @@ import app.flowstead.data.settings.EngineUrl
 import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.EngineMode
 import app.flowstead.data.settings.SettingsRepository
+import app.flowstead.data.update.AppUpdater
+import app.flowstead.data.update.InstallState
 import app.flowstead.data.update.UpdateChecker
 import app.flowstead.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,6 +57,7 @@ data class SettingsUiState(
     val patmError: String? = null,
     val connection: ConnectionState = ConnectionState.Idle,
     val update: UpdateState = UpdateState.Idle,
+    val install: InstallState = InstallState.Idle,
 )
 
 @HiltViewModel
@@ -61,6 +65,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val secrets: SecretStore,
     private val engine: EngineClient,
+    private val updater: AppUpdater,
     private val updates: UpdateChecker,
 ) : ViewModel() {
 
@@ -70,8 +75,9 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.settings,
         secrets.hasApiKey,
         transient,
-    ) { settings, hasKey, t ->
-        t.copy(loaded = true, settings = settings, hasApiKey = hasKey)
+        updater.state,
+    ) { settings, hasKey, t, install ->
+        t.copy(loaded = true, settings = settings, hasApiKey = hasKey, install = install)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     /** Returns true when the URL was valid and saved. */
@@ -129,6 +135,13 @@ class SettingsViewModel @Inject constructor(
             it.copy(update = r.fold({ c -> UpdateState.Done(c) }, { e -> UpdateState.Failed(e.message ?: "No connection") }))
         }
     }
+
+    /** Downloads the release in the background, verifies it and opens Android's install prompt. */
+    fun installUpdate(update: UpdateCheck.Available) = updater.start(update)
+
+    fun retryInstall() = updater.install()
+
+    fun installPermissionSettings(): Intent = updater.permissionSettings()
 
     fun selectPreset(preset: UnitSet) = viewModelScope.launch { settingsRepository.setUnitSet(preset) }
 

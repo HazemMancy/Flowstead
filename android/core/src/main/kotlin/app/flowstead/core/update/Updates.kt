@@ -23,8 +23,11 @@ data class GithubAsset(val name: String, @SerialName("browser_download_url") val
 
 sealed interface UpdateCheck {
     data class UpToDate(val latest: String) : UpdateCheck
-    /** [apkUrl] is the release's APK, null if the release has none (then [pageUrl] only). */
-    data class Available(val version: String, val pageUrl: String, val apkUrl: String?) : UpdateCheck
+    /**
+     * [apkUrl] is the release's APK, null if the release has none (then [pageUrl] only); [sha256Url] its
+     * published SHA-256, which the in-app installer checks before handing the file to Android.
+     */
+    data class Available(val version: String, val pageUrl: String, val apkUrl: String?, val sha256Url: String? = null) : UpdateCheck
 }
 
 /** Updates come from the project's GitHub releases (the app isn't on a store yet; decision D35). */
@@ -40,8 +43,13 @@ object Updates {
         val latest = release.tagName.removePrefix("v")
         if (release.draft || release.prerelease || compare(latest, installed) <= 0) return UpdateCheck.UpToDate(latest)
         val apk = release.assets.firstOrNull { it.name.endsWith(".apk") && !it.name.contains("debug") }
-        return UpdateCheck.Available(latest, release.htmlUrl, apk?.downloadUrl)
+        val sha = apk?.let { a -> release.assets.firstOrNull { it.name == a.name + ".sha256" } }
+        return UpdateCheck.Available(latest, release.htmlUrl, apk?.downloadUrl, sha?.downloadUrl)
     }
+
+    /** The hash in a `.sha256` file ("<64 hex>  flowstead-v1.3.2.apk", as `sha256sum` writes it), lower case; null if there is none. */
+    fun parseSha256(text: String): String? =
+        text.trim().split(Regex("\\s+")).firstOrNull()?.lowercase()?.takeIf { it.matches(Regex("[0-9a-f]{64}")) }
 
     /** Compares dotted versions numerically ("1.10.0" > "1.9.2"); a suffix such as "-beta" or " (on device)" is ignored. */
     fun compare(a: String, b: String): Int {

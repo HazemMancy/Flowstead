@@ -14,7 +14,8 @@ class UpdatesTest {
         {"tag_name":"v1.1.0","html_url":"https://github.com/HazemMancy/Flowstead/releases/tag/v1.1.0","draft":false,
          "prerelease":false,"name":"Flowstead v1.1.0","assets":[
            {"name":"flowstead-v1.1.0-mapping.txt","browser_download_url":"https://example/m.txt","size":1},
-           {"name":"flowstead-v1.1.0.apk","browser_download_url":"https://example/f.apk","size":2}]}
+           {"name":"flowstead-v1.1.0.apk","browser_download_url":"https://example/f.apk","size":2},
+           {"name":"flowstead-v1.1.0.apk.sha256","browser_download_url":"https://example/f.apk.sha256","size":3}]}
     """.trimIndent()
 
     @Test
@@ -31,6 +32,14 @@ class UpdatesTest {
         assertIs<UpdateCheck.Available>(r)
         assertEquals("1.1.0", r.version)
         assertEquals("https://example/f.apk", r.apkUrl)
+        assertEquals("https://example/f.apk.sha256", r.sha256Url)
+    }
+
+    @Test
+    fun sha256FilesParseAsSha256sumWritesThem() {
+        val h = "36CC39AE99168B2B142FF761D03AD96AEB359B1EA000FCE75F204C922CA460D0"
+        assertEquals(h.lowercase(), Updates.parseSha256("$h  flowstead-v1.3.1.apk\n"))
+        assertEquals(null, Updates.parseSha256("not a hash"))
     }
 
     @Test

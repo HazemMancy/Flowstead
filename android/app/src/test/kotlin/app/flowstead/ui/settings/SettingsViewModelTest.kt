@@ -12,7 +12,11 @@ import app.flowstead.core.update.UpdateCheck
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitSet
 import app.flowstead.core.units.Units
+import android.content.Intent
 import app.flowstead.data.engine.EngineResult
+import app.flowstead.data.update.AppUpdater
+import app.flowstead.data.update.InstallState
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
@@ -30,7 +34,17 @@ class SettingsViewModelTest {
     private val engine = FakeEngineClient()
     // Lazy: built after MainDispatcherRule has installed the test Main dispatcher.
     private var latest: Result<UpdateCheck> = Result.success(UpdateCheck.UpToDate("1.0.0"))
-    private val vm by lazy { SettingsViewModel(settings, secrets, engine) { latest } }
+    private val updater = object : AppUpdater {
+        val started = mutableListOf<UpdateCheck.Available>()
+        override val state = MutableStateFlow<InstallState>(InstallState.Idle)
+        override fun start(update: UpdateCheck.Available) {
+            started += update
+            state.value = InstallState.Downloading(update.version, 0.5f)
+        }
+        override fun install() = Unit
+        override fun permissionSettings() = Intent()
+    }
+    private val vm by lazy { SettingsViewModel(settings, secrets, engine, updater) { latest } }
 
     private suspend fun loaded() = vm.state.first { it.loaded }
 
@@ -115,5 +129,13 @@ class SettingsViewModelTest {
         latest = Result.failure(IllegalStateException("No connection"))
         vm.checkForUpdates()
         assertEquals(UpdateState.Failed("No connection"), vm.state.first { it.update is UpdateState.Failed }.update)
+    }
+
+    @Test
+    fun updatingDownloadsInTheAppAndShowsProgress() = runTest {
+        val release = UpdateCheck.Available("1.1.0", "https://example/page", "https://example/f.apk", "https://example/f.apk.sha256")
+        vm.installUpdate(release)
+        assertEquals(listOf(release), updater.started)
+        assertEquals(InstallState.Downloading("1.1.0", 0.5f), vm.state.first { it.install is InstallState.Downloading }.install)
     }
 }
