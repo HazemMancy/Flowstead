@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import app.flowstead.BuildConfig
 import app.flowstead.core.update.UpdateCheck
 import app.flowstead.ui.about.Credits
+import app.flowstead.ui.about.LinkedInLink
 import app.flowstead.ui.components.FlowsteadMark
 import app.flowstead.ui.components.Wordmark
 import app.flowstead.ui.theme.NumberStyles
@@ -47,6 +48,8 @@ internal fun AboutSection(state: SettingsUiState, vm: SettingsViewModel, onOpenA
         }
     }
     Text(Credits.DEVELOPER, style = MaterialTheme.typography.bodyLarge)
+    Text(Credits.DEVELOPER_BIO, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    LinkedInLink()
     Text(Credits.ENGINE, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
     val uri = LocalUriHandler.current
