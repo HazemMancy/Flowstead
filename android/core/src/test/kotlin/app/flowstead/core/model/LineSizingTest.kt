@@ -127,4 +127,19 @@ class LineSizingTest {
         assertEquals(4, checks.size)
         assertTrue(LineSizing.checks(LineCriteria(), "p", view).isEmpty())
     }
+
+    @Test
+    fun anOrificePlateTakesItsLineSizeFromTheSamePicker() {
+        val plate = SimObject("o", "FE-100", ObjectType.OrificePlate, specs = mapOf(SpecKey.ORIFICE_DIAMETER to Spec(0.05, "mm")))
+        var fs = FlowsheetEditing.setPipeSize(Flowsheet(objects = listOf(plate)), "o", "4", null)
+        val sized = fs.objects.single()
+        // 4" schedule 40: 114.3 mm outside, 6.02 mm wall, 102.26 mm inside; the plate has no outside-diameter spec.
+        assertEquals(0.10226, sized.specs.getValue(SpecKey.PIPE_DIAMETER).si, 1e-5)
+        assertEquals(null, sized.specs[SpecKey.OUTER_DIAMETER])
+        assertEquals(null, sized.specs[SpecKey.INNER_DIAMETER])
+        fs = FlowsheetEditing.setPipeSize(fs, "o", null, null)
+        // Back to a custom diameter: the size is forgotten, the last diameter kept to edit.
+        assertEquals(null, fs.objects.single().refs[LineSizing.NPS])
+        assertEquals(0.10226, fs.objects.single().specs.getValue(SpecKey.PIPE_DIAMETER).si, 1e-5)
+    }
 }

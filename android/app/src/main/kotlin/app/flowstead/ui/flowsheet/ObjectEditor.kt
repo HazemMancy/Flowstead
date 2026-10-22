@@ -242,7 +242,8 @@ fun ObjectEditorSheet(
                     ReactorEditor(fs, obj, unitSet, ctx, actions)
                 ObjectType.OrificePlate -> {
                     SpecField(obj, SpecKey.ORIFICE_DIAMETER, unitSet, ctx, actions)
-                    SpecField(obj, SpecKey.PIPE_DIAMETER, unitSet, ctx, actions)
+                    SectionLabel("Pipe the plate is in")
+                    PipeSizeChoice(obj, unitSet, ctx, actions)
                     MethodChoice(obj, "Pressure taps", ChoiceKey.ORIFICE_TAPS, ChoiceKey.ORIFICE_TAP_OPTIONS, actions)
                     Calculated("ISO 5167 orifice meter. The outlet is at the permanent (recovered) pressure.")
                 }

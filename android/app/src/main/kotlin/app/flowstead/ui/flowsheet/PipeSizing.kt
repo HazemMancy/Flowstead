@@ -42,6 +42,7 @@ import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.LineCriteria
 import app.flowstead.core.model.LineService
 import app.flowstead.core.model.LineSizing
+import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.PipeSizes
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SimObject
@@ -67,30 +68,7 @@ internal fun PipeEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: Un
     SpecField(obj, SpecKey.LENGTH, unitSet, ctx, actions)
 
     SectionLabel("Pipe size")
-    val size = obj.refs[LineSizing.NPS]?.let { PipeSizes.size(it) }
-    val schedule = size?.let { s -> obj.refs[LineSizing.SCHEDULE]?.let { s.schedule(it) } }
-    Choice(
-        label = "Nominal size",
-        selected = size?.label ?: "Custom inside diameter",
-        options = listOf(CUSTOM to "Custom inside diameter") + PipeSizes.ALL.map { it.nps to it.label },
-        testTag = "pipe_nps",
-    ) { picked -> actions.setPipeSize(obj.id, picked.takeIf { it != CUSTOM }, schedule?.label) }
-    if (size != null && schedule != null) {
-        Choice(
-            label = "Schedule",
-            selected = schedule.label,
-            options = size.schedules.map { it.label to "${it.label}  ·  wall ${wall(it.wallM, unitSet, ctx)}" },
-            testTag = "pipe_schedule",
-        ) { picked -> actions.setPipeSize(obj.id, size.nps, picked) }
-        val small = smallLength(unitSet)
-        DimensionRow("Outside diameter", size.outsideDiameterM, small, ctx)
-        DimensionRow("Wall thickness", schedule.wallM, small, ctx)
-        DimensionRow("Inside diameter", size.insideDiameterM(schedule), small, ctx)
-        Calculated("Dimensions from ASME B36.10M (carbon steel) and B36.19M (stainless, “S” schedules).")
-    } else {
-        SpecField(obj, SpecKey.INNER_DIAMETER, unitSet, ctx, actions)
-        SpecField(obj, SpecKey.OUTER_DIAMETER, unitSet, ctx, actions, optionalHint = "1.15 × inside if empty (heat transfer only)")
-    }
+    PipeSizeChoice(obj, unitSet, ctx, actions)
 
     SpecField(obj, SpecKey.ELEVATION_CHANGE, unitSet, ctx, actions, optionalHint = "0 (horizontal) if empty")
     SpecField(obj, SpecKey.ROUGHNESS, unitSet, ctx, actions, optionalHint = "0.0457 mm (commercial steel) if empty")
@@ -121,6 +99,39 @@ internal fun PipeEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: Un
     SectionLabel("Heat transfer")
     SpecField(obj, SpecKey.HEAT_TRANSFER_COEFFICIENT, unitSet, ctx, actions, optionalHint = "adiabatic if empty")
     SpecField(obj, SpecKey.AMBIENT_TEMPERATURE, unitSet, ctx, actions, optionalHint = "needed with U")
+}
+
+/**
+ * Nominal size and schedule from ASME B36.10M/B36.19M, which set the inside diameter (a pipe segment's, or the line an
+ * orifice plate sits in), with the standard's dimensions shown; or "Custom inside diameter" to type it.
+ */
+@Composable
+internal fun PipeSizeChoice(obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
+    val size = obj.refs[LineSizing.NPS]?.let { PipeSizes.size(it) }
+    val schedule = size?.let { s -> obj.refs[LineSizing.SCHEDULE]?.let { s.schedule(it) } }
+    val pipe = obj.type == ObjectType.PipeSegment
+    Choice(
+        label = "Nominal size",
+        selected = size?.label ?: "Custom inside diameter",
+        options = listOf(CUSTOM to "Custom inside diameter") + PipeSizes.ALL.map { it.nps to it.label },
+        testTag = "pipe_nps",
+    ) { picked -> actions.setPipeSize(obj.id, picked.takeIf { it != CUSTOM }, schedule?.label) }
+    if (size != null && schedule != null) {
+        Choice(
+            label = "Schedule",
+            selected = schedule.label,
+            options = size.schedules.map { it.label to "${it.label}  ·  wall ${wall(it.wallM, unitSet, ctx)}" },
+            testTag = "pipe_schedule",
+        ) { picked -> actions.setPipeSize(obj.id, size.nps, picked) }
+        val small = smallLength(unitSet)
+        DimensionRow("Outside diameter", size.outsideDiameterM, small, ctx)
+        DimensionRow("Wall thickness", schedule.wallM, small, ctx)
+        DimensionRow(if (pipe) "Inside diameter" else "Pipe inside diameter", size.insideDiameterM(schedule), small, ctx)
+        Calculated("Dimensions from ASME B36.10M (carbon steel) and B36.19M (stainless, “S” schedules).")
+    } else {
+        SpecField(obj, PipeSizes.insideDiameterKey(obj.type), unitSet, ctx, actions)
+        if (pipe) SpecField(obj, SpecKey.OUTER_DIAMETER, unitSet, ctx, actions, optionalHint = "1.15 × inside if empty (heat transfer only)")
+    }
 }
 
 private fun smallLength(unitSet: UnitSet) = if (unitSet.unitFor(Quantity.Length) == Units.ft) Units.inch else Units.mm

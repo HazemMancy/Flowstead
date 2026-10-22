@@ -13,6 +13,9 @@ package app.flowstead.core.model
 object PipeSizes {
     private const val IN = 0.0254
 
+    /** The inside-diameter specification a nominal size and schedule set on [type]: a pipe's own, or an orifice plate's line. */
+    fun insideDiameterKey(type: ObjectType): String = if (type == ObjectType.OrificePlate) SpecKey.PIPE_DIAMETER else SpecKey.INNER_DIAMETER
+
     data class Schedule(val label: String, val wallM: Double)
 
     data class Size(val nps: String, val dn: Int, val outsideDiameterM: Double, val schedules: List<Schedule>) {

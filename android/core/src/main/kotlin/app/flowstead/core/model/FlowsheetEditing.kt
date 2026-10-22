@@ -98,13 +98,16 @@ object FlowsheetEditing {
     fun setPipeSize(fs: Flowsheet, id: String, nps: String?, schedule: String?): Flowsheet = update(fs, id) { o ->
         val size = nps?.let { PipeSizes.size(it) }
         val sch = size?.let { s -> schedule?.let { s.schedule(it) } ?: s.schedules.firstOrNull { "40" in it.label.split(" / ") } ?: s.schedules.first() }
+        // Which inside diameter the size sets: a pipe segment's own, or the line an orifice plate sits in.
+        val inside = PipeSizes.insideDiameterKey(o.type)
+        val outside = SpecKey.OUTER_DIAMETER.takeIf { o.type == ObjectType.PipeSegment }
         if (size == null || sch == null) {
-            o.copy(refs = o.refs - LineSizing.NPS - LineSizing.SCHEDULE, specs = o.specs - SpecKey.OUTER_DIAMETER)
+            o.copy(refs = o.refs - LineSizing.NPS - LineSizing.SCHEDULE, specs = if (outside != null) o.specs - outside else o.specs)
         } else {
             o.copy(
                 refs = o.refs + (LineSizing.NPS to size.nps) + (LineSizing.SCHEDULE to sch.label),
-                specs = o.specs + (SpecKey.INNER_DIAMETER to Spec(size.insideDiameterM(sch), "in")) +
-                    (SpecKey.OUTER_DIAMETER to Spec(size.outsideDiameterM, "in")),
+                specs = o.specs + (inside to Spec(size.insideDiameterM(sch), "in")) +
+                    listOfNotNull(outside?.let { it to Spec(size.outsideDiameterM, "in") }),
             )
         }
     }

@@ -192,7 +192,7 @@ object DataSheets {
         /** The user's specifications and method choices. */
         fun inputs(): DataSheet.Section? {
             val lines = buildList {
-                if (obj.type == ObjectType.PipeSegment) {
+                if (obj.type == ObjectType.PipeSegment || obj.type == ObjectType.OrificePlate) {
                     val size = obj.refs[LineSizing.NPS]?.let { PipeSizes.size(it) }
                     val sch = size?.let { s -> obj.refs[LineSizing.SCHEDULE]?.let { s.schedule(it) } }
                     if (size != null && sch != null) {
