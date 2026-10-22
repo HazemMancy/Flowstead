@@ -125,7 +125,10 @@ class ResultsExportTest {
             assertEquals(overall.getValue(key), v.si, 0.0)
         }
         val streams = sheets().first { it.name == "Streams" }
-        val density = streams.rows.first { (it.firstOrNull() as? Cell.Text)?.text?.startsWith("Density") == true }
-        assertTrue(density[1] is Cell.Number, "density exported: ${density[1]}")
+        val density = streams.rows.filter { (it.firstOrNull() as? Cell.Text)?.text?.contains("mass density") == true }
+        assertTrue(density.isNotEmpty() && density.all { it[1] is Cell.Number || it[1] == Cell.Empty }, "density rows: $density")
+        assertTrue(density.any { it[1] is Cell.Number }, "a phase density is exported: $density")
+        // HYSYS layout: an Overall block, then the phases present.
+        assertTrue(streams.rows.any { it.firstOrNull() == Cell.Text("Overall") })
     }
 }

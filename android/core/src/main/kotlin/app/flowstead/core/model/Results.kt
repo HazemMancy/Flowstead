@@ -101,6 +101,8 @@ object ResultKeys {
         "volumeFlow", "liquidVolumeFlow" -> Quantity.VolumeFlow
         "liquidResidenceTime", "residenceTime" -> Quantity.Time
         "massEnthalpy" -> Quantity.MassEnthalpy
+        "molarEnthalpy" -> Quantity.MolarEnthalpy
+        "stdLiquidVolumeFlow" -> Quantity.VolumeFlow
         "massEntropy" -> Quantity.MassEntropy
         "massHeatCapacity" -> Quantity.MassHeatCapacity
         "density" -> Quantity.Density
@@ -125,6 +127,8 @@ object ResultKeys {
         "massFlow" -> "Mass flow"
         "volumeFlow" -> "Actual volume flow"
         "massEnthalpy" -> "Mass enthalpy"
+        "molarEnthalpy" -> "Molar enthalpy"
+        "stdLiquidVolumeFlow" -> "Std ideal liquid volume flow"
         "massEntropy" -> "Mass entropy"
         "massHeatCapacity" -> "Cp (mass)"
         "density" -> "Density"

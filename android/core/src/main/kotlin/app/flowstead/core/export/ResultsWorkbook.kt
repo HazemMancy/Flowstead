@@ -12,6 +12,7 @@ import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.ResultKeys
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.StreamLayout
 import app.flowstead.core.model.displayName
 import app.flowstead.core.model.modelHash
 import app.flowstead.core.units.Quantity
@@ -80,14 +81,26 @@ object ResultsWorkbook {
         is DisplayValue.Missing -> Cell.Empty
     }
 
+    private fun cellIn(v: DisplayValue, u: app.flowstead.core.units.EngUnit, ctx: UnitContext): Cell = when (v) {
+        is DisplayValue.Calculated -> Cell.Number(u.fromSi(v.si, ctx))
+        is DisplayValue.Specified -> Cell.Number(u.fromSi(v.si, ctx))
+        is DisplayValue.Error -> t("error: ${v.reason}")
+        is DisplayValue.Missing -> Cell.Empty
+    }
+
     private fun streams(fs: Flowsheet, view: ResultView, units: UnitSet, ctx: UnitContext): List<List<Cell>> {
         val streams = fs.objects.filter { it.type == ObjectType.MaterialStream }
         if (streams.isEmpty()) return listOf(listOf(t("No material streams")))
         return buildList {
             add(listOf(t("Property")) + streams.map { t(it.tag) })
-            for (key in ResultKeys.STREAM) {
-                val q = ResultKeys.quantity(key)
-                add(listOf(t(unitLabel(ResultKeys.label(key), q, units))) + streams.map { cell(view.value(it.id, key), q, units, ctx) })
+            // HYSYS workbook layout: Overall, then each phase present.
+            for (section in StreamLayout.sections(view, streams.map { it.id })) {
+                add(listOf(t(section.title)))
+                for (row in section.rows) {
+                    val u = StreamLayout.unit(row, units)
+                    val label = if (u.symbol.isEmpty()) row.label else "${row.label} [${u.symbol}]"
+                    add(listOf(t(label)) + streams.map { cellIn(StreamLayout.value(view, it.id, row), u, ctx) })
+                }
             }
             add(emptyList())
             add(listOf(t("Overall composition [mole fraction]")))

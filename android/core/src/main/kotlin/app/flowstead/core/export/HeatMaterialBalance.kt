@@ -14,6 +14,7 @@ import app.flowstead.core.model.ResultKeys
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.StreamLayout
 import app.flowstead.core.model.displayName
 import app.flowstead.core.model.modelHash
 import app.flowstead.core.units.EngUnit
@@ -102,33 +103,17 @@ object HeatMaterialBalance {
 
     private fun conditions(fs: Flowsheet, view: ResultView, f: Format, streams: List<SimObject>): DataSheet.Section {
         val ids = streams.map { it.id }
-        fun row(label: String, q: Quantity, get: (String) -> DisplayValue) =
-            f.unit(q).let { u -> DataSheet.Line(label, f.symbol(u), ids.map { f.value(get(it), u) }) }
-        fun overall(label: String, key: String) = row(label, ResultKeys.quantity(key)) { view.value(it, key) }
-        fun phase(label: String, ph: String, key: String) = row(label, ResultKeys.quantity(key)) { view.phaseValue(it, ph, key) }
         val lines = buildList {
             val ends = streams.map { ends(fs, it) }
             add(DataSheet.Line("From", "", ends.map { it.first }))
             add(DataSheet.Line("To", "", ends.map { it.second }))
-            add(overall("Vapour fraction (molar)", "vapourFraction"))
-            add(overall("Temperature", "temperature"))
-            add(overall("Pressure", "pressure"))
-            add(overall("Molar flow", "molarFlow"))
-            add(overall("Mass flow", "massFlow"))
-            add(phase("Actual volume flow", Phases.OVERALL, "volumeFlow"))
-            add(phase("Density", Phases.OVERALL, "density"))
-            add(phase("Molecular weight", Phases.OVERALL, "molecularWeight"))
-            add(overall("Mass enthalpy", "massEnthalpy"))
-            add(overall("Mass entropy", "massEntropy"))
-            for ((ph, name) in listOf(Phases.VAPOUR to "Vapour", Phases.LIQUID1 to "Liquid", Phases.LIQUID2 to "Aqueous")) {
-                if (ids.none { ph in view.presentPhases(it) }) continue
-                add(DataSheet.Line(name.uppercase() + " PHASE", "", ids.map { "" }, bold = true))
-                add(phase("$name mass flow", ph, "massFlow"))
-                add(phase("$name actual volume flow", ph, "volumeFlow"))
-                add(phase("$name density", ph, "density"))
-                add(phase("$name viscosity", ph, "viscosity"))
-                add(phase("$name molecular weight", ph, "molecularWeight"))
-                if (ph == Phases.VAPOUR) add(phase("Compressibility factor Z", ph, "compressibilityFactor"))
+            // HYSYS workbook layout: Overall, then each phase present in any of these streams.
+            for (section in StreamLayout.sections(view, ids)) {
+                add(DataSheet.Line(section.title.uppercase(), "", ids.map { "" }, bold = true))
+                for (row in section.rows) {
+                    val u = StreamLayout.unit(row, f.units)
+                    add(DataSheet.Line(row.label, f.symbol(u), ids.map { f.value(StreamLayout.value(view, it, row), u) }))
+                }
             }
         }
         return DataSheet.Section("MATERIAL STREAMS", streams.map { it.tag }, lines)

@@ -910,6 +910,8 @@ public sealed class DwsimEngine
                     ("massFlow", p.massflow),
                     ("volumeFlow", p.volumetric_flow),
                     ("massEnthalpy", p.enthalpy * 1000.0),          // DWSIM kJ/kg
+                    ("molarEnthalpy", p.molar_enthalpy),            // DWSIM kJ/kmol = J/mol
+                    ("stdLiquidVolumeFlow", ms.PropertyPackage is PropertyPackage spp ? StandardLiquid.VolumeFlow(ph, spp) : null),
                     ("massEntropy", p.entropy * 1000.0),            // DWSIM kJ/kg·K
                     ("massHeatCapacity", p.heatCapacityCp * 1000.0), // DWSIM kJ/kg·K
                     ("density", p.density),

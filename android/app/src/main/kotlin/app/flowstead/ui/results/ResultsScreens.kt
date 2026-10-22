@@ -53,6 +53,7 @@ import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.ResultKeys
+import app.flowstead.core.model.StreamLayout
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.StoredSolve
@@ -156,8 +157,10 @@ fun ResultsContent(u: ResultsUi, modifier: Modifier = Modifier) {
     val scroll = rememberScrollState()
 
     val baseStreams = u.flowsheet.objects.filter { it.type == ObjectType.MaterialStream }
-    val streams = sortKey?.let { key ->
-        val sorted = baseStreams.sortedBy { (u.results.value(it.id, key) as? DisplayValue.Calculated)?.si ?: Double.NEGATIVE_INFINITY }
+    // Sorting is by a row of the HYSYS-style layout, keyed by its label.
+    val sortRow = sortKey?.let { label -> StreamLayout.SECTIONS.flatMap { it.rows }.firstOrNull { it.label == label } }
+    val streams = sortRow?.let { row ->
+        val sorted = baseStreams.sortedBy { (StreamLayout.value(u.results, it.id, row) as? DisplayValue.Calculated)?.si ?: Double.NEGATIVE_INFINITY }
         if (descending) sorted.reversed() else sorted
     } ?: baseStreams.sortedWith(compareBy({ it.tag.toIntOrNull() ?: Int.MAX_VALUE }, { it.tag }))
     val unitOps = u.flowsheet.objects.filter { !it.type.isStream }
@@ -173,19 +176,30 @@ fun ResultsContent(u: ResultsUi, modifier: Modifier = Modifier) {
                     }
                 }
             }
-            items(ResultKeys.STREAM) { key ->
-                val unit = u.unitSet.unitFor(ResultKeys.quantity(key))
-                val arrow = if (sortKey == key) (if (descending) " ↓" else " ↑") else ""
-                TableRow(
-                    scroll,
-                    label = ResultKeys.label(key) + arrow,
-                    labelUnit = unit.symbol,
-                    onLabelClick = {
-                        if (sortKey == key) descending = !descending else { sortKey = key; descending = true }
-                    },
-                ) {
-                    streams.forEach { s ->
-                        Box(Modifier.width(CELL_WIDTH).padding(end = 8.dp)) { ValueText(u.results.value(s.id, key), unit, ctx = u.ctx) }
+            // As a HYSYS workbook: Overall, then Vapour, Liquid and Aqueous blocks for the phases present.
+            for (section in StreamLayout.sections(u.results, streams.map { it.id })) {
+                item(key = "section-${section.phase}") {
+                    Text(
+                        section.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                    )
+                }
+                items(section.rows, key = { "${section.phase}-${it.label}" }) { row ->
+                    val unit = StreamLayout.unit(row, u.unitSet)
+                    val arrow = if (sortKey == row.label) (if (descending) " ↓" else " ↑") else ""
+                    TableRow(
+                        scroll,
+                        label = row.label + arrow,
+                        labelUnit = unit.symbol,
+                        onLabelClick = {
+                            if (sortKey == row.label) descending = !descending else { sortKey = row.label; descending = true }
+                        },
+                    ) {
+                        streams.forEach { s ->
+                            Box(Modifier.width(CELL_WIDTH).padding(end = 8.dp)) { ValueText(StreamLayout.value(u.results, s.id, row), unit, ctx = u.ctx) }
+                        }
                     }
                 }
             }

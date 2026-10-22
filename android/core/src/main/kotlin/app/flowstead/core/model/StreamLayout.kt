@@ -1,0 +1,82 @@
+/*
+ * Flowstead — steady-state process simulation, in your pocket.
+ * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+ */
+package app.flowstead.core.model
+
+import app.flowstead.core.api.Phases
+import app.flowstead.core.units.EngUnit
+import app.flowstead.core.units.Quantity
+import app.flowstead.core.units.UnitSet
+import app.flowstead.core.units.Units
+
+/**
+ * A material stream's results laid out as in a HYSYS workbook: Overall, then Vapour, Liquid and Aqueous phase
+ * blocks, each only when the phase is present. Used by the Results screen, the results export and the heat and
+ * material balance so all three show the same rows.
+ */
+object StreamLayout {
+    /** One row: [key] read at stream level ([phase] null) or from that phase; [standardGas] shows a molar flow as standard gas volume. */
+    data class Row(val label: String, val key: String, val phase: String?, val standardGas: Boolean = false)
+
+    data class Section(val title: String, val phase: String, val rows: List<Row>)
+
+    private fun liquid(name: String, phase: String) = Section(
+        "$name phase", phase,
+        listOf(
+            Row("$name phase molar flow", "molarFlow", phase),
+            Row("$name phase mass flow", "massFlow", phase),
+            Row("$name phase actual volume flow", "volumeFlow", phase),
+            Row("$name phase std ideal liquid volume flow", "stdLiquidVolumeFlow", phase),
+            Row("$name phase molecular weight", "molecularWeight", phase),
+            Row("$name phase mass density", "density", phase),
+            Row("$name phase viscosity", "viscosity", phase),
+        ),
+    )
+
+    val SECTIONS: List<Section> = listOf(
+        Section(
+            "Overall", Phases.OVERALL,
+            listOf(
+                Row("Vapour fraction", "vapourFraction", null),
+                Row("Temperature", "temperature", null),
+                Row("Pressure", "pressure", null),
+                Row("Molar flow", "molarFlow", null),
+                Row("Mass flow", "massFlow", null),
+                Row("Std ideal liquid volume flow", "stdLiquidVolumeFlow", Phases.OVERALL),
+                Row("Molecular weight", "molecularWeight", Phases.OVERALL),
+                Row("Molar enthalpy", "molarEnthalpy", Phases.OVERALL),
+                Row("Mass enthalpy", "massEnthalpy", null),
+            ),
+        ),
+        Section(
+            "Vapour phase", Phases.VAPOUR,
+            listOf(
+                Row("Vapour phase molar flow", "molarFlow", Phases.VAPOUR),
+                Row("Vapour phase mass flow", "massFlow", Phases.VAPOUR),
+                Row("Vapour phase actual volume flow", "volumeFlow", Phases.VAPOUR),
+                Row("Vapour phase std gas flow", "molarFlow", Phases.VAPOUR, standardGas = true),
+                Row("Vapour phase molecular weight", "molecularWeight", Phases.VAPOUR),
+                Row("Vapour phase std ideal liquid volume flow", "stdLiquidVolumeFlow", Phases.VAPOUR),
+                Row("Vapour phase mass density", "density", Phases.VAPOUR),
+                Row("Vapour phase viscosity", "viscosity", Phases.VAPOUR),
+                Row("Vapour phase Z factor", "compressibilityFactor", Phases.VAPOUR),
+            ),
+        ),
+        liquid("Liquid", Phases.LIQUID1),
+        liquid("Aqueous", Phases.LIQUID2),
+    )
+
+    /** Sections to show for [streamIds]: Overall always, a phase block when any of the streams has that phase. */
+    fun sections(view: ResultView, streamIds: List<String>): List<Section> =
+        SECTIONS.filter { it.phase == Phases.OVERALL || streamIds.any { id -> it.phase in view.presentPhases(id) } }
+
+    fun value(view: ResultView, streamId: String, row: Row): DisplayValue =
+        if (row.phase == null) view.value(streamId, row.key) else view.phaseValue(streamId, row.phase, row.key)
+
+    /** The display unit: the user's unit for the quantity; a standard gas volume (Sm³/h, or MMSCFD in field units) for std gas flow. */
+    fun unit(row: Row, units: UnitSet): EngUnit =
+        if (row.standardGas) {
+            if (units.unitFor(Quantity.Temperature) == Units.F || units.unitFor(Quantity.Temperature) == Units.R) Units.mmscfd else Units.sm3PerH
+        } else units.unitFor(ResultKeys.quantity(row.key))
+}

@@ -24,7 +24,7 @@ data class PropertyTable(
 object PropertyTables {
     /** Properties a table can show for [o]: the stream properties, or the unit's own results. */
     fun available(fs: Flowsheet, o: SimObject): List<String> =
-        if (o.type == ObjectType.MaterialStream) ResultKeys.STREAM else ResultKeys.forObject(fs, o)
+        if (o.type == ObjectType.MaterialStream) ResultKeys.STREAM + listOf("molarEnthalpy", "stdLiquidVolumeFlow") else ResultKeys.forObject(fs, o)
 
     /** What a new table shows: conditions and flows for a stream, the first results of a unit. */
     fun defaults(fs: Flowsheet, o: SimObject): List<String> =

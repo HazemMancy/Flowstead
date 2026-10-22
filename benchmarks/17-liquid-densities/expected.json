@@ -827,6 +827,36 @@
       "tol": {
         "abs": 55.0
       }
+    },
+    {
+      "label": "Propane: standard ideal liquid volume flow at 60 °F, GPA 2145 density 506.5 kg/m³",
+      "source": "GPA 2145 (ideal liquid density at 60 °F)",
+      "blocking": true,
+      "path": "objects.c3.phases.overall.properties.stdLiquidVolumeFlow",
+      "expected": 8.70625e-05,
+      "tol": {
+        "rel": 0.005
+      }
+    },
+    {
+      "label": "n-Hexane: standard ideal liquid volume flow at 60 °F, GPA 2145 density 664.4 kg/m³",
+      "source": "GPA 2145 (ideal liquid density at 60 °F)",
+      "blocking": true,
+      "path": "objects.c6.phases.overall.properties.stdLiquidVolumeFlow",
+      "expected": 0.0001296944,
+      "tol": {
+        "rel": 0.005
+      }
+    },
+    {
+      "label": "Water: standard ideal liquid volume flow at 60 °F, GPA 2145 density 999.0 kg/m³",
+      "source": "GPA 2145 (ideal liquid density at 60 °F)",
+      "blocking": true,
+      "path": "objects.w.phases.overall.properties.stdLiquidVolumeFlow",
+      "expected": 1.8033e-05,
+      "tol": {
+        "rel": 0.005
+      }
     }
   ]
 }
