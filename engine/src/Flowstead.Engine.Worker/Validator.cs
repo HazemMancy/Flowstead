@@ -86,7 +86,7 @@ public static class Validator
         if (string.IsNullOrWhiteSpace(fs.PropertyPackage)) Err("Choose a property package.");
         else if (!knownPackages.Contains(fs.PropertyPackage)) Err($"Unknown property package '{fs.PropertyPackage}'.");
 
-        if (fs.LiquidDensity is { } ld && ld != LiquidDensityMethods.Costald) Err($"Unknown liquid density method '{ld}'.");
+        if (fs.LiquidDensity is { } ld && ld != LiquidDensityMethods.Costald && ld != LiquidDensityMethods.Eos) Err($"Unknown liquid density method '{ld}'.");
         if (fs.VapourViscosity is { } vv && vv != VapourViscosityMethods.LeeGonzalezEakin) Err($"Unknown vapour viscosity method '{vv}'.");
         if (fs.VolumeShift is { } vs && vs != VolumeShiftMethods.None) Err($"Unknown volume shift '{vs}'.");
         if (fs.Compounds.Count == 0) Err("Add at least one compound.");

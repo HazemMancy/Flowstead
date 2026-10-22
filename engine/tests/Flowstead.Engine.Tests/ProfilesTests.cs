@@ -136,4 +136,53 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
         var res = await engine.Authed().PostAsJsonAsync("/phase-envelope", new PhaseEnvelopeRequest(fs, new() { ["Ethane"] = 1 }), Json.Options);
         Assert.Equal(System.Net.HttpStatusCode.UnprocessableEntity, res.StatusCode);
     }
+
+    private async Task<PhaseEnvelope> Envelope(Dictionary<string, double> x, double? pressure, List<double>? qualities = null)
+    {
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = x.Keys.ToList() };
+        return await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync(
+            "/phase-envelope", new PhaseEnvelopeRequest(fs, x, qualities, Hydrates: true, Pressure: pressure), Json.Options));
+    }
+
+    [Theory]
+    // Measured hydrate equilibria (Sloan and Koh, Clathrate Hydrates of Natural Gases, 3rd ed.): methane 2.6 MPa at
+    // 273.2 K and 7.1 MPa at 283.2 K (sI); propane 0.21 MPa at 274.2 K (sII). The model gives 272.0, 282.5 and 274.24 K:
+    // the 1 K or so of the Munck parameters, recorded in D52.
+    [InlineData("Methane", 2.6e6, 273.2, "sI")]
+    [InlineData("Methane", 7.1e6, 283.2, "sI")]
+    [InlineData("Propane", 0.21e6, 274.2, "sII")]
+    public async Task HydrateTemperatureMatchesMeasuredData(string gas, double p, double measured, string structure)
+    {
+        var env = await Envelope(new() { [gas] = 1.0 }, p);
+        output.WriteLine($"{gas} at {p / 1e6} MPa: {env.HydrateTemperatureAtPressure} K ({env.HydrateStructureAtPressure}), measured {measured} K");
+        Assert.Equal(structure, env.HydrateStructureAtPressure);
+        Assert.Equal(measured, env.HydrateTemperatureAtPressure!.Value, 1.5);
+    }
+
+    [Fact]
+    public async Task QualityLinesLieBetweenBubbleAndDewAndTheHydrateCurveRisesWithPressure()
+    {
+        var gas = new Dictionary<string, double> { ["Methane"] = 0.8, ["Ethane"] = 0.1, ["Propane"] = 0.05, ["N-butane"] = 0.03, ["N-hexane"] = 0.02 };
+        var env = await Envelope(gas, 7e6, [0.5, 0.9]);
+        output.WriteLine(string.Join("; ", env.QualityLines.Select(l => $"{l.Quality}: {l.Temperature.Count} points {l.Pressure[0]}..{l.Pressure[^1]}")));
+        output.WriteLine($"hydrate at 7 MPa {env.HydrateTemperatureAtPressure} K {env.HydrateStructureAtPressure}; curve {env.HydrateTemperature.Count} points; " + string.Join(" | ", env.Warnings));
+        Assert.Equal(2, env.QualityLines.Count);
+        // At 3 MPa: bubble < 0.5 line < 0.9 line < dew.
+        static double At(List<double> t, List<double> p, double target)
+        {
+            for (var i = 1; i < p.Count; i++)
+                if ((p[i - 1] - target) * (p[i] - target) <= 0 && p[i] != p[i - 1]) return t[i - 1] + (target - p[i - 1]) / (p[i] - p[i - 1]) * (t[i] - t[i - 1]);
+            return double.NaN;
+        }
+        var tb = At(env.BubbleTemperature, env.BubblePressure, 3e6);
+        var t5 = At(env.QualityLines[0].Temperature, env.QualityLines[0].Pressure, 3e6);
+        var t9 = At(env.QualityLines[1].Temperature, env.QualityLines[1].Pressure, 3e6);
+        var td = At(env.DewTemperature, env.DewPressure, 3e6);
+        output.WriteLine($"3 MPa: bubble {tb} < q0.5 {t5} < q0.9 {t9} < dew {td}");
+        Assert.True(tb < t5 && t5 < t9 && t9 < td);
+        // Hydrates: sII forms with propane and butane present, and the curve rises with pressure.
+        Assert.Equal("sII", env.HydrateStructureAtPressure);
+        Assert.True(env.HydrateTemperature.Count > 10);
+        Assert.True(env.HydrateTemperature[^1] > env.HydrateTemperature[0]);
+    }
 }

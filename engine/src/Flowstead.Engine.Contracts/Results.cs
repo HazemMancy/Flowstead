@@ -77,8 +77,92 @@ public static class ProfileKeys
     public const string LiquidFlow = "liquidFlow";
 }
 
-/// <summary>Phase envelope of one composition: the flowsheet gives the package, compounds and settings.</summary>
-public sealed record PhaseEnvelopeRequest(Flowsheet Flowsheet, Dictionary<string, double> Composition);
+/// <summary>
+/// Phase envelope of one composition: the flowsheet gives the package, compounds and settings. <see cref="Qualities"/>:
+/// vapour fractions to draw quality lines for (none when empty). <see cref="Hydrates"/>: also trace the hydrate
+/// formation curve (D52). <see cref="Pressure"/>: the stream's pressure, for its own hydrate formation temperature.
+/// </summary>
+public sealed record PhaseEnvelopeRequest(
+    Flowsheet Flowsheet,
+    Dictionary<string, double> Composition,
+    List<double>? Qualities = null,
+    bool Hydrates = false,
+    double? Pressure = null);
+
+/// <summary>PVT experiment names (D53).</summary>
+public static class PvtExperiments
+{
+    public const string Saturation = "saturation";
+    public const string Cce = "cce";
+    public const string Cvd = "cvd";
+    public const string DifferentialLiberation = "dl";
+    public const string Separator = "separator";
+    public static readonly string[] All = [Saturation, Cce, Cvd, DifferentialLiberation, Separator];
+}
+
+/// <summary>A separator stage (K, Pa).</summary>
+public sealed record SeparatorStage(double Temperature, double Pressure);
+
+/// <summary>
+/// A PVT laboratory experiment on one composition at reservoir <see cref="Temperature"/> (K) (D53).
+/// <see cref="Pressures"/>: the pressure steps (Pa), any order; a default set around the saturation pressure when empty.
+/// <see cref="Stages"/>: separator stages before the stock tank (separator test).
+/// </summary>
+public sealed record PvtRequest(
+    Flowsheet Flowsheet,
+    Dictionary<string, double> Composition,
+    string Experiment,
+    double Temperature,
+    List<double>? Pressures = null,
+    List<SeparatorStage>? Stages = null);
+
+/// <summary>
+/// A PVT experiment's results. <see cref="Table"/> holds one list per column, all the same length (one row per step),
+/// in the order of <see cref="Columns"/>; null where DWSIM gave nothing for that step. Keys and SI units are in
+/// <see cref="PvtKeys"/>. <see cref="Summary"/>: single values (saturation pressure, Bo, GOR, API…).
+/// </summary>
+public sealed record PvtResult
+{
+    public required string Experiment { get; init; }
+    public double Temperature { get; init; }
+    public double? SaturationPressure { get; init; }
+    /// <summary>"bubble" (an oil: below its critical temperature) or "dew" (a gas condensate); null when there is none.</summary>
+    public string? SaturationKind { get; init; }
+    public List<string> Columns { get; init; } = [];
+    public Dictionary<string, List<double?>> Table { get; init; } = [];
+    public Dictionary<string, double> Summary { get; init; } = [];
+    public List<string> Warnings { get; init; } = [];
+}
+
+/// <summary>PVT result keys (SI). Gas standard volumes are at 60 °F and 101.325 kPa, as oilfield PVT reports.</summary>
+public static class PvtKeys
+{
+    public const string Pressure = "pressure";                       // Pa
+    public const string Temperature = "temperature";                 // K (separator stages)
+    public const string RelativeVolume = "relativeVolume";           // V / V(sat)
+    public const string LiquidDropout = "liquidDropout";             // liquid volume / V(sat)
+    public const string VapourFraction = "vapourFraction";           // molar
+    public const string GasZ = "gasZ";                               // Z of the gas (or of the single phase above saturation)
+    public const string TwoPhaseZ = "twoPhaseZ";                     // P·V(cell)/(n R T), CVD
+    public const string Density = "density";                         // kg/m³ of the single phase, or of the oil below saturation
+    public const string GasDensity = "gasDensity";                   // kg/m³
+    public const string YFunction = "yFunction";                     // (Psat − P)/(P (Vrel − 1)), oils below Pb
+    public const string GasProduced = "gasProduced";                 // cumulative moles produced / initial moles, CVD
+    public const string OilFormationVolumeFactor = "oilFvf";         // m³ oil at P,T per m³ residual (DL) or stock-tank (separator) oil
+    public const string SolutionGor = "solutionGor";                 // Sm³ gas / m³ residual oil, DL
+    public const string Gor = "gor";                                 // Sm³ gas / m³ stock-tank oil, separator stage
+    public const string GasGravity = "gasGravity";                   // molecular weight / 28.9647
+    public const string OilDensity = "oilDensity";                   // kg/m³
+    // Summary
+    public const string SaturationPressure = "saturationPressure";
+    public const string TotalGor = "totalGor";
+    public const string StockTankOilDensity = "stockTankOilDensity";
+    public const string Api = "api";
+    public const string ResidualOilDensity = "residualOilDensity";
+}
+
+/// <summary>A line of constant vapour fraction across the two-phase region (K, Pa).</summary>
+public sealed record QualityLine(double Quality, List<double> Temperature, List<double> Pressure);
 
 /// <summary>
 /// DWSIM's phase envelope (K, Pa). Bubble and dew curves run from low pressure up towards the critical point;
@@ -96,6 +180,14 @@ public sealed record PhaseEnvelope
     public double? CricondenbarPressure { get; init; }
     public double? CricondenthermTemperature { get; init; }
     public double? CricondenthermPressure { get; init; }
+    public List<QualityLine> QualityLines { get; init; } = [];
+    /// <summary>Hydrate formation curve (D52): temperature at each pressure, and the structure (sI, sII) that forms there.</summary>
+    public List<double> HydrateTemperature { get; init; } = [];
+    public List<double> HydratePressure { get; init; } = [];
+    public List<string> HydrateStructure { get; init; } = [];
+    /// <summary>Hydrate formation temperature at the requested pressure, and its structure.</summary>
+    public double? HydrateTemperatureAtPressure { get; init; }
+    public string? HydrateStructureAtPressure { get; init; }
     public List<string> Warnings { get; init; } = [];
 }
 
@@ -152,6 +244,7 @@ public static class WorkerMethods
     public const string ImportDwsim = "importDwsim";
     public const string EstimateHypotheticals = "estimateHypotheticals";
     public const string PhaseEnvelope = "phaseEnvelope";
+    public const string Pvt = "pvt";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

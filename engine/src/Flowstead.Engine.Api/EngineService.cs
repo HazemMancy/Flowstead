@@ -45,6 +45,10 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<PhaseEnvelope> PhaseEnvelopeAsync(PhaseEnvelopeRequest req, CancellationToken ct) =>
         pool.CallAsync<PhaseEnvelope>(WorkerMethods.PhaseEnvelope, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
+    /// <summary>A PVT experiment runs many flashes, so it gets the solve timeout.</summary>
+    public Task<PvtResult> PvtAsync(PvtRequest req, CancellationToken ct) =>
+        pool.CallAsync<PvtResult>(WorkerMethods.Pvt, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+
     public Task<ImportResult> ImportDwsimAsync(DwsimFile file, CancellationToken ct) =>
         pool.CallAsync<ImportResult>(WorkerMethods.ImportDwsim, file, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 

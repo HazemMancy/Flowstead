@@ -40,6 +40,8 @@ public static class VolumeShiftMethods
 public static class LiquidDensityMethods
 {
     public const string Costald = "costald";
+    /// <summary>Liquid density from the cubic equation of state itself (with the volume shift unless switched off), as PVT work uses (D53).</summary>
+    public const string Eos = "eos";
 }
 
 /// <summary>

@@ -130,6 +130,10 @@ api.MapPost("/hypotheticals/estimate", async (List<Hypothetical> hypotheticals, 
 api.MapPost("/phase-envelope", async (PhaseEnvelopeRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PhaseEnvelopeAsync(req, ct), "invalid_envelope"));
 
+// PVT laboratory experiments (D53).
+api.MapPost("/pvt", async (PvtRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.PvtAsync(req, ct), "invalid_pvt"));
+
 app.Run();
 return 0;
 

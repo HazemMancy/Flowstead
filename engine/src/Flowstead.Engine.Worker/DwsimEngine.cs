@@ -341,14 +341,33 @@ public sealed class DwsimEngine
     /// </summary>
     public PhaseEnvelope PhaseEnvelope(PhaseEnvelopeRequest req)
     {
-        var model = req.Flowsheet;
-        if (model.PropertyPackage is null) throw new InvalidDataException("Choose a fluid package first");
-        var x = req.Composition.Where(c => c.Value > 0 && double.IsFinite(c.Value)).ToDictionary();
+        var (pp, ms) = SingleStream(req.Flowsheet, req.Composition);
+        return PhaseEnvelopes.Read(pp, ms, req.Flowsheet.Compounds.ToArray(), req);
+    }
+
+    /// <summary>A PVT laboratory experiment (D53): DWSIM flashes of one cell of fluid, with the lab's bookkeeping.</summary>
+    public PvtResult Pvt(PvtRequest req)
+    {
+        if (!PvtExperiments.All.Contains(req.Experiment)) throw new InvalidDataException($"Unknown PVT experiment '{req.Experiment}'");
+        if (!(req.Temperature > 0)) throw new InvalidDataException("Give the reservoir temperature");
+        // PVT volumes must all come from one model: the equation of state for vapour and liquid alike (D53).
+        var model = req.Flowsheet with { Objects = [], Connections = [], Reactions = [], LiquidDensity = LiquidDensityMethods.Eos };
+        return new PvtLab(req with { Flowsheet = model }, Solve).Run();
+    }
+
+    /// <summary>
+    /// One stream of <paramref name="composition"/> with the flowsheet's package, compounds and options, built but not
+    /// solved: for calculations that need the composition only (envelopes, saturation points).
+    /// </summary>
+    private (PropertyPackage, MaterialStream) SingleStream(Flowsheet flowsheet, Dictionary<string, double> composition)
+    {
+        if (flowsheet.PropertyPackage is null) throw new InvalidDataException("Choose a fluid package first");
+        var x = composition.Where(c => c.Value > 0 && double.IsFinite(c.Value)).ToDictionary();
         if (x.Count == 0) throw new InvalidDataException("The composition is empty");
-        if (x.Keys.FirstOrDefault(c => !model.Compounds.Contains(c)) is { } unknown) throw new InvalidDataException($"{unknown} is not in the flowsheet's compounds");
+        if (x.Keys.FirstOrDefault(c => !flowsheet.Compounds.Contains(c)) is { } unknown) throw new InvalidDataException($"{unknown} is not in the flowsheet's compounds");
         var stream = new SimObject
         {
-            Id = "envelope", Tag = "ENVELOPE", Type = ObjectType.MaterialStream,
+            Id = "single", Tag = "SINGLE", Type = ObjectType.MaterialStream,
             Specs = new()
             {
                 [SpecKeys.Temperature] = new Spec(298.15, "K"),
@@ -357,11 +376,12 @@ public sealed class DwsimEngine
             },
             Composition = x,
         };
-        var (fs, map) = Build(model with { Objects = [stream], Connections = [], Reactions = [] }, WaterMode.None);
+        var (fs, map) = Build(flowsheet with { Objects = [stream], Connections = [], Reactions = [] }, WaterMode.None);
         var ms = (MaterialStream)map[stream.Id];
         var pp = (PropertyPackage)fs.PropertyPackages.Values.First();
         ms.PropertyPackage = pp;
-        return PhaseEnvelopes.Read(pp, ms);
+        pp.CurrentMaterialStream = ms;
+        return (pp, ms);
     }
 
     public List<HypotheticalProperties> EstimateHypotheticals(List<Hypothetical> hypotheticals)
@@ -452,6 +472,7 @@ public sealed class DwsimEngine
         }
         else pp = (PropertyPackage)fs.CreateAndAddPropertyPackage(ppName);
         if (costald) pp.LiquidDensityCalculationMode_Subcritical = PropertyPackage.LiquidDensityCalcMode.COSTALD;
+        if (model.LiquidDensity == LiquidDensityMethods.Eos) pp.LiquidDensityCalculationMode_Subcritical = PropertyPackage.LiquidDensityCalcMode.EOS;
         // Without the volume shift (D41) PR and SRK densities and Z are the plain EOS values, as HYSYS reports them.
         if (model.VolumeShift == VolumeShiftMethods.None) pp.LiquidDensity_UsePenelouxVolumeTranslation = false;
         // Lee–Gonzalez–Eakin vapour viscosity (D44) lives in Flowstead's package classes only.
@@ -976,6 +997,17 @@ public sealed class DwsimEngine
                 Composition = ph.Compounds.Values
                     .Where(c => c.MoleFraction.HasValue && double.IsFinite(c.MoleFraction.Value))
                     .ToDictionary(c => c.Name, c => c.MoleFraction!.Value),
+            };
+        }
+
+        // A phase with zero or negative density is a flash that went wrong (seen at 1000 bar on a condensate): the
+        // stream is reported as an error rather than with impossible numbers.
+        if (phases.Where(ph => ph.Key != "overall").Any(ph => ph.Value.Properties.TryGetValue("density", out var rho) && rho <= 0))
+        {
+            return new ObjectResult
+            {
+                Status = ObjectStatus.Error,
+                Error = "DWSIM's flash returned a phase with a non-physical (zero or negative) density at these conditions",
             };
         }
 

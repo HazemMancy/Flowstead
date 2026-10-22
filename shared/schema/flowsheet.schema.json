@@ -56,7 +56,7 @@
       "items": { "$ref": "#/$defs/Hypothetical" }
     },
     "liquidDensity": {
-      "enum": ["costald"],
+      "enum": ["costald", "eos"],
       "description": "Liquid density method. Absent: the engine default (DWSIM's Rackett and experimental data, with Flowstead's supercritical rule for cubic packages). \"costald\": COSTALD for every liquid, as HYSYS does for hydrocarbons."
     },
     "volumeShift": {

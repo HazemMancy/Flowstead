@@ -10,12 +10,13 @@ namespace Flowstead.Engine.Worker;
 
 /// <summary>
 /// Reads DWSIM's <c>DW_ReturnPhaseEnvelope</c> (D50): item 0/1 the bubble curve (T, P), 5/6 the dew curve, 15 the
-/// critical points (or DWSIM's critical-point solver when the routine leaves them empty). Points DWSIM could not converge come back as zeros or NaN and are dropped, never filled in.
+/// critical points (or DWSIM's critical-point solver when the routine leaves them empty), only the first continuous
+/// pass of each curve. Points DWSIM could not converge come back as zeros or NaN and are dropped, never filled in.
 /// The cricondenbar and cricondentherm are the highest pressure and temperature on either curve.
 /// </summary>
 public static class PhaseEnvelopes
 {
-    public static PhaseEnvelope Read(PropertyPackage pp, MaterialStream ms)
+    public static PhaseEnvelope Read(PropertyPackage pp, MaterialStream ms, string[] compounds, PhaseEnvelopeRequest req)
     {
         pp.CurrentMaterialStream = ms;
         var raw = (object[])pp.DW_ReturnPhaseEnvelope(new PhaseEnvelopeOptions());
@@ -49,14 +50,83 @@ public static class PhaseEnvelopes
         var all = bt.Zip(bp).Concat(dt.Zip(dp)).ToList();
         (double T, double P)? bar = all.Count > 0 ? all.MaxBy(x => x.Second) : null;
         (double T, double P)? therm = all.Count > 0 ? all.MaxBy(x => x.First) : null;
+        var z = ms.GetOverallComposition();
+        var lines = new List<QualityLine>();
+        var top = pc ?? bar?.P;
+        foreach (var q in (req.Qualities ?? []).Where(q => q > 0 && q < 1).Distinct().Order())
+        {
+            if (Quality(pp, z, q, all, top) is { } line) lines.Add(line);
+            else warnings.Add($"DWSIM could not trace the {q:0.##} vapour-fraction line.");
+        }
+
+        List<double> ht = [], hp = [];
+        List<string> hs = [];
+        double? hAt = null;
+        string? hAtS = null;
+        if (req.Hydrates)
+        {
+            if (!Hydrates.HasFormers(compounds.Where((c, i) => z[i] > 0)))
+                warnings.Add("No hydrate formers (methane to butanes, N₂, CO₂, H₂S) in this composition: no hydrate curve.");
+            else
+            {
+                // 0.1 MPa up to 1.2 × the cricondenbar (at least 10 MPa, at most 50 MPa), evenly in log P.
+                var pMax = Math.Clamp((bar?.P ?? 1e7) * 1.2, 1e7, 5e7);
+                double? guess = null;
+                for (var i = 0; i <= 30; i++)
+                {
+                    var p = 1e5 * Math.Pow(pMax / 1e5, i / 30.0);
+                    if (Hydrates.FormationTemperature(pp, compounds, z, p, guess) is not { } h) continue;
+                    ht.Add(h.T); hp.Add(p); hs.Add(h.Structure);
+                    guess = h.T;
+                }
+                if (req.Pressure is { } at && at > 0 && Hydrates.FormationTemperature(pp, compounds, z, at) is { } here)
+                    (hAt, hAtS) = (here.T, here.Structure);
+                warnings.Add("Hydrates: free water assumed present, with no inhibitor or salt (van der Waals–Platteeuw, Munck et al. 1988).");
+            }
+        }
+
         return new PhaseEnvelope
         {
+            QualityLines = lines,
+            HydrateTemperature = ht, HydratePressure = hp, HydrateStructure = hs,
+            HydrateTemperatureAtPressure = hAt, HydrateStructureAtPressure = hAtS,
             BubbleTemperature = bt, BubblePressure = bp, DewTemperature = dt, DewPressure = dp,
             CriticalTemperature = tc, CriticalPressure = pc,
             CricondenbarTemperature = bar?.T, CricondenbarPressure = bar?.P,
             CricondenthermTemperature = therm?.T, CricondenthermPressure = therm?.P,
             Warnings = warnings,
         };
+    }
+
+    /// <summary>
+    /// The line of vapour fraction <paramref name="q"/>: DWSIM's P-V flash at pressures from the lowest on the envelope
+    /// up to <paramref name="top"/> (the critical pressure, else the cricondenbar), each started from the last.
+    /// It stops where the flash stops converging; no point is drawn that DWSIM did not return.
+    /// </summary>
+    private static QualityLine? Quality(PropertyPackage pp, double[] z, double q, List<(double First, double Second)> envelope, double? top)
+    {
+        if (envelope.Count == 0 || top is not { } pTop) return null;
+        var pLow = Math.Max(envelope.Min(e => e.Second), 1e5);
+        List<double> t = [], p = [];
+        var guess = envelope.MinBy(e => e.Second).First;
+        for (var i = 0; i <= 40; i++)
+        {
+            var pi = pLow + (pTop * 0.995 - pLow) * i / 40.0;
+            try
+            {
+                var r = (object[])pp.FlashBase.Flash_PV(z, pi, q, guess, pp);
+                var ti = Convert.ToDouble(r[4]);
+                var v = Convert.ToDouble(r[1]);
+                if (!double.IsFinite(ti) || ti <= 0 || Math.Abs(v - q) > 1e-3 || (t.Count > 0 && Math.Abs(ti - t[^1]) > 40)) break;
+                t.Add(ti); p.Add(pi);
+                guess = ti;
+            }
+            catch
+            {
+                break;
+            }
+        }
+        return t.Count >= 2 ? new QualityLine(q, t, p) : null;
     }
 
     private static (List<double> T, List<double> P) Curve(object[] raw, int ti, int pi)
@@ -67,6 +137,18 @@ public static class PhaseEnvelopes
         {
             var (x, y) = (Convert.ToDouble(ts[i]), Convert.ToDouble(ps[i]));
             if (x > 0 && y > 0 && double.IsFinite(x) && double.IsFinite(y)) { t.Add(x); p.Add(y); }
+        }
+        // DWSIM sometimes appends a second pass of the same curve after it; it starts with a jump back. Only the
+        // first continuous pass is kept, so the plot never draws a line across the diagram.
+        var span = p.Count > 0 ? p.Max() : 0;
+        for (var i = 1; i < t.Count; i++)
+        {
+            if (t[i] < t[i - 1] - 30 || Math.Abs(p[i] - p[i - 1]) > 0.3 * span)
+            {
+                t.RemoveRange(i, t.Count - i);
+                p.RemoveRange(i, p.Count - i);
+                break;
+            }
         }
         return (t, p);
     }

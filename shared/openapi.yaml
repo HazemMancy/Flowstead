@@ -177,9 +177,12 @@ paths:
               properties:
                 flowsheet: { $ref: "schema/flowsheet.schema.json" }
                 composition: { type: object, description: Mole fractions by compound, additionalProperties: { type: number } }
+                qualities: { type: array, items: { type: number }, description: Vapour fractions to draw quality lines for }
+                hydrates: { type: boolean, description: Also trace the hydrate formation curve (D52; free water assumed, no inhibitor) }
+                pressure: { type: number, description: "The stream's pressure (Pa), for its hydrate formation temperature" }
       responses:
         "200":
-          description: Bubble and dew curves (K, Pa), with the critical point, cricondenbar and cricondentherm where found.
+          description: Bubble and dew curves (K, Pa), with the critical point, cricondenbar and cricondentherm where found; qualityLines (quality, temperature, pressure); hydrateTemperature, hydratePressure, hydrateStructure; hydrateTemperatureAtPressure and hydrateStructureAtPressure.
           content:
             application/json:
               schema:
@@ -197,6 +200,34 @@ paths:
                   cricondenthermPressure: { type: number }
                   warnings: { type: array, items: { type: string } }
         "422": { description: "Invalid input (code invalid_envelope)", content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } } }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+
+  /pvt:
+    post:
+      summary: A PVT laboratory experiment (D53) on one composition, from DWSIM flashes with equation-of-state volumes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flowsheet, composition, experiment, temperature]
+              properties:
+                flowsheet: { $ref: "schema/flowsheet.schema.json" }
+                composition: { type: object, additionalProperties: { type: number } }
+                experiment: { enum: [saturation, cce, cvd, dl, separator] }
+                temperature: { type: number, description: Reservoir temperature, K }
+                pressures: { type: array, items: { type: number }, description: Pressure steps, Pa (default around the saturation pressure) }
+                stages: { type: array, items: { type: object, properties: { temperature: { type: number }, pressure: { type: number } } }, description: Separator stages before the stock tank }
+      responses:
+        "200":
+          description: |
+            experiment, temperature, saturationPressure, saturationKind (bubble or dew), columns (order), table (one list per
+            column, null where DWSIM gave nothing), summary (saturationPressure, oilFvf, totalGor, stockTankOilDensity, api,
+            residualOilDensity), warnings. Keys: pressure, temperature, relativeVolume, liquidDropout, vapourFraction, gasZ,
+            twoPhaseZ, density, gasDensity, yFunction, gasProduced, oilFvf, solutionGor, gor, gasGravity, oilDensity (SI; gas
+            standard volumes at 60 °F and 101.325 kPa).
+        "422": { description: "Invalid input (code invalid_pvt)", content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } } }
         "503": { $ref: "#/components/responses/EngineUnavailable" }
 
 components:
