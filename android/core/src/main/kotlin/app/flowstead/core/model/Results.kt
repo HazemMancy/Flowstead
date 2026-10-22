@@ -203,6 +203,12 @@ object ResultKeys {
     /** Keys shown for [o]: [forType] plus, for reactors, the conversion of each reactant. */
     fun forObject(fs: Flowsheet, o: SimObject): List<String> =
         forType(o.type) + if (Reactors.isReactor(o.type)) Reactors.reactants(fs, o).map { CONVERSION_PREFIX + it } else emptyList()
+
+    /** [forObject], then any other unit-level value the engine returned for it that has a label, so nothing it calculated is hidden. */
+    fun allForObject(fs: Flowsheet, o: SimObject, view: ResultView): List<String> {
+        val listed = forObject(fs, o)
+        return listed + view.propertyKeys(o.id).filter { it !in listed && label(it) != it }.sorted()
+    }
 }
 
 /**
@@ -233,6 +239,10 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
 
     fun composition(objectId: String, phase: String = Phases.OVERALL, compound: String): DisplayValue =
         lookup(objectId, absentReason = "${Phases.label(phase)} phase not present") { it.phases?.get(phase)?.composition?.get(compound) }
+
+    /** Keys of the object-level values the engine returned for a solved object. */
+    fun propertyKeys(objectId: String): List<String> =
+        solve?.result?.objects?.get(objectId)?.takeIf { it.status == ObjectStatus.Solved }?.properties?.keys?.toList().orEmpty()
 
     /** A text result (e.g. a pipe's "flowRegime"), only from a solved object. */
     fun text(objectId: String, key: String): String? =

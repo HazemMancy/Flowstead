@@ -79,4 +79,24 @@ class ResultViewTest {
         assertTrue("liquidDensity" !in FlowsheetJson.encodeToString(Flowsheet.serializer(), a))
         assertTrue("volumeShift" !in FlowsheetJson.encodeToString(Flowsheet.serializer(), a))
     }
+
+    @Test
+    fun unitResultsIncludeEverythingTheEngineReturnedAndItsStreams() {
+        val fs = Flowsheet(
+            objects = listOf(
+                SimObject("a", "FEED", ObjectType.MaterialStream),
+                SimObject("v", "VLV-100", ObjectType.Valve),
+                SimObject("b", "LP", ObjectType.MaterialStream),
+            ),
+            connections = listOf(Connection("a", 0, "v", 0), Connection("v", 0, "b", 0)),
+        )
+        val r = SolveResult(
+            SolveStatus.Converged,
+            objects = mapOf("v" to ObjectResult(ObjectStatus.Solved, properties = mapOf("pressureDrop" to 1e5, "duty" to 0.0, "somethingNew" to 1.0))),
+        )
+        val view = ResultView(StoredSolve(r, "h", 0), "h")
+        val keys = ResultKeys.allForObject(fs, fs.objects[1], view)
+        assertEquals(ResultKeys.forType(ObjectType.Valve) + "duty", keys) // unlabelled keys stay hidden
+        assertEquals(listOf("IN · FEED", "OUT · LP"), UnitStreams.of(fs, "v").map { it.header })
+    }
 }

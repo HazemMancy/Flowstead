@@ -58,7 +58,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import app.flowstead.core.api.Phases
+import app.flowstead.core.api.ObjectStatus
 import app.flowstead.core.export.DataSheets
 import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.AdjustKeys
@@ -83,6 +83,7 @@ import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
 import app.flowstead.core.model.SpecStatus
+import app.flowstead.core.model.UnitStreams
 import app.flowstead.core.model.Specification
 import app.flowstead.core.model.displayName
 import app.flowstead.core.model.isFeed
@@ -587,36 +588,48 @@ internal fun Choice(
     }
 }
 
-/** Calculated values for this object: only what the engine returned, "—" with the reason otherwise. */
+/**
+ * Calculated values on the object itself: a stream's full workbook (every phase property and composition),
+ * a unit's every result and the worksheet of its connected streams. Only what the engine returned; "—" with the
+ * reason otherwise.
+ */
 @Composable
 private fun ResultsSection(fs: Flowsheet, obj: SimObject, results: ResultView, unitSet: UnitSet, ctx: UnitContext) {
-    val keys = when (obj.type) {
-        ObjectType.MaterialStream -> listOf("temperature", "pressure", "vapourFraction", "molarFlow", "massFlow", "massEnthalpy", "density", "molecularWeight")
-        ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
-        else -> ResultKeys.forObject(fs, obj)
+    val stream = obj.type == ObjectType.MaterialStream
+    val keys = when {
+        stream -> emptyList()
+        obj.type == ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
+        else -> ResultKeys.allForObject(fs, obj, results)
     }
-    if (keys.isEmpty()) return
+    val worksheet = if (stream) emptyList() else UnitStreams.of(fs, obj.id)
+    if (!stream && keys.isEmpty() && worksheet.isEmpty()) return
     HorizontalDivider()
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("Results", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
         if (results.stale) Text("⚠ out of date", style = NumberStyles.tag, color = MaterialTheme.valueColors.underSpecifiedText)
     }
-    for (key in keys) {
-        val unit = unitSet.unitFor(ResultKeys.quantityFor(obj, key))
-        // Overall density/MW live on the overall phase.
-        val value = if (key == "density" || key == "molecularWeight") results.phaseValue(obj.id, Phases.OVERALL, key)
-        else results.value(obj.id, key)
-        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(ResultKeys.label(key), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            ValueText(value, unit, ctx = ctx)
-        }
-        (value as? app.flowstead.core.model.DisplayValue.Missing)?.takeIf { key == keys.first() }?.let {
-            Text(it.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        (value as? app.flowstead.core.model.DisplayValue.Error)?.takeIf { key == keys.first() }?.let {
-            Text(it.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.error)
+    // Why there is nothing to show (not solved, failed), once at the top.
+    if (results.objectStatus(obj.id) != ObjectStatus.Solved) {
+        when (val why = results.value(obj.id, "temperature")) {
+            is app.flowstead.core.model.DisplayValue.Missing ->
+                Text(why.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            is app.flowstead.core.model.DisplayValue.Error ->
+                Text(why.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.error)
+            else -> Unit
         }
     }
+    if (stream) {
+        StreamResults(fs, obj.id, results, unitSet, ctx)
+        return
+    }
+    for (key in keys) {
+        val unit = unitSet.unitFor(ResultKeys.quantityFor(obj, key))
+        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(ResultKeys.label(key), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            ValueText(results.value(obj.id, key), unit, ctx = ctx)
+        }
+    }
+    if (worksheet.isNotEmpty()) UnitWorksheet(fs, worksheet, results, unitSet, ctx)
 }
 
 @Composable
