@@ -56,8 +56,7 @@ data class OssEntry(val name: String, val licence: String, val asset: String?)
 val OPEN_SOURCE = listOf(
     OssEntry("Flowstead", "GPL-3.0-or-later", "licenses/GPL-3.0.txt"),
     OssEntry("DWSIM — open-source process simulator (engine)", "GPL-3.0", "licenses/GPL-3.0.txt"),
-    OssEntry("Manrope typeface", "SIL Open Font License 1.1", "licenses/OFL-Manrope.txt"),
-    OssEntry("IBM Plex Mono typeface", "SIL Open Font License 1.1", "licenses/OFL-IBM-Plex-Mono.txt"),
+    OssEntry("Geist and Geist Mono typefaces (Vercel)", "SIL Open Font License 1.1", "licenses/OFL-Geist.txt"),
     OssEntry("AndroidX, Jetpack Compose, Material 3", "Apache-2.0", null),
     OssEntry("Kotlin, kotlinx.coroutines, kotlinx.serialization, Ktor", "Apache-2.0", null),
     OssEntry("Dagger / Hilt", "Apache-2.0", null),

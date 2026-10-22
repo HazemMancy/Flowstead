@@ -60,18 +60,18 @@ object PfdPdf {
         val solved: Boolean,
     )
 
-    private val ink = Color.rgb(0x1A, 0x1A, 0x1A)
-    private val muted = Color.rgb(0x5F, 0x66, 0x6D)
+    private val ink = Color.rgb(0x11, 0x11, 0x13)
+    private val muted = Color.rgb(0x5F, 0x5F, 0x66)
     private val grid = Color.rgb(0x80, 0x80, 0x80)
 
-    // Print palette: black symbols on white, energy lines amber and dashed as on screen.
+    // Print palette: ink symbols on white, energy lines signal red-orange and dashed as on screen.
     private val palette = IconPalette(
         fill = ComposeColor.White,
-        stroke = ComposeColor(0xFF1A1A1A),
-        accent = ComposeColor(0xFF0E7C74),
-        vapour = ComposeColor(0xFF1A1A1A),
-        liquid = ComposeColor(0xFF1A1A1A),
-        energy = ComposeColor(0xFFC77A12),
+        stroke = ComposeColor(0xFF111113),
+        accent = ComposeColor(0xFFFF5B1F),
+        vapour = ComposeColor(0xFF111113),
+        liquid = ComposeColor(0xFF111113),
+        energy = ComposeColor(0xFFE8461A),
     )
 
     private fun paint(size: Float, bold: Boolean = false, color: Int = ink, mono: Boolean = false) = Paint(Paint.ANTI_ALIAS_FLAG).apply {

@@ -14,8 +14,8 @@ _Last updated: 2026-10-20_
   - 18 engine tests including the **benchmark harness (3 cases passing)**. Case 02 checks water Tsat and latent heat against IAPWS-IF97 (blocking).
   - Docker image (API + worker + DWSIM) and `deploy/docker-compose.yml` with Caddy for HTTPS (`docs/engine-setup.md`).
 - **M4 Android shell** (CI-verified only, see limitations):
-  - Brand theme: Material 3 light and dark schemes from the brand palette, Manrope + IBM Plex Mono bundled, HYSYS-style value colours.
-  - Adaptive icon (navy background, mark in the safe zone, themed monochrome layer), notification glyph, Android 12 splash.
+  - Brand theme (D37 since 1.2.0): Material 3 light and dark schemes in paper, ink and signal orange, Geist + Geist Mono bundled, HYSYS-style value colours.
+  - Adaptive icon (the flow mark on its dark tile, themed monochrome layer), notification glyph, Android 12 splash.
   - Projects: list, create, rename, duplicate, delete (Room).
   - Settings: engine URL (HTTPS-only), API key (Android Keystore AES-GCM), test connection, unit set (SI / Field / Custom), barg/psig atmospheric reference, theme.
   - About: "Powered by DWSIM", disclaimer, open-source licences with bundled texts.
@@ -126,6 +126,7 @@ _Last updated: 2026-10-20_
 - **Review fixes:** typed values are committed before Save/Estimate/PDF/Excel/tab changes; Pc shown in absolute units; the D32 density variant applies to DWSIM's exact PR/SRK/PR-LK classes only; the API request limit is configurable (the test suite had hit 429s).
 - **Release 1.0.0 (D34):** release builds are R8-minified and signed with the owner's release key from two repository secrets; CI runs every on-device benchmark against the minified release build as well as the debug build; the release workflow checks the certificate before publishing.
 - **1.1.0 (D35, D36):** Settings → About (developer, DWSIM engine) and Check for updates (GitHub releases); property tables on the flowsheet; PFD as an A3 landscape PDF with title block; heat and material balance as PDF or Excel; the project title block on every export; line-sizing criteria only in the pipe segment editor. Fixed with it: stream density, volume flow, molecular weight, entropy, Cp, viscosity and Z showed "—" on the Results screen and in results exports (the engine reports them per phase; streams now read the overall phase, or their single phase).
+- **1.2.0 redesign (D37):** the owner's mix of two proposed directions: the "Aurora" mark (a violet-to-cyan stream between two nodes on a dark tile) with "Precision Light" colours (paper #F6F6F3, ink #111113, signal orange #FF5B1F; ink-based dark mode); Geist and Geist Mono replace Manrope and IBM Plex Mono; canvas phase colours amber/teal-blue/violet, energy red-orange; documents use the new mark and warm neutrals. The Play Store graphics in `docs/play-store/src` still show the old brand.
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 

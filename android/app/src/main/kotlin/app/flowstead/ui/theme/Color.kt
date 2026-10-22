@@ -6,21 +6,29 @@ package app.flowstead.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-/** Brand palette (brand board v1.0). Amber is for energy/vapour and highlights, never body text. */
+/**
+ * Brand palette (decision D37): "Precision" colours — paper, ink and one signal orange — with the
+ * "Aurora" mark, a violet-to-cyan flow line on a dark tile. Signal orange fills and highlights; text
+ * that must read as orange uses [SignalText] (light) or [SignalLight] (dark).
+ */
 object Brand {
-    val Navy = Color(0xFF0B1F33)
-    val NavyRaised = Color(0xFF0F2740)
-    val NavyHigh = Color(0xFF13304C)
-    val NavyBorder = Color(0xFF23415F)
-    val NavyButtonBorder = Color(0xFF3A5876)
-    val Teal = Color(0xFF12A89D)
-    val TealText = Color(0xFF0E7C74)
-    val TealLight = Color(0xFF7FDCD3)
-    val Amber = Color(0xFFF2A33A)
-    val Mist = Color(0xFFE8EEF3)
-    val Background = Color(0xFFF6F8FA)
-    val SecondaryText = Color(0xFF46586A)
-    val Border = Color(0xFFDCE3EA)
-    val OnDarkText = Color(0xFFC9D6E2)
-    val OnDarkMuted = Color(0xFF8FA3B6)
+    val Paper = Color(0xFFF6F6F3)
+    val PaperRaised = Color(0xFFEFEFEA)
+    val PaperHigh = Color(0xFFE8E8E2)
+    val Hairline = Color(0xFFDADAD3)
+    val Ink = Color(0xFF111113)
+    val InkRaised = Color(0xFF18181B)
+    val InkHigh = Color(0xFF222226)
+    val InkHairline = Color(0xFF2E2E33)
+    val Graphite = Color(0xFF5F5F66)
+    val Fog = Color(0xFFA8A8B0)
+    val Chalk = Color(0xFFF2F2EE)
+    val Signal = Color(0xFFFF5B1F)
+    val SignalText = Color(0xFFB83A0A)
+    val SignalLight = Color(0xFFFF8A5C)
+
+    // The mark's gradient and tile.
+    val Violet = Color(0xFF8B5CF6)
+    val Cyan = Color(0xFF22D3EE)
+    val MarkTile = Color(0xFF0E1322)
 }

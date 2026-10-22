@@ -29,34 +29,38 @@ data class ValueColors(
     val vapour: Color,
     val liquid: Color,
     val energy: Color,
+    /** Two-phase streams on the canvas (violet, from the mark). */
+    val twoPhase: Color,
 )
 
 val LightValueColors = ValueColors(
     specified = Color(0xFF2563C9),
-    calculated = Color(0xFF1B2A38),
+    calculated = Brand.Ink,
     underSpecified = Color(0xFFB7791F),
     underSpecifiedText = Color(0xFF8F5E12),
     error = Color(0xFFC8372D),
     converged = Color(0xFF1F8A4C),
     convergedText = Color(0xFF19763F),
     convergedContainer = Color(0xFFDDF3E6),
-    vapour = Brand.Amber,
-    liquid = Brand.Teal,
-    energy = Brand.Amber,
+    vapour = Color(0xFFC77700),
+    liquid = Color(0xFF0E7490),
+    energy = Color(0xFFE8461A),
+    twoPhase = Color(0xFF7C5CBF),
 )
 
 val DarkValueColors = ValueColors(
     specified = Color(0xFF8AB4F8),
-    calculated = Color(0xFFE8EEF3),
+    calculated = Brand.Chalk,
     underSpecified = Color(0xFFF2B866),
     underSpecifiedText = Color(0xFFF2B866),
     error = Color(0xFFFF8A80),
     converged = Color(0xFF6FE0A1),
     convergedText = Color(0xFF6FE0A1),
     convergedContainer = Color(0xFF123D2A),
-    vapour = Brand.Amber,
-    liquid = Brand.Teal,
-    energy = Brand.Amber,
+    vapour = Color(0xFFF5A524),
+    liquid = Color(0xFF22B8D6),
+    energy = Color(0xFFFF7A45),
+    twoPhase = Color(0xFFA78BFA),
 )
 
 val LocalValueColors = staticCompositionLocalOf { LightValueColors }

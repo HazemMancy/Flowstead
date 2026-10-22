@@ -2,12 +2,12 @@
 <resources>
     <!-- Compose draws everything; the window theme only sets edge-to-edge friendly basics. -->
     <style name="Theme.Flowstead" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/brand_background</item>
+        <item name="android:windowBackground">@color/brand_paper</item>
     </style>
 
-    <!-- Android 12 SplashScreen API (backported by core-splashscreen): navy, the mark centred. -->
+    <!-- Android 12 SplashScreen API (backported by core-splashscreen): the mark on its dark tile colour. -->
     <style name="Theme.Flowstead.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/brand_navy</item>
+        <item name="windowSplashScreenBackground">@color/brand_mark_tile</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/Theme.Flowstead</item>
     </style>

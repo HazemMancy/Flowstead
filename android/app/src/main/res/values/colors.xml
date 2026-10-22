@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand palette (docs: brand board v1.0) -->
-    <color name="brand_navy">#FF0B1F33</color>
-    <color name="brand_teal">#FF12A89D</color>
-    <color name="brand_teal_text">#FF0E7C74</color>
-    <color name="brand_teal_light">#FF7FDCD3</color>
-    <color name="brand_amber">#FFF2A33A</color>
-    <color name="brand_mist">#FFE8EEF3</color>
-    <color name="brand_background">#FFF6F8FA</color>
+    <!-- Brand (decision D37): Precision colours, Aurora mark. Mirrors ui/theme/Color.kt. -->
+    <color name="brand_paper">#FFF6F6F3</color>
+    <color name="brand_ink">#FF111113</color>
+    <color name="brand_signal">#FFFF5B1F</color>
+    <color name="brand_mark_tile">#FF0E1322</color>
+    <color name="brand_violet">#FF8B5CF6</color>
+    <color name="brand_cyan">#FF22D3EE</color>
 </resources>

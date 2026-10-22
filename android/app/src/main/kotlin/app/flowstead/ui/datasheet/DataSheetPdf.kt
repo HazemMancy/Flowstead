@@ -27,11 +27,11 @@ object DataSheetPdf {
     private const val PAD = 3f
     private const val FOOTER_H = 16f
 
-    private val ink = Color.rgb(0x1A, 0x1A, 0x1A)
+    private val ink = Color.rgb(0x11, 0x11, 0x13)
     private val grid = Color.rgb(0x80, 0x80, 0x80)
-    private val bar = Color.rgb(0xD9, 0xDE, 0xE4)
-    private val headFill = Color.rgb(0xF1, 0xF3, 0xF5)
-    private val muted = Color.rgb(0x5F, 0x66, 0x6D)
+    private val bar = Color.rgb(0xE6, 0xE6, 0xE0)
+    private val headFill = Color.rgb(0xF4, 0xF4, 0xF1)
+    private val muted = Color.rgb(0x5F, 0x5F, 0x66)
 
     private fun text(size: Float, bold: Boolean = false, color: Int = ink) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = size

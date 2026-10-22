@@ -22,8 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -76,7 +76,6 @@ import app.flowstead.core.model.obj
 import app.flowstead.ui.datasheet.DataSheetSheet
 import app.flowstead.ui.datasheet.ProjectDocumentActions
 import app.flowstead.ui.components.BackButton
-import app.flowstead.ui.theme.Brand
 import app.flowstead.ui.theme.NumberStyles
 import app.flowstead.ui.theme.valueColors
 
@@ -403,7 +402,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
 
 /**
  * Status and actions under the canvas: what blocks a solve, the last result's state, and the
- * Solve button (teal, as on the brand board).
+ * Solve button (the primary colour: ink on paper, chalk on ink).
  */
 @Composable
 private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onCancelQueued: () -> Unit, onIssues: () -> Unit, onResults: () -> Unit, onLog: () -> Unit) {
@@ -440,10 +439,10 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onCancelQueued: () ->
             Button(
                 onClick = onSolve,
                 enabled = !solving,
-                colors = ButtonDefaults.buttonColors(containerColor = Brand.Teal, contentColor = Brand.Navy),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.heightIn(min = 48.dp).testTag("solve_button"),
             ) {
-                if (solving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Brand.Navy)
+                if (solving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Solve", style = MaterialTheme.typography.labelLarge)
             }
         }

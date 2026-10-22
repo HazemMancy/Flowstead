@@ -1,45 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive-icon foreground: the mark without its background, scaled ×0.64 and centred so the
-     whole glyph (farthest point ≈ 47 units from centre) sits well inside the 66 dp safe zone (radius ≈ 30 of 33 dp). -->
+<!-- Adaptive-icon foreground: the mark's line and nodes (bounds 19..85 × 23..81 on its 104 grid),
+     scaled ×0.62 and centred, well inside the 66 dp safe zone. The tile colour is the background layer. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <group
-        android:scaleX="0.64"
-        android:scaleY="0.64"
-        android:translateX="15.44"
-        android:translateY="15.6">
+        android:scaleX="0.62"
+        android:scaleY="0.62"
+        android:translateX="21.76"
+        android:translateY="21.76">
         <path
-            android:fillColor="@color/brand_teal"
-            android:pathData="M40,20A12,12 0,0 1,52 32V88A12,12 0,0 1,40 100A12,12 0,0 1,28 88V32A12,12 0,0 1,40 20Z" />
+            android:pathData="M26,74C26,44 50,40 52,52C54,64 78,60 78,30"
+            android:strokeWidth="9"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="19" android:startY="81"
+                    android:endX="85" android:endY="23"
+                    android:startColor="@color/brand_violet"
+                    android:endColor="@color/brand_cyan" />
+            </aapt:attr>
+        </path>
         <path
-            android:pathData="M34,42h12M34,54h12M34,66h12M34,78h12"
-            android:strokeWidth="3"
-            android:strokeColor="@color/brand_navy"
-            android:strokeLineCap="round" />
+            android:fillColor="@color/brand_violet"
+            android:pathData="M26,74m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
         <path
-            android:pathData="M50,33h30"
-            android:strokeWidth="10"
-            android:strokeColor="@color/brand_amber"
-            android:strokeLineCap="round" />
-        <path
-            android:fillColor="@color/brand_amber"
-            android:pathData="M78,23l15,10l-15,10z"
-            android:strokeWidth="2"
-            android:strokeColor="@color/brand_amber"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M50,60h18"
-            android:strokeWidth="10"
-            android:strokeColor="@color/brand_teal_light"
-            android:strokeLineCap="round" />
-        <path
-            android:fillColor="@color/brand_teal_light"
-            android:pathData="M66,51l13,9l-13,9z"
-            android:strokeWidth="2"
-            android:strokeColor="@color/brand_teal_light"
-            android:strokeLineJoin="round" />
+            android:fillColor="@color/brand_cyan"
+            android:pathData="M78,30m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
     </group>
 </vector>
