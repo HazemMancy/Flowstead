@@ -25,7 +25,7 @@ public static class Validator
     {
         ObjectType.MaterialStream => [SpecKeys.Temperature, SpecKeys.Pressure, SpecKeys.VapourFraction, SpecKeys.MassEnthalpy,
             SpecKeys.MolarFlow, SpecKeys.MassFlow],
-        ObjectType.Valve => [SpecKeys.OutletPressure, SpecKeys.PressureDrop],
+        ObjectType.Valve => [SpecKeys.OutletPressure, SpecKeys.PressureDrop, SpecKeys.RatedCv],
         ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler => [SpecKeys.OutletTemperature, SpecKeys.Duty, SpecKeys.PressureDrop],
         ObjectType.Pump => [SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.Efficiency],
         ObjectType.Compressor => [SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.PressureRatio, SpecKeys.Efficiency],
@@ -363,6 +363,7 @@ public static class Validator
         {
             case ObjectType.Valve:
                 OneOf("outlet pressure or pressure drop", SpecKeys.OutletPressure, SpecKeys.PressureDrop);
+                if (s.GetValueOrDefault(SpecKeys.RatedCv) is { } cv && !(cv.Si > 0)) err($"{o.Tag}: rated Cv must be positive.", o.Id);
                 break;
             case ObjectType.Heater:
             case ObjectType.Cooler:

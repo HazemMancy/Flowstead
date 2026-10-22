@@ -175,4 +175,45 @@ public sealed class UnitChecksTests(EngineFixture engine)
         Assert.Equal(ObjectStatus.Error, r.Objects["u"].Status);
         Assert.Contains("choked", r.Objects["u"].Error);
     }
+
+    [Fact]
+    public async Task ValveIsSizedByIec60534()
+    {
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        // 100 m³/h of water at 25 °C across 1 bar: Kv = Q √(SG/ΔP) = 100 √(0.997/1) ≈ 99.9, Cv = 1.156 Kv ≈ 115.4.
+        var feed = Feed("f", water, 298.15, 5e5, 100 * 997.0 / 18.015);
+        var r = await Through(feed, ObjectType.Valve, new() { [SpecKeys.PressureDrop] = 1e5 }, "Steam Tables (IAPWS-IF97)");
+        var v = r.Objects["u"].Properties;
+        Assert.Equal(115.4, v["requiredCv"], 115.4 * 0.01);
+        Assert.Equal(99.9, v["requiredKv"], 99.9 * 0.01);
+        Assert.DoesNotContain(r.Messages, m => m.ObjectId == "u");
+
+        // An installed Cv 150 valve runs about 77 % open; a Cv 100 valve cannot pass the flow.
+        r = await Through(feed, ObjectType.Valve, new() { [SpecKeys.PressureDrop] = 1e5, [SpecKeys.RatedCv] = 150 }, "Steam Tables (IAPWS-IF97)");
+        Assert.Equal(0.77, r.Objects["u"].Properties["valveOpening"], 0.01);
+        r = await Through(feed, ObjectType.Valve, new() { [SpecKeys.PressureDrop] = 1e5, [SpecKeys.RatedCv] = 100 }, "Steam Tables (IAPWS-IF97)");
+        Assert.Equal(ObjectStatus.Error, r.Objects["u"].Status);
+        Assert.Contains("too small", r.Objects["u"].Error);
+    }
+
+    [Fact]
+    public async Task HotWaterLetDownCavitates()
+    {
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        // 80 °C water (Pv 0.47 bar) from 3 to 0.6 bar: ΔP 2.4 bar beyond FL²(P1 − FF Pv) ≈ 2.07 bar.
+        var r = await Through(Feed("f", water, 353.15, 3e5, 360), ObjectType.Valve, new() { [SpecKeys.OutletPressure] = 0.6e5 }, "Steam Tables (IAPWS-IF97)");
+        Assert.Equal(2.07e5, r.Objects["u"].Properties["chokedPressureDrop"], 0.02e5);
+        Assert.Contains("cavitating", On(r, "u", MessageLevel.Warning).Text);
+    }
+
+    [Fact]
+    public async Task GasValveChokesBeyondTheCriticalPressureRatio()
+    {
+        var methane = new Dictionary<string, double> { ["Methane"] = 1.0 };
+        var ok = await Through(Feed("f", methane, 300, 20e5, 1000), ObjectType.Valve, new() { [SpecKeys.OutletPressure] = 15e5 });
+        // Independently from IEC's standard-volume form (Q in scfh, Gg, T in °R, Z): 81.5 for 1000 kmol/h.
+        Assert.Equal(81.5, ok.Objects["u"].Properties["requiredCv"], 81.5 * 0.01);
+        var choked = await Through(Feed("f", methane, 300, 20e5, 1000), ObjectType.Valve, new() { [SpecKeys.OutletPressure] = 5e5 });
+        Assert.Contains("choked", On(choked, "u", MessageLevel.Warning).Text);
+    }
 }

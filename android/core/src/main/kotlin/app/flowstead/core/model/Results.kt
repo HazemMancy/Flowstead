@@ -46,7 +46,7 @@ object ResultKeys {
     /** Unit-level results shown for each type, in display order. Streams use [STREAM]. */
     fun forType(type: ObjectType): List<String> = when (type) {
         ObjectType.EnergyStream -> listOf("energyFlow")
-        ObjectType.Valve -> listOf("pressureDrop", "outletPressure", "temperatureChange")
+        ObjectType.Valve -> listOf("pressureDrop", "outletPressure", "temperatureChange", "requiredCv", "requiredKv", "valveOpening", "chokedPressureDrop", "inletBubblePressure")
         ObjectType.Heater, ObjectType.Cooler, ObjectType.AirCooler -> listOf("duty", "outletTemperature", "pressureDrop")
         ObjectType.ComponentSplitter -> listOf("duty")
         ObjectType.Tank -> listOf("liquidResidenceTime", "liquidVolumeFlow")
@@ -89,6 +89,10 @@ object ResultKeys {
         "condenserTemperature", "reboilerTemperature", "topTemperature", "bottomTemperature" -> Quantity.Temperature
         "temperatureChange", "lmtd", "minimumApproach" -> Quantity.TemperatureDifference
         "npshAvailable" -> Quantity.Length
+        "requiredCv", "requiredKv" -> Quantity.Ratio
+        "valveOpening" -> Quantity.Fraction
+        "chokedPressureDrop" -> Quantity.PressureDifference
+        "inletBubblePressure" -> Quantity.Pressure
         "feedBubblePressure" -> Quantity.Pressure
         "pressure", "outletPressure" -> Quantity.Pressure
         "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop",
@@ -160,6 +164,11 @@ object ResultKeys {
         "lmtd" -> "LMTD"
         "minimumApproach" -> "Minimum approach (at the ends)"
         "npshAvailable" -> "NPSH available (at the pump inlet)"
+        "requiredCv" -> "Required Cv (US, IEC 60534)"
+        "requiredKv" -> "Required Kv (metric)"
+        "valveOpening" -> "Opening (linear trim)"
+        "chokedPressureDrop" -> "Choked (maximum useful) pressure drop"
+        "inletBubblePressure" -> "Inlet bubble-point pressure"
         "feedBubblePressure" -> "Feed bubble-point pressure"
         "hotOutletTemperature" -> "Hot outlet temperature"
         "coldOutletTemperature" -> "Cold outlet temperature"

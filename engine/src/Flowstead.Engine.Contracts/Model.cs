@@ -160,6 +160,8 @@ public static class SpecKeys
     public const string ColdOutletTemperature = "coldOutletTemperature";
     public const string HotPressureDrop = "hotPressureDrop";
     public const string ColdPressureDrop = "coldPressureDrop";
+    /// <summary>Valve: the installed valve's rated (full-open) Cv, US units; optional, for the opening (D47).</summary>
+    public const string RatedCv = "ratedCv";
 
     // Pipe segment (SI: m, W/m²·K, K) and orifice plate.
     public const string Length = "length";

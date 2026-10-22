@@ -32,10 +32,13 @@ public static class UnitChecks
     public const double MixerPressureSpread = 0.01;
     private const double G = 9.80665;
 
-    /// <summary>Adds each pump's NPSH available (m) from its feed's bubble-point pressure at the feed temperature.</summary>
+    /// <summary>
+    /// Adds what needs the feed's bubble point: each pump's NPSH available (m), and each valve's inlet bubble-point and
+    /// pseudo-critical pressures for its sizing (<see cref="ValveSizing"/>).
+    /// </summary>
     public static void AddNpsh(Flowsheet model, Dictionary<string, ObjectResult> results, IReadOnlyDictionary<string, ISimulationObject> objects)
     {
-        foreach (var pump in model.Objects.Where(o => o.Type == ObjectType.Pump))
+        foreach (var pump in model.Objects.Where(o => o.Type is ObjectType.Pump or ObjectType.Valve))
         {
             if (results.GetValueOrDefault(pump.Id) is not { Status: ObjectStatus.Solved } r) continue;
             var feedId = Inlet(model, pump.Id, 0);
@@ -45,6 +48,7 @@ public static class UnitChecks
             var p = feed.Properties.GetValueOrDefault("pressure", double.NaN);
             var rho = feed.Phases?.GetValueOrDefault("overall")?.Properties.GetValueOrDefault("density", double.NaN) ?? double.NaN;
             if (!(t > 0 && p > 0 && rho > 0)) continue;
+            if (pump.Type == ObjectType.Valve && !(feed.Properties.GetValueOrDefault("vapourFraction", 1.0) <= 0)) continue; // liquid valves only
             try
             {
                 if (ms.PropertyPackage is not PropertyPackage pp) continue;
@@ -53,6 +57,13 @@ public static class UnitChecks
                 var flash = (object[])pp.FlashBase.Flash_TV(z, t, 0.0, p, pp);
                 var bubble = Convert.ToDouble(flash[4]);
                 if (!(bubble > 0) || !double.IsFinite(bubble)) continue;
+                if (pump.Type == ObjectType.Valve)
+                {
+                    r.Properties["inletBubblePressure"] = bubble;
+                    var pc = pp.RET_VPC();
+                    r.Properties[ValveSizing.CriticalPressureKey] = z.Select((zi, i) => zi * Convert.ToDouble(pc.GetValue(i))).Sum();
+                    continue;
+                }
                 r.Properties["npshAvailable"] = (p - bubble) / (rho * G);
                 r.Properties["feedBubblePressure"] = bubble;
             }
@@ -122,7 +133,8 @@ public static class UnitChecks
             case ObjectType.Valve:
             {
                 if (In() is not { } i || Out() is not { } x) break;
-                if (x.P > i.P * (1 + 1e-9)) Err($"the outlet pressure ({Bar(x.P)}) is above the inlet ({Bar(i.P)}); a valve can only lower pressure. Use a pump or a compressor.");
+                if (x.P > i.P * (1 + 1e-9)) { Err($"the outlet pressure ({Bar(x.P)}) is above the inlet ({Bar(i.P)}); a valve can only lower pressure. Use a pump or a compressor."); break; }
+                found.AddRange(ValveSizing.Size(o, r, results[Inlet(model, o.Id, 0)!], i.P, x.P));
                 break;
             }
             case ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler:

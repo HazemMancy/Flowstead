@@ -151,10 +151,14 @@ fun ObjectEditorSheet(
                 ObjectType.MaterialStream ->
                     if (fs.isFeed(obj)) FeedStreamEditor(fs, obj, unitSet, ctx, actions) else Calculated("This stream is calculated from the unit it comes from.")
                 ObjectType.EnergyStream -> Calculated("Energy streams carry the duty or power of the unit they connect to.")
-                ObjectType.Valve -> ExclusiveSpecs(
-                    obj, unitSet, ctx, actions,
-                    listOf(SpecKey.OUTLET_PRESSURE to "Outlet pressure", SpecKey.PRESSURE_DROP to "Pressure drop"),
-                )
+                ObjectType.Valve -> {
+                    ExclusiveSpecs(
+                        obj, unitSet, ctx, actions,
+                        listOf(SpecKey.OUTLET_PRESSURE to "Outlet pressure", SpecKey.PRESSURE_DROP to "Pressure drop"),
+                    )
+                    SpecField(obj, SpecKey.RATED_CV, unitSet, ctx, actions, optionalHint = "for the opening; leave empty to size only")
+                    Calculated("Sized by IEC 60534 (globe valve: FL 0.9, xT 0.72): the Cv it needs, and choked flow or cavitation.")
+                }
                 ObjectType.AirCooler -> {
                     Calculated("Process side only: the engine finds the duty to air; fan power is not modelled.")
                     ExclusiveSpecs(
