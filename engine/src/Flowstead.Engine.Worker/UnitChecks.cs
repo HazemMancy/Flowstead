@@ -74,6 +74,64 @@ public static class UnitChecks
         }
     }
 
+    /// <summary>Zone analysis: slices of equal duty along each heat exchanger.</summary>
+    public const int Zones = 20;
+
+    /// <summary>
+    /// Each exchanger's temperature profiles, as HYSYS's zone analysis: the duty is cut into <see cref="Zones"/> equal
+    /// slices and both sides are flashed (P, H) at each cut, counter-current, with pressure linear along each side.
+    /// The smallest hot-minus-cold difference is the minimum approach, which catches a cross inside the exchanger
+    /// (a condensing or boiling side) that the end temperatures don't show.
+    /// </summary>
+    public static void AddZoneAnalysis(Flowsheet model, Dictionary<string, ObjectResult> results, IReadOnlyDictionary<string, ISimulationObject> objects)
+    {
+        foreach (var hx in model.Objects.Where(o => o.Type == ObjectType.HeatExchanger))
+        {
+            if (results.GetValueOrDefault(hx.Id) is not { Status: ObjectStatus.Solved } r) continue;
+            MaterialStream? S(string? id) => id is not null && objects.GetValueOrDefault(id) is MaterialStream m ? m : null;
+            if (S(Inlet(model, hx.Id, 0)) is not { } a || S(Inlet(model, hx.Id, 1)) is not { } b
+                || S(Outlet(model, hx.Id, 0)) is not { } ao || S(Outlet(model, hx.Id, 1)) is not { } bo) continue;
+            static double T(MaterialStream m) => m.Phases[0].Properties.temperature.GetValueOrDefault();
+            var (hi, ho, ci, co) = T(a) >= T(b) ? (a, ao, b, bo) : (b, bo, a, ao);
+            try
+            {
+                double minDt = double.PositiveInfinity, at = 0, thAt = 0, tcAt = 0;
+                for (var k = 0; k <= Zones; k++)
+                {
+                    var f = (double)k / Zones; // from the hot inlet end
+                    var th = Flash(hi, ho, f);
+                    var tc = Flash(co, ci, f); // counter-current: the cold outlet is at the hot inlet end
+                    if (!double.IsFinite(th) || !double.IsFinite(tc)) throw new InvalidOperationException();
+                    if (th - tc < minDt) (minDt, at, thAt, tcAt) = (th - tc, f, th, tc);
+                }
+                r.Properties["minimumApproach"] = minDt;
+                r.Properties["pinchLocation"] = at;
+                r.Properties["pinchHotTemperature"] = thAt;
+                r.Properties["pinchColdTemperature"] = tcAt;
+            }
+            catch
+            {
+                // A flash that fails leaves only the end temperatures to check; nothing is guessed.
+            }
+        }
+    }
+
+    /// <summary>Temperature at fraction f of the way from stream <paramref name="from"/> to <paramref name="to"/> (same side), by a PH flash.</summary>
+    private static double Flash(MaterialStream from, MaterialStream to, double f)
+    {
+        if (from.PropertyPackage is not PropertyPackage pp) return double.NaN;
+        double H(MaterialStream m) => m.Phases[0].Properties.enthalpy.GetValueOrDefault(); // kJ/kg
+        double P(MaterialStream m) => m.Phases[0].Properties.pressure.GetValueOrDefault();
+        if (f == 0) return from.Phases[0].Properties.temperature.GetValueOrDefault();
+        if (f == 1) return to.Phases[0].Properties.temperature.GetValueOrDefault();
+        pp.CurrentMaterialStream = from;
+        var h = H(from) + f * (H(to) - H(from));
+        var p = P(from) + f * (P(to) - P(from));
+        var tGuess = from.Phases[0].Properties.temperature.GetValueOrDefault();
+        var result = (object[])pp.FlashBase.Flash_PH(from.GetOverallComposition(), p, h, tGuess, pp);
+        return Convert.ToDouble(result[4]);
+    }
+
     public static void Apply(Flowsheet model, Dictionary<string, ObjectResult> results, List<SolverMessage> messages)
     {
         foreach (var o in model.Objects)
@@ -154,11 +212,17 @@ public static class UnitChecks
                 // Counter-current: the hot outlet meets the cold inlet, the hot inlet the cold outlet.
                 var coldEnd = ho.T - ci.T;
                 var hotEnd = hi.T - co.T;
-                r.Properties["minimumApproach"] = Math.Min(coldEnd, hotEnd);
+                var ends = Math.Min(coldEnd, hotEnd);
+                // The zone analysis (when its flashes all worked) includes the ends; otherwise only the ends are known.
+                var zoned = r.Properties.TryGetValue("pinchLocation", out var at);
+                var approach = zoned ? Math.Min(r.Properties["minimumApproach"], ends) : ends;
+                r.Properties["minimumApproach"] = approach;
                 if (coldEnd < -1e-3 || hotEnd < -1e-3)
                     Err($"temperature cross: {(coldEnd < hotEnd ? $"the hot outlet ({K(ho.T)}) is below the cold inlet ({K(ci.T)})" : $"the cold outlet ({K(co.T)}) is above the hot inlet ({K(hi.T)})")}. Reduce the duty or change the specified outlet temperature.");
-                else if (Math.Min(coldEnd, hotEnd) < 1.0)
-                    Warn($"minimum approach at the ends is only {Math.Min(coldEnd, hotEnd):0.00} K; the exchanger would need a very large area.");
+                else if (zoned && approach < -0.05)
+                    Err($"internal temperature cross at {at * 100:0} % of the duty from the hot inlet: the hot side is at {K(r.Properties["pinchHotTemperature"])} where the cold side is at {K(r.Properties["pinchColdTemperature"])} (a condensing or boiling side holds its temperature). The ends look fine, but this exchange is impossible; reduce the duty or change the outlet temperatures.");
+                else if (approach < 1.0)
+                    Warn($"minimum approach is only {approach:0.00} K{(zoned ? $" (at {at * 100:0} % of the duty from the hot inlet)" : " at the ends")}; the exchanger would need a very large area.");
                 break;
             }
             case ObjectType.Mixer:

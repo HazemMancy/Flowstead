@@ -221,6 +221,7 @@ public sealed class DwsimEngine
             results[o.Id] = bad with { Error = UnitChecks.Explain(o, e) };
         }
         UnitChecks.AddNpsh(model, results, objects);
+        UnitChecks.AddZoneAnalysis(model, results, objects);
         Columns.Verify(model, results);
         Reactors.Verify(model, results);
         UnitChecks.Apply(model, results, messages);

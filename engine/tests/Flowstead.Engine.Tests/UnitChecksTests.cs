@@ -216,4 +216,34 @@ public sealed class UnitChecksTests(EngineFixture engine)
         var choked = await Through(Feed("f", methane, 300, 20e5, 1000), ObjectType.Valve, new() { [SpecKeys.OutletPressure] = 5e5 });
         Assert.Contains("choked", On(choked, "u", MessageLevel.Warning).Text);
     }
+
+    [Fact]
+    public async Task ZoneAnalysisFindsACrossInsideACondenser()
+    {
+        // Steam at 1 bar and 150 °C condensed to 95 °C against water from 30 °C. The ends look fine (hot end 150 vs
+        // ~120 °C, cold end 95 vs 30 °C), but the steam condenses at 99.6 °C while the water there is already above 110 °C.
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        Flowsheet Condenser(double coolingWater) => new()
+        {
+            PropertyPackage = "Steam Tables (IAPWS-IF97)",
+            Compounds = ["Water"],
+            Objects =
+            [
+                Feed("a", water, 423.15, 1e5, 36), Feed("b", water, 303.15, 3e5, coolingWater),
+                new SimObject { Id = "e", Tag = "E-100", Type = ObjectType.HeatExchanger, Specs = new() { [SpecKeys.HotOutletTemperature] = new Spec(368.15, "K") } },
+                Product("ao"), Product("bo"),
+            ],
+            Connections = [new("a", 0, "e", 0), new("b", 0, "e", 1), new("e", 0, "ao", 0), new("e", 1, "bo", 0)],
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", Condenser(226.4), Json.Options));
+        Assert.Equal(ObjectStatus.Error, r.Objects["e"].Status);
+        Assert.StartsWith("Internal temperature cross", r.Objects["e"].Error);
+
+        // Three times the cooling water: feasible, pinched where the steam starts to condense (99.6 °C).
+        r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", Condenser(720), Json.Options));
+        var e = r.Objects["e"].Properties;
+        Assert.Equal(372.76, e["pinchHotTemperature"], 0.1);
+        Assert.InRange(e["minimumApproach"], 30, 60);
+        Assert.True(e["minimumApproach"] < Math.Min(e["hotOutletTemperature"] - 303.15, 423.15 - e["coldOutletTemperature"]));
+    }
 }

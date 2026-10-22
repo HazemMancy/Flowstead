@@ -64,7 +64,7 @@ object ResultKeys {
         ObjectType.Pump -> listOf("power", "pressureRise", "temperatureChange", "efficiency", "npshAvailable", "feedBubblePressure")
         ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
-        ObjectType.HeatExchanger -> listOf("duty", "lmtd", "minimumApproach", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
+        ObjectType.HeatExchanger -> listOf("duty", "lmtd", "minimumApproach", "pinchLocation", "pinchHotTemperature", "pinchColdTemperature", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
         ObjectType.PipeSegment -> listOf("pressureDrop", "frictionPressureDrop", "staticPressureDrop") + PIPE_HYDRAULICS +
             listOf("temperatureChange", "heatTransferred")
         ObjectType.OrificePlate -> listOf("pressureDrop", "orificePressureDrop", "beta", "temperatureChange")
@@ -89,6 +89,8 @@ object ResultKeys {
         "condenserTemperature", "reboilerTemperature", "topTemperature", "bottomTemperature" -> Quantity.Temperature
         "temperatureChange", "lmtd", "minimumApproach" -> Quantity.TemperatureDifference
         "npshAvailable" -> Quantity.Length
+        "pinchLocation" -> Quantity.Fraction
+        "pinchHotTemperature", "pinchColdTemperature" -> Quantity.Temperature
         "requiredCv", "requiredKv" -> Quantity.Ratio
         "valveOpening" -> Quantity.Fraction
         "chokedPressureDrop" -> Quantity.PressureDifference
@@ -162,7 +164,10 @@ object ResultKeys {
         "efficiency" -> "Adiabatic efficiency"
         "adiabaticHead" -> "Adiabatic head"
         "lmtd" -> "LMTD"
-        "minimumApproach" -> "Minimum approach (at the ends)"
+        "minimumApproach" -> "Minimum approach (zone analysis)"
+        "pinchLocation" -> "Pinch at (fraction of the duty from the hot inlet)"
+        "pinchHotTemperature" -> "Hot side temperature at the pinch"
+        "pinchColdTemperature" -> "Cold side temperature at the pinch"
         "npshAvailable" -> "NPSH available (at the pump inlet)"
         "requiredCv" -> "Required Cv (US, IEC 60534)"
         "requiredKv" -> "Required Kv (metric)"
