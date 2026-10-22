@@ -63,6 +63,10 @@
       "enum": ["none"],
       "description": "Cubic EOS volume shift. Absent: DWSIM's Peneloux shift on vapour and liquid (PR, SRK, PR/LK). \"none\": the plain EOS, as HYSYS's Peng-Robinson reports densities and Z."
     },
+    "vapourViscosity": {
+      "enum": ["lge"],
+      "description": "Vapour viscosity method. Absent: DWSIM's (Lucas, with the Jossi-Stiel-Thodos pressure correction). \"lge\": Lee-Gonzalez-Eakin, the natural-gas correlation (PR, SRK, PR/LK, NRTL, UNIQUAC)."
+    },
     "sizingCriteria": {
       "type": "object",
       "description": "App-only line-sizing limits by service (gas, liquid, twoPhase), each a set of optional Specs in SI: maxVelocity, minVelocity (m/s), maxMomentumFlux (kg/m·s²), maxFrictionGradient (Pa/m), maxMach, erosionalC (API RP 14E). Not part of the solved model; the engine ignores it."

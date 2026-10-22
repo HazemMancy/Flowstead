@@ -40,6 +40,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val volumeShift: String? = null,
+    /** Vapour viscosity: null for DWSIM's, [VapourViscosityMethods.LGE] for Lee–Gonzalez–Eakin. Written only when set. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val vapourViscosity: String? = null,
     /** Line-sizing limits by service. Not part of the solved model: excluded from [modelHash]. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -70,6 +74,11 @@ object LiquidDensityMethods {
 /** Volume shift settings; same strings as the engine's VolumeShiftMethods. */
 object VolumeShiftMethods {
     const val NONE = "none"
+}
+
+/** Vapour viscosity methods; same strings as the engine's VapourViscosityMethods. */
+object VapourViscosityMethods {
+    const val LGE = "lge"
 }
 
 @Serializable

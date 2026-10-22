@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
 
 using DWSIM.Thermodynamics.PropertyPackages;
+using Flowstead.Engine.Contracts;
 
 namespace Flowstead.Engine.Worker;
 
@@ -105,42 +106,67 @@ public static class LiquidDensity
 }
 
 [Serializable]
-public sealed class FlowsteadPr : PengRobinsonPropertyPackage
+public sealed class FlowsteadPr : PengRobinsonPropertyPackage, IFlowsteadPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
         LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
 
     public override DWSIM.Thermodynamics.PropertyPackages.Auxiliary.FlashAlgorithms.FlashAlgorithm FlashBase => PhaseStability.Wrap(base.FlashBase);
+
+    public string? VapourViscosity { get; set; }
+
+    public override double AUX_VAPVISCm(double T, double RHO, double MM) =>
+        VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin ? GasViscosity.LeeGonzalezEakin(T, RHO, MM) : base.AUX_VAPVISCm(T, RHO, MM);
 }
 
 [Serializable]
-public sealed class FlowsteadSrk : SRKPropertyPackage
+public sealed class FlowsteadSrk : SRKPropertyPackage, IFlowsteadPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
         LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
 
     public override DWSIM.Thermodynamics.PropertyPackages.Auxiliary.FlashAlgorithms.FlashAlgorithm FlashBase => PhaseStability.Wrap(base.FlashBase);
+
+    public string? VapourViscosity { get; set; }
+
+    public override double AUX_VAPVISCm(double T, double RHO, double MM) =>
+        VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin ? GasViscosity.LeeGonzalezEakin(T, RHO, MM) : base.AUX_VAPVISCm(T, RHO, MM);
 }
 
 [Serializable]
-public sealed class FlowsteadPrLk : PengRobinsonLKPropertyPackage
+public sealed class FlowsteadPrLk : PengRobinsonLKPropertyPackage, IFlowsteadPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
         LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
 
     public override DWSIM.Thermodynamics.PropertyPackages.Auxiliary.FlashAlgorithms.FlashAlgorithm FlashBase => PhaseStability.Wrap(base.FlashBase);
+
+    public string? VapourViscosity { get; set; }
+
+    public override double AUX_VAPVISCm(double T, double RHO, double MM) =>
+        VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin ? GasViscosity.LeeGonzalezEakin(T, RHO, MM) : base.AUX_VAPVISCm(T, RHO, MM);
 }
 
 [Serializable]
-public sealed class FlowsteadNrtl : NRTLPropertyPackage
+public sealed class FlowsteadNrtl : NRTLPropertyPackage, IFlowsteadPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
         LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: false, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
+
+    public string? VapourViscosity { get; set; }
+
+    public override double AUX_VAPVISCm(double T, double RHO, double MM) =>
+        VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin ? GasViscosity.LeeGonzalezEakin(T, RHO, MM) : base.AUX_VAPVISCm(T, RHO, MM);
 }
 
 [Serializable]
-public sealed class FlowsteadUniquac : UNIQUACPropertyPackage
+public sealed class FlowsteadUniquac : UNIQUACPropertyPackage, IFlowsteadPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
         LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: false, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
+
+    public string? VapourViscosity { get; set; }
+
+    public override double AUX_VAPVISCm(double T, double RHO, double MM) =>
+        VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin ? GasViscosity.LeeGonzalezEakin(T, RHO, MM) : base.AUX_VAPVISCm(T, RHO, MM);
 }

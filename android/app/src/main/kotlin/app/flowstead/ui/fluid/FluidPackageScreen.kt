@@ -68,6 +68,7 @@ import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.Hypothetical
 import app.flowstead.core.model.LiquidDensityMethods
+import app.flowstead.core.model.VapourViscosityMethods
 import app.flowstead.core.model.VolumeShiftMethods
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitSet
@@ -105,6 +106,8 @@ data class FluidUi(
     val liquidDensity: String? = null,
     /** Null: DWSIM's Peneloux volume shift; [VolumeShiftMethods.NONE]: plain EOS. */
     val volumeShift: String? = null,
+    /** Null: DWSIM's vapour viscosity; [VapourViscosityMethods.LGE]: Lee–Gonzalez–Eakin. */
+    val vapourViscosity: String? = null,
     val compounds: List<String> = emptyList(),
     val hypotheticals: List<Hypothetical> = emptyList(),
     val packages: List<String> = OfflineCatalogue.propertyPackages,
@@ -152,6 +155,7 @@ class FluidPackageViewModel @Inject constructor(
             propertyPackage = p?.flowsheet?.propertyPackage,
             liquidDensity = p?.flowsheet?.liquidDensity,
             volumeShift = p?.flowsheet?.volumeShift,
+            vapourViscosity = p?.flowsheet?.vapourViscosity,
             compounds = p?.flowsheet?.compounds.orEmpty(),
             hypotheticals = p?.flowsheet?.hypotheticals.orEmpty(),
             packages = pk,
@@ -194,6 +198,11 @@ class FluidPackageViewModel @Inject constructor(
     fun setVolumeShift(method: String?) = viewModelScope.launch {
         val p = projects.observeProject(projectId).first() ?: return@launch
         projects.saveFlowsheet(projectId, p.flowsheet.copy(volumeShift = method))
+    }
+
+    fun setVapourViscosity(method: String?) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        projects.saveFlowsheet(projectId, p.flowsheet.copy(vapourViscosity = method))
     }
 
     fun add(name: String) = viewModelScope.launch {
@@ -259,6 +268,7 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onEditHypothetical = { viewModel.clearEstimate(); editing = it },
         onLiquidDensity = viewModel::setLiquidDensity,
         onVolumeShift = viewModel::setVolumeShift,
+        onVapourViscosity = viewModel::setVapourViscosity,
     )
     if (creating || editing != null) {
         val close = { creating = false; editing = null }
@@ -289,6 +299,7 @@ fun FluidPackageContent(
     onEditHypothetical: (Hypothetical) -> Unit = {},
     onLiquidDensity: (String?) -> Unit = {},
     onVolumeShift: (String?) -> Unit = {},
+    onVapourViscosity: (String?) -> Unit = {},
 ) {
     var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
@@ -357,6 +368,24 @@ fun FluidPackageContent(
                         .testTag("volume_shift_${o.method ?: "default"}"),
                 ) {
                     RadioButton(selected = ui.volumeShift == o.method, onClick = null)
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(o.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(o.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            item { HorizontalDivider() }
+            item { Text("Vapour viscosity", style = MaterialTheme.typography.titleMedium) }
+            items(VAPOUR_VISCOSITY_OPTIONS, key = { "vv_${it.method}" }) { o ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .selectable(selected = ui.vapourViscosity == o.method, role = Role.RadioButton) { onVapourViscosity(o.method) }
+                        .testTag("vapour_viscosity_${o.method ?: "default"}"),
+                ) {
+                    RadioButton(selected = ui.vapourViscosity == o.method, onClick = null)
                     Column(Modifier.padding(start = 12.dp)) {
                         Text(o.label, style = MaterialTheme.typography.bodyLarge)
                         Text(o.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -469,6 +498,17 @@ private val VOLUME_SHIFT_OPTIONS = listOf(
     DensityOption(
         VolumeShiftMethods.NONE, "Plain EOS (as HYSYS)",
         "No volume shift: PR densities and Z as HYSYS reports them.",
+    ),
+)
+
+private val VAPOUR_VISCOSITY_OPTIONS = listOf(
+    DensityOption(
+        null, "DWSIM default",
+        "Lucas, with the Jossi–Stiel–Thodos correction for pressure.",
+    ),
+    DensityOption(
+        VapourViscosityMethods.LGE, "Lee–Gonzalez–Eakin (natural gas)",
+        "The natural-gas correlation, from the gas density and molecular weight. With plain EOS densities it is within 2 % of HYSYS for a dense natural gas.",
     ),
 )
 

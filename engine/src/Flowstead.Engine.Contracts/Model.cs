@@ -23,6 +23,13 @@ public sealed record Flowsheet
     public string? LiquidDensity { get; init; }
     /// <summary>Cubic EOS volume shift: null for DWSIM's Peneloux shift on vapour and liquid; "none" for the plain EOS, as HYSYS's PR (D41).</summary>
     public string? VolumeShift { get; init; }
+    /// <summary>Vapour viscosity: null for DWSIM's (Lucas, then Jossi–Stiel–Thodos for pressure); "lge" for Lee–Gonzalez–Eakin (D44).</summary>
+    public string? VapourViscosity { get; init; }
+}
+
+public static class VapourViscosityMethods
+{
+    public const string LeeGonzalezEakin = "lge";
 }
 
 public static class VolumeShiftMethods

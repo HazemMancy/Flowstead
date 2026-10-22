@@ -78,6 +78,8 @@ class ResultViewTest {
         assertNotEquals(a.modelHash(), a.copy(volumeShift = VolumeShiftMethods.NONE).modelHash())
         assertTrue("liquidDensity" !in FlowsheetJson.encodeToString(Flowsheet.serializer(), a))
         assertTrue("volumeShift" !in FlowsheetJson.encodeToString(Flowsheet.serializer(), a))
+        assertNotEquals(a.modelHash(), a.copy(vapourViscosity = VapourViscosityMethods.LGE).modelHash())
+        assertTrue("vapourViscosity" !in FlowsheetJson.encodeToString(Flowsheet.serializer(), a))
     }
 
     @Test

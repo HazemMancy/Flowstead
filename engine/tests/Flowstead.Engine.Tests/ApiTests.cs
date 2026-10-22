@@ -261,6 +261,15 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
         Assert.Equal(0.8335, plain["compressibilityFactor"], 0.002);
         var bad = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs with { VolumeShift = "peneloux" }, Json.Options));
         Assert.Equal(SolveStatus.Invalid, bad.Status);
+
+        // Lee–Gonzalez–Eakin viscosity (D44) on the plain EOS density: HYSYS gives 0.0489 cP; LGE about 0.0497.
+        r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync(
+            "/solve", fs with { VolumeShift = VolumeShiftMethods.None, VapourViscosity = VapourViscosityMethods.LeeGonzalezEakin }, Json.Options));
+        var lge = r.Objects["g"].Phases!["vapour"].Properties;
+        Assert.Equal(0.0489e-3, lge["viscosity"], 0.0489e-3 * 0.03);
+        Assert.Equal(lge["viscosity"] / lge["density"], lge["kinematicViscosity"], 1e-9);
+        bad = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs with { VapourViscosity = "ely-hanley" }, Json.Options));
+        Assert.Equal(SolveStatus.Invalid, bad.Status);
     }
 
     [Fact]

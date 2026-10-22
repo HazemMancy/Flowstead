@@ -305,6 +305,8 @@ public sealed class DwsimEngine
             warnings.Add("Liquid densities: desktop DWSIM mixes pure-liquid densities by mole fraction; Flowstead's engine mixes them by mass" +
                 (LiquidDensity.CubicPackages.Contains(model.PropertyPackage ?? "") ? " and uses COSTALD for liquids that carry more than 1 mol % of components above their critical temperature" : "") +
                 ", so liquid densities and two-phase pipe ΔP can differ for mixtures.");
+        if (model.VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin)
+            warnings.Add("Vapour viscosity: Lee–Gonzalez–Eakin is a Flowstead option; desktop DWSIM uses its own method, so gas viscosities can differ.");
         var (fs, _) = Build(plain, forExport: true);
         var solveErrors = _automation.CalculateFlowsheet4(fs) ?? [];
         var status = solveErrors.Count == 0 ? SolveStatus.Converged : SolveStatus.Failed;
@@ -413,6 +415,8 @@ public sealed class DwsimEngine
         if (costald) pp.LiquidDensityCalculationMode_Subcritical = PropertyPackage.LiquidDensityCalcMode.COSTALD;
         // Without the volume shift (D41) PR and SRK densities and Z are the plain EOS values, as HYSYS reports them.
         if (model.VolumeShift == VolumeShiftMethods.None) pp.LiquidDensity_UsePenelouxVolumeTranslation = false;
+        // Lee–Gonzalez–Eakin vapour viscosity (D44) lives in Flowstead's package classes only.
+        if (pp is IFlowsteadPackage fp) fp.VapourViscosity = model.VapourViscosity;
         // DWSIM's Gibbs-minimisation flashes (rigorous VLLE) default to IPOPT, a native library that is not in the
         // engine (server or phone); its finalizer then crashed the process. DWSIM's managed L-BFGS instead.
         pp.FlashSettings[FlashSetting.GM_OptimizationMethod] = "Limited_Memory_BGFS";

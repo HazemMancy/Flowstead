@@ -24,6 +24,7 @@ import app.flowstead.MainDispatcherRule
 import app.flowstead.core.compounds.CompoundCatalogue
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.LiquidDensityMethods
+import app.flowstead.core.model.VapourViscosityMethods
 import app.flowstead.core.model.VolumeShiftMethods
 import app.flowstead.ui.theme.FlowsteadTheme
 import kotlinx.coroutines.flow.first
@@ -114,5 +115,19 @@ class FluidPackageTest {
         compose.onNodeWithTag("fluid_list").performScrollToNode(hasTestTag("volume_shift_none"))
         compose.onNodeWithTag("volume_shift_none").performClick()
         assertEquals(VolumeShiftMethods.NONE, picked)
+    }
+
+    @Test
+    fun vapourViscosityDefaultsToDwsimAndSwitchesToLge() = runTest {
+        val vm = vm()
+        assertEquals(null, vm.state.first { it.loaded }.vapourViscosity)
+        vm.setVapourViscosity(VapourViscosityMethods.LGE)
+        assertEquals(VapourViscosityMethods.LGE, vm.state.first { it.vapourViscosity != null }.vapourViscosity)
+
+        var picked: String? = "unset"
+        compose.setContent { FlowsteadTheme { FluidPackageContent(FluidUi(loaded = true), onVapourViscosity = { picked = it }) } }
+        compose.onNodeWithTag("fluid_list").performScrollToNode(hasTestTag("vapour_viscosity_lge"))
+        compose.onNodeWithTag("vapour_viscosity_lge").performClick()
+        assertEquals(VapourViscosityMethods.LGE, picked)
     }
 }
