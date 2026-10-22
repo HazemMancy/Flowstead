@@ -301,9 +301,10 @@ public sealed class DwsimEngine
         var applied = SetSolver.Apply(model);
         var plain = applied with { Objects = applied.Objects.Where(o => o.Type is not (ObjectType.Adjust or ObjectType.Set)).ToList() };
 
-        if (model.LiquidDensity != LiquidDensityMethods.Costald && LiquidDensity.CubicPackages.Contains(model.PropertyPackage ?? "") && HasSupercriticalCompound(model))
-            warnings.Add("Liquid densities: desktop DWSIM uses its default method; Flowstead's engine uses COSTALD for liquids that carry " +
-                "more than 1 mol % of components above their critical temperature, so liquid densities and two-phase pipe ΔP can differ.");
+        if (model.LiquidDensity != LiquidDensityMethods.Costald && LiquidDensity.FixedPackages.Contains(model.PropertyPackage ?? "") && model.Compounds.Count > 1)
+            warnings.Add("Liquid densities: desktop DWSIM mixes pure-liquid densities by mole fraction; Flowstead's engine mixes them by mass" +
+                (LiquidDensity.CubicPackages.Contains(model.PropertyPackage ?? "") ? " and uses COSTALD for liquids that carry more than 1 mol % of components above their critical temperature" : "") +
+                ", so liquid densities and two-phase pipe ΔP can differ for mixtures.");
         var (fs, _) = Build(plain, forExport: true);
         var solveErrors = _automation.CalculateFlowsheet4(fs) ?? [];
         var status = solveErrors.Count == 0 ? SolveStatus.Converged : SolveStatus.Failed;

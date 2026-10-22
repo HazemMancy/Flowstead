@@ -1,4 +1,4 @@
-// Flowstead engine worker — liquid density for the cubic equations of state (decision D32).
+// Flowstead engine worker — liquid density for the cubic and activity packages (decisions D32, D39).
 // Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
 
 using DWSIM.Thermodynamics.PropertyPackages;
@@ -19,13 +19,19 @@ public static class LiquidDensity
     /// <summary>Mole fraction of supercritical components above which COSTALD is used.</summary>
     public const double SupercriticalLimit = 0.01;
 
+    /// <summary>Packages whose liquid density Flowstead corrects (mass-fraction mixing, D39).</summary>
+    public static readonly IReadOnlySet<string> FixedPackages = new HashSet<string>
+    {
+        "Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "Peng-Robinson / Lee-Kesler (PR/LK)", "NRTL", "UNIQUAC",
+    };
+
     public static readonly IReadOnlySet<string> CubicPackages = new HashSet<string>
     {
         "Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "Peng-Robinson / Lee-Kesler (PR/LK)",
     };
 
     /// <summary>
-    /// The Flowstead variant of a cubic package, or null for any other package. Exact types only: DWSIM's
+    /// The Flowstead variant of a cubic or activity package, or null for any other package. Exact types only: DWSIM's
     /// derived packages (PR 1978, the PR/SRK variants with other mixing rules) must keep their own class.
     /// </summary>
     public static PropertyPackage? Variant(PropertyPackage template)
@@ -34,6 +40,8 @@ public static class LiquidDensity
         if (type == typeof(PengRobinsonLKPropertyPackage)) return Copy(new FlowsteadPrLk(), template);
         if (type == typeof(PengRobinsonPropertyPackage)) return Copy(new FlowsteadPr(), template);
         if (type == typeof(SRKPropertyPackage)) return Copy(new FlowsteadSrk(), template);
+        if (type == typeof(NRTLPropertyPackage)) return Copy(new FlowsteadNrtl(), template);
+        if (type == typeof(UNIQUACPropertyPackage)) return Copy(new FlowsteadUniquac(), template);
         return null;
     }
 
@@ -56,6 +64,23 @@ public static class LiquidDensity
         return supercritical > SupercriticalLimit;
     }
 
+    /// <summary>
+    /// Flowstead's liquid density for a package in DWSIM's default mode (D32, D39). DWSIM mixes the pure-liquid
+    /// densities as 1/Σ(xᵢ/ρᵢ) with mole fractions, which is right only when the molecular weights are equal
+    /// (propane/n-decane 40/60 mol read 614 kg/m³ against 675 for ideal mixing). Its sum uses the fractions
+    /// nowhere else, so handing it mass fractions gives the volume-additive 1/Σ(wᵢ/ρᵢ). Cubic packages also
+    /// switch to COSTALD for liquids carrying supercritical components (D32).
+    /// </summary>
+    internal static double Density(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density)
+    {
+        if (forceEos || pp.LiquidDensityCalculationMode_Subcritical != PropertyPackage.LiquidDensityCalcMode.Rackett_and_ExpData)
+            return density(vx);
+        if (cubic && UseCostald(pp, t, vx, forceEos)) return WithCostald(pp, () => density(vx));
+        var x = new double[vx.Length];
+        for (var i = 0; i < x.Length; i++) x[i] = Convert.ToDouble(vx.GetValue(i));
+        return density(pp.AUX_CONVERT_MOL_TO_MASS(x));
+    }
+
     /// <summary>DWSIM's density with COSTALD for this call only.</summary>
     internal static double WithCostald(PropertyPackage pp, Func<double> density)
     {
@@ -70,25 +95,33 @@ public static class LiquidDensity
 public sealed class FlowsteadPr : PengRobinsonPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
-        LiquidDensity.UseCostald(this, T, Vx, FORCE_EOS)
-            ? LiquidDensity.WithCostald(this, () => base.AUX_LIQDENS(T, Vx, P, Pvp, FORCE_EOS))
-            : base.AUX_LIQDENS(T, Vx, P, Pvp, FORCE_EOS);
+        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
 }
 
 [Serializable]
 public sealed class FlowsteadSrk : SRKPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
-        LiquidDensity.UseCostald(this, T, Vx, FORCE_EOS)
-            ? LiquidDensity.WithCostald(this, () => base.AUX_LIQDENS(T, Vx, P, Pvp, FORCE_EOS))
-            : base.AUX_LIQDENS(T, Vx, P, Pvp, FORCE_EOS);
+        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
 }
 
 [Serializable]
 public sealed class FlowsteadPrLk : PengRobinsonLKPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
-        LiquidDensity.UseCostald(this, T, Vx, FORCE_EOS)
-            ? LiquidDensity.WithCostald(this, () => base.AUX_LIQDENS(T, Vx, P, Pvp, FORCE_EOS))
-            : base.AUX_LIQDENS(T, Vx, P, Pvp, FORCE_EOS);
+        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
+}
+
+[Serializable]
+public sealed class FlowsteadNrtl : NRTLPropertyPackage
+{
+    public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
+        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: false, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
+}
+
+[Serializable]
+public sealed class FlowsteadUniquac : UNIQUACPropertyPackage
+{
+    public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
+        LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: false, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS));
 }

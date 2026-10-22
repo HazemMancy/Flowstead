@@ -4,7 +4,7 @@
   "generatedWith": {
     "engine": "0.2.0",
     "dwsim": "9.0.5",
-    "date": "2026-10-21"
+    "date": "2026-10-22"
   },
   "status": "converged",
   "checks": [
@@ -241,7 +241,7 @@
     },
     {
       "path": "objects.d.phases.overall.properties.density",
-      "expected": 438.0510540993648,
+      "expected": 451.5552634906206,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -307,7 +307,7 @@
     },
     {
       "path": "objects.d.phases.liquid1.properties.density",
-      "expected": 438.0510540993648,
+      "expected": 451.5552634906206,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -419,7 +419,7 @@
     },
     {
       "path": "objects.b.phases.overall.properties.density",
-      "expected": 463.0731374299232,
+      "expected": 467.36233463564804,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -485,7 +485,7 @@
     },
     {
       "path": "objects.b.phases.liquid1.properties.density",
-      "expected": 463.0731374299232,
+      "expected": 467.36233463564804,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -775,7 +775,7 @@
     },
     {
       "path": "objects.d2.phases.overall.properties.density",
-      "expected": 436.16773856065845,
+      "expected": 449.6486825127244,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -907,7 +907,7 @@
     },
     {
       "path": "objects.d2.phases.liquid1.properties.density",
-      "expected": 437.8694211322623,
+      "expected": 451.461222648119,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -1019,7 +1019,7 @@
     },
     {
       "path": "objects.b2.phases.overall.properties.density",
-      "expected": 444.3655414723766,
+      "expected": 448.40538260006474,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -1151,7 +1151,7 @@
     },
     {
       "path": "objects.b2.phases.liquid1.properties.density",
-      "expected": 462.91651125452535,
+      "expected": 467.31882174704003,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -1619,7 +1619,7 @@
     },
     {
       "path": "objects.bx.phases.overall.properties.density",
-      "expected": 463.65116668720344,
+      "expected": 473.92569431998396,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -1685,7 +1685,7 @@
     },
     {
       "path": "objects.bx.phases.liquid1.properties.density",
-      "expected": 463.65116668720344,
+      "expected": 473.92569431998396,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09

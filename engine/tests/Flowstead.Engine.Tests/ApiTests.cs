@@ -204,13 +204,13 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
         // Pure n-hexane at 25 °C (measured about 655 kg/m³): both methods agree.
         var hexane = Liquid(298.15, 1e5, new() { ["N-hexane"] = 1.0 });
         Assert.Equal(await Density(hexane), await Density(hexane with { LiquidDensity = LiquidDensityMethods.Costald }), 0);
-        // Propane/n-decane 40/60 mol at 25 °C, 20 bar. DWSIM's default mixes pure-liquid densities by mole fraction
-        // (D39) and gives about 614 kg/m³; ideal mixing by mass gives about 675 and COSTALD a little more.
+        // Propane/n-decane 40/60 mol at 25 °C, 20 bar. DWSIM's own default mixes pure-liquid densities by mole fraction
+        // and read 614 kg/m³; Flowstead mixes them by mass (D39): about 675, ideal mixing. COSTALD a little more.
         var mixture = Liquid(298.15, 2e6, new() { ["Propane"] = 0.4, ["N-decane"] = 0.6 });
         var standard = await Density(mixture);
         var costald = await Density(mixture with { LiquidDensity = LiquidDensityMethods.Costald });
         output.WriteLine($"C3/nC10: default {standard:F1}, COSTALD {costald:F1} kg/m³");
-        Assert.InRange(standard, 600, 630);
+        Assert.InRange(standard, 665, 685);
         Assert.InRange(costald, 675, 710);
 
         var bad = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", hexane with { LiquidDensity = "rackett" }, Json.Options));
