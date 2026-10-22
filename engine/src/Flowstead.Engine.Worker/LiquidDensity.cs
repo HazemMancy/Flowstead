@@ -109,6 +109,8 @@ public sealed class FlowsteadPr : PengRobinsonPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
         LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
+
+    public override DWSIM.Thermodynamics.PropertyPackages.Auxiliary.FlashAlgorithms.FlashAlgorithm FlashBase => PhaseStability.Wrap(base.FlashBase);
 }
 
 [Serializable]
@@ -116,6 +118,8 @@ public sealed class FlowsteadSrk : SRKPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
         LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
+
+    public override DWSIM.Thermodynamics.PropertyPackages.Auxiliary.FlashAlgorithms.FlashAlgorithm FlashBase => PhaseStability.Wrap(base.FlashBase);
 }
 
 [Serializable]
@@ -123,6 +127,8 @@ public sealed class FlowsteadPrLk : PengRobinsonLKPropertyPackage
 {
     public override double AUX_LIQDENS(double T, Array Vx, double P = 0, double Pvp = 0, bool FORCE_EOS = false) =>
         LiquidDensity.Density(this, T, Vx, FORCE_EOS, cubic: true, x => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS), x => LiquidDensity.WithMode(this, PropertyPackage.LiquidDensityCalcMode.EOS, () => base.AUX_LIQDENS(T, x, P, Pvp, FORCE_EOS)));
+
+    public override DWSIM.Thermodynamics.PropertyPackages.Auxiliary.FlashAlgorithms.FlashAlgorithm FlashBase => PhaseStability.Wrap(base.FlashBase);
 }
 
 [Serializable]

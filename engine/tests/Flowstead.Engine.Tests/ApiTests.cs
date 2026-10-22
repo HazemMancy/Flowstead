@@ -218,6 +218,44 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task DenseGasIsOnePhaseAsInHysys()
+    {
+        // The owner's winter gas (mol %) at 320 barg and 35 °C. HYSYS (PR): one vapour phase, MW 24.12. DWSIM's PR
+        // flash split it into two copies of the same fluid (VF 0.3913, phase MWs 23.93 and 24.19); D40.
+        var raw = new Dictionary<string, double>
+        {
+            ["Carbon dioxide"] = 1.235, ["Nitrogen"] = 1.4027, ["Methane"] = 62.5718, ["Ethane"] = 18.9212, ["Propane"] = 12.6557,
+            ["Isobutane"] = 0.7699, ["N-butane"] = 1.7809, ["Isopentane"] = 0.1974, ["N-pentane"] = 0.2243,
+        };
+        var total = raw.Values.Sum();
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Peng-Robinson (PR)",
+            Compounds = raw.Keys.ToList(),
+            Objects =
+            [
+                new SimObject
+                {
+                    Id = "g", Tag = "GAS", Type = ObjectType.MaterialStream,
+                    Specs = new()
+                    {
+                        [SpecKeys.Temperature] = new Spec(308.15, "C"),
+                        [SpecKeys.Pressure] = new Spec(320e5 + 101_325, "barg"),
+                        [SpecKeys.MolarFlow] = new Spec(1692 / 3.6, "kgmol/h"),
+                    },
+                    Composition = raw.ToDictionary(kv => kv.Key, kv => kv.Value / total),
+                },
+            ],
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        var g = r.Objects["g"];
+        Assert.Equal(1.0, g.Properties["vapourFraction"]);
+        Assert.Equal(["overall", "vapour"], g.Phases!.Keys.Order().ToArray());
+        Assert.InRange(g.Phases["vapour"].Properties["density"], 330, 370);
+    }
+
+    [Fact]
     public async Task NearCriticalLiquidHasADensity()
     {
         // Rich gas at 321 bar and 35 °C: DWSIM splits it into two near-identical phases, and Rackett/COSTALD have
