@@ -58,6 +58,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import app.flowstead.core.api.MessageLevel
 import app.flowstead.core.api.ObjectStatus
 import app.flowstead.core.export.DataSheets
 import app.flowstead.core.format.ValueFormat
@@ -618,6 +619,7 @@ private fun ResultsSection(fs: Flowsheet, obj: SimObject, results: ResultView, u
             else -> Unit
         }
     }
+    UnitMessages(results, obj.id)
     if (stream) {
         StreamResults(fs, obj.id, results, unitSet, ctx)
         return
@@ -630,6 +632,27 @@ private fun ResultsSection(fs: Flowsheet, obj: SimObject, results: ResultView, u
         }
     }
     if (worksheet.isNotEmpty()) UnitWorksheet(fs, worksheet, results, unitSet, ctx)
+}
+
+/** The engine's warnings and notes about this object (D46), on the object itself. Errors are its status, shown above. */
+@Composable
+private fun UnitMessages(results: ResultView, id: String) {
+    val list = results.messages(id).filter { it.level != MessageLevel.Error }
+    if (list.isEmpty()) return
+    Column(Modifier.testTag("unit_messages"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (m in list) {
+            val warning = m.level == MessageLevel.Warning
+            Row(verticalAlignment = Alignment.Top) {
+                Text(if (warning) "⚠" else "ⓘ", color = if (warning) MaterialTheme.valueColors.underSpecifiedText else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 8.dp))
+                Text(
+                    m.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (warning) MaterialTheme.valueColors.underSpecifiedText else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 @Composable

@@ -155,7 +155,7 @@ public static class Reactors
                 }
             }
             if (miss is null) continue;
-            results[o.Id] = new ObjectResult { Status = ObjectStatus.Error, Error = $"DWSIM's reactor result doesn't hold up ({miss})." };
+            UnitChecks.MarkError(model, results, o, $"DWSIM's reactor result doesn't hold up ({miss}).");
         }
     }
 }

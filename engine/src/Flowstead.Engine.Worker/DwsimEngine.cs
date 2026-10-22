@@ -213,8 +213,17 @@ public sealed class DwsimEngine
             else if (o.Type == ObjectType.Set) results[o.Id] = SetSolver.Result(o, model);
         }
         AddTankResidenceTimes(model, results);
+        foreach (var o in model.Objects)
+        {
+            if (results.GetValueOrDefault(o.Id) is not { Status: ObjectStatus.Error, Error: { } e } bad) continue;
+            // DWSIM also reports the unit's error without saying which unit; keep the one that does.
+            messages.RemoveAll(m => m.ObjectId is null && m.Level == MessageLevel.Error && m.Text.Trim() == e.Trim());
+            results[o.Id] = bad with { Error = UnitChecks.Explain(o, e) };
+        }
+        UnitChecks.AddNpsh(model, results, objects);
         Columns.Verify(model, results);
         Reactors.Verify(model, results);
+        UnitChecks.Apply(model, results, messages);
         foreach (var (id, r) in results.Where(r => r.Value.Status == ObjectStatus.Error))
         {
             messages.Add(new SolverMessage(MessageLevel.Error, r.Error ?? "Calculation failed", id));

@@ -478,7 +478,10 @@ class FlowsheetViewModel @Inject constructor(
     }
 
     private fun summary(r: SolveResult): String = when (r.status) {
-        SolveStatus.Converged -> "Converged in %.1f s".format(java.util.Locale.ROOT, r.elapsedMs / 1000.0)
+        SolveStatus.Converged -> "Converged in %.1f s".format(java.util.Locale.ROOT, r.elapsedMs / 1000.0) +
+            r.messages.count { it.level == app.flowstead.core.api.MessageLevel.Warning }.let { n ->
+                if (n == 0) "" else " · $n warning" + if (n == 1) "" else "s"
+            }
         SolveStatus.Failed -> "Solve failed: ${r.messages.firstOrNull()?.text ?: "see the solver log"}"
         SolveStatus.Invalid -> "Engine refused the flowsheet: ${r.messages.firstOrNull()?.text ?: "see the solver log"}"
         SolveStatus.Timeout -> "Solve timed out: ${r.messages.firstOrNull()?.text ?: ""}".trimEnd(' ', ':')

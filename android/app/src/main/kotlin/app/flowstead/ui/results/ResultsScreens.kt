@@ -263,6 +263,9 @@ private fun TableRow(
 private fun UnitOpCard(op: SimObject, u: ResultsUi) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text("${op.tag} · ${op.type.displayName()}", style = MaterialTheme.typography.titleSmall)
+        u.results.warnings(op.id).forEach {
+            Text("⚠ ${it.text}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText)
+        }
         val keys = ResultKeys.forType(op.type)
         if (keys.isEmpty()) {
             Text("No unit-level results; see its product streams.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

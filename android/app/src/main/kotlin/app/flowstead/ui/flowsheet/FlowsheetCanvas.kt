@@ -291,13 +291,17 @@ fun FlowsheetCanvas(
                             }
                         }
 
-                        // Status badge: amber = needs input, red = invalid or failed, green = solved and current.
+                        // Status badge: amber = needs input or solved with warnings, red = invalid or failed, green = solved and current.
                         val badge = when (status[o.id]) {
                             is SpecStatus.UnderSpecified -> values.underSpecified
                             is SpecStatus.OverSpecified, is SpecStatus.Invalid -> values.error
                             else -> when (results.objectStatus(o.id)) {
                                 ObjectStatus.Error -> values.error
-                                ObjectStatus.Solved -> if (results.stale) null else values.converged
+                                ObjectStatus.Solved -> when {
+                                    results.stale -> null
+                                    results.warnings(o.id).isNotEmpty() -> values.underSpecified
+                                    else -> values.converged
+                                }
                                 else -> null
                             }
                         }
@@ -419,7 +423,11 @@ private fun describe(o: SimObject, status: SpecStatus?, results: ResultView): St
         is SpecStatus.OverSpecified -> status.problem
         is SpecStatus.Invalid -> status.problem
         else -> when (results.objectStatus(o.id)) {
-            ObjectStatus.Solved -> if (results.stale) "solved, results out of date" else "solved"
+            ObjectStatus.Solved -> when {
+                results.stale -> "solved, results out of date"
+                results.warnings(o.id).isNotEmpty() -> "solved with ${results.warnings(o.id).size} warning(s)"
+                else -> "solved"
+            }
             ObjectStatus.Error -> "calculation error"
             else -> "fully specified, not solved"
         }

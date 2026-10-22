@@ -101,4 +101,20 @@ class ResultViewTest {
         assertEquals(ResultKeys.forType(ObjectType.Valve) + "duty", keys) // unlabelled keys stay hidden
         assertEquals(listOf("IN · FEED", "OUT · LP"), UnitStreams.of(fs, "v").map { it.header })
     }
+
+    @Test
+    fun unitMessagesBelongToTheirUnit() {
+        val r = SolveResult(
+            SolveStatus.Converged,
+            messages = listOf(
+                app.flowstead.core.api.SolverMessage(app.flowstead.core.api.MessageLevel.Info, "free water", null),
+                app.flowstead.core.api.SolverMessage(app.flowstead.core.api.MessageLevel.Warning, "K-100: liquid in the feed", "k"),
+                app.flowstead.core.api.SolverMessage(app.flowstead.core.api.MessageLevel.Info, "V-100: no liquid", "v"),
+            ),
+        )
+        val view = ResultView(StoredSolve(r, "h", 0), "h")
+        assertEquals(listOf("K-100: liquid in the feed"), view.warnings("k").map { it.text })
+        assertTrue(view.warnings("v").isEmpty())
+        assertEquals(1, view.messages("v").size)
+    }
 }

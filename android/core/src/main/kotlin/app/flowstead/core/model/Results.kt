@@ -61,10 +61,10 @@ object ResultKeys {
             "minimumRefluxRatio", "minimumStages", "actualStages", "optimalFeedStage",
             "condenserDuty", "reboilerDuty",
         )
-        ObjectType.Pump -> listOf("power", "pressureRise", "temperatureChange", "efficiency")
+        ObjectType.Pump -> listOf("power", "pressureRise", "temperatureChange", "efficiency", "npshAvailable", "feedBubblePressure")
         ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
-        ObjectType.HeatExchanger -> listOf("duty", "lmtd", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
+        ObjectType.HeatExchanger -> listOf("duty", "lmtd", "minimumApproach", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
         ObjectType.PipeSegment -> listOf("pressureDrop", "frictionPressureDrop", "staticPressureDrop") + PIPE_HYDRAULICS +
             listOf("temperatureChange", "heatTransferred")
         ObjectType.OrificePlate -> listOf("pressureDrop", "orificePressureDrop", "beta", "temperatureChange")
@@ -87,7 +87,9 @@ object ResultKeys {
     fun quantity(key: String): Quantity = when (key) {
         "temperature", "outletTemperature", "hotOutletTemperature", "coldOutletTemperature",
         "condenserTemperature", "reboilerTemperature", "topTemperature", "bottomTemperature" -> Quantity.Temperature
-        "temperatureChange", "lmtd" -> Quantity.TemperatureDifference
+        "temperatureChange", "lmtd", "minimumApproach" -> Quantity.TemperatureDifference
+        "npshAvailable" -> Quantity.Length
+        "feedBubblePressure" -> Quantity.Pressure
         "pressure", "outletPressure" -> Quantity.Pressure
         "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop",
         "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop" -> Quantity.PressureDifference
@@ -156,6 +158,9 @@ object ResultKeys {
         "efficiency" -> "Adiabatic efficiency"
         "adiabaticHead" -> "Adiabatic head"
         "lmtd" -> "LMTD"
+        "minimumApproach" -> "Minimum approach (at the ends)"
+        "npshAvailable" -> "NPSH available (at the pump inlet)"
+        "feedBubblePressure" -> "Feed bubble-point pressure"
         "hotOutletTemperature" -> "Hot outlet temperature"
         "coldOutletTemperature" -> "Cold outlet temperature"
         "hotPressureDrop" -> "Hot side pressure drop"
@@ -239,6 +244,14 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
 
     fun composition(objectId: String, phase: String = Phases.OVERALL, compound: String): DisplayValue =
         lookup(objectId, absentReason = "${Phases.label(phase)} phase not present") { it.phases?.get(phase)?.composition?.get(compound) }
+
+    /** The solver's messages about this object (the engine's unit checks, D46), errors first. */
+    fun messages(objectId: String): List<app.flowstead.core.api.SolverMessage> =
+        solve?.result?.messages.orEmpty().filter { it.objectId == objectId }.sortedBy { -it.level.ordinal }
+
+    /** Warnings about a solved object: its numbers stand, but something needs the engineer's attention. */
+    fun warnings(objectId: String): List<app.flowstead.core.api.SolverMessage> =
+        messages(objectId).filter { it.level == app.flowstead.core.api.MessageLevel.Warning }
 
     /** Keys of the object-level values the engine returned for a solved object. */
     fun propertyKeys(objectId: String): List<String> =
