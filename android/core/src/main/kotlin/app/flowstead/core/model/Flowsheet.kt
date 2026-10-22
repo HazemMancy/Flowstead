@@ -56,6 +56,13 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val tables: List<PropertyTable> = emptyList(),
+    /**
+     * Solver mode, as HYSYS: false = Hold (solve on demand), true = Active (re-solve after every change). Saved with
+     * the project. Not part of the solved model: excluded from [modelHash]. Written only when Active.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val solverActive: Boolean = false,
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
     fun hypothetical(name: String): Hypothetical? = hypotheticals.firstOrNull { it.name == name }

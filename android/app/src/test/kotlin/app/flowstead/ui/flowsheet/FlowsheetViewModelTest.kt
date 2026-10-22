@@ -23,6 +23,7 @@ import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
 import app.flowstead.core.model.SpecStatus
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
@@ -163,6 +164,35 @@ class FlowsheetViewModelTest {
 
         vm.setSpec("f", SpecKey.TEMPERATURE, Spec(310.0, "C"))
         assertTrue(vm.ui { it.results.stale }.results.stale)
+    }
+
+    @Test
+    fun activeSolverSolvesAfterEveryChangeAndHoldDoesNot() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        engine.solveResult = app.flowstead.data.engine.EngineResult.Ok(
+            app.flowstead.core.api.SolveResult(app.flowstead.core.api.SolveStatus.Converged, elapsedMs = 100),
+        )
+        val vm = vm(completeFeed())
+        vm.ui()
+        // Hold (the default): a change waits for Solve.
+        vm.setSpec("f", SpecKey.TEMPERATURE, Spec(310.0, "C"))
+        vm.ui { it.flowsheet.objects.single().specs[SpecKey.TEMPERATURE]?.si == 310.0 }
+        advanceTimeBy(5_000)
+        assertTrue(engine.solved.isEmpty())
+
+        // Active: switching solves at once, then every change solves once the user pauses.
+        vm.setSolverActive(true)
+        assertTrue(vm.ui { it.results.status != null && !it.results.stale }.flowsheet.solverActive)
+        assertEquals(1, engine.solved.size)
+        vm.setSpec("f", SpecKey.TEMPERATURE, Spec(320.0, "C"))
+        vm.setSpec("f", SpecKey.TEMPERATURE, Spec(330.0, "C"))
+        advanceTimeBy(5_000)
+        vm.ui { !it.results.stale }
+        assertEquals(2, engine.solved.size)
+        assertEquals(330.0, engine.solved.last().objects.single().specs[SpecKey.TEMPERATURE]?.si)
+        // The mode is not part of the model: switching back to Hold keeps the results current.
+        vm.setSolverActive(false)
+        assertFalse(vm.ui { !it.flowsheet.solverActive }.results.stale)
     }
 
     @Test

@@ -75,6 +75,10 @@
       "type": "object",
       "description": "App-only title block for every project document (data sheets, PFD, H&MB): company, project, projectNumber, client, site, preparedBy, checkedBy, approvedBy, pfdNumber, hmbNumber, revision (strings). Not part of the solved model; the engine ignores it."
     },
+    "solverActive": {
+      "type": "boolean",
+      "description": "App-only solver mode, as HYSYS: absent or false = Hold (solve on demand), true = Active (the app re-solves after every change). Not part of the solved model; the engine ignores it."
+    },
     "tables": {
       "type": "array",
       "description": "App-only property tables drawn on the flowsheet and the printed PFD: objectId, keys (result keys to show), dx and dy (offset from the object, world units). Not part of the solved model; the engine ignores it.",

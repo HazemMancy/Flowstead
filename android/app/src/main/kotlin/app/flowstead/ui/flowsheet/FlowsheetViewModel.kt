@@ -54,7 +54,9 @@ import app.flowstead.ui.datasheet.FlowsteadLogo
 import app.flowstead.ui.nav.FlowsheetRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -149,6 +151,8 @@ class FlowsheetViewModel @Inject constructor(
     private var current: Flowsheet? = null
     private var currentSolve: StoredSolve? = null
     private var currentName: String = ""
+    private var autoSolve: Job? = null
+    private var solveAgain = false
 
     val state: StateFlow<FlowsheetUiState> = combine(
         repository.observeProject(projectId),
@@ -306,14 +310,24 @@ class FlowsheetViewModel @Inject constructor(
      * Sends the flowsheet as it is now to the engine and keeps the result with the project.
      * Local degrees-of-freedom problems are reported first, so the engine only sees complete input.
      */
-    fun solve() {
+    fun solve() = solve(auto = false)
+
+    /**
+     * [auto]: started by the Active solver after a change. It stays quiet when the flowsheet is not complete yet
+     * (the solve bar already says what is missing) and when it converges (the bar shows it), and never queues.
+     */
+    private fun solve(auto: Boolean) {
         val fs = current ?: return
-        if (local.value.solving) return
-        val problems = Specification.problems(fs)
-        if (problems.isNotEmpty()) {
-            _messages.trySend("Fix ${problems.size} issue(s) first: ${problems.first().second}")
+        if (local.value.solving) {
+            if (auto) solveAgain = true
             return
         }
+        val problems = Specification.problems(fs)
+        if (problems.isNotEmpty()) {
+            if (!auto) _messages.trySend("Fix ${problems.size} issue(s) first: ${problems.first().second}")
+            return
+        }
+        if (auto && currentSolve?.modelHash == fs.modelHash()) return
         local.update { it.copy(solving = true) }
         viewModelScope.launch {
             try {
@@ -323,7 +337,7 @@ class FlowsheetViewModel @Inject constructor(
                     return@launch
                 }
                 when (val r = engine.solve(url, secrets.apiKey(), fs)) {
-                    is EngineResult.Failed -> if (r.unreachable) {
+                    is EngineResult.Failed -> if (r.unreachable && !auto) {
                         queue.enqueue(projectId)
                         _messages.send("Engine unreachable. Queued: it will solve when the phone is back online")
                     } else {
@@ -332,12 +346,36 @@ class FlowsheetViewModel @Inject constructor(
                     is EngineResult.Ok -> {
                         queue.cancel(projectId)
                         repository.saveSolve(projectId, StoredSolve(r.value, fs.modelHash(), clock.now()))
-                        _messages.send(summary(r.value))
+                        if (!auto || r.value.status != SolveStatus.Converged) _messages.send(summary(r.value))
                     }
                 }
             } finally {
                 local.update { it.copy(solving = false) }
+                // Changes made while this solve ran are solved next (Active only).
+                if (solveAgain) {
+                    solveAgain = false
+                    if (current?.solverActive == true) solveSoon()
+                }
             }
+        }
+    }
+
+    /** Hold (false) or Active (true), as HYSYS's solver buttons; switching to Active solves straight away. */
+    fun setSolverActive(active: Boolean) {
+        edit(undoable = false) { it.copy(solverActive = active) }
+        if (active) solveSoon(0)
+        else {
+            autoSolve?.cancel()
+            solveAgain = false
+        }
+    }
+
+    /** Active solver: waits for the user to stop typing or dragging, then solves the newest flowsheet. */
+    private fun solveSoon(delayMs: Long = ACTIVE_DELAY_MS) {
+        autoSolve?.cancel()
+        autoSolve = viewModelScope.launch {
+            delay(delayMs)
+            solve(auto = true)
         }
     }
 
@@ -493,7 +531,12 @@ class FlowsheetViewModel @Inject constructor(
     fun undo() {
         val previous = local.value.undo.lastOrNull() ?: return
         local.update { it.copy(undo = it.undo.dropLast(1)) }
-        viewModelScope.launch { repository.saveFlowsheet(projectId, previous) }
+        val active = current?.solverActive == true
+        // Undo restores the model, not the solver mode.
+        val restored = previous.copy(solverActive = active)
+        current = restored
+        viewModelScope.launch { repository.saveFlowsheet(projectId, restored) }
+        if (active) solveSoon()
     }
 
     private fun edit(undoable: Boolean = true, block: (Flowsheet) -> Flowsheet) {
@@ -511,9 +554,12 @@ class FlowsheetViewModel @Inject constructor(
         current = after
         if (undoable) local.update { it.copy(undo = (it.undo + before).takeLast(UNDO_DEPTH)) }
         viewModelScope.launch { repository.saveFlowsheet(projectId, after) }
+        if (after.solverActive && after.modelHash() != before.modelHash()) solveSoon()
     }
 
     companion object {
         const val UNDO_DEPTH = 50
+        /** Active solver: quiet time after the last change before it solves. */
+        const val ACTIVE_DELAY_MS = 800L
     }
 }

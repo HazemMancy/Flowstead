@@ -6,7 +6,11 @@ package app.flowstead.ui.flowsheet
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,6 +60,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -270,7 +275,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             ghost?.let { (type, root) -> PaletteGhost(type, root, canvasRect.topLeft, viewport.zoom) }
         }
 
-        SolveBar(ui, onSolve = vm::solve, onCancelQueued = vm::cancelQueuedSolve, onIssues = { showIssues = true }, onResults = onOpenResults, onLog = onOpenLog)
+        SolveBar(ui, onSolve = vm::solve, onSolverActive = vm::setSolverActive, onCancelQueued = vm::cancelQueuedSolve, onIssues = { showIssues = true }, onResults = onOpenResults, onLog = onOpenLog)
         Palette(
             onAdd = { type ->
                 val c = viewport.toWorld(Offset(canvasRect.width / 2, canvasRect.height / 2), density)
@@ -403,11 +408,31 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
 }
 
 /**
+ * HYSYS's solver buttons in one: Hold (amber, solve when asked) or Active (green, re-solve after every change).
+ * Tapping switches; the mode is saved with the project.
+ */
+@Composable
+private fun SolverModeToggle(active: Boolean, onChange: (Boolean) -> Unit) {
+    val colour = if (active) MaterialTheme.valueColors.convergedText else MaterialTheme.valueColors.underSpecifiedText
+    TextButton(
+        onClick = { onChange(!active) },
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .semantics { contentDescription = if (active) "Solver active. Tap to hold" else "Solver on hold. Tap to make active" }
+            .testTag("solver_mode"),
+    ) {
+        Box(Modifier.size(10.dp).background(colour, CircleShape))
+        Spacer(Modifier.width(6.dp))
+        Text(if (active) "Active" else "Hold", color = colour, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+/**
  * Status and actions under the canvas: what blocks a solve, the last result's state, and the
  * Solve button (the primary colour: ink on paper, chalk on ink).
  */
 @Composable
-private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onCancelQueued: () -> Unit, onIssues: () -> Unit, onResults: () -> Unit, onLog: () -> Unit) {
+private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onSolverActive: (Boolean) -> Unit, onCancelQueued: () -> Unit, onIssues: () -> Unit, onResults: () -> Unit, onLog: () -> Unit) {
     val v = MaterialTheme.valueColors
     val solving = ui.solveState == SolveState.Solving
     val (text, color) = when {
@@ -416,12 +441,14 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onCancelQueued: () ->
         solving -> "Solving…" to MaterialTheme.colorScheme.onSurfaceVariant
         ui.solveState == SolveState.Queued -> "Queued — solves when the engine is reachable" to MaterialTheme.colorScheme.onSurfaceVariant
         ui.results.status == null -> (if (ui.engineConfigured) "Ready to solve" else "Set the engine in Settings to solve") to MaterialTheme.colorScheme.onSurfaceVariant
+        ui.results.stale && ui.flowsheet.solverActive -> "Changed — solving shortly" to MaterialTheme.colorScheme.onSurfaceVariant
         ui.results.stale -> "Results out of date — solve again" to v.underSpecifiedText
         ui.results.status == SolveStatus.Converged -> "✓ Converged" to v.convergedText
         else -> "Last solve ${ui.results.status?.name?.lowercase()} — see log" to v.error
     }
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().testTag("solve_bar")) {
-        Row(Modifier.heightIn(min = 56.dp).padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.heightIn(min = 56.dp).padding(start = 4.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            SolverModeToggle(ui.flowsheet.solverActive, onSolverActive)
             Text(
                 text,
                 color = color,
