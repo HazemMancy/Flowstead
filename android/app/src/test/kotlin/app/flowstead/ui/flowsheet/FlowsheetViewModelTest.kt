@@ -228,7 +228,12 @@ class FlowsheetViewModelTest {
     fun aReliefValveIsSizedFromTheSolvedVesselAndKeepsItsResult() = runTest {
         settings.setEngineUrl("https://engine.example.com")
         val sep = app.flowstead.core.model.SimObject("v", "V-100", ObjectType.Separator)
-        val fs = completeFeed().let { it.copy(objects = it.objects + sep, connections = listOf(Connection("f", 0, "v", 0))) }
+        // The separator needs its vapour and liquid outlets, or the flowsheet is not solved.
+        val gas = app.flowstead.core.model.SimObject("g", "GAS", ObjectType.MaterialStream)
+        val liquid = app.flowstead.core.model.SimObject("l", "LIQUID", ObjectType.MaterialStream)
+        val fs = completeFeed().let {
+            it.copy(objects = it.objects + sep + gas + liquid, connections = listOf(Connection("f", 0, "v", 0), Connection("v", 0, "g", 0), Connection("v", 1, "l", 0)))
+        }
         engine.solveResult = app.flowstead.data.engine.EngineResult.Ok(
             app.flowstead.core.api.SolveResult(
                 app.flowstead.core.api.SolveStatus.Converged,
@@ -243,7 +248,7 @@ class FlowsheetViewModelTest {
         backgroundScope.launch { vm.messages.collect { messages += it } }
         vm.ui()
         vm.solve()
-        vm.ui { it.results.status != null }
+        withTimeoutOrNull(60_000) { vm.ui { it.results.status != null } } ?: error("Not solved; messages: $messages")
         vm.upsertReliefDevice(app.flowstead.core.model.ReliefDeviceDef(
             "d", "PSV-100", protectedId = "v", setPressure = 6e6,
             scenarios = listOf(app.flowstead.core.api.ReliefScenario(app.flowstead.core.api.ReliefScenarioKinds.BLOCKED_OUTLET)),
