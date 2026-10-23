@@ -245,6 +245,8 @@ public static class WorkerMethods
     public const string EstimateHypotheticals = "estimateHypotheticals";
     public const string PhaseEnvelope = "phaseEnvelope";
     public const string Pvt = "pvt";
+    public const string Relief = "relief";
+    public const string Depressuring = "depressuring";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

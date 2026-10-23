@@ -134,6 +134,10 @@ api.MapPost("/phase-envelope", async (PhaseEnvelopeRequest req, EngineService e,
 api.MapPost("/pvt", async (PvtRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PvtAsync(req, ct), "invalid_pvt"));
 
+// Safety analysis: relief valve loads and sizing (D54–D56).
+api.MapPost("/relief", async (ReliefRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.ReliefAsync(req, ct), "invalid_relief"));
+
 app.Run();
 return 0;
 

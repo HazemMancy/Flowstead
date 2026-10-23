@@ -49,6 +49,10 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<PvtResult> PvtAsync(PvtRequest req, CancellationToken ct) =>
         pool.CallAsync<PvtResult>(WorkerMethods.Pvt, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
+    /// <summary>Relief sizing runs several flashes per scenario: the solve timeout.</summary>
+    public Task<ReliefResult> ReliefAsync(ReliefRequest req, CancellationToken ct) =>
+        pool.CallAsync<ReliefResult>(WorkerMethods.Relief, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+
     public Task<ImportResult> ImportDwsimAsync(DwsimFile file, CancellationToken ct) =>
         pool.CallAsync<ImportResult>(WorkerMethods.ImportDwsim, file, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
