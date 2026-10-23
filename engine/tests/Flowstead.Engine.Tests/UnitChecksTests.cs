@@ -336,6 +336,48 @@ public sealed class UnitChecksTests(EngineFixture engine)
     }
 
     [Fact]
+    public async Task PolynomialFitReadsBetweenThePointsAsHysysDoes()
+    {
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        // Points on H = 90 − 25000 Q²: at 0.0278 m³/s the quadratic gives 70.7 m where straight lines give 70.3 m.
+        var curve = new PerformanceCurve { Points = [new(0.01, 87.5), new(0.02, 80), new(0.03, 67.5), new(0.04, 50)], Fit = CurveFits.Polynomial, Order = 2 };
+        var r = await OnCurve(Feed("f", water, 300, 2e5, 5540), ObjectType.Pump, curve, "Steam Tables (IAPWS-IF97)");
+        var q = r.Objects["u"].Properties["inletVolumeFlow"];
+        Assert.Equal(90 - 25000 * q * q, r.Objects["u"].Properties["head"], 0.05);
+        var linear = await OnCurve(Feed("f", water, 300, 2e5, 5540), ObjectType.Pump, curve with { Fit = null }, "Steam Tables (IAPWS-IF97)");
+        Assert.True(Math.Abs(linear.Objects["u"].Properties["head"] - (90 - 25000 * q * q)) > 0.3);
+    }
+
+    [Fact]
+    public async Task GivenPressureSetsTheSpeedOfAVariableSpeedPump()
+    {
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        // The 90 % speed case above gave 51.6 m at 100 m³/h; asking for that rise, the engine should find about 2655 rpm.
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Steam Tables (IAPWS-IF97)", Compounds = ["Water"],
+            Objects =
+            [
+                Feed("f", water, 300, 2e5, 5540),
+                new SimObject { Id = "u", Tag = "P-100", Type = ObjectType.Pump, Curve = PumpCurve with { Speed = 2950 }, Specs = new() { [SpecKeys.PressureRise] = new(51.6 * 996.5 * 9.80665, "Pa") } },
+                Product("o"),
+            ],
+            Connections = [new Connection("f", 0, "u", 0), new Connection("u", 0, "o", 0)],
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.Equal(SolveStatus.Converged, r.Status);
+        var p = r.Objects["u"].Properties;
+        Assert.Equal(2655, p["operatingSpeed"], 5.0);
+        Assert.Equal(0.744, p["efficiency"], 0.003);
+        Assert.Equal(51.6, p["head"], 0.1);
+
+        // A pressure no speed up to twice the rated one can give is an error, not a wrong answer.
+        var tooHigh = fs with { Objects = fs.Objects.Select(o => o.Id == "u" ? o with { Specs = new() { [SpecKeys.PressureRise] = new(3e7, "Pa") } } : o).ToList() };
+        var bad = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", tooHigh, Json.Options));
+        Assert.Contains(bad.Messages, m => m.ObjectId == "u" && m.Text.Contains("no speed"));
+    }
+
+    [Fact]
     public async Task CompressorRunsOnItsCurveAndSurgesBelowIt()
     {
         var methane = new Dictionary<string, double> { ["Methane"] = 1.0 };

@@ -363,8 +363,14 @@ object Specification {
         val onCurve = o.type in listOf(ObjectType.Pump, ObjectType.Compressor) && o.curve != null
         if (onCurve) {
             curveProblem(o)?.let { return SpecStatus.Invalid(it) }
-            if (listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE, SpecKey.PRESSURE_RATIO).any { it in s }) {
-                return SpecStatus.OverSpecified("It runs on its curve, which sets the outlet pressure; remove the outlet pressure or pressure rise")
+            val pressures = listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE, SpecKey.PRESSURE_RATIO).count { it in s }
+            val curve = o.curve!!
+            when {
+                pressures > 1 -> return SpecStatus.OverSpecified("Give one of outlet pressure, pressure rise or pressure ratio")
+                pressures == 1 && !((curve.speed ?: 0.0) > 0) ->
+                    return SpecStatus.OverSpecified("It runs on its curve, which sets the outlet pressure; remove the outlet pressure or pressure rise, or give the curve's speed so the engine finds the speed that meets it")
+                pressures == 1 && curve.operatingSpeed != null ->
+                    return SpecStatus.OverSpecified("Both the running speed and the outlet pressure are given; remove one (without the speed, the engine finds it)")
             }
         }
         exclusiveGroups(o.type).filterNot { onCurve }.forEach { (what, keys) ->
@@ -472,6 +478,7 @@ object Specification {
     private fun pointsProblem(o: SimObject, p: List<CurvePoint>): String? {
         return when {
             p.size < 2 -> "The performance curve needs at least two points"
+            o.curve?.order?.let { it < 1 || it > 5 } == true -> "The polynomial order must be 1 to 5"
             p.any { !(it.flow > 0) || !(it.head > 0) } -> "Every curve point needs a positive flow and head"
             p.map { it.flow }.distinct().size != p.size -> "Two curve points have the same flow"
             p.any { it.efficiency != null } && p.any { it.efficiency == null || it.efficiency <= 0 || it.efficiency > 1 } ->

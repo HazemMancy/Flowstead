@@ -124,8 +124,21 @@ public sealed record PerformanceCurve
     public double? Speed { get; init; }
     /// <summary>More curves at other speeds (HYSYS's multiple curves), for a variable-speed machine.</summary>
     public List<SpeedLine> SpeedLines { get; init; } = [];
-    /// <summary>The speed the machine runs at, rpm; null: the rated <see cref="Speed"/>.</summary>
+    /// <summary>
+    /// The speed the machine runs at, rpm; null: the rated <see cref="Speed"/>, or, with an outlet pressure (pressure
+    /// rise or ratio) given, the speed that meets it, which the engine solves (as HYSYS does for a variable-speed machine).
+    /// </summary>
     public double? OperatingSpeed { get; init; }
+    /// <summary>How the points are joined: null or "linear", straight lines; "polynomial", a least-squares fit as HYSYS's.</summary>
+    public string? Fit { get; init; }
+    /// <summary>Polynomial order; null: the smaller of 3 and points − 1.</summary>
+    public int? Order { get; init; }
+}
+
+public static class CurveFits
+{
+    public const string Linear = "linear";
+    public const string Polynomial = "polynomial";
 }
 
 /// <summary>One curve of a multi-speed map: its speed (rpm) and points.</summary>

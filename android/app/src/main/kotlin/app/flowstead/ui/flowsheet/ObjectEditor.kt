@@ -199,12 +199,13 @@ fun ObjectEditorSheet(
                 ObjectType.Separator, ObjectType.ThreePhaseSeparator ->
                     Calculated("Adiabatic flash at the lowest feed pressure. Nothing to specify: connect the feed and the product streams.")
                 ObjectType.Pump -> {
-                    if (obj.curve == null) ExclusiveSpecs(obj, unitSet, ctx, actions, listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_RISE to "ΔP rise"))
+                    // On a fixed-speed curve the curve sets the pressure; a variable-speed one takes a pressure and finds its speed.
+                    if (obj.curve?.solvesSpeed != false) ExclusiveSpecs(obj, unitSet, ctx, actions, listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_RISE to "ΔP rise"))
                     SpecField(obj, SpecKey.EFFICIENCY, unitSet, ctx, actions, optionalHint = if (obj.curve == null) "75 % if empty" else "used if the curve has no efficiency")
                     CurveSection(obj, results, unitSet, ctx, actions)
                 }
                 ObjectType.Compressor -> {
-                    if (obj.curve == null) ExclusiveSpecs(
+                    if (obj.curve?.solvesSpeed != false) ExclusiveSpecs(
                         obj, unitSet, ctx, actions,
                         listOf(SpecKey.OUTLET_PRESSURE to "Outlet P", SpecKey.PRESSURE_RISE to "ΔP", SpecKey.PRESSURE_RATIO to "Ratio"),
                     )

@@ -374,9 +374,14 @@ public static class Validator
                 break;
             case ObjectType.Pump when o.Curve is not null:
             case ObjectType.Compressor when o.Curve is not null:
-                // On its curve, the machine's head (so its outlet pressure) comes from the curve (D48).
-                if (new[] { SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.PressureRatio }.Any(s.ContainsKey))
-                    err($"{o.Tag}: over-specified — it runs on its curve, which sets the outlet pressure; remove the outlet pressure or pressure rise.", o.Id);
+                // On its curve, the machine's head (so its outlet pressure) comes from the curve (D48); with a speed-rated
+                // curve and no running speed, a given pressure instead sets the speed the engine solves.
+                var pressures = new[] { SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.PressureRatio }.Count(s.ContainsKey);
+                if (pressures > 1) err($"{o.Tag}: give one of outlet pressure, pressure rise or pressure ratio.", o.Id);
+                else if (pressures == 1 && o.Curve.Speed is not > 0)
+                    err($"{o.Tag}: over-specified — it runs on its curve, which sets the outlet pressure; remove the outlet pressure or pressure rise, or give the curve's speed so the engine finds the speed that meets it.", o.Id);
+                else if (pressures == 1 && o.Curve.OperatingSpeed is not null)
+                    err($"{o.Tag}: over-specified — both the running speed and the outlet pressure are given; remove one (without the speed, the engine finds it).", o.Id);
                 ValidateCurve(o, o.Curve, err);
                 break;
             case ObjectType.Pump:
@@ -493,6 +498,8 @@ public static class Validator
             err($"{o.Tag}: give the efficiency at every curve point (above 0, up to 100 %), or at none.", o.Id);
         if (p.Any(x => x.Npshr is not null) && (o.Type != ObjectType.Pump || p.Any(x => x.Npshr is not (>= 0))))
             err($"{o.Tag}: NPSH required belongs to pumps; give it at every point (0 or more), or at none.", o.Id);
+        if (curve.Fit is not (null or CurveFits.Linear or CurveFits.Polynomial)) err($"{o.Tag}: unknown curve fit '{curve.Fit}'.", o.Id);
+        if (curve.Order is { } order && order is < 1 or > 5) err($"{o.Tag}: the polynomial order must be 1 to 5.", o.Id);
         if ((curve.SpeedLines.Count > 0 || curve.OperatingSpeed is not null) && curve.Speed is not > 0)
             err($"{o.Tag}: give the curve's own speed to use other speed lines or an operating speed.", o.Id);
         if (curve.OperatingSpeed is { } n && !(n > 0)) err($"{o.Tag}: the operating speed must be positive.", o.Id);

@@ -137,9 +137,23 @@ data class PerformanceCurve(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val speed: Double? = null,
     /** Curves at other speeds (HYSYS's multiple curves) for a variable-speed machine. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val speedLines: List<SpeedLine> = emptyList(),
-    /** The speed it runs at, rpm; null: [speed]. The engine reads the map at it by the affinity laws (D48). */
+    /**
+     * The speed it runs at, rpm; null: [speed], or with an outlet pressure given, the speed that meets it, which the
+     * engine finds. The engine reads the map at the speed by the affinity laws (D48).
+     */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val operatingSpeed: Double? = null,
-)
+    /** How the points are joined: null (straight lines) or [CurveFits.POLYNOMIAL], a least-squares fit as HYSYS's. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val fit: String? = null,
+    /** Polynomial order; null: the smaller of 3 and points − 1. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val order: Int? = null,
+) {
+    /** A variable-speed machine whose speed the engine finds from the pressure given. */
+    val solvesSpeed: Boolean get() = (speed ?: 0.0) > 0 && operatingSpeed == null
+}
+
+object CurveFits {
+    const val POLYNOMIAL = "polynomial"
+}
 
 /** kij between compounds [a] and [b] (symmetric). Same as the engine's BinaryParameter. */
 @Serializable

@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonObject
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -155,5 +156,15 @@ class SpecificationTest {
         assertEquals("Two curves have the same speed", problem(base.copy(speed = 2400.0, speedLines = listOf(line))))
         assertEquals("At 2400 rpm: the performance curve needs at least two points",
             problem(base.copy(speed = 2950.0, speedLines = listOf(line.copy(points = line.points.take(1))))))
+    }
+
+    @Test
+    fun aVariableSpeedCurveTakesAPressureAndFindsItsSpeed() {
+        val base = PerformanceCurve(listOf(CurvePoint(0.01, 80.0), CurvePoint(0.03, 60.0)))
+        fun specProblem(c: PerformanceCurve) = Specification.status(Flowsheet(), SimObject("u", "P-100", ObjectType.Pump, curve = c, specs = mapOf(SpecKey.PRESSURE_RISE to Spec(4e5, "Pa"))))
+        assertIs<SpecStatus.OverSpecified>(specProblem(base))
+        assertIs<SpecStatus.OverSpecified>(specProblem(base.copy(speed = 2950.0, operatingSpeed = 2600.0)))
+        assertFalse(specProblem(base.copy(speed = 2950.0)) is SpecStatus.OverSpecified)
+        assertTrue(base.copy(speed = 2950.0).solvesSpeed)
     }
 }

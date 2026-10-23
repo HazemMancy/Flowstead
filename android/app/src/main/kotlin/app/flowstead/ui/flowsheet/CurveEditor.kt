@@ -44,6 +44,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.CurvePoint
+import androidx.compose.material3.FilterChip
+import app.flowstead.core.model.CurveFits
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.PerformanceCurve
@@ -93,6 +95,14 @@ internal fun CurveSection(obj: SimObject, results: ResultView, unitSet: UnitSet,
         Text(it, color = MaterialTheme.valueColors.underSpecifiedText, style = MaterialTheme.typography.bodySmall)
     }
     PointRows(curve.points, pump, flowUnit, headUnit, ctx, "curve") { save(curve.copy(points = it)) }
+    // How the points are joined: straight lines, or a least-squares polynomial as HYSYS fits its curves.
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        FilterChip(selected = curve.fit == null, onClick = { save(curve.copy(fit = null, order = null)) }, label = { Text("Straight lines") })
+        FilterChip(selected = curve.fit == CurveFits.POLYNOMIAL, onClick = { save(curve.copy(fit = CurveFits.POLYNOMIAL)) }, label = { Text("Polynomial fit") }, modifier = Modifier.testTag("curve_polynomial"))
+        if (curve.fit == CurveFits.POLYNOMIAL) {
+            CurveCell("Order", curve.order?.toDouble(), null, ctx, "curve_order", Modifier.weight(1f)) { save(curve.copy(order = it?.toInt())) }
+        }
+    }
 
     // Variable speed, as HYSYS's multiple curves: the rated speed of the curve above, more curves at other speeds,
     // and the speed it runs at; the engine reads the map at that speed by the affinity laws.
@@ -100,6 +110,13 @@ internal fun CurveSection(obj: SimObject, results: ResultView, unitSet: UnitSet,
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         CurveCell("Curve speed, rpm", curve.speed, null, ctx, "curve_speed", Modifier.weight(1f)) { save(curve.copy(speed = it)) }
         CurveCell("Runs at, rpm", curve.operatingSpeed, null, ctx, "curve_run_speed", Modifier.weight(1f)) { save(curve.copy(operatingSpeed = it)) }
+    }
+    if (curve.solvesSpeed) {
+        val n = (results.value(obj.id, "operatingSpeed") as? DisplayValue.Calculated)?.si
+        Text(
+            "Variable speed: give the outlet pressure above and the engine finds the speed" + (n?.let { " (${ValueFormat.number(it, 0)} rpm in the last solve)" } ?: "") + "; or type the speed it runs at.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
     curve.speedLines.forEachIndexed { k, line ->
         fun saveLine(l: SpeedLine) = save(curve.copy(speedLines = curve.speedLines.toMutableList().also { it[k] = l }))
