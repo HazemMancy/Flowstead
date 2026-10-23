@@ -87,6 +87,50 @@ object Safety {
         return Contents(x, t, p, w)
     }
 
+    /** A relief scenario the flowsheet suggests for a vessel, with why (HYSYS-like scenario screening, API 521 §4.4). */
+    data class Suggestion(val scenario: ReliefScenario, val reason: String)
+
+    /**
+     * The credible overpressure causes the flowsheet shows for the protected vessel: fire (always, for a vessel in a
+     * fire zone), its blocked outlet (the whole feed), a control valve failing wide open for each valve feeding it
+     * (its upstream state from the solve, its rated Cv if given), and thermal expansion when it holds only liquid.
+     */
+    fun suggest(fs: Flowsheet, results: ResultView, protectedId: String?): List<Suggestion> {
+        val id = protectedId ?: return emptyList()
+        val vessel = fs.objects.firstOrNull { it.id == id } ?: return emptyList()
+        fun calc(obj: String, key: String) = (results.value(obj, key) as? DisplayValue.Calculated)?.si
+        val out = mutableListOf(
+            Suggestion(ReliefScenario(ReliefScenarioKinds.FIRE, "Fire"), "Any vessel in a fire zone; the wetted area comes from the vessel's dimensions"),
+        )
+        if (fs.connections.any { it.fromObject == id }) {
+            out += Suggestion(ReliefScenario(ReliefScenarioKinds.BLOCKED_OUTLET, "Blocked outlet"), "An outlet of ${vessel.tag} closed: its whole feed relieves")
+        }
+        val feeds = fs.connections.filter { it.toObject == id }.map { it.fromObject }
+        for (stream in feeds) {
+            val valve = fs.connections.firstOrNull { it.toObject == stream }?.let { c -> fs.objects.firstOrNull { it.id == c.fromObject && it.type == ObjectType.Valve } } ?: continue
+            val inlet = fs.connections.firstOrNull { it.toObject == valve.id }?.fromObject ?: continue
+            val x = fs.compounds.associateWith { c -> (results.composition(inlet, Phases.OVERALL, c) as? DisplayValue.Calculated)?.si ?: 0.0 }.filterValues { it > 0 }
+            val cv = valve.specs[SpecKey.RATED_CV]?.si
+            out += Suggestion(
+                ReliefScenario(
+                    ReliefScenarioKinds.CONTROL_VALVE_FAILURE, "${valve.tag} fails open",
+                    composition = x.takeIf { it.isNotEmpty() }, temperature = calc(inlet, "temperature"),
+                    upstreamPressure = calc(inlet, "pressure"), ratedCv = cv,
+                ),
+                "${valve.tag} feeds ${vessel.tag} from the higher-pressure side" + if (cv == null) "; give its rated Cv" else "",
+            )
+        }
+        val feedVf = feeds.firstNotNullOfOrNull { calc(it, "vapourFraction") }
+        if (feedVf != null && feedVf <= 0.0) {
+            out += Suggestion(ReliefScenario(ReliefScenarioKinds.THERMAL_EXPANSION, "Thermal expansion"), "${vessel.tag} holds only liquid: if blocked in, heat expands it; give the heat input")
+        }
+        return out
+    }
+
+    /** The suggestions not already among the valve's scenarios (same kind and name). */
+    fun newSuggestions(fs: Flowsheet, results: ResultView, d: ReliefDeviceDef): List<Suggestion> =
+        suggest(fs, results, d.protectedId).filter { s -> d.scenarios.none { it.kind == s.scenario.kind && it.name == s.scenario.name } }
+
     /** What stops the valve from being sized, or null. */
     fun problem(fs: Flowsheet, results: ResultView, d: ReliefDeviceDef): String? = when {
         d.protectedId == null || fs.objects.none { it.id == d.protectedId } -> "Choose the equipment it protects"

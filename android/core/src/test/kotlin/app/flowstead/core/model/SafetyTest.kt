@@ -73,4 +73,36 @@ class SafetyTest {
         assertEquals(listOf(0.0, 10.0), temps[3].x)
         assertEquals(listOf("Pressure", "Temperature", "Liquid", "Flow"), plots.map { it.title })
     }
+
+    @Test
+    fun scenariosAreSuggestedFromTheFlowsheet() {
+        // HP gas → FV-100 → feed → V-100 → gas out.
+        val hp = SimObject("hp", "HP", ObjectType.MaterialStream)
+        val fv = SimObject("fv", "FV-100", ObjectType.Valve, specs = mapOf(SpecKey.RATED_CV to Spec(120.0, "ratio")))
+        val gas = SimObject("g", "GAS", ObjectType.MaterialStream)
+        val sheet = Flowsheet(
+            compounds = listOf("Propane"), objects = listOf(hp, fv, feed, sep, gas),
+            connections = listOf(Connection("hp", 0, "fv", 0), Connection("fv", 0, "f", 0), Connection("f", 0, "v", 0), Connection("v", 0, "g", 0)),
+        )
+        val solve = SolveResult(
+            SolveStatus.Converged,
+            objects = mapOf(
+                "hp" to ObjectResult(ObjectStatus.Solved, properties = mapOf("temperature" to 310.0, "pressure" to 40e5, "vapourFraction" to 1.0),
+                    phases = mapOf("overall" to PhaseResult(composition = mapOf("Propane" to 1.0)))),
+                "f" to ObjectResult(ObjectStatus.Solved, properties = mapOf("temperature" to 300.0, "pressure" to 8e5, "vapourFraction" to 0.4, "massFlow" to 2.0),
+                    phases = mapOf("overall" to PhaseResult(composition = mapOf("Propane" to 1.0)))),
+            ),
+        )
+        val view = ResultView(StoredSolve(solve, sheet.modelHash(), 0), sheet.modelHash())
+        val s = Safety.suggest(sheet, view, "v")
+        assertEquals(listOf(ReliefScenarioKinds.FIRE, ReliefScenarioKinds.BLOCKED_OUTLET, ReliefScenarioKinds.CONTROL_VALVE_FAILURE), s.map { it.scenario.kind })
+        val cv = s[2].scenario
+        assertEquals("FV-100 fails open", cv.name)
+        assertEquals(40e5, cv.upstreamPressure)
+        assertEquals(310.0, cv.temperature)
+        assertEquals(120.0, cv.ratedCv)
+        // Already listed scenarios are not suggested again.
+        val d = ReliefDeviceDef("d", "PSV-100", protectedId = "v", scenarios = s.take(2).map { it.scenario })
+        assertEquals(listOf("FV-100 fails open"), Safety.newSuggestions(sheet, view, d).map { it.scenario.name })
+    }
 }

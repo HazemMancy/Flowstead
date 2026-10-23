@@ -138,7 +138,9 @@ fun SafetySheet(
                         val n = (study?.devices?.size ?: 0) + 100
                         val d = ReliefDeviceDef(
                             UUID.randomUUID().toString(), "PSV-$n", protectedId = vessels.first().id,
-                            scenarios = listOf(ReliefScenario(ReliefScenarioKinds.FIRE, "Fire"), ReliefScenario(ReliefScenarioKinds.BLOCKED_OUTLET, "Blocked outlet")),
+                            // HYSYS-like: start from the scenarios the flowsheet suggests for the vessel.
+                            scenarios = Safety.suggest(fs, results, vessels.first().id).map { it.scenario }
+                                .ifEmpty { listOf(ReliefScenario(ReliefScenarioKinds.FIRE, "Fire"), ReliefScenario(ReliefScenarioKinds.BLOCKED_OUTLET, "Blocked outlet")) },
                         )
                         actions.saveDevice(d)
                         openId = d.id
@@ -223,6 +225,19 @@ private fun ReliefEditor(
             ScenarioFields(s, "psv_${d.id}_$i", unitSet, ctx,
                 onChange = { n -> save(d.copy(scenarios = d.scenarios.toMutableList().also { l -> l[i] = n })) },
                 onRemove = { save(d.copy(scenarios = d.scenarios.filterIndexed { j, _ -> j != i })) })
+        }
+        val suggested = Safety.newSuggestions(fs, results, d)
+        if (suggested.isNotEmpty()) {
+            Text("Suggested from the flowsheet", style = MaterialTheme.typography.labelLarge)
+            suggested.forEach { s ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(s.scenario.name ?: ReliefScenarioKinds.label(s.scenario.kind), style = MaterialTheme.typography.bodyMedium)
+                        Text(s.reason, style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(onClick = { save(d.copy(scenarios = d.scenarios + s.scenario)) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Add") }
+                }
+            }
         }
         Choice("Add a scenario", null, ReliefScenarioKinds.ALL.map { it to ReliefScenarioKinds.label(it) }, placeholder = "Choose…") {
             save(d.copy(scenarios = d.scenarios + ReliefScenario(it, ReliefScenarioKinds.label(it))))
