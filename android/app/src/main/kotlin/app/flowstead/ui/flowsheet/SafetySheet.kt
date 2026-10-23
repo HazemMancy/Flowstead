@@ -419,8 +419,11 @@ private fun DepressuringEditor(
         QuantityField("Restriction orifice diameter", c.orificeDiameter?.let { Spec(it, defaultUnit(SpecKey.INNER_DIAMETER, Quantity.Length, unitSet).id) }, Quantity.Length, defaultUnit(SpecKey.INNER_DIAMETER, Quantity.Length, unitSet), ctx,
             "bd_ro_${c.id}", hint = "sized for 15 min if empty", testTag = "bd_orifice") { save(c.copy(orificeDiameter = it?.si)) }
         CheckLine("Fire during depressuring (API 521 heat input)", c.withFire) { save(c.copy(withFire = it)) }
-        QuantityField("Wall heat transfer coefficient", Spec(c.heatTransferCoefficient, unitSet.unitFor(Quantity.HeatTransferCoefficient).id), Quantity.HeatTransferCoefficient,
-            unitSet.unitFor(Quantity.HeatTransferCoefficient), ctx, "bd_h_${c.id}", hint = "0 for adiabatic") { save(c.copy(heatTransferCoefficient = it?.si ?: 0.0)) }
+        Calculated("Two zones (vapour and liquid, not in equilibrium) and a wall conducting through its thickness, wet and dry sections apart.")
+        QuantityField("Inside heat transfer coefficient", c.heatTransferCoefficient?.let { Spec(it, unitSet.unitFor(Quantity.HeatTransferCoefficient).id) }, Quantity.HeatTransferCoefficient,
+            unitSet.unitFor(Quantity.HeatTransferCoefficient), ctx, "bd_h_${c.id}", hint = "correlations if empty; 0 adiabatic") { save(c.copy(heatTransferCoefficient = it?.si)) }
+        QuantityField("Ambient temperature", c.ambientTemperature?.let { Spec(it, unitSet.unitFor(Quantity.Temperature).id) }, Quantity.Temperature,
+            unitSet.unitFor(Quantity.Temperature), ctx, "bd_amb_${c.id}", hint = "the starting temperature") { save(c.copy(ambientTemperature = it?.si)) }
         val problem = Safety.depressuringProblem(fs, results, c)
         problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText) }
         RunRow(busy, problem == null, if (c.result == null) "Run" else "Run again", "Blowing down…", { actions.runCase(c.id) }, { actions.deleteCase(c.id) })
@@ -439,7 +442,11 @@ private fun DepressuringEditor(
                     (r.timeToTarget?.let { "reached after ${ValueFormat.number(it / 60, 1)} min" } ?: "not reached"),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Text("Lowest fluid temperature ${t(r.minimumTemperature)}; lowest wall (mean) ${t(r.minimumWallTemperature)}; wall ${ValueFormat.number(r.wallThickness * 1000, 1)} mm", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Lowest vapour temperature ${t(r.minimumTemperature)}" + (r.minimumLiquidTemperature?.let { "; liquid ${t(it)}" } ?: "") +
+                    "; lowest inner wall ${t(r.minimumWallTemperature)}; wall ${ValueFormat.number(r.wallThickness * 1000, 1)} mm",
+                style = MaterialTheme.typography.bodyMedium,
+            )
             Text("Peak flow ${ValueFormat.number(wu.fromSi(r.peakFlow, ctx), wu.decimals)} ${wu.symbol}", style = MaterialTheme.typography.bodyMedium)
             r.warnings.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText) }
             PlotsSection(Safety.depressuringPlots(r), unitSet, ctx, c.resultHash != fs.modelHash(), "bd_${c.id}")

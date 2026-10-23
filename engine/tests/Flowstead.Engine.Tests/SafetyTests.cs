@@ -174,22 +174,22 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
     }
 
     private async Task<DepressuringResult> Blowdown(double? orifice, Dictionary<string, double> z, double p0, double t0, params string[] compounds) =>
-        await Blowdown(orifice, z, p0, t0, 30, compounds);
+        await Blowdown(orifice, z, p0, t0, null, 0, compounds);
 
-    private async Task<DepressuringResult> Blowdown(double? orifice, Dictionary<string, double> z, double p0, double t0, double h, params string[] compounds)
+    private async Task<DepressuringResult> Blowdown(double? orifice, Dictionary<string, double> z, double p0, double t0, double? h, double liquidLevel, params string[] compounds)
     {
         var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = compounds.ToList() };
         var req = new DepressuringRequest
         {
             Flowsheet = fs, Composition = z, InitialPressure = p0, InitialTemperature = t0,
-            Vessel = new VesselGeometry(1.5, 4), OrificeDiameter = orifice, HeatTransferCoefficient = h,
+            Vessel = new VesselGeometry(1.5, 4, LiquidLevel: liquidLevel), OrificeDiameter = orifice, HeatTransferCoefficient = h,
         };
         var res = await engine.Authed().PostAsJsonAsync("/depressuring", req, Json.Options);
         Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
         var r = await EngineFixture.Json<DepressuringResult>(res);
-        output.WriteLine($"orifice {r.OrificeDiameter * 1000:0.#} mm (sized {r.OrificeSized}), target {r.TargetPressure / 1e5:0.##} bar at {r.TimeToTarget:0} s, Tmin {r.MinimumTemperature - 273.15:0.#} °C wall {r.MinimumWallTemperature - 273.15:0.#} °C ({r.WallThickness * 1000:0.#} mm), peak {r.PeakFlow:0.###} kg/s, {r.Time.Count} steps | " + string.Join(" | ", r.Warnings));
+        output.WriteLine($"orifice {r.OrificeDiameter * 1000:0.#} mm (sized {r.OrificeSized}), target {r.TargetPressure / 1e5:0.##} bar at {r.TimeToTarget:0} s, Tmin {r.MinimumTemperature - 273.15:0.#} °C liquid {r.MinimumLiquidTemperature - 273.15:0.#} °C wall {r.MinimumWallTemperature - 273.15:0.#} °C ({r.WallThickness * 1000:0.#} mm), peak {r.PeakFlow:0.###} kg/s, {r.Time.Count} steps | " + string.Join(" | ", r.Warnings));
         for (var i = 0; i < r.Time.Count; i += Math.Max(1, r.Time.Count / 8))
-            output.WriteLine($"  t {r.Time[i]:0} s  P {r.Pressure[i] / 1e5:0.##} bar  T {r.Temperature[i] - 273.15:0.#} °C  Tw {r.WallTemperature[i] - 273.15:0.#} °C  W {r.MassFlow[i]:0.###}  M {r.Inventory[i]:0.#} kg");
+            output.WriteLine($"  t {r.Time[i]:0} s  P {r.Pressure[i] / 1e5:0.##} bar  T {r.Temperature[i] - 273.15:0.#} °C  TL {r.LiquidTemperature[i] - 273.15:0.#} °C  Tw {r.WallTemperature[i] - 273.15:0.#}/{r.WettedWallTemperature[i] - 273.15:0.#} °C  LF {r.LiquidVolumeFraction[i]:0.###}  W {r.MassFlow[i]:0.###}  M {r.Inventory[i]:0.#} kg");
         return r;
     }
 
@@ -199,11 +199,12 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         var r = await Blowdown(0.02, Methane, 70e5, 300, "Methane");
         Assert.True(r.Pressure.Zip(r.Pressure.Skip(1)).All(p => p.Second < p.First));
         Assert.True(r.MinimumTemperature < 300 - 30);
-        // The wall lags the gas: it stays warmer than the gas and cools less.
+        // The wall lags the gas: its inner surface stays warmer than the gas, but cools.
         Assert.True(r.MinimumWallTemperature > r.MinimumTemperature);
+        Assert.True(r.MinimumWallTemperature < 300);
         // Adiabatic: the gas follows the isentrope, colder than with the wall's heat. Ideal gas from 70 to ~1 bar:
         // T ≈ 300 (1/70)^((k−1)/k) ≈ 113 K.
-        var adiabatic = await Blowdown(0.02, Methane, 70e5, 300, 0, "Methane");
+        var adiabatic = await Blowdown(0.02, Methane, 70e5, 300, 0, 0, "Methane");
         Assert.True(adiabatic.MinimumTemperature < r.MinimumTemperature);
         Assert.InRange(adiabatic.MinimumTemperature, 95, 135);
         // Mass balance: the outflow integrated over time (trapezoids) equals the inventory lost.
@@ -221,5 +222,44 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         var r = await Blowdown(null, Methane, 70e5, 300, "Methane");
         Assert.True(r.OrificeSized);
         Assert.InRange(r.TimeToTarget!.Value, 0.9 * 900, 900);
+    }
+
+    [Fact]
+    public async Task PressureEntropyFlashReturnsTheStateItCameFrom()
+    {
+        var mix = new Dictionary<string, double> { ["Methane"] = 0.3, ["Propane"] = 0.4, ["N-butane"] = 0.3 };
+        SimObject Stream(string id, Dictionary<string, Spec> specs) => new() { Id = id, Tag = id, Type = ObjectType.MaterialStream, Composition = mix, Specs = specs };
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = mix.Keys.ToList() };
+        var a = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs with
+        {
+            Objects = [Stream("a", new() { [SpecKeys.Temperature] = new(320, "K"), [SpecKeys.Pressure] = new(19e5, "Pa"), [SpecKeys.MassFlow] = new(1, "kg/s") })],
+        }, Json.Options));
+        var s = a.Objects["a"].Phases!["overall"].Properties["massEntropy"];
+        var b = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs with
+        {
+            Objects = [Stream("b", new() { [SpecKeys.MassEntropy] = new(s, "J/kg.K"), [SpecKeys.Pressure] = new(19e5, "Pa"), [SpecKeys.MassFlow] = new(1, "kg/s") })],
+        }, Json.Options));
+        Assert.Equal(SolveStatus.Converged, b.Status);
+        Assert.Equal(320, b.Objects["b"].Properties["temperature"], 0.05);
+    }
+
+    [Fact]
+    public async Task TwoPhaseBlowdownKeepsTheLiquidColderThanTheGasHeatedWall()
+    {
+        // A vessel half full of NGL: the liquid boils as the pressure falls and chills the wetted wall more than the gas does the dry wall.
+        var ngl = new Dictionary<string, double> { ["Methane"] = 0.3, ["Ethane"] = 0.15, ["Propane"] = 0.3, ["N-butane"] = 0.25 };
+        var r = await Blowdown(0.02, ngl, 30e5, 300, null, 0.75, "Methane", "Ethane", "Propane", "N-butane");
+        Assert.NotNull(r.MinimumLiquidTemperature);
+        // 0.75 m in a vertical 1.5 m × 4 m vessel: the bottom head and 0.375 m of shell, 14 % of the volume.
+        Assert.Equal(0.139, r.LiquidVolumeFraction[0], 0.005);
+        // Mass balance with two zones.
+        double released = 0;
+        for (var i = 1; i < r.Time.Count; i++) released += 0.5 * (r.MassFlow[i] + r.MassFlow[i - 1]) * (r.Time[i] - r.Time[i - 1]);
+        var lost = r.Inventory[0] - r.Inventory[^1];
+        Assert.Equal(lost, released, lost * 0.05);
+        // Boiling cools the liquid; the wetted wall follows it more closely than the dry wall follows the gas.
+        Assert.True(r.MinimumLiquidTemperature < 300 - 20);
+        var wetMin = r.WettedWallTemperature.Where(v => v is not null).Min()!.Value;
+        Assert.True(wetMin < r.WallTemperature.Min());
     }
 }

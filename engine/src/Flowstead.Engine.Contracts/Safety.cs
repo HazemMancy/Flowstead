@@ -147,10 +147,14 @@ public sealed record DepressuringRequest
     public double Duration { get; init; } = 1800;
     public ReliefScenario? Fire { get; init; }
     /// <summary>
-    /// Heat exchange with the steel wall: inside coefficient W/m²·K (0 for an adiabatic blowdown) and wall thickness, m
-    /// (null for ASME VIII-1 at 1.1 × the starting pressure, S = 138 MPa, E = 1).
+    /// Inside heat transfer between the wall and each zone, W/m²·K: null for the correlations (natural convection, and
+    /// nucleate boiling on the wetted wall), a number to fix it, 0 for an adiabatic blowdown (no heat from the wall).
     /// </summary>
-    public double HeatTransferCoefficient { get; init; } = 30;
+    public double? HeatTransferCoefficient { get; init; }
+    /// <summary>Air outside: temperature (K; null for the starting fluid temperature) and coefficient (W/m²·K).</summary>
+    public double? AmbientTemperature { get; init; }
+    public double OutsideCoefficient { get; init; } = 10;
+    /// <summary>Wall thickness, m (null for ASME VIII-1 at 1.1 × the starting pressure, S = 138 MPa, E = 1).</summary>
     public double? WallThickness { get; init; }
 }
 
@@ -160,14 +164,21 @@ public sealed record DepressuringResult
     public bool OrificeSized { get; init; }
     public double TargetPressure { get; init; }
     public double? TimeToTarget { get; init; }
+    /// <summary>Lowest vapour and liquid temperatures, and the lowest inner-surface metal temperature anywhere.</summary>
     public double MinimumTemperature { get; init; }
+    public double? MinimumLiquidTemperature { get; init; }
     public double MinimumWallTemperature { get; init; }
     public double WallThickness { get; init; }
     public double PeakFlow { get; init; }
     public List<double> Time { get; init; } = [];
     public List<double> Pressure { get; init; } = [];
+    /// <summary>Vapour-zone temperature (the gas leaving).</summary>
     public List<double> Temperature { get; init; } = [];
+    /// <summary>Liquid-zone temperature; null while there is no liquid.</summary>
+    public List<double?> LiquidTemperature { get; init; } = [];
+    /// <summary>Inner-surface metal temperature of the dry (vapour-side) wall, and of the wetted wall (null while dry).</summary>
     public List<double> WallTemperature { get; init; } = [];
+    public List<double?> WettedWallTemperature { get; init; } = [];
     public List<double> MassFlow { get; init; } = [];
     public List<double> Inventory { get; init; } = [];
     public List<double> LiquidVolumeFraction { get; init; } = [];

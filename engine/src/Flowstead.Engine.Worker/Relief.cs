@@ -16,7 +16,7 @@ namespace Flowstead.Engine.Worker;
 /// A mm², W kg/h, P kPa abs, T K.</item>
 /// <item>Liquid (§5.8, capacity-certified valves): A = 11.78 Q/(Kd Kw Kc Kv)·√(G/(P1−P2)), Q L/min, with the viscosity
 /// correction Kv iterated on the Reynolds number R = Q·18 800·G/(μ√A).</item>
-/// <item>Two-phase (Annex C, omega method): ω = 9 (v₉/v₀ − 1) from an isenthalpic flash to 90 % of the relieving pressure;
+/// <item>Two-phase (Annex C, omega method): ω = 9 (v₉/v₀ − 1) from an isentropic flash to 90 % of the relieving pressure;
 /// critical pressure ratio from η² + (ω² − 2ω)(1 − η)² + 2ω² ln η + 2ω²(1 − η) = 0. A subcooled liquid that flashes in
 /// the valve is sized with the high-subcooling mass flux G = √(2ρ₀(P₀ − Ps)), the conservative case.</item>
 /// </list>
@@ -359,7 +359,9 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
     private double Omega(ObjectResult inlet, Dictionary<string, double> z, double w, double p1, double pb, double kc, Dictionary<string, double> d, List<string> warnings)
     {
         var v0 = SpecificVolume(inlet);
-        var at90 = Flash(z, P: 0.9 * p1, H: inlet.Properties["massEnthalpy"]) ?? throw new InvalidDataException("DWSIM could not flash the fluid at 90 % of the relieving pressure");
+        // API 520-1 C.2.2.1: ω from an isentropic flash to 90 % of the relieving pressure.
+        var s0 = inlet.Phases!["overall"].Properties.TryGetValue("massEntropy", out var e) ? e : throw new InvalidDataException("DWSIM gave no entropy for the relieving fluid");
+        var at90 = Flash(z, P: 0.9 * p1, S: s0) ?? throw new InvalidDataException("DWSIM could not flash the fluid isentropically to 90 % of the relieving pressure");
         var v9 = SpecificVolume(at90);
         var omega = 9 * (v9 / v0 - 1);
         if (!(omega > 0)) throw new InvalidDataException("The two-phase fluid does not expand on depressurising (ω ≤ 0)");
@@ -371,7 +373,6 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
         if (etaA <= etaC) g = etaC * Math.Sqrt(p1 / (v0 * omega));
         else g = Math.Sqrt(-2 * (omega * Math.Log(etaA) + (omega - 1) * (1 - etaA))) * Math.Sqrt(p1 / v0) / (omega * (1 / etaA - 1) + 1);
         (d["omega"], d["criticalPressureRatio"], d["massFlux"], d["kd"], d["specificVolume"]) = (omega, etaC, g, kd, v0);
-        warnings.Add("Two-phase: ω from an isenthalpic flash to 90 % of the relieving pressure (API 520 prefers isentropic; the difference is small for most fluids).");
         return w / (kd * kb * kc * g);
     }
 
@@ -394,13 +395,14 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
     // ------------------------------------------------------------------ DWSIM flashes
 
     /// <summary>A 1 kg/s stream of <paramref name="z"/> flashed by DWSIM at two of T, P, vapour fraction, mass enthalpy.</summary>
-    internal ObjectResult? Flash(Dictionary<string, double> z, double? T = null, double? P = null, double? Vf = null, double? H = null)
+    internal ObjectResult? Flash(Dictionary<string, double> z, double? T = null, double? P = null, double? Vf = null, double? H = null, double? S = null)
     {
         var specs = new Dictionary<string, Spec> { [SpecKeys.MassFlow] = new(1, "kg/s") };
         if (T is { } t) specs[SpecKeys.Temperature] = new(t, "K");
         if (P is { } p) specs[SpecKeys.Pressure] = new(p, "Pa");
         if (Vf is { } v) specs[SpecKeys.VapourFraction] = new(v, "");
         if (H is { } h) specs[SpecKeys.MassEnthalpy] = new(h, "J/kg");
+        if (S is { } en) specs[SpecKeys.MassEntropy] = new(en, "J/kg.K");
         var stream = new SimObject { Id = "s", Tag = "S", Type = ObjectType.MaterialStream, Composition = z, Specs = specs };
         var r = solve(_model with { Objects = [stream] });
         return r.Status == SolveStatus.Converged && r.Objects.GetValueOrDefault("s") is { Status: ObjectStatus.Solved, Phases: not null } o ? o : null;

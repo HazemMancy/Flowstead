@@ -163,6 +163,8 @@ public static class SpecKeys
     public const string Pressure = "pressure";
     public const string VapourFraction = "vapourFraction";
     public const string MassEnthalpy = "massEnthalpy";
+    /// <summary>Stream mass entropy, J/kg·K: with pressure, an isentropic (P-S) flash. Used by the engine's own calculations.</summary>
+    public const string MassEntropy = "massEntropy";
     public const string MolarFlow = "molarFlow";
     public const string MassFlow = "massFlow";
     public const string OutletPressure = "outletPressure";

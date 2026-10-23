@@ -359,7 +359,16 @@ public sealed class DwsimEngine
     public ReliefResult Relief(ReliefRequest req) => new ReliefCalc(req, Solve).Run();
 
     /// <summary>Vessel depressuring through a restriction orifice (D57).</summary>
-    public DepressuringResult Depressuring(DepressuringRequest req) => new DepressuringCalc(req, Solve).Run();
+    public DepressuringResult Depressuring(DepressuringRequest req)
+    {
+        // Critical pressures for the boiling correlation: DWSIM's database, or a hypothetical's characterisation.
+        double? Pc(string name)
+        {
+            if (req.Flowsheet.Hypotheticals.FirstOrDefault(h => h.Name == name) is { } hypo) return Hypotheticals.Characterise(hypo).Critical_Pressure;
+            return _automation.AvailableCompounds.TryGetValue(name, out var c) && double.IsFinite(c.Critical_Pressure) && c.Critical_Pressure > 0 ? c.Critical_Pressure : null;
+        }
+        return new DepressuringCalc(req, Solve, Pc).Run();
+    }
 
     /// <summary>
     /// One stream of <paramref name="composition"/> with the flowsheet's package, compounds and options, built but not
@@ -606,9 +615,11 @@ public sealed class DwsimEngine
         if (Has(SpecKeys.Temperature)) ms.SetTemperature(V(SpecKeys.Temperature));
         if (Has(SpecKeys.Pressure)) ms.SetPressure(V(SpecKeys.Pressure));
         if (Has(SpecKeys.MassEnthalpy)) ms.SetMassEnthalpy(V(SpecKeys.MassEnthalpy) / 1000.0); // DWSIM kJ/kg
+        if (Has(SpecKeys.MassEntropy)) ms.SetMassEntropy(V(SpecKeys.MassEntropy) / 1000.0); // DWSIM kJ/kg·K
         if (Has(SpecKeys.VapourFraction)) ms.Phases[2].Properties.molarfraction = V(SpecKeys.VapourFraction);
 
-        ms.SpecType = (Has(SpecKeys.Temperature), Has(SpecKeys.Pressure), Has(SpecKeys.VapourFraction), Has(SpecKeys.MassEnthalpy)) switch
+        if (Has(SpecKeys.Pressure) && Has(SpecKeys.MassEntropy)) ms.SpecType = StreamSpec.Pressure_and_Entropy;
+        else ms.SpecType = (Has(SpecKeys.Temperature), Has(SpecKeys.Pressure), Has(SpecKeys.VapourFraction), Has(SpecKeys.MassEnthalpy)) switch
         {
             (true, true, _, _) => StreamSpec.Temperature_and_Pressure,
             (_, true, true, _) => StreamSpec.Pressure_and_VaporFraction,

@@ -24,7 +24,7 @@ public static class Validator
     public static IReadOnlyList<string> SpecKeysFor(ObjectType t) => t switch
     {
         ObjectType.MaterialStream => [SpecKeys.Temperature, SpecKeys.Pressure, SpecKeys.VapourFraction, SpecKeys.MassEnthalpy,
-            SpecKeys.MolarFlow, SpecKeys.MassFlow],
+            SpecKeys.MassEntropy, SpecKeys.MolarFlow, SpecKeys.MassFlow],
         ObjectType.Valve => [SpecKeys.OutletPressure, SpecKeys.PressureDrop, SpecKeys.RatedCv],
         ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler => [SpecKeys.OutletTemperature, SpecKeys.Duty, SpecKeys.PressureDrop],
         ObjectType.Pump => [SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.Efficiency],
@@ -449,14 +449,15 @@ public static class Validator
         if (Has(SpecKeys.VapourFraction) && s[SpecKeys.VapourFraction].Si is < 0 or > 1)
             err($"{o.Tag}: vapour fraction must be between 0 and 1.", o.Id);
 
-        var state = new[] { SpecKeys.Temperature, SpecKeys.Pressure, SpecKeys.VapourFraction, SpecKeys.MassEnthalpy }.Count(Has);
+        var state = new[] { SpecKeys.Temperature, SpecKeys.Pressure, SpecKeys.VapourFraction, SpecKeys.MassEnthalpy, SpecKeys.MassEntropy }.Count(Has);
         var validPair = (Has(SpecKeys.Temperature) && Has(SpecKeys.Pressure))
                         || (Has(SpecKeys.Pressure) && Has(SpecKeys.VapourFraction))
                         || (Has(SpecKeys.Temperature) && Has(SpecKeys.VapourFraction))
-                        || (Has(SpecKeys.Pressure) && Has(SpecKeys.MassEnthalpy));
+                        || (Has(SpecKeys.Pressure) && Has(SpecKeys.MassEnthalpy))
+                        || (Has(SpecKeys.Pressure) && Has(SpecKeys.MassEntropy));
         if (state < 2) err($"{o.Tag}: under-specified — give two of temperature, pressure, vapour fraction (or pressure + enthalpy).", o.Id);
         else if (state > 2) err($"{o.Tag}: over-specified — give exactly two state variables.", o.Id);
-        else if (!validPair) err($"{o.Tag}: that pair of state variables can't fix the stream; use T+P, P+VF, T+VF or P+H.", o.Id);
+        else if (!validPair) err($"{o.Tag}: that pair of state variables can't fix the stream; use T+P, P+VF, T+VF, P+H or P+S.", o.Id);
 
         var flows = (Has(SpecKeys.MolarFlow) ? 1 : 0) + (Has(SpecKeys.MassFlow) ? 1 : 0);
         if (flows == 0) err($"{o.Tag}: under-specified — give a molar or mass flow.", o.Id);

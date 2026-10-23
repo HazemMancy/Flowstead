@@ -60,7 +60,9 @@ data class DepressuringCase(
     /** Null: Flowstead sizes the orifice to the 15-minute target. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
     val withFire: Boolean = false,
-    val heatTransferCoefficient: Double = 30.0,
+    /** Null: Flowstead's correlations (natural convection, nucleate boiling); 0: adiabatic. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val heatTransferCoefficient: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val ambientTemperature: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val result: DepressuringResult? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val resultHash: String? = null,
 )
@@ -123,10 +125,11 @@ object Safety {
             flowsheet = fs, composition = contents.composition, initialPressure = contents.pressure, initialTemperature = contents.temperature,
             vessel = c.vessel!!, backPressure = c.backPressure, orificeDiameter = c.orificeDiameter,
             fire = if (c.withFire) ReliefScenario(ReliefScenarioKinds.FIRE) else null, heatTransferCoefficient = c.heatTransferCoefficient,
+            ambientTemperature = c.ambientTemperature,
         )
     }
 
-    /** Pressure, temperatures (fluid and wall) and flow against time. */
+    /** Pressure, temperatures (vapour, liquid and both wall surfaces) and flow against time. */
     fun depressuringPlots(r: DepressuringResult): List<Plot> {
         val t = r.time
         if (t.size < 2) return emptyList()
@@ -135,10 +138,22 @@ object Safety {
             Plot("Pressure", "Time", Quantity.Time, "Pressure", Quantity.Pressure, listOf(PlotSeries("Vessel", t, r.pressure)),
                 markers = listOfNotNull(r.timeToTarget?.let { PlotMarker("Target", it, r.targetPressure) })).takeIf { ok(r.pressure) },
             Plot("Temperature", "Time", Quantity.Time, "Temperature", Quantity.Temperature, listOfNotNull(
-                PlotSeries("Fluid", t, r.temperature).takeIf { ok(r.temperature) },
-                PlotSeries("Wall (mean)", t, r.wallTemperature, dashed = true).takeIf { ok(r.wallTemperature) },
+                PlotSeries("Vapour", t, r.temperature).takeIf { ok(r.temperature) },
+                partial("Liquid", t, r.liquidTemperature, dashed = false),
+                PlotSeries("Dry wall", t, r.wallTemperature, dashed = true).takeIf { ok(r.wallTemperature) },
+                partial("Wetted wall", t, r.wettedWallTemperature, dashed = true),
             )).takeIf { ok(r.temperature) },
+            Plot("Liquid", "Time", Quantity.Time, "Liquid volume fraction", Quantity.Fraction,
+                listOf(PlotSeries("Liquid holdup", t, r.liquidVolumeFraction))).takeIf { ok(r.liquidVolumeFraction) && r.liquidVolumeFraction.any { it > 0 } },
             Plot("Flow", "Time", Quantity.Time, "Mass flow out", Quantity.MassFlow, listOf(PlotSeries("Through the orifice", t, r.massFlow))).takeIf { ok(r.massFlow) },
         )
+    }
+
+    /** A series over the times where it has values (the liquid zone can empty), or null if it never does. */
+    private fun partial(label: String, t: List<Double>, y: List<Double?>, dashed: Boolean): PlotSeries? {
+        if (y.size != t.size) return null
+        val keep = t.indices.filter { y[it] != null }
+        if (keep.size < 2) return null
+        return PlotSeries(label, keep.map { t[it] }, keep.map { y[it]!! }, dashed = dashed)
     }
 }

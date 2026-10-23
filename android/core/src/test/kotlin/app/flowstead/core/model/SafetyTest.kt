@@ -4,6 +4,7 @@
  */
 package app.flowstead.core.model
 
+import app.flowstead.core.api.DepressuringResult
 import app.flowstead.core.api.ObjectResult
 import app.flowstead.core.api.ObjectStatus
 import app.flowstead.core.api.PhaseResult
@@ -55,5 +56,21 @@ class SafetyTest {
         assertNull(FlowsheetEditing.upsertReliefDevice(f, d.copy(setPressure = 20e5)).safety!!.devices.single().result)
         // The safety analysis changes no result.
         assertEquals(fs.modelHash(), f.modelHash())
+    }
+
+    @Test
+    fun depressuringPlotsDrawTheLiquidOnlyWhileThereIsSome() {
+        val r = DepressuringResult(
+            time = listOf(0.0, 10.0, 20.0, 30.0), pressure = listOf(3e6, 2e6, 1.5e6, 1e6), temperature = listOf(300.0, 290.0, 280.0, 275.0),
+            liquidTemperature = listOf(300.0, 295.0, 290.0, null), wallTemperature = listOf(300.0, 299.0, 298.0, 297.0),
+            wettedWallTemperature = listOf(300.0, 298.0, null, null), massFlow = listOf(2.0, 1.5, 1.0, 0.5),
+            liquidVolumeFraction = listOf(0.2, 0.15, 0.1, 0.0),
+        )
+        val plots = Safety.depressuringPlots(r)
+        val temps = plots.first { it.title == "Temperature" }.series
+        assertEquals(listOf("Vapour", "Liquid", "Dry wall", "Wetted wall"), temps.map { it.label })
+        assertEquals(listOf(0.0, 10.0, 20.0), temps[1].x)
+        assertEquals(listOf(0.0, 10.0), temps[3].x)
+        assertEquals(listOf("Pressure", "Temperature", "Liquid", "Flow"), plots.map { it.title })
     }
 }

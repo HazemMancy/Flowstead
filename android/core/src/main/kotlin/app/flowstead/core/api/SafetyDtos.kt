@@ -143,7 +143,11 @@ data class DepressuringRequest(
     val targetTime: Double = 900.0,
     val duration: Double = 1800.0,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val fire: ReliefScenario? = null,
-    val heatTransferCoefficient: Double = 30.0,
+    /** Inside film coefficient (W/m²·K); null: natural convection and nucleate boiling correlations; 0: adiabatic. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val heatTransferCoefficient: Double? = null,
+    /** Air outside the vessel (K); null: the starting temperature. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val ambientTemperature: Double? = null,
+    val outsideCoefficient: Double = 10.0,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val wallThickness: Double? = null,
 )
 
@@ -154,13 +158,19 @@ data class DepressuringResult(
     val targetPressure: Double = 0.0,
     val timeToTarget: Double? = null,
     val minimumTemperature: Double = 0.0,
+    val minimumLiquidTemperature: Double? = null,
     val minimumWallTemperature: Double = 0.0,
     val wallThickness: Double = 0.0,
     val peakFlow: Double = 0.0,
     val time: List<Double> = emptyList(),
     val pressure: List<Double> = emptyList(),
     val temperature: List<Double> = emptyList(),
+    /** The liquid zone's temperature, null while there is no liquid. */
+    val liquidTemperature: List<Double?> = emptyList(),
+    /** Inner surface of the dry wall (in contact with the vapour). */
     val wallTemperature: List<Double> = emptyList(),
+    /** Inner surface of the wetted wall, null while there is no liquid. */
+    val wettedWallTemperature: List<Double?> = emptyList(),
     val massFlow: List<Double> = emptyList(),
     val inventory: List<Double> = emptyList(),
     val liquidVolumeFraction: List<Double> = emptyList(),
