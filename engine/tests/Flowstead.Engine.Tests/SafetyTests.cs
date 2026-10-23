@@ -172,4 +172,54 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.False(bad.Outlet!.Ok);
         Assert.True(bad.Inlet.PressureDrop > good.Inlet.PressureDrop);
     }
+
+    private async Task<DepressuringResult> Blowdown(double? orifice, Dictionary<string, double> z, double p0, double t0, params string[] compounds) =>
+        await Blowdown(orifice, z, p0, t0, 30, compounds);
+
+    private async Task<DepressuringResult> Blowdown(double? orifice, Dictionary<string, double> z, double p0, double t0, double h, params string[] compounds)
+    {
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = compounds.ToList() };
+        var req = new DepressuringRequest
+        {
+            Flowsheet = fs, Composition = z, InitialPressure = p0, InitialTemperature = t0,
+            Vessel = new VesselGeometry(1.5, 4), OrificeDiameter = orifice, HeatTransferCoefficient = h,
+        };
+        var res = await engine.Authed().PostAsJsonAsync("/depressuring", req, Json.Options);
+        Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+        var r = await EngineFixture.Json<DepressuringResult>(res);
+        output.WriteLine($"orifice {r.OrificeDiameter * 1000:0.#} mm (sized {r.OrificeSized}), target {r.TargetPressure / 1e5:0.##} bar at {r.TimeToTarget:0} s, Tmin {r.MinimumTemperature - 273.15:0.#} °C wall {r.MinimumWallTemperature - 273.15:0.#} °C ({r.WallThickness * 1000:0.#} mm), peak {r.PeakFlow:0.###} kg/s, {r.Time.Count} steps | " + string.Join(" | ", r.Warnings));
+        for (var i = 0; i < r.Time.Count; i += Math.Max(1, r.Time.Count / 8))
+            output.WriteLine($"  t {r.Time[i]:0} s  P {r.Pressure[i] / 1e5:0.##} bar  T {r.Temperature[i] - 273.15:0.#} °C  Tw {r.WallTemperature[i] - 273.15:0.#} °C  W {r.MassFlow[i]:0.###}  M {r.Inventory[i]:0.#} kg");
+        return r;
+    }
+
+    [Fact]
+    public async Task GasBlowdownConservesMassAndCools()
+    {
+        var r = await Blowdown(0.02, Methane, 70e5, 300, "Methane");
+        Assert.True(r.Pressure.Zip(r.Pressure.Skip(1)).All(p => p.Second < p.First));
+        Assert.True(r.MinimumTemperature < 300 - 30);
+        // The wall lags the gas: it stays warmer than the gas and cools less.
+        Assert.True(r.MinimumWallTemperature > r.MinimumTemperature);
+        // Adiabatic: the gas follows the isentrope, colder than with the wall's heat. Ideal gas from 70 to ~1 bar:
+        // T ≈ 300 (1/70)^((k−1)/k) ≈ 113 K.
+        var adiabatic = await Blowdown(0.02, Methane, 70e5, 300, 0, "Methane");
+        Assert.True(adiabatic.MinimumTemperature < r.MinimumTemperature);
+        Assert.InRange(adiabatic.MinimumTemperature, 95, 135);
+        // Mass balance: the outflow integrated over time (trapezoids) equals the inventory lost.
+        double released = 0;
+        for (var i = 1; i < r.Time.Count; i++) released += 0.5 * (r.MassFlow[i] + r.MassFlow[i - 1]) * (r.Time[i] - r.Time[i - 1]);
+        var lost = r.Inventory[0] - r.Inventory[^1];
+        Assert.Equal(lost, released, lost * 0.03);
+        // API 521 target: the lower of 6.9 barg and half of the starting gauge pressure.
+        Assert.Equal(101325 + 690e3, r.TargetPressure, 1e-6);
+    }
+
+    [Fact]
+    public async Task OrificeIsSizedToReachTheTargetIn15Minutes()
+    {
+        var r = await Blowdown(null, Methane, 70e5, 300, "Methane");
+        Assert.True(r.OrificeSized);
+        Assert.InRange(r.TimeToTarget!.Value, 0.9 * 900, 900);
+    }
 }

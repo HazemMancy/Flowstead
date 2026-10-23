@@ -230,6 +230,41 @@ paths:
         "422": { description: "Invalid input (code invalid_pvt)", content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } } }
         "503": { $ref: "#/components/responses/EngineUnavailable" }
 
+  /relief:
+    post:
+      summary: Relief loads (API 521) and sizing (API 520 Part I) of one pressure-relief valve, with inlet and outlet line checks (API 520 Part II) (D54–D56).
+      description: |
+        Request: { flowsheet, device } where device has id, tag, setPressure (Pa abs), backPressure (Pa abs, superimposed),
+        design (conventional | balancedBellows | pilot), kd (optional), kb, ruptureDisk, composition, operatingTemperature,
+        operatingPressure, vessel { diameter, length, horizontal, liquidLevel, elevation } (m), scenarios [ { kind (fire |
+        blockedOutlet | controlValveFailure | thermalExpansion | custom), name, overpressure, environmentFactor,
+        adequateDrainage, area, wallTemperature, massFlow, composition, temperature, upstreamPressure, ratedCv, heatInput } ],
+        inletLine and outletLine { insideDiameter, length, roughness, fittingsLength, elevationChange }.
+      responses:
+        "200":
+          description: |
+            scenarios [ { kind, name, massFlow (kg/s), phase (vapour | liquid | twoPhase), relievingPressure,
+            relievingTemperature, requiredArea (m²), method, details, error, warnings } ], governing, requiredArea, orifice
+            (API 526 letter), orificeArea, valves, ratedFlow, inlet and outlet { pressureDrop, limit, fractionOfSet, ok, note }, warnings.
+        "422": { description: "Invalid input (code invalid_relief)", content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } } }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+
+  /depressuring:
+    post:
+      summary: Vessel depressuring through a restriction orifice (API 521), sized to the 15-minute target when no orifice is given (D57).
+      description: |
+        Request: flowsheet, composition, initialPressure, initialTemperature, vessel, backPressure, orificeDiameter (m, optional),
+        dischargeCoefficient (0.84), targetPressure, targetTime (900 s), duration (1800 s), fire (a fire scenario, optional),
+        heatTransferCoefficient (W/m²K, 30; 0 adiabatic), wallThickness (m, optional).
+      responses:
+        "200":
+          description: |
+            orificeDiameter, orificeSized, targetPressure, timeToTarget, minimumTemperature (fluid), minimumWallTemperature,
+            wallThickness, peakFlow, and the series time, pressure, temperature, wallTemperature, massFlow, inventory,
+            liquidVolumeFraction; warnings.
+        "422": { description: "Invalid input (code invalid_depressuring)", content: { application/json: { schema: { $ref: "#/components/schemas/EngineError" } } } }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+
 components:
   securitySchemes:
     apiKey:

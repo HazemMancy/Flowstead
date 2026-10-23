@@ -57,6 +57,7 @@ public sealed class WorkerHost(TextWriter output)
         WorkerMethods.PhaseEnvelope => JsonSerializer.SerializeToNode(engine.PhaseEnvelope(Params<PhaseEnvelopeRequest>(req)), Json.Options),
         WorkerMethods.Pvt => JsonSerializer.SerializeToNode(engine.Pvt(Params<PvtRequest>(req)), Json.Options),
         WorkerMethods.Relief => JsonSerializer.SerializeToNode(engine.Relief(Params<ReliefRequest>(req)), Json.Options),
+        WorkerMethods.Depressuring => JsonSerializer.SerializeToNode(engine.Depressuring(Params<DepressuringRequest>(req)), Json.Options),
         WorkerMethods.TestSleep when TestHooks => Sleep(req.Params!.GetValue<int>()),
         _ => throw new InvalidOperationException($"Unknown method '{req.Method}'"),
     };

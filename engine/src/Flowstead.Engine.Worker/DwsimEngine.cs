@@ -358,6 +358,9 @@ public sealed class DwsimEngine
     /// <summary>Relief loads and API 520 sizing for one relief valve (D54–D56).</summary>
     public ReliefResult Relief(ReliefRequest req) => new ReliefCalc(req, Solve).Run();
 
+    /// <summary>Vessel depressuring through a restriction orifice (D57).</summary>
+    public DepressuringResult Depressuring(DepressuringRequest req) => new DepressuringCalc(req, Solve).Run();
+
     /// <summary>
     /// One stream of <paramref name="composition"/> with the flowsheet's package, compounds and options, built but not
     /// solved: for calculations that need the composition only (envelopes, saturation points).

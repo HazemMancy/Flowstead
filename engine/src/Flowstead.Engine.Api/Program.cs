@@ -138,6 +138,10 @@ api.MapPost("/pvt", async (PvtRequest req, EngineService e, CancellationToken ct
 api.MapPost("/relief", async (ReliefRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.ReliefAsync(req, ct), "invalid_relief"));
 
+// Safety analysis: vessel depressuring (D57).
+api.MapPost("/depressuring", async (DepressuringRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.DepressuringAsync(req, ct), "invalid_depressuring"));
+
 app.Run();
 return 0;
 

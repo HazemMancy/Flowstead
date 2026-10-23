@@ -53,6 +53,10 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<ReliefResult> ReliefAsync(ReliefRequest req, CancellationToken ct) =>
         pool.CallAsync<ReliefResult>(WorkerMethods.Relief, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
+    /// <summary>A blowdown is hundreds of flashes (more when the orifice is sized): twice the solve timeout.</summary>
+    public Task<DepressuringResult> DepressuringAsync(DepressuringRequest req, CancellationToken ct) =>
+        pool.CallAsync<DepressuringResult>(WorkerMethods.Depressuring, req, TimeSpan.FromSeconds(2 * options.SolveTimeoutSeconds), ct);
+
     public Task<ImportResult> ImportDwsimAsync(DwsimFile file, CancellationToken ct) =>
         pool.CallAsync<ImportResult>(WorkerMethods.ImportDwsim, file, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 

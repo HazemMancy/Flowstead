@@ -145,6 +145,12 @@ public sealed record DepressuringRequest
     public double TargetTime { get; init; } = 900;
     public double Duration { get; init; } = 1800;
     public ReliefScenario? Fire { get; init; }
+    /// <summary>
+    /// Heat exchange with the steel wall: inside coefficient W/m²·K (0 for an adiabatic blowdown) and wall thickness, m
+    /// (null for ASME VIII-1 at 1.1 × the starting pressure, S = 138 MPa, E = 1).
+    /// </summary>
+    public double HeatTransferCoefficient { get; init; } = 30;
+    public double? WallThickness { get; init; }
 }
 
 public sealed record DepressuringResult
@@ -154,10 +160,13 @@ public sealed record DepressuringResult
     public double TargetPressure { get; init; }
     public double? TimeToTarget { get; init; }
     public double MinimumTemperature { get; init; }
+    public double MinimumWallTemperature { get; init; }
+    public double WallThickness { get; init; }
     public double PeakFlow { get; init; }
     public List<double> Time { get; init; } = [];
     public List<double> Pressure { get; init; } = [];
     public List<double> Temperature { get; init; } = [];
+    public List<double> WallTemperature { get; init; } = [];
     public List<double> MassFlow { get; init; } = [];
     public List<double> Inventory { get; init; } = [];
     public List<double> LiquidVolumeFraction { get; init; } = [];
