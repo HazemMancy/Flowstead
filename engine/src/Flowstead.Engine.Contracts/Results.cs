@@ -174,7 +174,8 @@ public sealed record PvtRequest(
     string Experiment,
     double Temperature,
     List<double>? Pressures = null,
-    List<SeparatorStage>? Stages = null);
+    List<SeparatorStage>? Stages = null,
+    double? SaturationGuess = null);
 
 /// <summary>
 /// A PVT experiment's results. <see cref="Table"/> holds one list per column, all the same length (one row per step),

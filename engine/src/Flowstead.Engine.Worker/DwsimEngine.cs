@@ -352,7 +352,7 @@ public sealed class DwsimEngine
         if (!(req.Temperature > 0)) throw new InvalidDataException("Give the reservoir temperature");
         // PVT volumes must all come from one model: the equation of state for vapour and liquid alike (D53).
         var model = req.Flowsheet with { Objects = [], Connections = [], Reactions = [], LiquidDensity = LiquidDensityMethods.Eos };
-        return new PvtLab(req with { Flowsheet = model }, Solve).Run();
+        return new PvtLab(req with { Flowsheet = model }, Solve, req.SaturationGuess).Run();
     }
 
     /// <summary>Tunes the plus fraction's critical constants to PVT lab data (D53).</summary>

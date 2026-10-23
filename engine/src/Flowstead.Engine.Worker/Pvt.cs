@@ -13,7 +13,8 @@ namespace Flowstead.Engine.Worker;
 /// </summary>
 public sealed class PvtLab(
     PvtRequest req,
-    Func<Flowsheet, SolveResult> solve)
+    Func<Flowsheet, SolveResult> solve,
+    double? saturationGuess = null)
 {
     private const double R = 8.314462618;
     private const double T60F = 288.7056;
@@ -67,6 +68,10 @@ public sealed class PvtLab(
         Cell? Two(double p) => Flash(z, 1, t, p) is { GasMoles: > 0, LiquidMoles: > 0 } c ? c : null;
         double hi = 7e7, lo = double.NaN;
         Cell? below = null;
+        // A nearby earlier answer (a regression's previous step): bracket it within 10 % if the boundary is still there.
+        if (saturationGuess is { } g && g > 5e4 && g < 7e7 && Two(g * 0.9) is { } under && Two(Math.Min(g * 1.1, 7e7)) is null)
+            (hi, lo, below) = (Math.Min(g * 1.1, 7e7), g * 0.9, under);
+        else
         for (var p = hi; p > 5e4; p *= 0.85)
         {
             if (Two(p) is { } c) { lo = p; below = c; break; }

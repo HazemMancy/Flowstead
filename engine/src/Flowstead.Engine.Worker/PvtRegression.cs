@@ -16,6 +16,7 @@ namespace Flowstead.Engine.Worker;
 public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, PvtResult> pvt)
 {
     private readonly List<string> _warnings = [];
+    private double? _lastSaturation;
 
     private sealed record Parameter(string Hypothetical, string Property, double Base);
 
@@ -114,13 +115,24 @@ public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, Pvt
             return h with { CriticalTemperature = V("tc", c.Critical_Temperature), CriticalPressure = V("pc", c.Critical_Pressure), AcentricFactor = V("omega", c.Acentric_Factor) };
         }).ToList();
         var fs = req.Flowsheet with { Hypotheticals = hypos };
+        // One run per experiment; the saturation pressure comes with any of them, so a saturation measurement alone
+        // needs its own run only when nothing else is measured. Each run starts its saturation search at the last one.
         var runs = new Dictionary<string, PvtResult?>();
-        foreach (var exp in req.Observations.Select(o => o.Experiment).Distinct())
+        var experiments = req.Observations.Select(o => o.Experiment).Distinct().ToList();
+        if (experiments.Count > 1) experiments.Remove(PvtExperiments.Saturation);
+        foreach (var exp in experiments)
         {
             var pressures = req.Observations.Where(o => o.Experiment == exp && o.Pressure is > 0).Select(o => o.Pressure!.Value).Distinct().ToList();
-            try { runs[exp] = pvt(new PvtRequest(fs, req.Composition, exp, req.Temperature, pressures.Count > 0 ? pressures : null)); }
+            try
+            {
+                var r = pvt(new PvtRequest(fs, req.Composition, exp, req.Temperature, pressures.Count > 0 ? pressures : null, SaturationGuess: _lastSaturation));
+                runs[exp] = r;
+                _lastSaturation = r.SaturationPressure ?? _lastSaturation;
+            }
             catch (InvalidDataException) { runs[exp] = null; }
         }
+        var any = runs.Values.FirstOrDefault(v => v is not null);
+        runs.TryAdd(PvtExperiments.Saturation, any);
         return req.Observations.Select(o =>
         {
             if (runs[o.Experiment] is not { } r) return (double?)null;

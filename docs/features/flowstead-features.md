@@ -39,5 +39,5 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - The valve library gives typical IEC factors by valve type, not a maker's catalogue (no Fp or inherent characteristic).
 - Pump and compressor curves join your points with straight lines (HYSYS fits a polynomial).
 - Hydrate inhibition (methanol, glycols) is by the GPSA correlations, not in the phase equilibrium; salts are ignored.
-- PVT has no regression to lab data (no EOS tuning) yet.
+- PVT regression tunes the plus fraction's Tc, Pc and ω only (no interaction or volume-shift parameters).
 - No dynamics: steady state only (depressuring is the one time-stepping calculation).

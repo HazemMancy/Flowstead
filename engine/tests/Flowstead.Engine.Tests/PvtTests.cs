@@ -150,10 +150,12 @@ public sealed class PvtTests(EngineFixture engine, ITestOutputHelper output)
         output.WriteLine($"error {r.ErrorBefore:P2} -> {r.ErrorAfter:P3} in {r.Iterations} iterations; " + string.Join(", ", r.Multipliers.Select(m => $"{m.Key} {m.Value:0.0000}")));
         foreach (var m in r.Matches) output.WriteLine($"  {m.Observation.Key} at {m.Observation.Pressure}: lab {m.Observation.Value:0.####} before {m.Before:0.####} after {m.After:0.####}");
         foreach (var w in r.Warnings) output.WriteLine("  warning: " + w);
-        Assert.True(r.ErrorBefore > 0.01);
-        Assert.True(r.ErrorAfter < 0.002);
+        // The data move little with these constants (0.6 % RMS untuned); the fit takes it to well under a tenth of that.
+        Assert.True(r.ErrorBefore > 0.003);
+        Assert.True(r.ErrorAfter < r.ErrorBefore / 20);
         // The tuned constants are written out for the flowsheet; they are near the ones that made the data.
         var tuned = Assert.Single(r.Tuned);
         Assert.Equal(estimated.CriticalTemperature * 1.04, tuned.CriticalTemperature!.Value, estimated.CriticalTemperature * 0.01);
+        Assert.Equal(estimated.CriticalPressure * 0.93, tuned.CriticalPressure!.Value, estimated.CriticalPressure * 0.02);
     }
 }
