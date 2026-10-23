@@ -12,6 +12,7 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - **Heat exchanger zone analysis.** The exchanger is checked in 20 zones, so an internal pinch or temperature cross in a condenser or reboiler is caught, with the T–Q diagram.
 - **Pump and compressor curves.** The machine runs on the vendor's curve with DWSIM's rigorous head (DWSIM 9.0.5's own curve modes gave zero pump power and an ideal-gas compressor head); run-out, surge, stonewall and NPSH required are checked.
 - **Hydrate formation.** The hydrate curve on the phase envelope and the hydrate temperature of any stream (van der Waals–Platteeuw, Munck et al.; DWSIM 9.0.5's engine has no hydrate model). Within about 1 K of measured methane and propane data.
+- **Safety analysis.** Relief valves sized by API 520 for API 521 scenarios (fire, blocked outlet, control valve failure, thermal expansion), with API 526 orifices and the inlet-loss and back-pressure checks of API 520 Part II; vessel depressuring with the restriction orifice sized to the 15-minute target, and the fluid and wall temperatures. DWSIM 9.0.5's engine has no relief sizing or depressuring.
 - **PVT laboratory.** Saturation pressure, constant composition expansion, constant volume depletion, differential liberation and separator tests on any stream.
 - **Interactive.** Hold/Active solver, what-if sliders on every specification, case studies with one or two variables, and plots of profiles and envelopes that you can read by touch.
 - **More reliable densities and phases.** Liquid densities of mixtures with light gases, near-critical fluids and dense gases that DWSIM reported as zero or split into two copies of one fluid are corrected; a flash that returns an impossible phase is reported as an error, not a number. Optional COSTALD, plain-EOS (no volume shift) and equation-of-state liquid densities, and Lee–Gonzalez–Eakin gas viscosity.
@@ -28,6 +29,7 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - **Densities and viscosities matched to HYSYS on request:** plain Peng–Robinson densities and Z, COSTALD liquids, Lee–Gonzalez–Eakin gas viscosity. On a C1–C5 gas at 320 barg and 35 °C (Peng–Robinson): density 361.9 kg/m³ (HYSYS 362.5), Z 0.8341 (HYSYS 0.8335), viscosity 0.0497 cP (HYSYS 0.0489).
 - **Hypothetical components** from boiling point, molecular weight and specific gravity.
 - **Adjust and Set** operations.
+- **Safety analysis:** relief valves with several scenarios each and a governing case, line checks, depressuring.
 - **Envelope utility** with quality lines and the hydrate curve; **case studies** with one or two independent variables.
 - **Exchanger zone analysis, pump and compressor curves, valve sizing**, as in HYSYS's equipment pages.
 
@@ -38,4 +40,5 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - Pump and compressor curves are at one speed, with straight lines between your points.
 - Hydrates assume free water with no inhibitor (methanol, MEG) or salt.
 - PVT has no regression to lab data (no EOS tuning) yet.
-- No dynamics: steady state only.
+- Relief cases are listed by the user (not generated from the flowsheet); the omega flash is isenthalpic; depressuring uses one well-mixed fluid and a lumped wall (its mean temperature).
+- No dynamics: steady state only (depressuring is the one time-stepping calculation).

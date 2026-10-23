@@ -97,7 +97,7 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
         if (Excess(hi) < 0)
         {
             warnings.Add("The outlet line cannot carry the rated flow even at the relieving pressure: enlarge it.");
-            return new LineCheck(double.NaN, double.NaN, double.NaN, false, "Outlet line choked or too small for the rated flow.");
+            return new LineCheck(null, null, null, false, "Outlet line choked or too small for the rated flow.");
         }
         for (var i = 0; i < 50 && hi - lo > 10; i++)
         {

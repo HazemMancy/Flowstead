@@ -152,6 +152,12 @@ fun FlowsheetScreen(
                                 onClick = { menu = false; xlsxFile.launch(viewModel.exportFileName("xlsx", " results")) },
                             )
                             DropdownMenuItem(
+                                text = { Text("Safety analysis: relief valves, depressuring") },
+                                enabled = ready != null,
+                                onClick = { menu = false; viewModel.openSafety() },
+                                modifier = Modifier.testTag("menu_safety"),
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Case studies") },
                                 enabled = ready != null,
                                 onClick = { menu = false; viewModel.openCaseStudies() },
@@ -328,6 +334,26 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             onRun = vm::runCaseStudy,
             onCancel = vm::cancelCaseStudy,
             onDismiss = vm::closeCaseStudies,
+        )
+    }
+    if (ui.safetyOpen) {
+        SafetySheet(
+            fs = ui.flowsheet,
+            results = ui.results,
+            running = ui.safetyRunning,
+            unitSet = ui.unitSet,
+            ctx = ui.unitContext,
+            actions = remember(vm) {
+                object : SafetyActions {
+                    override fun saveDevice(d: app.flowstead.core.model.ReliefDeviceDef) = vm.upsertReliefDevice(d)
+                    override fun deleteDevice(id: String) = vm.deleteReliefDevice(id)
+                    override fun runDevice(id: String) = vm.runRelief(id)
+                    override fun saveCase(c: app.flowstead.core.model.DepressuringCase) = vm.upsertDepressuring(c)
+                    override fun deleteCase(id: String) = vm.deleteDepressuring(id)
+                    override fun runCase(id: String) = vm.runDepressuring(id)
+                }
+            },
+            onDismiss = vm::closeSafety,
         )
     }
     ui.pvtFor?.let { id ->

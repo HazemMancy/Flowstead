@@ -15,6 +15,10 @@ import app.flowstead.core.api.PhaseEnvelope
 import app.flowstead.core.api.PhaseEnvelopeRequest
 import app.flowstead.core.api.PropertyPackageInfo
 import app.flowstead.core.api.PvtRequest
+import app.flowstead.core.api.ReliefRequest
+import app.flowstead.core.api.ReliefResult
+import app.flowstead.core.api.DepressuringRequest
+import app.flowstead.core.api.DepressuringResult
 import app.flowstead.core.api.PvtResult
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.Hypothetical
@@ -22,6 +26,7 @@ import app.flowstead.core.model.Flowsheet
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpRequestTimeoutException
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -61,6 +66,12 @@ interface EngineClient {
     /** A PVT laboratory experiment (D53). */
     suspend fun pvt(baseUrl: String, apiKey: String?, request: PvtRequest): EngineResult<PvtResult> =
         EngineResult.Failed("This engine can't run PVT experiments")
+    /** Relief loads and sizing of one relief valve (D54–D56). */
+    suspend fun relief(baseUrl: String, apiKey: String?, request: ReliefRequest): EngineResult<ReliefResult> =
+        EngineResult.Failed("This engine can't size relief valves")
+    /** A vessel blowdown (D57). */
+    suspend fun depressuring(baseUrl: String, apiKey: String?, request: DepressuringRequest): EngineResult<DepressuringResult> =
+        EngineResult.Failed("This engine can't simulate depressuring")
 }
 
 @Singleton
@@ -131,6 +142,26 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(request)
+            }
+        }
+
+    override suspend fun relief(baseUrl: String, apiKey: String?, request: ReliefRequest): EngineResult<ReliefResult> =
+        call {
+            http.post("$baseUrl/relief") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+        }
+
+    override suspend fun depressuring(baseUrl: String, apiKey: String?, request: DepressuringRequest): EngineResult<DepressuringResult> =
+        call {
+            http.post("$baseUrl/depressuring") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                // A blowdown with orifice sizing is many flashes.
+                timeout { requestTimeoutMillis = 10 * 60_000L }
             }
         }
 

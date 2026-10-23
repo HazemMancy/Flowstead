@@ -223,6 +223,40 @@ class FlowsheetViewModelTest {
     }
 
     @Test
+    fun aReliefValveIsSizedFromTheSolvedVesselAndKeepsItsResult() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        val sep = app.flowstead.core.model.SimObject("v", "V-100", ObjectType.Separator)
+        val fs = completeFeed().let { it.copy(objects = it.objects + sep, connections = listOf(Connection("f", 0, "v", 0))) }
+        engine.solveResult = app.flowstead.data.engine.EngineResult.Ok(
+            app.flowstead.core.api.SolveResult(
+                app.flowstead.core.api.SolveStatus.Converged,
+                objects = mapOf("f" to app.flowstead.core.api.ObjectResult(
+                    app.flowstead.core.api.ObjectStatus.Solved, properties = mapOf("temperature" to 300.0, "pressure" to 5e6, "massFlow" to 1.0),
+                    phases = mapOf("overall" to app.flowstead.core.api.PhaseResult(composition = mapOf("Methane" to 1.0))))),
+            ),
+        )
+        engine.reliefResult = app.flowstead.data.engine.EngineResult.Ok(app.flowstead.core.api.ReliefResult(orifice = "K", valves = 1))
+        val vm = vm(fs)
+        vm.ui()
+        vm.solve()
+        vm.ui { it.results.status != null }
+        vm.upsertReliefDevice(app.flowstead.core.model.ReliefDeviceDef(
+            "d", "PSV-100", protectedId = "v", setPressure = 6e6,
+            scenarios = listOf(app.flowstead.core.api.ReliefScenario(app.flowstead.core.api.ReliefScenarioKinds.BLOCKED_OUTLET)),
+        ))
+        vm.ui { it.flowsheet.safety != null }
+        vm.runRelief("d")
+        val sized = vm.ui { it.flowsheet.safety?.devices?.single()?.result != null }
+        assertEquals("K", sized.flowsheet.safety!!.devices.single().result!!.orifice)
+        // The engine got the feed's fluid and flow for the blocked outlet.
+        val sent = engine.reliefs.single().device
+        assertEquals(mapOf("Methane" to 1.0), sent.composition)
+        assertEquals(1.0, sent.scenarios.single().massFlow)
+        // The safety analysis is not part of the model: the results stay current.
+        assertFalse(sized.results.stale)
+    }
+
+    @Test
     fun unreachableEngineQueuesTheSolve() = runTest {
         settings.setEngineUrl("https://engine.example.com")
         engine.solveResult = app.flowstead.data.engine.EngineResult.Failed("Cannot reach the engine: timeout", unreachable = true)

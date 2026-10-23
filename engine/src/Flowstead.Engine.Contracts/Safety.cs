@@ -107,7 +107,8 @@ public sealed record ScenarioResult
 }
 
 /// <summary>Pressure loss of a relief line at the valve's rated flow, against its API 520 Part II limit.</summary>
-public sealed record LineCheck(double PressureDrop, double Limit, double FractionOfSet, bool Ok, string Note);
+/// <summary>Null loss: the line cannot carry the rated flow at all (choked).</summary>
+public sealed record LineCheck(double? PressureDrop, double? Limit, double? FractionOfSet, bool Ok, string Note);
 
 public sealed record ReliefResult
 {

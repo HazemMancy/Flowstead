@@ -114,12 +114,12 @@ fun PvtSheet(
                 stages.forEachIndexed { i, st ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            QuantityField("T, stage ${i + 1}", Spec(st.temperature, "K"), Quantity.Temperature, unitSet.unitFor(Quantity.Temperature), ctx, "pvt_st_t_$i") { s ->
+                            QuantityField("T, stage ${i + 1}", Spec(st.temperature, unitSet.unitFor(Quantity.Temperature).id), Quantity.Temperature, unitSet.unitFor(Quantity.Temperature), ctx, "pvt_st_t_$i") { s ->
                                 s?.let { stages = stages.toMutableList().also { l -> l[i] = st.copy(temperature = it.si) } }
                             }
                         }
                         Column(Modifier.weight(1f)) {
-                            QuantityField("P, stage ${i + 1}", Spec(st.pressure, "Pa"), Quantity.Pressure, unitSet.unitFor(Quantity.Pressure), ctx, "pvt_st_p_$i") { s ->
+                            QuantityField("P, stage ${i + 1}", Spec(st.pressure, unitSet.unitFor(Quantity.Pressure).id), Quantity.Pressure, unitSet.unitFor(Quantity.Pressure), ctx, "pvt_st_p_$i") { s ->
                                 s?.let { stages = stages.toMutableList().also { l -> l[i] = st.copy(pressure = it.si) } }
                             }
                         }

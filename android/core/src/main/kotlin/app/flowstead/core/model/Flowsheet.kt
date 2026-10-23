@@ -67,6 +67,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val caseStudies: List<CaseStudy> = emptyList(),
+    /** Relief valves and depressuring cases (D54–D57). Not part of the solved model: excluded from [modelHash]. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val safety: SafetyStudy? = null,
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
     fun hypothetical(name: String): Hypothetical? = hypotheticals.firstOrNull { it.name == name }

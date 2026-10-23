@@ -128,6 +128,13 @@ class FakeEngineClient(var result: EngineResult<EngineHealth> = EngineResult.Ok(
         return pvtResult
     }
 
+    var reliefResult: EngineResult<app.flowstead.core.api.ReliefResult> = EngineResult.Failed("No relief in this test")
+    val reliefs = mutableListOf<app.flowstead.core.api.ReliefRequest>()
+    override suspend fun relief(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.ReliefRequest): EngineResult<app.flowstead.core.api.ReliefResult> {
+        reliefs += request
+        return reliefResult
+    }
+
     var exportResult: EngineResult<ExportResult> = EngineResult.Ok(ExportResult("UEsDBA==", SolveStatus.Converged)) // "PK\u0003\u0004"
     override suspend fun exportDwsim(baseUrl: String, apiKey: String?, flowsheet: Flowsheet) = exportResult
 

@@ -4,6 +4,9 @@
  */
 package app.flowstead.core.model
 
+import app.flowstead.core.api.DepressuringResult
+import app.flowstead.core.api.ReliefResult
+
 import java.util.UUID
 
 /** Why an edit was refused, in words the user sees. */
@@ -125,6 +128,39 @@ object FlowsheetEditing {
         val kept = if (old != null && old.copy(name = cs.name, results = null) == cs.copy(results = null)) cs.copy(results = cs.results ?: old.results) else cs
         return fs.copy(caseStudies = if (old == null) fs.caseStudies + kept else fs.caseStudies.map { if (it.id == cs.id) kept else it })
     }
+
+    /**
+     * Adds or replaces a relief valve (D54) as the user edits it. A change to what it is (anything but its tag) drops
+     * its last result, which no longer describes it; [setReliefResult] stores a new one.
+     */
+    fun upsertReliefDevice(fs: Flowsheet, d: ReliefDeviceDef): Flowsheet {
+        val study = fs.safety ?: SafetyStudy()
+        val old = study.devices.firstOrNull { it.id == d.id }
+        fun def(x: ReliefDeviceDef) = x.copy(tag = "", result = null, resultHash = null)
+        val kept = if (old != null && def(old) == def(d)) d.copy(result = old.result, resultHash = old.resultHash) else d.copy(result = null, resultHash = null)
+        return fs.copy(safety = study.copy(devices = if (old == null) study.devices + kept else study.devices.map { if (it.id == d.id) kept else it }))
+    }
+
+    fun setReliefResult(fs: Flowsheet, id: String, result: ReliefResult, hash: String): Flowsheet =
+        fs.copy(safety = fs.safety?.let { s -> s.copy(devices = s.devices.map { if (it.id == id) it.copy(result = result, resultHash = hash) else it }) })
+
+    fun deleteReliefDevice(fs: Flowsheet, id: String): Flowsheet =
+        fs.copy(safety = fs.safety?.let { it.copy(devices = it.devices.filterNot { d -> d.id == id }) })
+
+    /** As [upsertReliefDevice], for depressuring cases (D57); renaming keeps the result. */
+    fun upsertDepressuring(fs: Flowsheet, c: DepressuringCase): Flowsheet {
+        val study = fs.safety ?: SafetyStudy()
+        val old = study.depressuring.firstOrNull { it.id == c.id }
+        fun def(x: DepressuringCase) = x.copy(name = "", result = null, resultHash = null)
+        val kept = if (old != null && def(old) == def(c)) c.copy(result = old.result, resultHash = old.resultHash) else c.copy(result = null, resultHash = null)
+        return fs.copy(safety = study.copy(depressuring = if (old == null) study.depressuring + kept else study.depressuring.map { if (it.id == c.id) kept else it }))
+    }
+
+    fun setDepressuringResult(fs: Flowsheet, id: String, result: DepressuringResult, hash: String): Flowsheet =
+        fs.copy(safety = fs.safety?.let { s -> s.copy(depressuring = s.depressuring.map { if (it.id == id) it.copy(result = result, resultHash = hash) else it }) })
+
+    fun deleteDepressuring(fs: Flowsheet, id: String): Flowsheet =
+        fs.copy(safety = fs.safety?.let { it.copy(depressuring = it.depressuring.filterNot { c -> c.id == id }) })
 
     fun deleteCaseStudy(fs: Flowsheet, id: String): Flowsheet = fs.copy(caseStudies = fs.caseStudies.filterNot { it.id == id })
 

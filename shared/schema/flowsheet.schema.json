@@ -84,6 +84,10 @@
       "description": "App-only case studies (D51): id, name, objectId and specKey (the specification varied), from and to (SI), steps, outputs (objectId, key), and the last results (modelHash, x, values per output, errors per point). Not part of the solved model; the engine ignores it.",
       "items": { "type": "object", "required": ["id", "name"] }
     },
+    "safety": {
+      "type": "object",
+      "description": "App-only safety analysis (D54–D57): devices (relief valves: id, tag, protectedId, setPressure, backPressure, design, ruptureDisk, kb, vessel, scenarios, inletLine, outletLine, result, resultHash) and depressuring cases (id, name, protectedId, vessel, backPressure, orificeDiameter, withFire, heatTransferCoefficient, result, resultHash). Not part of the solved model; the engine ignores it."
+    },
     "tables": {
       "type": "array",
       "description": "App-only property tables drawn on the flowsheet and the printed PFD: objectId, keys (result keys to show), dx and dy (offset from the object, world units). Not part of the solved model; the engine ignores it.",

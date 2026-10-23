@@ -20,7 +20,11 @@ import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.CaseResults
 import app.flowstead.core.model.CaseStudies
 import app.flowstead.core.model.CaseStudy
+import app.flowstead.core.model.DepressuringCase
 import app.flowstead.core.model.FlowsheetEditing
+import app.flowstead.core.model.ReliefDeviceDef
+import app.flowstead.core.model.ResultView
+import app.flowstead.core.model.Safety
 import app.flowstead.core.model.PerformanceCurve
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
@@ -35,10 +39,10 @@ import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
 import app.flowstead.core.api.PhaseEnvelopeRequest
 import app.flowstead.core.api.PvtRequest
+import app.flowstead.core.api.ReliefRequest
 import app.flowstead.core.api.SeparatorStage
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
-import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.StoredSolve
 import app.flowstead.core.model.isFeed
 import app.flowstead.core.model.modelHash
@@ -114,6 +118,8 @@ data class FlowsheetUi(
     /** The stream whose PVT sheet is open (D53), and the last experiment run. */
     val pvtFor: String? = null,
     val pvt: PvtUi? = null,
+    val safetyOpen: Boolean = false,
+    val safetyRunning: Set<String> = emptySet(),
 )
 
 /** [FlowsheetUi.dataSheetFor] for one document with every equipment's data sheet. */
@@ -164,6 +170,9 @@ class FlowsheetViewModel @Inject constructor(
         val pvtFor: String? = null,
         val pvt: PvtUi? = null,
         val pvtHash: String? = null,
+        val safetyOpen: Boolean = false,
+        /** Ids of relief valves and depressuring cases the engine is working on. */
+        val safetyRunning: Set<String> = emptySet(),
     )
 
     private val local = MutableStateFlow(Local())
@@ -215,6 +224,8 @@ class FlowsheetViewModel @Inject constructor(
                 caseRun = l.caseRun,
                 pvtFor = l.pvtFor?.takeIf { id -> fs.objects.any { it.id == id } },
                 pvt = l.pvt?.copy(stale = l.pvtHash != null && l.pvtHash != fs.modelHash()),
+                safetyOpen = l.safetyOpen,
+                safetyRunning = l.safetyRunning,
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
@@ -512,6 +523,56 @@ class FlowsheetViewModel @Inject constructor(
                 is EngineResult.Failed -> EnvelopeUi(streamId, error = "No envelope: ${r.reason}")
             }
             local.update { it.copy(envelope = next, envelopeHash = fs.modelHash()) }
+        }
+    }
+
+    // ---- safety analysis (D54–D57)
+
+    fun openSafety() = local.update { it.copy(safetyOpen = true, editingId = null) }
+    fun closeSafety() = local.update { it.copy(safetyOpen = false) }
+    fun upsertReliefDevice(d: ReliefDeviceDef) = edit { FlowsheetEditing.upsertReliefDevice(it, d) }
+    fun deleteReliefDevice(id: String) = edit { FlowsheetEditing.deleteReliefDevice(it, id) }
+    fun upsertDepressuring(c: DepressuringCase) = edit { FlowsheetEditing.upsertDepressuring(it, c) }
+    fun deleteDepressuring(id: String) = edit { FlowsheetEditing.deleteDepressuring(it, id) }
+
+    /** Sizes one relief valve on the engine, from the protected equipment's solved contents. */
+    fun runRelief(id: String) {
+        val fs = current ?: return
+        val d = fs.safety?.devices?.firstOrNull { it.id == id } ?: return
+        val view = ResultView(currentSolve, fs.modelHash())
+        Safety.problem(fs, view, d)?.let { _messages.trySend(it); return }
+        engineCall(id) { url, key ->
+            when (val r = engine.relief(url, key, ReliefRequest(fs, Safety.request(fs, view, d)))) {
+                is EngineResult.Ok -> edit(undoable = false) { FlowsheetEditing.setReliefResult(it, id, r.value, fs.modelHash()) }
+                is EngineResult.Failed -> _messages.send("Not sized: ${r.reason}")
+            }
+        }
+    }
+
+    /** Runs one blowdown on the engine (sizing the orifice when none is given). */
+    fun runDepressuring(id: String) {
+        val fs = current ?: return
+        val c = fs.safety?.depressuring?.firstOrNull { it.id == id } ?: return
+        val view = ResultView(currentSolve, fs.modelHash())
+        Safety.depressuringProblem(fs, view, c)?.let { _messages.trySend(it); return }
+        engineCall(id) { url, key ->
+            when (val r = engine.depressuring(url, key, Safety.depressuringRequest(fs, view, c))) {
+                is EngineResult.Ok -> edit(undoable = false) { FlowsheetEditing.setDepressuringResult(it, id, r.value, fs.modelHash()) }
+                is EngineResult.Failed -> _messages.send("Not run: ${r.reason}")
+            }
+        }
+    }
+
+    private fun engineCall(id: String, block: suspend (url: String, key: String?) -> Unit) {
+        if (id in local.value.safetyRunning) return
+        local.update { it.copy(safetyRunning = it.safetyRunning + id) }
+        viewModelScope.launch {
+            try {
+                val url = settingsRepository.settings.first().engineTarget
+                if (url.isBlank()) _messages.send("Set the engine address in Settings") else block(url, secrets.apiKey())
+            } finally {
+                local.update { it.copy(safetyRunning = it.safetyRunning - id) }
+            }
         }
     }
 

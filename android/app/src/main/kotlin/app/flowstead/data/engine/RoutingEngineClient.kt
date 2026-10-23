@@ -34,4 +34,8 @@ class RoutingEngineClient @Inject constructor(
         pick(baseUrl).phaseEnvelope(baseUrl, apiKey, request)
     override suspend fun pvt(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PvtRequest) =
         pick(baseUrl).pvt(baseUrl, apiKey, request)
+    override suspend fun relief(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.ReliefRequest) =
+        pick(baseUrl).relief(baseUrl, apiKey, request)
+    override suspend fun depressuring(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DepressuringRequest) =
+        pick(baseUrl).depressuring(baseUrl, apiKey, request)
 }
