@@ -57,6 +57,10 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<DepressuringResult> DepressuringAsync(DepressuringRequest req, CancellationToken ct) =>
         pool.CallAsync<DepressuringResult>(WorkerMethods.Depressuring, req, TimeSpan.FromSeconds(2 * options.SolveTimeoutSeconds), ct);
 
+    /// <summary>A regression re-runs the PVT experiments dozens of times: four times the solve timeout.</summary>
+    public Task<PvtRegressionResult> PvtRegressionAsync(PvtRegressionRequest req, CancellationToken ct) =>
+        pool.CallAsync<PvtRegressionResult>(WorkerMethods.PvtRegression, req, TimeSpan.FromSeconds(4 * options.SolveTimeoutSeconds), ct);
+
     public Task<ImportResult> ImportDwsimAsync(DwsimFile file, CancellationToken ct) =>
         pool.CallAsync<ImportResult>(WorkerMethods.ImportDwsim, file, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 

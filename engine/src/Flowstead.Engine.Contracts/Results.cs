@@ -194,6 +194,45 @@ public sealed record PvtResult
     public List<string> Warnings { get; init; } = [];
 }
 
+/// <summary>
+/// One lab measurement to match (D53): <see cref="Key"/> of <see cref="Experiment"/> at <see cref="Pressure"/> (a table
+/// value, e.g. CCE relative volume), or with no pressure a summary value (e.g. the saturation pressure). SI, as
+/// <see cref="PvtKeys"/>.
+/// </summary>
+public sealed record PvtObservation(string Experiment, string Key, double Value, double? Pressure = null, double Weight = 1);
+
+/// <summary>
+/// Tunes the fluid's plus fraction to lab data, as PVTsim or HYSYS's oil characterisation do: multipliers on the
+/// critical temperature, critical pressure and acentric factor of the hypothetical components in
+/// <see cref="Tune"/> (null: every hypothetical in the composition), each kept within ±<see cref="MaxChange"/>.
+/// </summary>
+public sealed record PvtRegressionRequest(
+    Flowsheet Flowsheet,
+    Dictionary<string, double> Composition,
+    double Temperature,
+    List<PvtObservation> Observations,
+    List<string>? Tune = null,
+    double MaxChange = 0.2,
+    int MaxIterations = 12);
+
+/// <summary>One observation against the model before and after tuning.</summary>
+public sealed record PvtMatch(PvtObservation Observation, double? Before, double? After);
+
+/// <summary>
+/// The tuned hypotheticals (critical constants set; apply them to the flowsheet to use them), the multipliers, each
+/// observation before and after, and the root-mean-square relative error before and after.
+/// </summary>
+public sealed record PvtRegressionResult
+{
+    public List<Hypothetical> Tuned { get; init; } = [];
+    public Dictionary<string, double> Multipliers { get; init; } = [];
+    public List<PvtMatch> Matches { get; init; } = [];
+    public double? ErrorBefore { get; init; }
+    public double? ErrorAfter { get; init; }
+    public int Iterations { get; init; }
+    public List<string> Warnings { get; init; } = [];
+}
+
 /// <summary>PVT result keys (SI). Gas standard volumes are at 60 °F and 101.325 kPa, as oilfield PVT reports.</summary>
 public static class PvtKeys
 {
@@ -312,6 +351,7 @@ public static class WorkerMethods
     public const string Pvt = "pvt";
     public const string Relief = "relief";
     public const string Depressuring = "depressuring";
+    public const string PvtRegression = "pvtRegression";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

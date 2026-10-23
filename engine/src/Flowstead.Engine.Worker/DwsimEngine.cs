@@ -355,6 +355,13 @@ public sealed class DwsimEngine
         return new PvtLab(req with { Flowsheet = model }, Solve).Run();
     }
 
+    /// <summary>Tunes the plus fraction's critical constants to PVT lab data (D53).</summary>
+    public PvtRegressionResult PvtRegression(PvtRegressionRequest req)
+    {
+        if (!(req.Temperature > 0)) throw new InvalidDataException("Give the reservoir temperature");
+        return new PvtRegression(req, Pvt).Run();
+    }
+
     /// <summary>Relief loads and API 520 sizing for one relief valve (D54–D56).</summary>
     public ReliefResult Relief(ReliefRequest req) => new ReliefCalc(req, Solve).Run();
 

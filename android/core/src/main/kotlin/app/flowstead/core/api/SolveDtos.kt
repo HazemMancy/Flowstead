@@ -156,6 +156,44 @@ data class PvtRequest(
     val stages: List<SeparatorStage> = emptyList(),
 )
 
+/** A lab measurement to match (D53): [key] of [experiment] at [pressure], or a summary value when [pressure] is null. SI. */
+@Serializable
+data class PvtObservation(
+    val experiment: String,
+    val key: String,
+    val value: Double,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val pressure: Double? = null,
+    val weight: Double = 1.0,
+)
+
+/** Tunes the plus fraction's Tc, Pc and ω (multipliers within ±[maxChange]) to [observations]; [tune] null: every hypothetical. */
+@Serializable
+data class PvtRegressionRequest(
+    val flowsheet: app.flowstead.core.model.Flowsheet,
+    val composition: Map<String, Double>,
+    val temperature: Double,
+    val observations: List<PvtObservation>,
+    val tune: List<String>? = null,
+    val maxChange: Double = 0.2,
+    val maxIterations: Int = 12,
+)
+
+@Serializable
+data class PvtMatch(val observation: PvtObservation, val before: Double? = null, val after: Double? = null)
+
+/** The tuned hypotheticals (apply them to use them), the multipliers, each match before and after, and the RMS relative errors. */
+@Serializable
+data class PvtRegressionResult(
+    val tuned: List<app.flowstead.core.model.Hypothetical> = emptyList(),
+    val multipliers: Map<String, Double> = emptyMap(),
+    val matches: List<PvtMatch> = emptyList(),
+    val errorBefore: Double? = null,
+    val errorAfter: Double? = null,
+    val iterations: Int = 0,
+    val warnings: List<String> = emptyList(),
+)
+
 /** One PVT experiment's results: [table] has one list per column (in [columns] order), null where DWSIM gave nothing. */
 @Serializable
 data class PvtResult(

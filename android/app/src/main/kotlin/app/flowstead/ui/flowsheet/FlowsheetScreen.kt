@@ -367,6 +367,9 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 ctx = ui.unitContext,
                 onRun = { experiment, t, stages -> vm.runPvt(id, experiment, t, stages) },
                 onDismiss = vm::closePvt,
+                tuning = ui.tuning?.takeIf { it.streamId == id },
+                onTune = { t, observations -> vm.runTuning(id, t, observations) },
+                onApplyTuning = vm::applyTuning,
             )
         }
     }

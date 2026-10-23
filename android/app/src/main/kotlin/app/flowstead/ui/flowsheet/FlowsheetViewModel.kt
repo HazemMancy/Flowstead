@@ -39,6 +39,9 @@ import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
 import app.flowstead.core.api.PhaseEnvelopeRequest
 import app.flowstead.core.api.PvtRequest
+import app.flowstead.core.model.PvtTuning
+import app.flowstead.core.api.PvtRegressionRequest
+import app.flowstead.core.api.PvtObservation
 import app.flowstead.core.api.ReliefRequest
 import app.flowstead.core.api.SeparatorStage
 import app.flowstead.core.api.SolveResult
@@ -118,6 +121,7 @@ data class FlowsheetUi(
     /** The stream whose PVT sheet is open (D53), and the last experiment run. */
     val pvtFor: String? = null,
     val pvt: PvtUi? = null,
+    val tuning: TuningUi? = null,
     val safetyOpen: Boolean = false,
     val safetyRunning: Set<String> = emptySet(),
 )
@@ -170,6 +174,7 @@ class FlowsheetViewModel @Inject constructor(
         val pvtFor: String? = null,
         val pvt: PvtUi? = null,
         val pvtHash: String? = null,
+        val tuning: TuningUi? = null,
         val safetyOpen: Boolean = false,
         /** Ids of relief valves and depressuring cases the engine is working on. */
         val safetyRunning: Set<String> = emptySet(),
@@ -224,6 +229,7 @@ class FlowsheetViewModel @Inject constructor(
                 caseRun = l.caseRun,
                 pvtFor = l.pvtFor?.takeIf { id -> fs.objects.any { it.id == id } },
                 pvt = l.pvt?.copy(stale = l.pvtHash != null && l.pvtHash != fs.modelHash()),
+                tuning = l.tuning,
                 safetyOpen = l.safetyOpen,
                 safetyRunning = l.safetyRunning,
             ),
@@ -605,6 +611,37 @@ class FlowsheetViewModel @Inject constructor(
             }
             local.update { it.copy(pvt = next, pvtHash = fs.modelHash()) }
         }
+    }
+
+    /**
+     * Tunes the stream's plus fraction to lab data (D53). The tuned constants are shown, not applied: [applyTuning]
+     * writes them into the flowsheet's hypotheticals when the user accepts them.
+     */
+    fun runTuning(streamId: String, temperature: Double, observations: List<PvtObservation>, maxChange: Double = 0.2) {
+        val fs = current ?: return
+        if (local.value.tuning?.loading == true) return
+        val (composition, why) = streamComposition(fs, streamId)
+        PvtTuning.problem(fs, composition, observations)?.let { p ->
+            local.update { it.copy(tuning = TuningUi(streamId, error = composition?.let { p } ?: why)) }
+            return
+        }
+        local.update { it.copy(tuning = TuningUi(streamId, loading = true)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val next = if (url.isBlank()) TuningUi(streamId, error = "Set the engine address in Settings")
+            else when (val r = engine.pvtRegression(url, secrets.apiKey(), PvtRegressionRequest(fs, composition!!, temperature, observations, maxChange = maxChange))) {
+                is EngineResult.Ok -> TuningUi(streamId, result = r.value)
+                is EngineResult.Failed -> TuningUi(streamId, error = "Not tuned: ${r.reason}")
+            }
+            local.update { it.copy(tuning = next) }
+        }
+    }
+
+    /** Writes the tuned critical constants into the hypotheticals (undoable). */
+    fun applyTuning() {
+        val tuned = local.value.tuning?.result?.tuned ?: return
+        edit { PvtTuning.apply(it, tuned) }
+        local.update { it.copy(tuning = it.tuning?.copy(applied = true)) }
     }
 
     /** Suggested file names for the system "save as" picker. */

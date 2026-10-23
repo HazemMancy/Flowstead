@@ -66,6 +66,9 @@ interface EngineClient {
     /** A PVT laboratory experiment (D53). */
     suspend fun pvt(baseUrl: String, apiKey: String?, request: PvtRequest): EngineResult<PvtResult> =
         EngineResult.Failed("This engine can't run PVT experiments")
+    /** Tunes the plus fraction to PVT lab data (D53). */
+    suspend fun pvtRegression(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PvtRegressionRequest): EngineResult<app.flowstead.core.api.PvtRegressionResult> =
+        EngineResult.Failed("This engine can't tune fluids")
     /** Relief loads and sizing of one relief valve (D54–D56). */
     suspend fun relief(baseUrl: String, apiKey: String?, request: ReliefRequest): EngineResult<ReliefResult> =
         EngineResult.Failed("This engine can't size relief valves")
@@ -142,6 +145,17 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(request)
+            }
+        }
+
+    override suspend fun pvtRegression(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PvtRegressionRequest): EngineResult<app.flowstead.core.api.PvtRegressionResult> =
+        call {
+            http.post("$baseUrl/pvt-regression") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                // Dozens of PVT runs.
+                timeout { requestTimeoutMillis = 10 * 60_000L }
             }
         }
 
