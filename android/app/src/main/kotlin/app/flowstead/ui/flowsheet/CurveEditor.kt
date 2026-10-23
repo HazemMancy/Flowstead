@@ -49,6 +49,7 @@ import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.PerformanceCurve
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SimObject
+import app.flowstead.core.model.SpeedLine
 import app.flowstead.core.model.Specification
 import app.flowstead.core.units.EngUnit
 import app.flowstead.core.units.Quantity
@@ -86,18 +87,62 @@ internal fun CurveSection(obj: SimObject, results: ResultView, unitSet: UnitSet,
     val flowUnit = unitSet.unitFor(Quantity.VolumeFlow)
     val headUnit = unitSet.unitFor(Quantity.Length)
     val pump = obj.type == ObjectType.Pump
-    fun replace(i: Int, p: CurvePoint) = actions.setCurve(obj.id, curve.copy(points = curve.points.toMutableList().also { it[i] = p }))
+    fun save(c: PerformanceCurve) = actions.setCurve(obj.id, c)
 
     Specification.curveProblem(obj)?.let {
         Text(it, color = MaterialTheme.valueColors.underSpecifiedText, style = MaterialTheme.typography.bodySmall)
     }
-    curve.points.forEachIndexed { i, p ->
+    PointRows(curve.points, pump, flowUnit, headUnit, ctx, "curve") { save(curve.copy(points = it)) }
+
+    // Variable speed, as HYSYS's multiple curves: the rated speed of the curve above, more curves at other speeds,
+    // and the speed it runs at; the engine reads the map at that speed by the affinity laws.
+    Text("Speed", style = MaterialTheme.typography.labelLarge)
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        CurveCell("Curve speed, rpm", curve.speed, null, ctx, "curve_speed", Modifier.weight(1f)) { save(curve.copy(speed = it)) }
+        CurveCell("Runs at, rpm", curve.operatingSpeed, null, ctx, "curve_run_speed", Modifier.weight(1f)) { save(curve.copy(operatingSpeed = it)) }
+    }
+    curve.speedLines.forEachIndexed { k, line ->
+        fun saveLine(l: SpeedLine) = save(curve.copy(speedLines = curve.speedLines.toMutableList().also { it[k] = l }))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CurveCell("Curve at, rpm", line.speed, null, ctx, "curve_line_speed_$k", Modifier.weight(1f)) { saveLine(line.copy(speed = it ?: 0.0)) }
+            IconButton(onClick = { save(curve.copy(speedLines = curve.speedLines.filterIndexed { j, _ -> j != k })) }) {
+                Icon(Icons.Filled.Delete, contentDescription = "Remove the curve at ${ValueFormat.number(line.speed, 0)} rpm")
+            }
+        }
+        PointRows(line.points, pump, flowUnit, headUnit, ctx, "curve_line_$k") { saveLine(line.copy(points = it)) }
+    }
+    if (curve.points.size >= 2) {
+        TextButton(
+            onClick = {
+                // Starts as the affinity-law copy of the rated curve at 80 % speed; the user types the vendor's figures over it.
+                val rated = curve.speed ?: 3000.0
+                val n = (curve.speedLines.map { it.speed } + rated).min() * 0.8
+                val r = n / rated
+                val pts = curve.points.map { CurvePoint(it.flow * r, it.head * r * r, it.efficiency, it.npshr?.times(r * r)) }
+                save(curve.copy(speed = rated, speedLines = curve.speedLines + SpeedLine(n, pts)))
+            },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("curve_add_speed"),
+        ) { Text("Add a curve at another speed") }
+    }
+
+    if (curve.points.size >= 2 && Specification.curveProblem(obj) == null) {
+        val q = (results.value(obj.id, "inletVolumeFlow") as? DisplayValue.Calculated)?.si
+        val h = (results.value(obj.id, if (pump) "head" else "adiabaticHead") as? DisplayValue.Calculated)?.si
+        CurveChart(curve, q, h, flowUnit, headUnit, ctx)
+    }
+}
+
+/** The points of one curve, in flow order, with a button to add one after the last. */
+@Composable
+private fun PointRows(points: List<CurvePoint>, pump: Boolean, flowUnit: EngUnit, headUnit: EngUnit, ctx: UnitContext, key: String, onChange: (List<CurvePoint>) -> Unit) {
+    fun replace(i: Int, p: CurvePoint) = onChange(points.toMutableList().also { it[i] = p })
+    points.forEachIndexed { i, p ->
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            CurveCell("Flow, ${flowUnit.symbol}", p.flow, flowUnit, ctx, "curve_flow_$i", Modifier.weight(1f)) { replace(i, p.copy(flow = it ?: 0.0)) }
-            CurveCell("Head, ${headUnit.symbol}", p.head, headUnit, ctx, "curve_head_$i", Modifier.weight(1f)) { replace(i, p.copy(head = it ?: 0.0)) }
-            CurveCell("Eff, %", p.efficiency?.times(100), null, ctx, "curve_eff_$i", Modifier.weight(0.8f)) { replace(i, p.copy(efficiency = it?.div(100))) }
-            if (pump) CurveCell("NPSHr, ${headUnit.symbol}", p.npshr, headUnit, ctx, "curve_npshr_$i", Modifier.weight(0.9f)) { replace(i, p.copy(npshr = it)) }
-            IconButton(onClick = { actions.setCurve(obj.id, curve.copy(points = curve.points.filterIndexed { j, _ -> j != i })) }) {
+            CurveCell("Flow, ${flowUnit.symbol}", p.flow, flowUnit, ctx, "${key}_flow_$i", Modifier.weight(1f)) { replace(i, p.copy(flow = it ?: 0.0)) }
+            CurveCell("Head, ${headUnit.symbol}", p.head, headUnit, ctx, "${key}_head_$i", Modifier.weight(1f)) { replace(i, p.copy(head = it ?: 0.0)) }
+            CurveCell("Eff, %", p.efficiency?.times(100), null, ctx, "${key}_eff_$i", Modifier.weight(0.8f)) { replace(i, p.copy(efficiency = it?.div(100))) }
+            if (pump) CurveCell("NPSHr, ${headUnit.symbol}", p.npshr, headUnit, ctx, "${key}_npshr_$i", Modifier.weight(0.9f)) { replace(i, p.copy(npshr = it)) }
+            IconButton(onClick = { onChange(points.filterIndexed { j, _ -> j != i }) }) {
                 Icon(Icons.Filled.Delete, contentDescription = "Remove point ${i + 1}")
             }
         }
@@ -105,18 +150,12 @@ internal fun CurveSection(obj: SimObject, results: ResultView, unitSet: UnitSet,
     TextButton(
         onClick = {
             // A new point after the last one, so the list stays in flow order; the user types over it.
-            val last = curve.points.maxByOrNull { it.flow }
+            val last = points.maxByOrNull { it.flow }
             val next = last?.let { CurvePoint(it.flow * 1.2, it.head * 0.9, it.efficiency, it.npshr?.times(1.2)) } ?: CurvePoint(0.01, 50.0)
-            actions.setCurve(obj.id, curve.copy(points = curve.points + next))
+            onChange(points + next)
         },
-        modifier = Modifier.heightIn(min = 48.dp).testTag("curve_add_point"),
+        modifier = Modifier.heightIn(min = 48.dp).testTag("${key}_add_point"),
     ) { Text("Add point") }
-
-    if (curve.points.size >= 2 && Specification.curveProblem(obj) == null) {
-        val q = (results.value(obj.id, "inletVolumeFlow") as? DisplayValue.Calculated)?.si
-        val h = (results.value(obj.id, if (pump) "head" else "adiabaticHead") as? DisplayValue.Calculated)?.si
-        CurveChart(curve, q, h, flowUnit, headUnit, ctx)
-    }
 }
 
 /** One number in a curve row, in [unit] (null: shown as typed, e.g. a percentage); blank commits null. */
@@ -149,8 +188,9 @@ private fun CurveCell(label: String, si: Double?, unit: EngUnit?, ctx: UnitConte
 @Composable
 private fun CurveChart(curve: PerformanceCurve, flow: Double?, head: Double?, flowUnit: EngUnit, headUnit: EngUnit, ctx: UnitContext) {
     val pts = curve.points.sortedBy { it.flow }
-    val maxQ = maxOf(pts.last().flow, flow ?: 0.0) * 1.08
-    val maxH = maxOf(pts.maxOf { it.head }, head ?: 0.0) * 1.1
+    val all = pts + curve.speedLines.flatMap { it.points }
+    val maxQ = maxOf(all.maxOf { it.flow }, flow ?: 0.0) * 1.08
+    val maxH = maxOf(all.maxOf { it.head }, head ?: 0.0) * 1.1
     val line = MaterialTheme.colorScheme.primary
     val eff = MaterialTheme.colorScheme.tertiary
     val axis = MaterialTheme.colorScheme.outline
@@ -168,6 +208,10 @@ private fun CurveChart(curve: PerformanceCurve, flow: Double?, head: Double?, fl
             val path = Path().apply { pts.forEachIndexed { i, p -> if (i == 0) moveTo(x(p.flow), y(p.head)) else lineTo(x(p.flow), y(p.head)) } }
             drawPath(path, line, style = Stroke(width = 5f))
             pts.forEach { drawCircle(line, 6f, Offset(x(it.flow), y(it.head))) }
+            curve.speedLines.forEach { l ->
+                val lp = l.points.sortedBy { it.flow }
+                if (lp.size >= 2) drawPath(Path().apply { lp.forEachIndexed { i, p -> if (i == 0) moveTo(x(p.flow), y(p.head)) else lineTo(x(p.flow), y(p.head)) } }, line.copy(alpha = 0.45f), style = Stroke(width = 3f))
+            }
             if (pts.all { it.efficiency != null }) {
                 val e = Path().apply {
                     pts.forEachIndexed { i, p ->
@@ -183,7 +227,7 @@ private fun CurveChart(curve: PerformanceCurve, flow: Double?, head: Double?, fl
             }
         }
         Text(
-            "Head (solid) and efficiency (dashed, 0–100 %) against flow, 0–${fmt(maxQ, flowUnit, ctx)} ${flowUnit.symbol}" +
+            "Head (solid; other speeds lighter) and efficiency (dashed, 0–100 %) against flow, 0–${fmt(maxQ, flowUnit, ctx)} ${flowUnit.symbol}" +
                 if (flow != null && head != null) "; the dot is where it runs." else "; solve to see where it runs.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

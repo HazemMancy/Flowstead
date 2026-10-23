@@ -493,5 +493,19 @@ public static class Validator
             err($"{o.Tag}: give the efficiency at every curve point (above 0, up to 100 %), or at none.", o.Id);
         if (p.Any(x => x.Npshr is not null) && (o.Type != ObjectType.Pump || p.Any(x => x.Npshr is not (>= 0))))
             err($"{o.Tag}: NPSH required belongs to pumps; give it at every point (0 or more), or at none.", o.Id);
+        if ((curve.SpeedLines.Count > 0 || curve.OperatingSpeed is not null) && curve.Speed is not > 0)
+            err($"{o.Tag}: give the curve's own speed to use other speed lines or an operating speed.", o.Id);
+        if (curve.OperatingSpeed is { } n && !(n > 0)) err($"{o.Tag}: the operating speed must be positive.", o.Id);
+        var speeds = curve.SpeedLines.Select(l => l.Speed).Append(curve.Speed ?? 0).ToList();
+        if (speeds.Distinct().Count() != speeds.Count) err($"{o.Tag}: two curves have the same speed.", o.Id);
+        foreach (var l in curve.SpeedLines)
+        {
+            if (!(l.Speed > 0)) err($"{o.Tag}: every speed line needs a positive speed.", o.Id);
+            ValidateCurve(o, new PerformanceCurve { Points = l.Points }, err);
+            if (l.Points.Any(x => x.Efficiency is not null) != p.Any(x => x.Efficiency is not null))
+                err($"{o.Tag}: give efficiencies on every speed line or on none.", o.Id);
+            if (l.Points.Any(x => x.Npshr is not null) != p.Any(x => x.Npshr is not null))
+                err($"{o.Tag}: give NPSH required on every speed line or on none.", o.Id);
+        }
     }
 }

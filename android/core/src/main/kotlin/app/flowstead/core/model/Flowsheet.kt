@@ -125,8 +125,21 @@ data class SimObject(
  * A pump or compressor curve at its rated speed, as the vendor gives it. The lowest flow is the compressor's surge
  * limit and the highest its stonewall; for a pump, its minimum and run-out flows. Same shape as the engine's.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class PerformanceCurve(val points: List<CurvePoint> = emptyList())
+data class PerformanceCurve(
+    val points: List<CurvePoint> = emptyList(),
+    /** Speed of [points], rpm; needed with [speedLines] or [operatingSpeed]. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val speed: Double? = null,
+    /** Curves at other speeds (HYSYS's multiple curves) for a variable-speed machine. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val speedLines: List<SpeedLine> = emptyList(),
+    /** The speed it runs at, rpm; null: [speed]. The engine reads the map at it by the affinity laws (D48). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val operatingSpeed: Double? = null,
+)
+
+/** One curve of a multi-speed map. */
+@Serializable
+data class SpeedLine(val speed: Double, val points: List<CurvePoint> = emptyList())
 
 /** [flow]: actual inlet m³/s; [head]: m (compressors: adiabatic head); [efficiency]: fraction; [npshr]: pumps, m. */
 @Serializable

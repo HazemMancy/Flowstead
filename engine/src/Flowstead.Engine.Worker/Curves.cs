@@ -10,6 +10,48 @@ public static class Curves
 {
     public static List<CurvePoint> Sorted(PerformanceCurve c) => c.Points.OrderBy(p => p.Flow).ToList();
 
+    /// <summary>
+    /// The curve at the operating speed, as HYSYS reads a multi-speed map. Each line is first carried to that speed by
+    /// the affinity laws (Q ∝ N, H and NPSHr ∝ N², efficiency unchanged); between the two lines that bracket the
+    /// speed the values blend linearly in speed (the end flows, surge and stonewall, too; the points are both lines' own flows); beyond the map, the nearest
+    /// line is scaled alone. A single curve with an operating speed is scaled by the affinity laws.
+    /// </summary>
+    public static PerformanceCurve AtSpeed(PerformanceCurve c)
+    {
+        if (c.Speed is not { } rated || rated <= 0) return c;
+        var n = c.OperatingSpeed ?? rated;
+        var lines = c.SpeedLines.Where(l => l.Speed > 0 && l.Points.Count >= 2).Select(l => (l.Speed, Points: l.Points.OrderBy(p => p.Flow).ToList()))
+            .Prepend((Speed: rated, Points: Sorted(c))).OrderBy(l => l.Speed).ToList();
+        if (lines.Count == 1 && Math.Abs(n - rated) < 1e-9) return c;
+        static List<CurvePoint> Scale(List<CurvePoint> p, double r) =>
+            p.Select(x => new CurvePoint(x.Flow * r, x.Head * r * r, x.Efficiency, x.Npshr * r * r)).ToList();
+        var hi = lines.FindIndex(l => l.Speed >= n);
+        var a = hi <= 0 ? lines[Math.Max(hi, 0)] : lines[hi - 1];
+        var b = hi < 0 ? lines[^1] : lines[hi];
+        if (hi < 0) a = b;
+        var sa = Scale(a.Points, n / a.Speed);
+        var sb = Scale(b.Points, n / b.Speed);
+        var w = b.Speed > a.Speed ? (n - a.Speed) / (b.Speed - a.Speed) : 0;
+        double Blend(double x, double y) => x + w * (y - x);
+        double? Value(List<CurvePoint> p, double q, Func<CurvePoint, double?> pick) => At(new PerformanceCurve { Points = p }, q, pick);
+        var q0 = Blend(sa[0].Flow, sb[0].Flow);
+        var q1 = Blend(sa[^1].Flow, sb[^1].Flow);
+        // The points: both scaled lines' own flows inside the blended range, so a single line is reproduced exactly.
+        var flows = sa.Select(x => x.Flow).Concat(sb.Select(x => x.Flow)).Where(q => q > q0 && q < q1).Append(q0).Append(q1)
+            .Distinct().OrderBy(q => q).ToList();
+        var points = flows.Select(q =>
+        {
+            double? Mix(Func<CurvePoint, double?> pick) => Value(sa, q, pick) is { } x && Value(sb, q, pick) is { } y ? Blend(x, y) : null;
+            return new CurvePoint(q, Mix(p => p.Head)!.Value, Mix(p => p.Efficiency), Mix(p => p.Npshr));
+        }).ToList();
+        return new PerformanceCurve { Points = points, Speed = n, OperatingSpeed = n };
+    }
+
+    /// <summary>The model with every multi-speed or off-speed curve reduced to its curve at the operating speed.</summary>
+    public static Flowsheet AtSpeed(Flowsheet model) => model.Objects.Any(o => o.Curve?.Speed is not null)
+        ? model with { Objects = model.Objects.Select(o => o.Curve?.Speed is not null ? o with { Curve = AtSpeed(o.Curve) } : o).ToList() }
+        : model;
+
     /// <summary>The value at <paramref name="flow"/>; outside the curve, its end value (the checks say the machine is off its curve).</summary>
     public static double? At(PerformanceCurve curve, double flow, Func<CurvePoint, double?> pick)
     {
@@ -43,6 +85,7 @@ public static class CurveSolver
 
     public static SolveResult Solve(Flowsheet model, Func<Flowsheet, SolveResult> solve)
     {
+        model = Curves.AtSpeed(model);
         var machines = model.Objects.Where(o => o.Type is ObjectType.Pump or ObjectType.Compressor && o.Curve is { Points.Count: >= 2 }).ToList();
         if (machines.Count == 0) return solve(model);
 
@@ -72,6 +115,7 @@ public static class CurveSolver
             {
                 o.Properties["curveHead"] = state[m.Id].TargetHead;
                 o.Properties["curveIterations"] = iterations;
+                if (m.Curve?.Speed is { } speed) o.Properties["operatingSpeed"] = speed;
             }
             if (!converged && state[m.Id].Readable)
                 messages.Add(new SolverMessage(MessageLevel.Warning, $"{m.Tag}: did not settle on its curve in {iterations} solves; the head is within {state[m.Id].Miss:P1} of the curve's.", m.Id));

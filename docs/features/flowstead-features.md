@@ -37,7 +37,7 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 
 - The thermodynamics are DWSIM's: Peng–Robinson and the others match HYSYS closely but not to the last digit; defaults differ (DWSIM applies the Peneloux volume shift, HYSYS's PR does not; the options above bring them together).
 - The valve library gives typical IEC factors by valve type, not a maker's catalogue (no Fp or inherent characteristic).
-- Pump and compressor curves are at one speed, with straight lines between your points.
+- Pump and compressor curves join your points with straight lines (HYSYS fits a polynomial).
 - Hydrates assume free water with no inhibitor (methanol, MEG) or salt.
 - PVT has no regression to lab data (no EOS tuning) yet.
 - No dynamics: steady state only (depressuring is the one time-stepping calculation).

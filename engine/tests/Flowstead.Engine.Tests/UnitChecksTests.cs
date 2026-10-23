@@ -315,6 +315,27 @@ public sealed class UnitChecksTests(EngineFixture engine)
     }
 
     [Fact]
+    public async Task VariableSpeedPumpFollowsTheAffinityLawsAndItsSpeedLines()
+    {
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        var feed = Feed("f", water, 300, 2e5, 5540); // 100 m³/h, 0.0278 m³/s
+        // At 90 % speed: the rated curve's point at 0.0278 / 0.9 = 0.0309 m³/s (63.7 m, η 0.744), head × 0.81 = 51.6 m.
+        var slow = await OnCurve(feed, ObjectType.Pump, PumpCurve with { Speed = 2950, OperatingSpeed = 2655 }, "Steam Tables (IAPWS-IF97)");
+        Assert.Equal(SolveStatus.Converged, slow.Status);
+        var p = slow.Objects["u"].Properties;
+        Assert.Equal(51.6, p["head"], 0.15);
+        Assert.Equal(0.744, p["efficiency"], 0.003);
+        Assert.Equal(2655, p["operatingSpeed"]);
+
+        // A measured line at 80 % speed with 10 % less head than the affinity laws give: halfway between the two
+        // speeds, the head is the mean of both lines carried to 90 % speed, 0.95 × 51.6 = 49.0 m.
+        var low = PumpCurve.Points.Select(x => new CurvePoint(x.Flow * 0.8, x.Head * 0.64 * 0.9, x.Efficiency, x.Npshr * 0.64)).ToList();
+        var map = PumpCurve with { Speed = 2950, SpeedLines = [new SpeedLine(2360, low)], OperatingSpeed = 2655 };
+        var r = await OnCurve(feed, ObjectType.Pump, map, "Steam Tables (IAPWS-IF97)");
+        Assert.Equal(49.0, r.Objects["u"].Properties["head"], 0.2);
+    }
+
+    [Fact]
     public async Task CompressorRunsOnItsCurveAndSurgesBelowIt()
     {
         var methane = new Dictionary<string, double> { ["Methane"] = 1.0 };

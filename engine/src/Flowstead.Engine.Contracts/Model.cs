@@ -112,7 +112,16 @@ public sealed record SimObject
 public sealed record PerformanceCurve
 {
     public List<CurvePoint> Points { get; init; } = [];
+    /// <summary>Speed of <see cref="Points"/>, rpm; needed with <see cref="SpeedLines"/> or <see cref="OperatingSpeed"/>.</summary>
+    public double? Speed { get; init; }
+    /// <summary>More curves at other speeds (HYSYS's multiple curves), for a variable-speed machine.</summary>
+    public List<SpeedLine> SpeedLines { get; init; } = [];
+    /// <summary>The speed the machine runs at, rpm; null: the rated <see cref="Speed"/>.</summary>
+    public double? OperatingSpeed { get; init; }
 }
+
+/// <summary>One curve of a multi-speed map: its speed (rpm) and points.</summary>
+public sealed record SpeedLine(double Speed, List<CurvePoint> Points);
 
 /// <param name="Flow">Actual volumetric flow at the inlet, m³/s.</param>
 /// <param name="Head">Head, m (compressors: adiabatic head).</param>

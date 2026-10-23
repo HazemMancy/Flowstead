@@ -447,7 +447,29 @@ object Specification {
 
     /** What is wrong with a pump or compressor curve, or null. Mirrors the engine validator (D48). */
     fun curveProblem(o: SimObject): String? {
-        val p = o.curve?.points ?: return null
+        val curve = o.curve ?: return null
+        pointsProblem(o, curve.points)?.let { return it }
+        val speeds = curve.speedLines.map { it.speed } + (curve.speed ?: 0.0)
+        return when {
+            (curve.speedLines.isNotEmpty() || curve.operatingSpeed != null) && !((curve.speed ?: 0.0) > 0) ->
+                "Give the curve's own speed to use other speed lines or an operating speed"
+            curve.operatingSpeed != null && curve.operatingSpeed <= 0 -> "The operating speed must be positive"
+            curve.speedLines.any { it.speed <= 0 } -> "Every speed line needs a positive speed"
+            speeds.distinct().size != speeds.size -> "Two curves have the same speed"
+            else -> curve.speedLines.firstNotNullOfOrNull { l ->
+                pointsProblem(o, l.points)?.let { "At ${rpm(l.speed)} rpm: ${it.replaceFirstChar(Char::lowercase)}" }
+                    ?: when {
+                        l.points.any { it.efficiency != null } != curve.points.any { it.efficiency != null } -> "Give efficiencies on every speed line or on none"
+                        l.points.any { it.npshr != null } != curve.points.any { it.npshr != null } -> "Give NPSH required on every speed line or on none"
+                        else -> null
+                    }
+            }
+        }
+    }
+
+    private fun rpm(v: Double) = if (v == Math.rint(v)) v.toLong().toString() else v.toString()
+
+    private fun pointsProblem(o: SimObject, p: List<CurvePoint>): String? {
         return when {
             p.size < 2 -> "The performance curve needs at least two points"
             p.any { !(it.flow > 0) || !(it.head > 0) } -> "Every curve point needs a positive flow and head"

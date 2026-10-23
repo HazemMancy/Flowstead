@@ -143,4 +143,17 @@ class SpecificationTest {
         assertEquals(on, FlowsheetJson.decodeFromString(Flowsheet.serializer(), json).objects.single())
         assertEquals(null, FlowsheetEditing.setCurve(Flowsheet(objects = listOf(on)), "u", null).objects.single().curve)
     }
+
+    @Test
+    fun multiSpeedCurvesNeedTheirSpeeds() {
+        val base = PerformanceCurve(listOf(CurvePoint(0.01, 80.0), CurvePoint(0.03, 60.0)))
+        fun problem(c: PerformanceCurve) = Specification.curveProblem(SimObject("u", "P-100", ObjectType.Pump, curve = c))
+        assertEquals(null, problem(base.copy(speed = 2950.0, operatingSpeed = 2600.0)))
+        assertEquals("Give the curve's own speed to use other speed lines or an operating speed", problem(base.copy(operatingSpeed = 2600.0)))
+        val line = SpeedLine(2400.0, listOf(CurvePoint(0.008, 52.0), CurvePoint(0.024, 40.0)))
+        assertEquals(null, problem(base.copy(speed = 2950.0, speedLines = listOf(line))))
+        assertEquals("Two curves have the same speed", problem(base.copy(speed = 2400.0, speedLines = listOf(line))))
+        assertEquals("At 2400 rpm: the performance curve needs at least two points",
+            problem(base.copy(speed = 2950.0, speedLines = listOf(line.copy(points = line.points.take(1))))))
+    }
 }
