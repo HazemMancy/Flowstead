@@ -52,6 +52,8 @@ public sealed record ReliefScenario
     // Control valve failure: upstream pressure and the valve's rated (fully open) Cv
     public double? UpstreamPressure { get; init; }
     public double? RatedCv { get; init; }
+    /// <summary>Control valve failure: the valve's xT (IEC 60534); null for a globe valve's 0.72.</summary>
+    public double? ValveXt { get; init; }
     // Thermal expansion: heat into the blocked-in liquid, W
     public double? HeatInput { get; init; }
 }

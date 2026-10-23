@@ -115,7 +115,7 @@ object Safety {
                 ReliefScenario(
                     ReliefScenarioKinds.CONTROL_VALVE_FAILURE, "${valve.tag} fails open",
                     composition = x.takeIf { it.isNotEmpty() }, temperature = calc(inlet, "temperature"),
-                    upstreamPressure = calc(inlet, "pressure"), ratedCv = cv,
+                    upstreamPressure = calc(inlet, "pressure"), ratedCv = cv, valveXt = valve.specs[SpecKey.VALVE_XT]?.si,
                 ),
                 "${valve.tag} feeds ${vessel.tag} from the higher-pressure side" + if (cv == null) "; give its rated Cv" else "",
             )

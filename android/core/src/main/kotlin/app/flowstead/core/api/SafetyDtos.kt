@@ -61,6 +61,8 @@ data class ReliefScenario(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val temperature: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val upstreamPressure: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val ratedCv: Double? = null,
+    /** Control valve failure: the valve's xT; null for a globe valve's 0.72. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val valveXt: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val heatInput: Double? = null,
 )
 

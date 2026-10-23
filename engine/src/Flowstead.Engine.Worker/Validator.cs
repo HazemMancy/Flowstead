@@ -25,7 +25,7 @@ public static class Validator
     {
         ObjectType.MaterialStream => [SpecKeys.Temperature, SpecKeys.Pressure, SpecKeys.VapourFraction, SpecKeys.MassEnthalpy,
             SpecKeys.MassEntropy, SpecKeys.MolarFlow, SpecKeys.MassFlow],
-        ObjectType.Valve => [SpecKeys.OutletPressure, SpecKeys.PressureDrop, SpecKeys.RatedCv],
+        ObjectType.Valve => [SpecKeys.OutletPressure, SpecKeys.PressureDrop, SpecKeys.RatedCv, SpecKeys.ValveFl, SpecKeys.ValveXt],
         ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler => [SpecKeys.OutletTemperature, SpecKeys.Duty, SpecKeys.PressureDrop],
         ObjectType.Pump => [SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.Efficiency],
         ObjectType.Compressor => [SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.PressureRatio, SpecKeys.Efficiency],
@@ -364,6 +364,8 @@ public static class Validator
             case ObjectType.Valve:
                 OneOf("outlet pressure or pressure drop", SpecKeys.OutletPressure, SpecKeys.PressureDrop);
                 if (s.GetValueOrDefault(SpecKeys.RatedCv) is { } cv && !(cv.Si > 0)) err($"{o.Tag}: rated Cv must be positive.", o.Id);
+                if (s.GetValueOrDefault(SpecKeys.ValveFl) is { } fl && !(fl.Si is > 0.3 and <= 1)) err($"{o.Tag}: FL must be between 0.3 and 1.", o.Id);
+                if (s.GetValueOrDefault(SpecKeys.ValveXt) is { } xt && !(xt.Si is > 0.05 and <= 1)) err($"{o.Tag}: xT must be between 0.05 and 1.", o.Id);
                 break;
             case ObjectType.Heater:
             case ObjectType.Cooler:

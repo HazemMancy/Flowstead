@@ -243,8 +243,9 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
             var rho = Phase(up, "vapour", "density");
             var k = Phase(up, "vapour", "heatCapacityRatio");
             var fk = k / 1.4;
-            var x = Math.Min((pu - p1) / pu, fk * ValveSizing.Xt);
-            var y = 1 - x / (3 * fk * ValveSizing.Xt);
+            var xt = s.ValveXt ?? ValveSizing.Xt;
+            var x = Math.Min((pu - p1) / pu, fk * xt);
+            var y = 1 - x / (3 * fk * xt);
             w = s.RatedCv.Value * 63.3 * y * Math.Sqrt(x * (pu / PaPerPsi) * rho * 0.0624280) / 7936.64;
         }
         else if (vf <= 0.001)

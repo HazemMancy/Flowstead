@@ -88,6 +88,7 @@ import app.flowstead.core.model.SetKeys
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
+import app.flowstead.core.model.ValveLibrary
 import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.UnitStreams
 import app.flowstead.core.model.Specification
@@ -170,7 +171,15 @@ fun ObjectEditorSheet(
                         listOf(SpecKey.OUTLET_PRESSURE to "Outlet pressure", SpecKey.PRESSURE_DROP to "Pressure drop"),
                     )
                     SpecField(obj, SpecKey.RATED_CV, unitSet, ctx, actions, optionalHint = "for the opening; leave empty to size only")
-                    Calculated("Sized by IEC 60534 (globe valve: FL 0.9, xT 0.72): the Cv it needs, and choked flow or cavitation.")
+                    // HYSYS-like valve library: the type fills FL and xT with IEC 60534's typical values; the vendor's figures can replace them.
+                    Choice("Valve type", ValveLibrary.of(obj)?.label ?: "Custom (vendor's FL and xT)", ValveLibrary.TYPES.map { it.id to it.label }, testTag = "valve_type") { id ->
+                        val t = ValveLibrary.TYPES.first { it.id == id }
+                        actions.setSpec(obj.id, SpecKey.VALVE_FL, Spec(t.fl, "ratio"))
+                        actions.setSpec(obj.id, SpecKey.VALVE_XT, Spec(t.xt, "ratio"))
+                    }
+                    SpecField(obj, SpecKey.VALVE_FL, unitSet, ctx, actions, optionalHint = "typical for the type; 0.9 if empty")
+                    SpecField(obj, SpecKey.VALVE_XT, unitSet, ctx, actions, optionalHint = "typical for the type; 0.72 if empty")
+                    Calculated("Sized by IEC 60534 with these factors (typical values, IEC 60534-2-1 Annex A): the Cv it needs, and choked flow or cavitation.")
                 }
                 ObjectType.AirCooler -> {
                     Calculated("Process side only: the engine finds the duty to air; fan power is not modelled.")

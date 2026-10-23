@@ -7,13 +7,14 @@ namespace Flowstead.Engine.Worker;
 
 /// <summary>
 /// The Cv a valve needs to pass its flow at the solved pressure drop, as HYSYS's valve sizing, by IEC 60534-2-1
-/// (ISA-75.01) in US units, with the standard globe-valve factors (no fittings, Fp = 1):
+/// (ISA-75.01) in US units, with the valve's FL and xT (its type's typical values from the app's valve library, or
+/// the standard globe valve's 0.9 and 0.72 when not given; no fittings, Fp = 1):
 /// <list type="bullet">
 /// <item>Liquid: Cv = Q √(Gf / ΔP), Q in US gpm, ΔP in psi, Gf the specific gravity. The flow chokes (cavitation,
 /// or flashing if the outlet is below the bubble point) when ΔP ≥ FL² (P1 − FF Pv), FF = 0.96 − 0.28 √(Pv / Pc),
-/// FL = 0.9; then that ΔP sizes the valve.</item>
+/// then that ΔP sizes the valve.</item>
 /// <item>Gas: Cv = W / (63.3 Y √(x P1 ρ1)), W in lb/h, P1 in psia, ρ1 in lb/ft³, x = ΔP / P1,
-/// Y = 1 − x / (3 Fγ xT), Fγ = k / 1.4, xT = 0.72. The flow chokes at x = Fγ xT (Y = 2/3).</item>
+/// Y = 1 − x / (3 Fγ xT), Fγ = k / 1.4. The flow chokes at x = Fγ xT (Y = 2/3).</item>
 /// </list>
 /// Kv = Cv / 1.156. Two-phase flow is not sized (the standard has no general method). With the installed valve's
 /// rated Cv the opening is reported for a linear trim.
@@ -28,6 +29,8 @@ public static class ValveSizing
     public static IEnumerable<(MessageLevel, string)> Size(SimObject valve, ObjectResult r, ObjectResult inlet, double p1, double p2)
     {
         var vf = inlet.Properties.GetValueOrDefault("vapourFraction", double.NaN);
+        var fl = valve.Specs.GetValueOrDefault(SpecKeys.ValveFl)?.Si ?? Fl;
+        var xt = valve.Specs.GetValueOrDefault(SpecKeys.ValveXt)?.Si ?? Xt;
         var dp = p1 - p2;
         if (!(dp > 0)) yield break;
         double? cv = null;
@@ -40,7 +43,7 @@ public static class ValveSizing
             if (r.Properties.TryGetValue("inletBubblePressure", out var pv) && r.Properties.TryGetValue(CriticalPressureKey, out var pc) && pc > 0)
             {
                 var ff = 0.96 - 0.28 * Math.Sqrt(Math.Clamp(pv / pc, 0, 1));
-                var choked = Fl * Fl * (p1 - ff * pv);
+                var choked = fl * fl * (p1 - ff * pv);
                 r.Properties["chokedPressureDrop"] = choked;
                 if (dp >= choked)
                 {
@@ -60,12 +63,12 @@ public static class ValveSizing
             if (rho is not > 0 || !(w > 0)) yield break;
             var fk = k / 1.4;
             var x = dp / p1;
-            if (x >= fk * Xt)
+            if (x >= fk * xt)
             {
-                x = fk * Xt;
-                yield return (MessageLevel.Warning, $"the gas flow is choked (sonic in the valve): the pressure ratio is beyond {fk * Xt:0.###} of the inlet pressure; more pressure drop won't pass more gas, and the valve will be noisy.");
+                x = fk * xt;
+                yield return (MessageLevel.Warning, $"the gas flow is choked (sonic in the valve): the pressure ratio is beyond {fk * xt:0.###} of the inlet pressure; more pressure drop won't pass more gas, and the valve will be noisy.");
             }
-            var y = 1 - x / (3 * fk * Xt);
+            var y = 1 - x / (3 * fk * xt);
             cv = w * 7936.64 / (63.3 * y * Math.Sqrt(x * (p1 / PaPerPsi) * (rho.Value * 0.0624280)));
         }
         else

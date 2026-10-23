@@ -207,6 +207,24 @@ public sealed class UnitChecksTests(EngineFixture engine)
     }
 
     [Fact]
+    public async Task ValveTypeFactorsChangeWhereTheFlowChokes()
+    {
+        // A standard-bore ball valve (FL 0.55) cavitates far sooner: FL²(P1 − FF Pv) = 0.3025 × (3 − 0.947 × 0.47) ≈ 0.77 bar.
+        var water = new Dictionary<string, double> { ["Water"] = 1.0 };
+        var r = await Through(Feed("f", water, 353.15, 3e5, 360), ObjectType.Valve,
+            new() { [SpecKeys.OutletPressure] = 2e5, [SpecKeys.ValveFl] = 0.55 }, "Steam Tables (IAPWS-IF97)");
+        Assert.Equal(0.77e5, r.Objects["u"].Properties["chokedPressureDrop"], 0.02e5);
+        Assert.Contains("cavitating", On(r, "u", MessageLevel.Warning).Text);
+
+        // Methane from 20 to 12 bar (x 0.4): a globe valve (xT 0.72) is not choked; a butterfly (xT 0.35) is.
+        var methane = new Dictionary<string, double> { ["Methane"] = 1.0 };
+        var globe = await Through(Feed("f", methane, 300, 20e5, 1000), ObjectType.Valve, new() { [SpecKeys.OutletPressure] = 12e5 });
+        Assert.DoesNotContain(globe.Messages, m => m.ObjectId == "u" && m.Text.Contains("choked"));
+        var butterfly = await Through(Feed("f", methane, 300, 20e5, 1000), ObjectType.Valve, new() { [SpecKeys.OutletPressure] = 12e5, [SpecKeys.ValveXt] = 0.35 });
+        Assert.Contains("choked", On(butterfly, "u", MessageLevel.Warning).Text);
+    }
+
+    [Fact]
     public async Task GasValveChokesBeyondTheCriticalPressureRatio()
     {
         var methane = new Dictionary<string, double> { ["Methane"] = 1.0 };

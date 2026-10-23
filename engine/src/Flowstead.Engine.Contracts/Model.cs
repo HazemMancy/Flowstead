@@ -184,6 +184,9 @@ public static class SpecKeys
     public const string ColdPressureDrop = "coldPressureDrop";
     /// <summary>Valve: the installed valve's rated (full-open) Cv, US units; optional, for the opening (D47).</summary>
     public const string RatedCv = "ratedCv";
+    /// <summary>Valve: IEC 60534 liquid pressure-recovery factor FL and gas pressure-differential ratio xT; optional (globe 0.9 and 0.72).</summary>
+    public const string ValveFl = "valveFl";
+    public const string ValveXt = "valveXt";
 
     // Pipe segment (SI: m, W/m²·K, K) and orifice plate.
     public const string Length = "length";

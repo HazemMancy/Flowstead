@@ -53,6 +53,9 @@ object SpecKey {
     const val EFFICIENCY = "efficiency"
     /** Valve: installed valve's rated (full-open) Cv, US units; optional, for the opening (D47). */
     const val RATED_CV = "ratedCv"
+    /** Valve: IEC 60534 FL and xT; optional (a globe valve's 0.9 and 0.72), typically set from [ValveLibrary]. */
+    const val VALVE_FL = "valveFl"
+    const val VALVE_XT = "valveXt"
     /** Splitter: fraction of the feed to outlet 1 / outlet 2; outlet 3 takes the rest. */
     const val SPLIT_1 = "split1"
     const val SPLIT_2 = "split2"
@@ -115,7 +118,7 @@ object SpecKey {
     /** The spec keys each type takes (component-splitter fractions aside). Mirrors the engine's Validator.SpecKeysFor. */
     fun forType(type: ObjectType): List<String> = when (type) {
         ObjectType.MaterialStream -> STREAM_STATE + STREAM_FLOW
-        ObjectType.Valve -> listOf(OUTLET_PRESSURE, PRESSURE_DROP, RATED_CV)
+        ObjectType.Valve -> listOf(OUTLET_PRESSURE, PRESSURE_DROP, RATED_CV, VALVE_FL, VALVE_XT)
         ObjectType.Heater, ObjectType.Cooler, ObjectType.AirCooler -> listOf(OUTLET_TEMPERATURE, DUTY, PRESSURE_DROP)
         ObjectType.Pump -> listOf(OUTLET_PRESSURE, PRESSURE_RISE, EFFICIENCY)
         ObjectType.Compressor -> listOf(OUTLET_PRESSURE, PRESSURE_RISE, PRESSURE_RATIO, EFFICIENCY)
@@ -139,7 +142,7 @@ object SpecKey {
         PRESSURE_DROP, PRESSURE_RISE, HOT_PRESSURE_DROP, COLD_PRESSURE_DROP, COLUMN_PRESSURE_DROP -> Quantity.PressureDifference
         VAPOUR_FRACTION, EFFICIENCY, SPLIT_1, SPLIT_2, DISTILLATE_FRACTION, DISTILLATE_RECOVERY, BOTTOMS_FRACTION,
         BOTTOMS_RECOVERY, LIGHT_KEY_IN_BOTTOMS, HEAVY_KEY_IN_DISTILLATE -> Quantity.Fraction
-        PRESSURE_RATIO, REFLUX_RATIO, BOILUP_RATIO, RATED_CV -> Quantity.Ratio
+        PRESSURE_RATIO, REFLUX_RATIO, BOILUP_RATIO, RATED_CV, VALVE_FL, VALVE_XT -> Quantity.Ratio
         TRAYS, "feedStage1", "feedStage2", "feedStage3" -> Quantity.Count
         DISTILLATE_RATE, BOTTOMS_RATE, VAPOUR_RATE -> Quantity.MolarFlow
         REBOILER_DUTY -> Quantity.Power
@@ -169,6 +172,8 @@ object SpecKey {
         PRESSURE_RATIO -> "Pressure ratio"
         EFFICIENCY -> "Adiabatic efficiency"
         RATED_CV -> "Rated Cv (installed valve, optional)"
+        VALVE_FL -> "Liquid pressure recovery factor FL"
+        VALVE_XT -> "Pressure differential ratio factor xT"
         SPLIT_1 -> "Fraction to outlet 1"
         SPLIT_2 -> "Fraction to outlet 2"
         HOT_OUTLET_TEMPERATURE -> "Hot outlet temperature"
