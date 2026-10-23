@@ -355,11 +355,30 @@ public sealed class DwsimEngine
         return new PvtLab(req with { Flowsheet = model }, Solve, req.SaturationGuess).Run();
     }
 
+    /// <summary>The kij table of the flowsheet's package for every pair of its compounds (D58).</summary>
+    public List<BinaryParameterInfo> InteractionParameterTable(Flowsheet model)
+    {
+        if (model.PropertyPackage is null) throw new InvalidDataException("Choose a fluid package first");
+        var (fs, _) = Build(model with { Objects = [], Connections = [], Reactions = [], InteractionParameters = [] }, WaterMode.None);
+        var pp = (PropertyPackage)fs.PropertyPackages.Values.First();
+        if (!InteractionParameters.Supported(pp)) throw new InvalidDataException("This fluid package has no binary interaction parameters (kij belong to PR, SRK and PR/LK)");
+        var c = model.Compounds;
+        var list = new List<BinaryParameterInfo>();
+        for (var i = 0; i < c.Count; i++)
+            for (var j = i + 1; j < c.Count; j++)
+            {
+                var def = InteractionParameters.Get(pp, c[i], c[j]);
+                var user = model.InteractionParameters.LastOrDefault(p => (p.A == c[i] && p.B == c[j]) || (p.A == c[j] && p.B == c[i]));
+                list.Add(new BinaryParameterInfo(c[i], c[j], def, user?.Kij ?? def ?? 0, user is not null));
+            }
+        return list;
+    }
+
     /// <summary>Tunes the plus fraction's critical constants to PVT lab data (D53).</summary>
     public PvtRegressionResult PvtRegression(PvtRegressionRequest req)
     {
         if (!(req.Temperature > 0)) throw new InvalidDataException("Give the reservoir temperature");
-        return new PvtRegression(req, Pvt).Run();
+        return new PvtRegression(req, Pvt, InteractionParameterTable).Run();
     }
 
     /// <summary>Relief loads and API 520 sizing for one relief valve (D54–D56).</summary>
@@ -499,6 +518,8 @@ public sealed class DwsimEngine
         if (model.VolumeShift == VolumeShiftMethods.None) pp.LiquidDensity_UsePenelouxVolumeTranslation = false;
         // Lee–Gonzalez–Eakin vapour viscosity (D44) lives in Flowstead's package classes only.
         if (pp is IFlowsteadPackage fp) fp.VapourViscosity = model.VapourViscosity;
+        // The user's kij (D58), over DWSIM's databank values for those pairs.
+        InteractionParameters.Apply(pp, model.InteractionParameters);
         // DWSIM's Gibbs-minimisation flashes (rigorous VLLE) default to IPOPT, a native library that is not in the
         // engine (server or phone); its finalizer then crashed the process. DWSIM's managed L-BFGS instead.
         pp.FlashSettings[FlashSetting.GM_OptimizationMethod] = "Limited_Memory_BGFS";

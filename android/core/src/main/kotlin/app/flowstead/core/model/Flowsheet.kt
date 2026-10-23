@@ -44,6 +44,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val vapourViscosity: String? = null,
+    /** The user's kij for the cubic EOS (D58), over DWSIM's databank for those pairs. Written only when there are some. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val interactionParameters: List<BinaryParameter> = emptyList(),
     /** Line-sizing limits by service. Not part of the solved model: excluded from [modelHash]. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -136,6 +140,10 @@ data class PerformanceCurve(
     /** The speed it runs at, rpm; null: [speed]. The engine reads the map at it by the affinity laws (D48). */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val operatingSpeed: Double? = null,
 )
+
+/** kij between compounds [a] and [b] (symmetric). Same as the engine's BinaryParameter. */
+@Serializable
+data class BinaryParameter(val a: String, val b: String, val kij: Double)
 
 /** One curve of a multi-speed map. */
 @Serializable

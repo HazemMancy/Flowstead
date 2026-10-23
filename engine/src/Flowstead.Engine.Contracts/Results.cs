@@ -204,7 +204,7 @@ public sealed record PvtObservation(string Experiment, string Key, double Value,
 
 /// <summary>
 /// Tunes the fluid's plus fraction to lab data, as PVTsim or HYSYS's oil characterisation do: multipliers on the
-/// critical temperature, critical pressure and acentric factor of the hypothetical components in
+/// critical temperature, critical pressure and acentric factor of the hypothetical components, and their kij with methane, in
 /// <see cref="Tune"/> (null: every hypothetical in the composition), each kept within ±<see cref="MaxChange"/>.
 /// </summary>
 public sealed record PvtRegressionRequest(
@@ -226,6 +226,8 @@ public sealed record PvtMatch(PvtObservation Observation, double? Before, double
 public sealed record PvtRegressionResult
 {
     public List<Hypothetical> Tuned { get; init; } = [];
+    /// <summary>With kij tuned: the flowsheet's whole kij list to apply (its other pairs kept).</summary>
+    public List<BinaryParameter> InteractionParameters { get; init; } = [];
     public Dictionary<string, double> Multipliers { get; init; } = [];
     public List<PvtMatch> Matches { get; init; } = [];
     public double? ErrorBefore { get; init; }
@@ -233,6 +235,12 @@ public sealed record PvtRegressionResult
     public int Iterations { get; init; }
     public List<string> Warnings { get; init; } = [];
 }
+
+/// <summary>
+/// One pair of the flowsheet's kij table (D58): DWSIM's databank value (null: none, DWSIM uses 0) and the value in
+/// use (the user's when given).
+/// </summary>
+public sealed record BinaryParameterInfo(string A, string B, double? Default, double Kij, bool User);
 
 /// <summary>PVT result keys (SI). Gas standard volumes are at 60 °F and 101.325 kPa, as oilfield PVT reports.</summary>
 public static class PvtKeys
@@ -353,6 +361,7 @@ public static class WorkerMethods
     public const string Relief = "relief";
     public const string Depressuring = "depressuring";
     public const string PvtRegression = "pvtRegression";
+    public const string InteractionParameters = "interactionParameters";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

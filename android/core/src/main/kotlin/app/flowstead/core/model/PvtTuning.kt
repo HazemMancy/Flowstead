@@ -33,7 +33,7 @@ object PvtTuning {
         else -> null
     }
 
-    /** The flowsheet with the tuned hypotheticals' critical constants in place (the rest kept). */
-    fun apply(fs: Flowsheet, tuned: List<Hypothetical>): Flowsheet =
-        fs.copy(hypotheticals = fs.hypotheticals.map { h -> tuned.firstOrNull { it.name == h.name }?.let { t -> h.copy(criticalTemperature = t.criticalTemperature, criticalPressure = t.criticalPressure, acentricFactor = t.acentricFactor) } ?: h })
+    /** The flowsheet with the tuned hypotheticals' critical constants (and the tuned kij, when any) in place, the rest kept. */
+    fun apply(fs: Flowsheet, tuned: List<Hypothetical>, kij: List<BinaryParameter> = emptyList()): Flowsheet =
+        fs.copy(interactionParameters = kij.ifEmpty { fs.interactionParameters }, hypotheticals = fs.hypotheticals.map { h -> tuned.firstOrNull { it.name == h.name }?.let { t -> h.copy(criticalTemperature = t.criticalTemperature, criticalPressure = t.criticalPressure, acentricFactor = t.acentricFactor) } ?: h })
 }

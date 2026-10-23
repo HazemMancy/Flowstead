@@ -36,11 +36,11 @@ public sealed class EngineFixture : WebApplicationFactory<Program>, IAsyncLifeti
         await Services.GetRequiredService<WorkerPool>().StartAsync(CancellationToken.None);
     }
 
-    public HttpClient Authed()
+    public HttpClient Authed(double minutes = 3)
     {
         var c = CreateClient();
         c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
-        c.Timeout = TimeSpan.FromMinutes(3);
+        c.Timeout = TimeSpan.FromMinutes(minutes);
         return c;
     }
 

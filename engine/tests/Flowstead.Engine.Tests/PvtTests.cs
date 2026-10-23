@@ -123,13 +123,17 @@ public sealed class PvtTests(EngineFixture engine, ITestOutputHelper output)
     [Fact]
     public async Task RegressionRecoversTheCriticalConstantsThatMadeTheLabData()
     {
-        // "Lab data" from the same fluid with its plus fraction's Tc 4 % higher and Pc 7 % lower; the regression,
-        // starting from the Riazi–Daubert estimates, should find a fluid that reproduces the data.
+        // "Lab data" from the same fluid with its plus fraction's Tc 4 % higher, Pc 7 % lower and its kij with methane
+        // 0.03 above DWSIM's; the regression, starting from the Riazi–Daubert estimates and DWSIM's kij, should find a
+        // fluid that reproduces the data.
         var plus = new Hypothetical { Name = "C12+", NormalBoilingPoint = 490, MolecularWeight = 170, SpecificGravity = 0.78 };
         var x = new Dictionary<string, double> { ["Methane"] = 0.40, ["Ethane"] = 0.08, ["Propane"] = 0.06, ["N-butane"] = 0.04, ["N-heptane"] = 0.12, ["C12+"] = 0.30 };
         Flowsheet Fluid(Hypothetical h) => new() { PropertyPackage = "Peng-Robinson (PR)", Compounds = x.Keys.ToList(), Hypotheticals = [h] };
         var estimated = (await EngineFixture.Json<List<HypotheticalProperties>>(await engine.Authed().PostAsJsonAsync("/hypotheticals/estimate", new List<Hypothetical> { plus }, Json.Options))).Single();
-        var truth = Fluid(plus with { CriticalTemperature = estimated.CriticalTemperature * 1.04, CriticalPressure = estimated.CriticalPressure * 0.93, AcentricFactor = estimated.AcentricFactor });
+        var kij0 = (await EngineFixture.Json<List<BinaryParameterInfo>>(await engine.Authed().PostAsJsonAsync("/interaction-parameters", Fluid(plus), Json.Options)))
+            .Single(p => p.A == "Methane" && p.B == "C12+").Kij;
+        var truth = Fluid(plus with { CriticalTemperature = estimated.CriticalTemperature * 1.04, CriticalPressure = estimated.CriticalPressure * 0.93, AcentricFactor = estimated.AcentricFactor })
+            with { InteractionParameters = [new BinaryParameter("Methane", "C12+", kij0 + 0.03)] };
 
         async Task<PvtResult> Lab(string exp, List<double>? p = null) =>
             await EngineFixture.Json<PvtResult>(await engine.Authed().PostAsJsonAsync("/pvt", new PvtRequest(truth, x, exp, Reservoir, p), Json.Options));
@@ -144,15 +148,16 @@ public sealed class PvtTests(EngineFixture engine, ITestOutputHelper output)
             new(PvtExperiments.Cce, PvtKeys.RelativeVolume, At(PvtKeys.RelativeVolume, ps[1]), ps[1]),
             new(PvtExperiments.Cce, PvtKeys.RelativeVolume, At(PvtKeys.RelativeVolume, ps[2]), ps[2]),
         };
-        var response = await engine.Authed().PostAsJsonAsync("/pvt-regression", new PvtRegressionRequest(Fluid(plus), x, Reservoir, observations), Json.Options);
+        var response = await engine.Authed(minutes: 8).PostAsJsonAsync("/pvt-regression", new PvtRegressionRequest(Fluid(plus), x, Reservoir, observations), Json.Options);
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
         var r = await EngineFixture.Json<PvtRegressionResult>(response);
-        output.WriteLine($"error {r.ErrorBefore:P2} -> {r.ErrorAfter:P3} in {r.Iterations} iterations; " + string.Join(", ", r.Multipliers.Select(m => $"{m.Key} {m.Value:0.0000}")));
+        output.WriteLine($"error {r.ErrorBefore:P2} -> {r.ErrorAfter:P3} in {r.Iterations} iterations; " + string.Join(", ", r.Multipliers.Select(m => $"{m.Key} {m.Value:0.0000}"))
+            + $"; kij {kij0:0.0000} -> {r.InteractionParameters.SingleOrDefault()?.Kij:0.0000} (truth {kij0 + 0.03:0.0000})");
         foreach (var m in r.Matches) output.WriteLine($"  {m.Observation.Key} at {m.Observation.Pressure}: lab {m.Observation.Value:0.####} before {m.Before:0.####} after {m.After:0.####}");
         foreach (var w in r.Warnings) output.WriteLine("  warning: " + w);
-        // The data move little with these constants (0.6 % RMS untuned); the fit takes it to well under a tenth of that.
         Assert.True(r.ErrorBefore > 0.003);
         Assert.True(r.ErrorAfter < r.ErrorBefore / 20);
+        Assert.Equal(kij0 + 0.03, Assert.Single(r.InteractionParameters).Kij, 0.015);
         // The tuned constants are written out for the flowsheet; they are near the ones that made the data.
         var tuned = Assert.Single(r.Tuned);
         Assert.Equal(estimated.CriticalTemperature * 1.04, tuned.CriticalTemperature!.Value, estimated.CriticalTemperature * 0.01);

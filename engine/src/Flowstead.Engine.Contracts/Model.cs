@@ -25,7 +25,15 @@ public sealed record Flowsheet
     public string? VolumeShift { get; init; }
     /// <summary>Vapour viscosity: null for DWSIM's (Lucas, then Jossi–Stiel–Thodos for pressure); "lge" for Lee–Gonzalez–Eakin (D44).</summary>
     public string? VapourViscosity { get; init; }
+    /// <summary>
+    /// Binary interaction parameters kij of the cubic equation of state (PR, SRK, PR/LK) that replace DWSIM's for these
+    /// pairs (HYSYS's Binary Coeffs page; D58). Pairs not listed keep DWSIM's value.
+    /// </summary>
+    public List<BinaryParameter> InteractionParameters { get; init; } = [];
 }
+
+/// <summary>kij between compounds <paramref name="A"/> and <paramref name="B"/> (symmetric).</summary>
+public sealed record BinaryParameter(string A, string B, double Kij);
 
 public static class VapourViscosityMethods
 {

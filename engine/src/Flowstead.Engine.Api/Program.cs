@@ -135,6 +135,9 @@ api.MapPost("/pvt", async (PvtRequest req, EngineService e, CancellationToken ct
     await FileCall(() => e.PvtAsync(req, ct), "invalid_pvt"));
 
 // Safety analysis: relief valve loads and sizing (D54–D56).
+api.MapPost("/interaction-parameters", async (Flowsheet fs, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.InteractionParametersAsync(fs, ct), "invalid_interaction_parameters"));
+
 api.MapPost("/pvt-regression", async (PvtRegressionRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PvtRegressionAsync(req, ct), "invalid_pvt_regression"));
 

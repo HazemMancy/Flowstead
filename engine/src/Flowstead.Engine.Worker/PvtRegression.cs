@@ -7,13 +7,14 @@ using Flowsheet = Flowstead.Engine.Contracts.Flowsheet;
 namespace Flowstead.Engine.Worker;
 
 /// <summary>
-/// EOS tuning by regression (D53), the way PVT packages tune a characterised fluid: the parameters are multipliers on
-/// Tc, Pc and ω of the plus-fraction hypotheticals; each evaluation re-runs Flowstead's own PVT experiments (DWSIM
+/// EOS tuning by regression (D53, D58), the way PVT packages tune a characterised fluid: the parameters are multipliers on
+/// Tc, Pc and ω of the plus-fraction hypotheticals and the methane–plus-fraction kij (kij = databank + 0.5 (x − 1), so
+/// ±0.1 at the default ±20 %); each evaluation re-runs Flowstead's own PVT experiments (DWSIM
 /// flashes) with the multiplied constants; Levenberg–Marquardt with forward-difference derivatives minimises the
 /// weighted relative errors Σ (w (calc − lab) / lab)², the multipliers held within ±MaxChange. With fewer observations
-/// than parameters only the most influential are tuned, in the order Tc, Pc, ω of each hypothetical.
+/// than parameters only the most influential are tuned, in the order Tc, Pc, kij, ω of each hypothetical.
 /// </summary>
-public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, PvtResult> pvt)
+public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, PvtResult> pvt, Func<Flowsheet, List<BinaryParameterInfo>>? kijTable = null)
 {
     private readonly List<string> _warnings = [];
     private double? _lastSaturation;
@@ -30,10 +31,17 @@ public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, Pvt
             .Where(n => req.Composition.GetValueOrDefault(n) > 0 && req.Flowsheet.Hypotheticals.Any(h => h.Name == n)).ToList();
         if (names.Count == 0) throw new InvalidDataException("Tuning needs a hypothetical (plus fraction) in the fluid: add one to the compounds and the composition");
 
+        // kij needs methane in the fluid and a package with a kij table.
+        var table = req.Composition.GetValueOrDefault(Methane) > 0 && kijTable is not null ? TryTable() : null;
         var all = new List<Parameter>();
-        foreach (var prop in new[] { "tc", "pc", "omega" })
+        foreach (var prop in new[] { "tc", "pc", "kij", "omega" })
             foreach (var n in names)
             {
+                if (prop == "kij")
+                {
+                    if (table?.FirstOrDefault(p => (p.A == Methane && p.B == n) || (p.B == Methane && p.A == n)) is { } k) all.Add(new Parameter(n, prop, k.Kij));
+                    continue;
+                }
                 var c = Hypotheticals.Characterise(req.Flowsheet.Hypotheticals.First(h => h.Name == n));
                 all.Add(new Parameter(n, prop, prop switch { "tc" => c.Critical_Temperature, "pc" => c.Critical_Pressure, _ => c.Acentric_Factor }));
             }
@@ -86,13 +94,31 @@ public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, Pvt
         return new PvtRegressionResult
         {
             Tuned = tuned,
-            Multipliers = parameters.Select((p, j) => (Label(p), x[j])).ToDictionary(t => t.Item1, t => t.Item2),
+            InteractionParameters = parameters.Any(p => p.Property == "kij") ? Kij(parameters, x) : [],
+            Multipliers = parameters.Select((p, j) => (p, j)).Where(t => t.p.Property != "kij").ToDictionary(t => Label(t.p), t => x[t.j]),
             Matches = req.Observations.Select((o, i) => new PvtMatch(o, before[i], after[i])).ToList(),
             ErrorBefore = Rms(before), ErrorAfter = Rms(after), Iterations = iterations, Warnings = _warnings,
         };
     }
 
-    private static string Label(Parameter p) => $"{p.Hypothetical} {p.Property switch { "tc" => "Tc", "pc" => "Pc", _ => "ω" }}";
+    private const string Methane = "Methane";
+
+    private List<BinaryParameterInfo>? TryTable()
+    {
+        try { return kijTable!(req.Flowsheet); }
+        catch (InvalidDataException) { return null; }
+    }
+
+    private static string Label(Parameter p) => p.Property == "kij" ? $"kij Methane–{p.Hypothetical}" : $"{p.Hypothetical} {p.Property switch { "tc" => "Tc", "pc" => "Pc", _ => "ω" }}";
+
+    private static double KijValue(Parameter p, double x) => p.Base + 0.5 * (x - 1);
+
+    /// <summary>The flowsheet's kij list with the tuned pairs set.</summary>
+    private List<BinaryParameter> Kij(List<Parameter> parameters, double[] x) =>
+        req.Flowsheet.InteractionParameters
+            .Where(b => !parameters.Any(p => p.Property == "kij" && ((b.A == Methane && b.B == p.Hypothetical) || (b.B == Methane && b.A == p.Hypothetical))))
+            .Concat(parameters.Select((p, j) => (p, j)).Where(t => t.p.Property == "kij").Select(t => new BinaryParameter(Methane, t.p.Hypothetical, KijValue(t.p, x[t.j]))))
+            .ToList();
 
     private double[] Residuals(IReadOnlyList<double?> calc) =>
         req.Observations.Select((o, i) => calc[i] is { } v ? o.Weight * (v - o.Value) / Math.Abs(o.Value) : double.NaN).ToArray();
@@ -114,7 +140,7 @@ public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, Pvt
             double V(string prop, double baseValue) => ps.FirstOrDefault(t => t.p.Property == prop) is { p: not null } t ? t.p.Base * x[t.j] : baseValue;
             return h with { CriticalTemperature = V("tc", c.Critical_Temperature), CriticalPressure = V("pc", c.Critical_Pressure), AcentricFactor = V("omega", c.Acentric_Factor) };
         }).ToList();
-        var fs = req.Flowsheet with { Hypotheticals = hypos };
+        var fs = req.Flowsheet with { Hypotheticals = hypos, InteractionParameters = Kij(parameters, x) };
         // One run per experiment; the saturation pressure comes with any of them, so a saturation measurement alone
         // needs its own run only when nothing else is measured. Each run starts its saturation search at the last one.
         var runs = new Dictionary<string, PvtResult?>();

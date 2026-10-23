@@ -180,7 +180,7 @@ private fun TuningSection(
     onApply: () -> Unit,
 ) {
     SectionLabel("Tune to lab data")
-    Calculated("Type your lab measurements; Flowstead adjusts the plus fraction (hypothetical components) to match them.")
+    Calculated("Type your lab measurements; Flowstead adjusts the plus fraction (hypothetical components: Tc, Pc, ω, and kij with methane) to match them.")
     var rows by remember { mutableStateOf(listOf<PvtObservation>()) }
     rows.forEachIndexed { i, o ->
         val kind = PvtTuning.kind(o) ?: PvtTuning.KINDS.first()
@@ -222,6 +222,9 @@ private fun TuningSection(
     fun pct(v: Double?) = v?.let { "${ValueFormat.number(it * 100, 2)} %" } ?: "—"
     Text("RMS error ${pct(r.errorBefore)} → ${pct(r.errorAfter)} in ${r.iterations} iterations", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("tune_result"))
     r.multipliers.forEach { (name, m) -> Text("$name × ${ValueFormat.number(m, 4)}", style = MaterialTheme.typography.bodyMedium) }
+    r.interactionParameters.filter { it.a == "Methane" || it.b == "Methane" }.forEach { k ->
+        Text("kij ${k.a}–${k.b} = ${ValueFormat.number(k.kij, 4)}", style = MaterialTheme.typography.bodyMedium)
+    }
     r.matches.forEach { m ->
         val kind = PvtTuning.kind(m.observation)
         val u = unitSet.unitFor(kind?.quantity ?: Quantity.Ratio)

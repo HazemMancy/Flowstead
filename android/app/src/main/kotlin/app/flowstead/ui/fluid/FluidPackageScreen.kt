@@ -4,6 +4,14 @@
  */
 package app.flowstead.ui.fluid
 
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import app.flowstead.core.api.BinaryParameterInfo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -99,6 +107,16 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+sealed interface KijState {
+    data object Idle : KijState
+    data object Working : KijState
+    data class Loaded(val pairs: List<BinaryParameterInfo>) : KijState
+    data class Failed(val reason: String) : KijState
+}
+
+/** The packages with a kij table (cubic equations of state). */
+val KIJ_PACKAGES = setOf("Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "Peng-Robinson / Lee-Kesler (PR/LK)")
+
 data class FluidUi(
     val loaded: Boolean = false,
     val propertyPackage: String? = null,
@@ -110,6 +128,8 @@ data class FluidUi(
     val vapourViscosity: String? = null,
     val compounds: List<String> = emptyList(),
     val hypotheticals: List<Hypothetical> = emptyList(),
+    /** How many pairs carry the user's kij. */
+    val userKij: Int = 0,
     val packages: List<String> = OfflineCatalogue.propertyPackages,
     val query: String = "",
     /** Family filter; null = all, [CompoundCatalogue.COMMON] = the oil & gas favourites. */
@@ -158,6 +178,7 @@ class FluidPackageViewModel @Inject constructor(
             vapourViscosity = p?.flowsheet?.vapourViscosity,
             compounds = p?.flowsheet?.compounds.orEmpty(),
             hypotheticals = p?.flowsheet?.hypotheticals.orEmpty(),
+            userKij = p?.flowsheet?.interactionParameters?.size ?: 0,
             packages = pk,
             query = s.query,
             family = s.family,
@@ -203,6 +224,31 @@ class FluidPackageViewModel @Inject constructor(
     fun setVapourViscosity(method: String?) = viewModelScope.launch {
         val p = projects.observeProject(projectId).first() ?: return@launch
         projects.saveFlowsheet(projectId, p.flowsheet.copy(vapourViscosity = method))
+    }
+
+    /** The package's kij table from the engine (D58), loaded when the kij sheet opens. */
+    private val _kij = MutableStateFlow<KijState>(KijState.Idle)
+    val kij: StateFlow<KijState> = _kij
+
+    fun loadKij() = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        val url = settings.settings.first().engineTarget
+        if (url.isBlank()) { _kij.value = KijState.Failed("Choose an engine in Settings to read the interaction parameters"); return@launch }
+        _kij.value = KijState.Working
+        _kij.value = when (val r = engine.interactionParameters(url, secrets.apiKey(), p.flowsheet)) {
+            is EngineResult.Ok -> KijState.Loaded(r.value)
+            is EngineResult.Failed -> KijState.Failed(r.reason)
+        }
+    }
+
+    /** Sets (or with null resets) one pair's kij, then re-reads the table. */
+    fun setKij(a: String, b: String, kij: Double?) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        val next = try { FlowsheetEditing.setInteractionParameter(p.flowsheet, a, b, kij) } catch (e: EditRejected) { _messages.send(e.message ?: "Not allowed"); return@launch }
+        projects.saveFlowsheet(projectId, next)
+        (_kij.value as? KijState.Loaded)?.let { s ->
+            _kij.value = KijState.Loaded(s.pairs.map { if ((it.a == a && it.b == b) || (it.a == b && it.b == a)) it.copy(kij = kij ?: it.databank ?: 0.0, user = kij != null) else it })
+        }
     }
 
     fun add(name: String) = viewModelScope.launch {
@@ -262,6 +308,8 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
     val estimate by viewModel.estimate.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<Hypothetical?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var kijOpen by remember { mutableStateOf(false) }
+    val kij by viewModel.kij.collectAsStateWithLifecycle()
     FluidPackageContent(
         ui, snackbar, viewModel::setPackage, viewModel::add, viewModel::remove, viewModel::setQuery, viewModel::setFamily, onBack,
         onNewHypothetical = { viewModel.clearEstimate(); creating = true },
@@ -269,7 +317,9 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onLiquidDensity = viewModel::setLiquidDensity,
         onVolumeShift = viewModel::setVolumeShift,
         onVapourViscosity = viewModel::setVapourViscosity,
+        onKij = { viewModel.loadKij(); kijOpen = true },
     )
+    if (kijOpen) KijSheet(kij, onSet = viewModel::setKij, onDismiss = { kijOpen = false })
     if (creating || editing != null) {
         val close = { creating = false; editing = null }
         HypotheticalSheet(
@@ -300,6 +350,7 @@ fun FluidPackageContent(
     onLiquidDensity: (String?) -> Unit = {},
     onVolumeShift: (String?) -> Unit = {},
     onVapourViscosity: (String?) -> Unit = {},
+    onKij: () -> Unit = {},
 ) {
     var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
@@ -389,6 +440,22 @@ fun FluidPackageContent(
                     Column(Modifier.padding(start = 12.dp)) {
                         Text(o.label, style = MaterialTheme.typography.bodyLarge)
                         Text(o.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            if (ui.propertyPackage in KIJ_PACKAGES && ui.compounds.size >= 2) {
+                item { HorizontalDivider() }
+                item { Text("Binary interaction parameters", style = MaterialTheme.typography.titleMedium) }
+                item {
+                    Text(
+                        "kij of the equation of state for each pair, as HYSYS's Binary Coeffs page: DWSIM's databank values, " +
+                            "which you can replace (for instance with HYSYS's, to match its results).",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                item {
+                    OutlinedButton(onClick = onKij, modifier = Modifier.heightIn(min = 48.dp).testTag("open_kij")) {
+                        Text("Edit kij" + if (ui.userKij > 0) " (${ui.userKij} set by you)" else "")
                     }
                 }
             }
@@ -610,3 +677,41 @@ private fun CompoundSheet(c: Compound, added: Boolean, unitSet: UnitSet, onAdd: 
 
 /** 1 debye in C·m. */
 private const val DEBYE = 3.33564e-30
+
+/** The kij of every pair (D58): type a value to replace DWSIM's, clear it to go back. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KijSheet(state: KijState, onSet: (String, String, Double?) -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        LazyColumn(
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.navigationBarsPadding().testTag("kij_sheet"),
+        ) {
+            item { Text("Binary interaction parameters (kij)", style = MaterialTheme.typography.titleLarge) }
+            when (state) {
+                KijState.Idle, KijState.Working -> item { CircularProgressIndicator(Modifier.size(24.dp)) }
+                is KijState.Failed -> item { Text(state.reason, color = MaterialTheme.valueColors.error) }
+                is KijState.Loaded -> items(state.pairs, key = { "${it.a}|${it.b}" }) { p ->
+                    var text by remember(p.a, p.b, p.kij, p.user) { mutableStateOf(if (p.user) ValueFormat.number(p.kij, 4).replace(",", "") else "") }
+                    fun commit() {
+                        val t = text.trim().replace(',', '.')
+                        if (t.isEmpty()) { if (p.user) onSet(p.a, p.b, null); return }
+                        t.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { if (!p.user || it != p.kij) onSet(p.a, p.b, it) }
+                    }
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        label = { Text("${p.a} – ${p.b}") },
+                        placeholder = { Text(ValueFormat.number(p.databank ?: 0.0, 4)) },
+                        supportingText = { Text("DWSIM: " + (p.databank?.let { ValueFormat.number(it, 4) } ?: "none in the databank (0)") + if (p.user) " · yours in use" else "") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { commit() }),
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) commit() }.testTag("kij_${p.a}_${p.b}"),
+                    )
+                }
+            }
+        }
+    }
+}

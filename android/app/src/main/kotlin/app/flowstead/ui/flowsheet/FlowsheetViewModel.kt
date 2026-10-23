@@ -639,8 +639,8 @@ class FlowsheetViewModel @Inject constructor(
 
     /** Writes the tuned critical constants into the hypotheticals (undoable). */
     fun applyTuning() {
-        val tuned = local.value.tuning?.result?.tuned ?: return
-        edit { PvtTuning.apply(it, tuned) }
+        val r = local.value.tuning?.result ?: return
+        edit { PvtTuning.apply(it, r.tuned, r.interactionParameters) }
         local.update { it.copy(tuning = it.tuning?.copy(applied = true)) }
     }
 

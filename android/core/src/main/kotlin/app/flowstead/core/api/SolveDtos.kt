@@ -156,6 +156,16 @@ data class PvtRequest(
     val stages: List<SeparatorStage> = emptyList(),
 )
 
+/** One pair of the package's kij table (D58): DWSIM's databank value (null: none, 0 used) and the value in use. */
+@Serializable
+data class BinaryParameterInfo(
+    val a: String,
+    val b: String,
+    @SerialName("default") val databank: Double? = null,
+    val kij: Double = 0.0,
+    val user: Boolean = false,
+)
+
 /** A lab measurement to match (D53): [key] of [experiment] at [pressure], or a summary value when [pressure] is null. SI. */
 @Serializable
 data class PvtObservation(
@@ -186,6 +196,8 @@ data class PvtMatch(val observation: PvtObservation, val before: Double? = null,
 @Serializable
 data class PvtRegressionResult(
     val tuned: List<app.flowstead.core.model.Hypothetical> = emptyList(),
+    /** With kij tuned (D58): the flowsheet's whole kij list to apply. */
+    val interactionParameters: List<app.flowstead.core.model.BinaryParameter> = emptyList(),
     val multipliers: Map<String, Double> = emptyMap(),
     val matches: List<PvtMatch> = emptyList(),
     val errorBefore: Double? = null,

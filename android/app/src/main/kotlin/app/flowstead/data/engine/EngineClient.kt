@@ -66,6 +66,9 @@ interface EngineClient {
     /** A PVT laboratory experiment (D53). */
     suspend fun pvt(baseUrl: String, apiKey: String?, request: PvtRequest): EngineResult<PvtResult> =
         EngineResult.Failed("This engine can't run PVT experiments")
+    /** The package's kij for every pair of the flowsheet's compounds (D58). */
+    suspend fun interactionParameters(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<List<app.flowstead.core.api.BinaryParameterInfo>> =
+        EngineResult.Failed("This engine can't list interaction parameters")
     /** Tunes the plus fraction to PVT lab data (D53). */
     suspend fun pvtRegression(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PvtRegressionRequest): EngineResult<app.flowstead.core.api.PvtRegressionResult> =
         EngineResult.Failed("This engine can't tune fluids")
@@ -145,6 +148,15 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(request)
+            }
+        }
+
+    override suspend fun interactionParameters(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<List<app.flowstead.core.api.BinaryParameterInfo>> =
+        call {
+            http.post("$baseUrl/interaction-parameters") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(flowsheet)
             }
         }
 

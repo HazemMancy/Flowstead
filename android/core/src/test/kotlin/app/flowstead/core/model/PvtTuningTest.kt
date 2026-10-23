@@ -32,4 +32,18 @@ class PvtTuningTest {
         assertEquals(700.0, h.criticalTemperature)
         assertEquals(0.55, h.acentricFactor)
     }
+
+    @Test
+    fun kijIsSetPerPairAndGoesWithItsCompounds() {
+        var f = FlowsheetEditing.setInteractionParameter(fs, "C12+", "Methane", 0.05)
+        assertEquals(listOf(BinaryParameter("C12+", "Methane", 0.05)), f.interactionParameters)
+        // The same pair either way round replaces it; null goes back to DWSIM's.
+        f = FlowsheetEditing.setInteractionParameter(f, "Methane", "C12+", 0.07)
+        assertEquals(0.07, f.interactionParameters.single().kij)
+        assertEquals(emptyList(), FlowsheetEditing.setInteractionParameter(f, "Methane", "C12+", null).interactionParameters)
+        // Removing a compound removes its pairs.
+        assertEquals(emptyList(), FlowsheetEditing.setCompounds(f, listOf("Methane")).interactionParameters)
+        // Tuned kij are applied with the constants.
+        assertEquals(0.09, PvtTuning.apply(f, listOf(plus), listOf(BinaryParameter("Methane", "C12+", 0.09))).interactionParameters.single().kij)
+    }
 }

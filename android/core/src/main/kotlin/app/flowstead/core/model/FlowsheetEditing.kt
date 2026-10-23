@@ -225,7 +225,18 @@ object FlowsheetEditing {
         // Compositions keep only compounds that are still present.
         val objects = fs.objects.map { o -> o.copy(composition = o.composition.filterKeys { it in distinct }) }
         // A hypothetical taken out of the list goes with it.
-        return fs.copy(compounds = distinct, objects = objects, hypotheticals = fs.hypotheticals.filter { it.name in distinct })
+        return fs.copy(
+            compounds = distinct, objects = objects, hypotheticals = fs.hypotheticals.filter { it.name in distinct },
+            interactionParameters = fs.interactionParameters.filter { it.a in distinct && it.b in distinct },
+        )
+    }
+
+    /** Sets the user's kij for a pair (D58), or with null goes back to DWSIM's value. */
+    fun setInteractionParameter(fs: Flowsheet, a: String, b: String, kij: Double?): Flowsheet {
+        if (a == b || a !in fs.compounds || b !in fs.compounds) throw EditRejected("kij needs two different compounds of the fluid")
+        if (kij != null && !(kij > -1 && kij < 1)) throw EditRejected("kij must be between −1 and 1")
+        val others = fs.interactionParameters.filterNot { (it.a == a && it.b == b) || (it.a == b && it.b == a) }
+        return fs.copy(interactionParameters = if (kij == null) others else others + BinaryParameter(a, b, kij))
     }
 
     /**

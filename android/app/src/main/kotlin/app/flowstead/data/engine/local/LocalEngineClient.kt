@@ -74,6 +74,11 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
             engine.call("pvt", FlowsheetJson.encodeToJsonElement(PvtRequest.serializer(), request))
         }
 
+    override suspend fun interactionParameters(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<List<app.flowstead.core.api.BinaryParameterInfo>> =
+        decode(ListSerializer(app.flowstead.core.api.BinaryParameterInfo.serializer())) {
+            engine.call("interactionParameters", FlowsheetJson.encodeToJsonElement(Flowsheet.serializer(), flowsheet))
+        }
+
     override suspend fun pvtRegression(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PvtRegressionRequest): EngineResult<app.flowstead.core.api.PvtRegressionResult> =
         decode(app.flowstead.core.api.PvtRegressionResult.serializer()) {
             engine.call("pvtRegression", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.PvtRegressionRequest.serializer(), request))
