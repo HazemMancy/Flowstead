@@ -95,9 +95,10 @@ public sealed record PhaseEnvelopeRequest(
     double InhibitorWeightFraction = 0);
 
 /// <summary>
-/// Thermodynamic hydrate inhibitors in the free water (D52): the depression of the hydrate formation temperature,
-/// by Nielsen–Bucklin for methanol (ΔT = −72 ln x_water, K; GPSA, good to about 0.8 mole fraction) and Hammerschmidt
-/// for the glycols (ΔT = 1297 W / (M (100 − W)), K, W in wt %; GPSA, good to about 70 wt %).
+/// Thermodynamic hydrate inhibitors in the free water (D52). The engine puts them into the hydrate equilibrium through
+/// the water's activity (DWSIM's NRTL for water + inhibitor); the GPSA correlations here, Nielsen–Bucklin for methanol
+/// (ΔT = −72 ln x_water, K) and Hammerschmidt for the glycols (ΔT = 1297 W / (M (100 − W)), K, W in wt %), are kept
+/// as a cross-check and for their ranges.
 /// </summary>
 public static class HydrateInhibitors
 {
@@ -107,6 +108,16 @@ public static class HydrateInhibitors
     public const string Teg = "teg";
     public static readonly string[] All = [Methanol, Meg, Deg, Teg];
     private const double WaterMw = 18.015;
+
+    /// <summary>DWSIM's compound name for the inhibitor.</summary>
+    public static string Compound(string inhibitor) => inhibitor switch
+    {
+        Methanol => "Methanol",
+        Meg => "Ethylene glycol",
+        Deg => "Diethylene glycol",
+        Teg => "Triethylene glycol",
+        _ => throw new ArgumentException($"Unknown inhibitor '{inhibitor}'"),
+    };
 
     public static double MolecularWeight(string inhibitor) => inhibitor switch
     {
@@ -296,8 +307,10 @@ public sealed record PhaseEnvelope
     /// <summary>Hydrate formation temperature at the requested pressure, and its structure.</summary>
     public double? HydrateTemperatureAtPressure { get; init; }
     public string? HydrateStructureAtPressure { get; init; }
-    /// <summary>With an inhibitor: the curve shifted by its depression, and the depression (K).</summary>
+    /// <summary>With an inhibitor: the inhibited curve (its own pressures), and the depression (K) at the stream's pressure (else the curve's mean).</summary>
     public List<double> InhibitedHydrateTemperature { get; init; } = [];
+    public List<double> InhibitedHydratePressure { get; init; } = [];
+    public double? InhibitedHydrateTemperatureAtPressure { get; init; }
     public double? HydrateDepression { get; init; }
     /// <summary>With the stream's temperature: the weight fraction of the inhibitor (methanol if none chosen) its free water needs to stay out of hydrates (0 when it is already warmer).</summary>
     public double? RequiredInhibitorFraction { get; init; }

@@ -16,7 +16,9 @@ namespace Flowstead.Engine.Worker;
 /// </summary>
 public static class PhaseEnvelopes
 {
-    public static PhaseEnvelope Read(PropertyPackage pp, MaterialStream ms, string[] compounds, PhaseEnvelopeRequest req)
+    /// <param name="lnWaterActivity">ln a_w of the free water with the request's inhibitor at weight fraction w, (w, T, P) → value; null without one.</param>
+    public static PhaseEnvelope Read(PropertyPackage pp, MaterialStream ms, string[] compounds, PhaseEnvelopeRequest req,
+        Func<double, double, double, double>? lnWaterActivity = null)
     {
         pp.CurrentMaterialStream = ms;
         var raw = (object[])pp.DW_ReturnPhaseEnvelope(new PhaseEnvelopeOptions());
@@ -63,8 +65,8 @@ public static class PhaseEnvelopes
         List<string> hs = [];
         double? hAt = null;
         string? hAtS = null;
-        List<double> hti = [];
-        double? depression = null, required = null;
+        List<double> hti = [], hpi = [];
+        double? depression = null, required = null, hAtInhibited = null;
         if (req.Hydrates)
         {
             if (!Hydrates.HasFormers(compounds.Where((c, i) => z[i] > 0)))
@@ -83,20 +85,48 @@ public static class PhaseEnvelopes
                 }
                 if (req.Pressure is { } at && at > 0 && Hydrates.FormationTemperature(pp, compounds, z, at) is { } here)
                     (hAt, hAtS) = (here.T, here.Structure);
-                var inhibitor = req.Inhibitor is { } name && HydrateInhibitors.All.Contains(name) ? name : null;
+                var inhibitor = req.Inhibitor is { } name && HydrateInhibitors.All.Contains(name) && lnWaterActivity is not null ? name : null;
+                // The inhibitor enters the equilibrium: the water's activity in the vdW–Platteeuw balance at every point.
+                (double T, string Structure)? Inhibited(double w, double p, double? guess) =>
+                    Hydrates.FormationTemperature(pp, compounds, z, p, guess, (t, pp2) => lnWaterActivity!(w, t, pp2));
                 if (inhibitor is not null && req.InhibitorWeightFraction > 0)
                 {
                     var w = req.InhibitorWeightFraction;
-                    if (w > HydrateInhibitors.Limit(inhibitor))
-                        warnings.Add($"Hydrates: {w:P0} {inhibitor} is beyond its correlation's range (up to {HydrateInhibitors.Limit(inhibitor):P0}); the depression is extrapolated.");
-                    depression = HydrateInhibitors.Depression(inhibitor, w);
-                    hti = ht.Select(t => t - depression.Value).ToList();
+                    for (var i = 0; i < hp.Count; i++)
+                        if (Inhibited(w, hp[i], i > 0 && hti.Count > 0 ? hti[^1] : ht[i] - 10) is { } h) { hti.Add(h.T); hpi.Add(hp[i]); }
+                    if (hAt is { } th0 && req.Pressure is { } at0 && Inhibited(w, at0, null) is { } hi)
+                    {
+                        hAtInhibited = hi.T;
+                        depression = th0 - hi.T;
+                    }
+                    else if (hti.Count > 0) depression = hpi.Select((p, i) => ht[hp.IndexOf(p)] - hti[i]).Average();
                 }
-                if (hAt is { } th && req.Temperature is { } ts)
-                    required = HydrateInhibitors.Required(inhibitor ?? HydrateInhibitors.Methanol, th - ts);
+                // The dose the stream's water needs: the weight fraction whose formation temperature is the stream's.
+                if (hAt is { } th && req.Temperature is { } ts && req.Pressure is { } ps)
+                {
+                    var dose = inhibitor ?? HydrateInhibitors.Methanol;
+                    if (th <= ts) required = 0;
+                    else if (lnWaterActivity is not null)
+                    {
+                        double lo = 0, hi = 0.85;
+                        if (Hydrates.FormationTemperature(pp, compounds, z, ps, null, (t, p2) => lnWaterActivity(hi, t, p2)) is { } strongest && strongest.T > ts) required = null;
+                        else
+                        {
+                            for (var k = 0; k < 30 && hi - lo > 1e-4; k++)
+                            {
+                                var m = 0.5 * (lo + hi);
+                                var tm = Hydrates.FormationTemperature(pp, compounds, z, ps, null, (t, p2) => lnWaterActivity(m, t, p2))?.T;
+                                if (tm is { } v && v > ts) lo = m; else hi = m;
+                            }
+                            required = hi;
+                        }
+                    }
+                    if (required is null && th > ts) warnings.Add($"Hydrates: no {dose} strength up to 85 wt % keeps this stream out of hydrates.");
+                }
                 warnings.Add(inhibitor is null || depression is null
                     ? "Hydrates: free water assumed present, with no inhibitor or salt (van der Waals–Platteeuw, Munck et al. 1988)."
-                    : $"Hydrates: free water assumed present (van der Waals–Platteeuw, Munck et al. 1988); the inhibited curve is {depression:0.#} K lower ({(inhibitor == HydrateInhibitors.Methanol ? "Nielsen–Bucklin" : "Hammerschmidt")}), no salt.");
+                    : $"Hydrates: free water assumed present (van der Waals–Platteeuw, Munck et al. 1988) with {req.InhibitorWeightFraction:P0} {inhibitor} in it, " +
+                      $"through the water's activity (DWSIM NRTL): {depression:0.#} K lower (GPSA correlation: {HydrateInhibitors.Depression(inhibitor, req.InhibitorWeightFraction):0.#} K); no salt.");
             }
         }
 
@@ -105,7 +135,8 @@ public static class PhaseEnvelopes
             QualityLines = lines,
             HydrateTemperature = ht, HydratePressure = hp, HydrateStructure = hs,
             HydrateTemperatureAtPressure = hAt, HydrateStructureAtPressure = hAtS,
-            InhibitedHydrateTemperature = hti, HydrateDepression = depression, RequiredInhibitorFraction = required,
+            InhibitedHydrateTemperature = hti, InhibitedHydratePressure = hpi, InhibitedHydrateTemperatureAtPressure = hAtInhibited,
+            HydrateDepression = depression, RequiredInhibitorFraction = required,
             BubbleTemperature = bt, BubblePressure = bp, DewTemperature = dt, DewPressure = dp,
             CriticalTemperature = tc, CriticalPressure = pc,
             CricondenbarTemperature = bar?.T, CricondenbarPressure = bar?.P,

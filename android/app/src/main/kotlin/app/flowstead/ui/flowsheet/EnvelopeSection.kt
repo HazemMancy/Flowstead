@@ -89,7 +89,11 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
                 )
             }
             env.hydrateDepression?.let { d ->
-                Text("The inhibitor lowers the hydrate curve by ${ValueFormat.number(d, 1)} K (dashed).", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "With the inhibitor in the water, hydrates form ${ValueFormat.number(d, 1)} K lower" +
+                        (env.inhibitedHydrateTemperatureAtPressure?.let { ti -> ", below ${ValueFormat.number(t.fromSi(ti, ctx), t.decimals)} ${t.symbol} at this stream's pressure" } ?: "") + " (dashed curve).",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
             env.requiredInhibitorFraction?.let { w ->
                 val what = HydrateInhibitors.label(lastInhibitor ?: HydrateInhibitors.METHANOL)

@@ -171,21 +171,33 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
         Assert.Equal(w, HydrateInhibitors.Required(inhibitor, dT), 0.002);
     }
 
-    [Fact]
-    public async Task MethanolShiftsTheCurveAndTheStreamGetsItsDose()
+    [Theory]
+    // In the equilibrium (water activity from DWSIM's NRTL) the depression should sit near the GPSA correlations,
+    // which fit measured data: 20 wt % methanol 9.5 K (Nielsen–Bucklin), 30 wt % MEG 9.0 K (Hammerschmidt).
+    [InlineData(HydrateInhibitors.Methanol, 0.20)]
+    [InlineData(HydrateInhibitors.Meg, 0.30)]
+    public async Task InhibitorEntersTheEquilibriumAndTheStreamGetsItsDose(string inhibitor, double w)
     {
         var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane"] };
         // Methane at 7.1 MPa and 5 °C: about 4.4 K inside the hydrate region without inhibitor.
         var env = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope",
             new PhaseEnvelopeRequest(fs, new() { ["Methane"] = 1.0 }, Hydrates: true, Pressure: 7.1e6, Temperature: 278.15,
-                Inhibitor: HydrateInhibitors.Methanol, InhibitorWeightFraction: 0.2), Json.Options));
-        Assert.Equal(9.47, env.HydrateDepression!.Value, 0.02);
-        Assert.Equal(env.HydrateTemperature.Count, env.InhibitedHydrateTemperature.Count);
-        Assert.All(env.HydrateTemperature.Zip(env.InhibitedHydrateTemperature), x => Assert.Equal(x.First - 9.47, x.Second, 0.02));
-        // The dose that brings the hydrate temperature down to the stream's.
-        var need = env.HydrateTemperatureAtPressure!.Value - 278.15;
-        Assert.Equal(HydrateInhibitors.Required(HydrateInhibitors.Methanol, need), env.RequiredInhibitorFraction!.Value, 1e-9);
-        Assert.InRange(env.RequiredInhibitorFraction!.Value, 0.05, 0.15);
+                Inhibitor: inhibitor, InhibitorWeightFraction: w), Json.Options));
+        var gpsa = HydrateInhibitors.Depression(inhibitor, w);
+        output.WriteLine($"{inhibitor} {w:P0}: depression {env.HydrateDepression:0.00} K (GPSA {gpsa:0.00} K); dose {env.RequiredInhibitorFraction:P1}; " + string.Join(" | ", env.Warnings));
+        Assert.Equal(gpsa, env.HydrateDepression!.Value, 2.0);
+        Assert.Equal(env.HydrateTemperatureAtPressure!.Value - env.HydrateDepression!.Value, env.InhibitedHydrateTemperatureAtPressure!.Value, 1e-9);
+        // The inhibited curve is below the free-water one above 0 °C; far below it, where the solution would freeze, ice
+        // governs and the inhibitor changes nothing (the gas–ice–hydrate line), so the curves meet there.
+        Assert.True(env.InhibitedHydratePressure.Count > 10);
+        for (var i = 0; i < env.InhibitedHydratePressure.Count; i++)
+        {
+            var free = env.HydrateTemperature[env.HydratePressure.IndexOf(env.InhibitedHydratePressure[i])];
+            Assert.True(env.InhibitedHydrateTemperature[i] <= free + 1e-6);
+            if (free > 275) Assert.True(env.InhibitedHydrateTemperature[i] < free - 5);
+        }
+        // The dose that brings the hydrate temperature down to the stream's 5 °C: a few wt %, less than the 20–30 % above.
+        Assert.InRange(env.RequiredInhibitorFraction!.Value, 0.03, w);
     }
 
     [Fact]

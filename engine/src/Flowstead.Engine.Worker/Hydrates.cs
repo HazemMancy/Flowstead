@@ -12,8 +12,10 @@ namespace Flowstead.Engine.Worker;
 /// constants C = (A/T)·exp(B/T) and the water reference properties of Munck, Skjold-Jørgensen and Rasmussen, Chem.
 /// Eng. Sci. 43 (1988) 2661 (as tabulated in Sloan and Koh, Clathrate Hydrates of Natural Gases). The guest
 /// fugacities are DWSIM's: the property package's fugacity coefficients of the hydrocarbon vapour at (T, P).
-/// Assumptions, stated wherever a result is shown: free water present at unit activity (no inhibitor, no salt);
-/// structures I and II both tried, the warmer one forms.
+/// Assumptions, stated wherever a result is shown: free water present, at unit activity or, with a thermodynamic
+/// inhibitor, at the activity <c>ln a_w</c> the caller gives (the aqueous phase's, from DWSIM's activity model; the
+/// solution is the water reference below 0 °C too, unless ice is more stable); no salt; structures I
+/// and II both tried, the warmer one forms.
 /// </summary>
 public static class Hydrates
 {
@@ -52,16 +54,17 @@ public static class Hydrates
 
     /// <summary>
     /// The hydrate formation temperature (K) at pressure <paramref name="p"/> (Pa) and the structure that forms, or
-    /// null when no structure forms between 230 K and 320 K (or the gas has no hydrate formers).
+    /// null when no structure forms between 200 K and 320 K (or the gas has no hydrate formers).
     /// </summary>
-    public static (double T, string Structure)? FormationTemperature(PropertyPackage pp, string[] compounds, double[] z, double p, double? guess = null)
+    public static (double T, string Structure)? FormationTemperature(PropertyPackage pp, string[] compounds, double[] z, double p, double? guess = null,
+        Func<double, double, double>? lnWaterActivity = null)
     {
         var dry = DryGas(compounds, z);
         if (dry is null) return null;
         (double, string)? best = null;
         foreach (var s in new[] { SI, SII })
         {
-            double G(double t) => Imbalance(pp, compounds, dry, s, t, p);
+            double G(double t) => Imbalance(pp, compounds, dry, s, t, p, lnWaterActivity);
             if (Bracket(G, guess) is not var (a, b)) continue;
             // G(a) ≥ 0 (hydrate stable, colder), G(b) < 0; bisect to 0.001 K.
             for (var i = 0; i < 40 && b - a > 1e-3; i++)
@@ -75,12 +78,12 @@ public static class Hydrates
         return best;
     }
 
-    /// <summary>A 2 K interval where G changes sign (cold side ≥ 0), near <paramref name="guess"/> if given; null if none in 230–320 K.</summary>
+    /// <summary>A 2 K interval where G changes sign (cold side ≥ 0), near <paramref name="guess"/> if given; null if none in 200–320 K.</summary>
     private static (double, double)? Bracket(Func<double, double> g, double? guess)
     {
         if (guess is { } t0 && t0 > 232 && t0 < 318 && g(t0 - 1) >= 0 && g(t0 + 1) < 0) return (t0 - 1, t0 + 1);
         if (!(g(320) < 0)) return null;
-        for (var t = 318.0; t >= 230; t -= 2)
+        for (var t = 318.0; t >= 200; t -= 2)
         {
             if (g(t) >= 0) return (t, t + 2);
         }
@@ -97,7 +100,7 @@ public static class Hydrates
     }
 
     /// <summary>Δμ(hydrate)/RT − Δμ(water)/RT: positive where hydrate is the stable water phase.</summary>
-    private static double Imbalance(PropertyPackage pp, string[] compounds, double[] dry, Structure s, double t, double p)
+    private static double Imbalance(PropertyPackage pp, string[] compounds, double[] dry, Structure s, double t, double p, Func<double, double, double>? lnAw)
     {
         // Guest fugacities (atm) in the vapour that is in contact with the water, from DWSIM's flash and EOS.
         var y = Vapour(pp, dry, t, p);
@@ -112,7 +115,11 @@ public static class Hydrates
             if (large is not null) SumLarge += large[0] / t * Math.Exp(large[1] / t) * f;
         }
         var hydrate = s.NuSmall * Math.Log(1 + SumSmall) + s.NuLarge * Math.Log(1 + SumLarge);
-        return hydrate - WaterSide(s, t, p);
+        if (lnAw is null) return hydrate - WaterSide(s, t, p);
+        // Inhibited water: the solution, its chemical potential lowered by ln a_w (< 0); below 0 °C ice instead when ice
+        // is the more stable (the solution would freeze), i.e. whichever water phase gives the larger Δμ.
+        var solution = LiquidWaterSide(s, t, p) - lnAw(t, p);
+        return hydrate - (t < T0 ? Math.Max(solution, WaterSide(s, t, p)) : solution);
     }
 
     /// <summary>Δμ of water (empty lattice − ice or liquid) / RT at (T, P), unit water activity.</summary>
@@ -123,6 +130,12 @@ public static class Hydrates
             // Ice: constant Δh and Δv.
             return s.Dmu0 / (R * T0) + s.Dh0 / R * (1 / t - 1 / T0) + s.Dv0 * p / (R * t);
         }
+        return LiquidWaterSide(s, t, p);
+    }
+
+    /// <summary>Δμ of water (empty lattice − pure liquid water) / RT at (T, P), above or below 0 °C.</summary>
+    private static double LiquidWaterSide(Structure s, double t, double p)
+    {
         // Liquid water: Δh(T) = Δh0 − ΔH_melt + ∫ΔCp dT; Δv = Δv0 + Δv_melt.
         double Dh(double tt) => s.Dh0 - MeltEnthalpy + (-38.12) * (tt - T0) + 0.141 / 2 * (tt - T0) * (tt - T0);
         // −∫ Δh/(RT²) dT from T0 to T, by Simpson's rule (smooth integrand).

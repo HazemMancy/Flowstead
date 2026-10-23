@@ -125,8 +125,10 @@ data class PhaseEnvelope(
     val hydrateStructure: List<String> = emptyList(),
     val hydrateTemperatureAtPressure: Double? = null,
     val hydrateStructureAtPressure: String? = null,
-    /** With an inhibitor: the curve lowered by [hydrateDepression] (K), at [hydratePressure]. */
+    /** With an inhibitor in the equilibrium (the water's activity): its curve, at its own pressures, and [hydrateDepression] (K) at the stream's pressure. */
     val inhibitedHydrateTemperature: List<Double> = emptyList(),
+    val inhibitedHydratePressure: List<Double> = emptyList(),
+    val inhibitedHydrateTemperatureAtPressure: Double? = null,
     val hydrateDepression: Double? = null,
     /** Weight fraction of the inhibitor (methanol if none chosen) the stream's free water needs; 0 when it is warm enough. */
     val requiredInhibitorFraction: Double? = null,

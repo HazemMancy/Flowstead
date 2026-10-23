@@ -84,7 +84,7 @@ object Plots {
             env.qualityLines.mapNotNull { ok(PlotSeries("VF ${"%.2f".format(java.util.Locale.ROOT, it.quality).trimEnd('0').trimEnd('.')}", it.temperature, it.pressure, dashed = true)) } +
             listOfNotNull(
                 ok(PlotSeries("Hydrate formation", env.hydrateTemperature, env.hydratePressure)),
-                ok(PlotSeries("Hydrate, inhibited", env.inhibitedHydrateTemperature, env.hydratePressure, dashed = true)),
+                ok(PlotSeries("Hydrate, inhibited", env.inhibitedHydrateTemperature, env.inhibitedHydratePressure, dashed = true)),
             )
         val markers = listOfNotNull(
             point("Critical point", env.criticalTemperature, env.criticalPressure),

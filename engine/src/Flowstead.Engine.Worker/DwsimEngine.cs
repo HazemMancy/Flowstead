@@ -342,7 +342,31 @@ public sealed class DwsimEngine
     public PhaseEnvelope PhaseEnvelope(PhaseEnvelopeRequest req)
     {
         var (pp, ms) = SingleStream(req.Flowsheet, req.Composition);
-        return PhaseEnvelopes.Read(pp, ms, req.Flowsheet.Compounds.ToArray(), req);
+        var lnAw = req.Hydrates && req.Pressure is not null || req.Inhibitor is not null ? WaterActivity(req.Inhibitor ?? HydrateInhibitors.Methanol) : null;
+        return PhaseEnvelopes.Read(pp, ms, req.Flowsheet.Compounds.ToArray(), req, lnAw);
+    }
+
+    /// <summary>
+    /// ln a_w of water with a weight fraction w of the inhibitor (salt- and gas-free aqueous phase), from DWSIM's NRTL
+    /// with its databank parameters: x_w γ_w, γ_w = φ_w(mixture)/φ_w(pure water) at (T, P). Null when DWSIM lacks the compound.
+    /// </summary>
+    private Func<double, double, double, double>? WaterActivity(string inhibitor)
+    {
+        var name = HydrateInhibitors.Compound(inhibitor);
+        if (!_automation.AvailableCompounds.TryGetValue(name, out var c) || !_automation.AvailableCompounds.ContainsKey("Water")) return null;
+        var fluid = new Flowsheet { PropertyPackage = "NRTL", Compounds = ["Water", name] };
+        var (pp, _) = SingleStream(fluid, new() { ["Water"] = 0.5, [name] = 0.5 });
+        var mi = c.Molar_Weight;
+        return (w, t, p) =>
+        {
+            if (!(w > 0)) return 0;
+            var nw = (1 - w) / 18.015;
+            var xw = nw / (nw + w / mi);
+            var mix = (double[])pp.DW_CalcFugCoeff(new[] { xw, 1 - xw }, t, p, State.Liquid);
+            var pure = (double[])pp.DW_CalcFugCoeff(new[] { 1.0, 0.0 }, t, p, State.Liquid);
+            var lnGamma = Math.Log(mix[0] / pure[0]);
+            return Math.Log(xw) + (double.IsFinite(lnGamma) ? lnGamma : 0);
+        };
     }
 
     /// <summary>A PVT laboratory experiment (D53): DWSIM flashes of one cell of fluid, with the lab's bookkeeping.</summary>

@@ -38,6 +38,6 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - The thermodynamics are DWSIM's: the same Peng–Robinson and SRK equations, but DWSIM's pure-component data and kij databank (HYSYS's are proprietary). The plain-EOS option and your own kij (for instance HYSYS's) bring the results together.
 - The valve library gives typical IEC factors by valve type, not a maker's catalogue (no Fp or inherent characteristic).
 - Pump and compressor curves join your points with straight lines (HYSYS fits a polynomial).
-- Hydrate inhibition (methanol, glycols) is by the GPSA correlations, not in the phase equilibrium; salts are ignored.
+- Hydrate inhibition enters the equilibrium through the water's activity (DWSIM's NRTL), not HYSYS's own model; salts and inhibitor losses to the gas are not counted.
 - PVT regression tunes the plus fraction's Tc, Pc, ω and its kij with methane (no volume-shift or splitting).
 - No dynamics: steady state only (depressuring is the one time-stepping calculation).
