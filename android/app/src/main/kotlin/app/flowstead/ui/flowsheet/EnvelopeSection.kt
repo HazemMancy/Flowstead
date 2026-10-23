@@ -30,6 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.flowstead.core.api.PhaseEnvelope
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import app.flowstead.core.api.HydrateInhibitors
 import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.Plots
@@ -56,6 +60,8 @@ data class EnvelopeUi(
 @Composable
 internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: EnvelopeUi?, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
     SectionLabel("Phase envelope")
+    // The inhibitor of the last trace, for the dose sentence (methanol when none was chosen).
+    var lastInhibitor by rememberSaveable { mutableStateOf<String?>(null) }
     val env = state?.envelope
     if (env != null) {
         // The stream's own state, from the same solve, when it is current.
@@ -82,6 +88,17 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
                     modifier = Modifier.testTag("hydrate_temperature"),
                 )
             }
+            env.hydrateDepression?.let { d ->
+                Text("The inhibitor lowers the hydrate curve by ${ValueFormat.number(d, 1)} K (dashed).", style = MaterialTheme.typography.bodyMedium)
+            }
+            env.requiredInhibitorFraction?.let { w ->
+                val what = HydrateInhibitors.label(lastInhibitor ?: HydrateInhibitors.METHANOL)
+                Text(
+                    if (w <= 0) "This stream is warmer than its hydrate temperature: no inhibitor needed."
+                    else "To stay out of hydrates at this stream's temperature, its free water needs ${ValueFormat.number(w * 100, 1)} wt % $what.",
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inhibitor_needed"),
+                )
+            }
         }
         env.warnings.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText) }
     } else {
@@ -90,6 +107,8 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
     state?.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.error) }
     // What to draw besides the envelope, as HYSYS's envelope utility: quality lines and the hydrate curve.
     var hydrates by rememberSaveable { mutableStateOf(true) }
+    var inhibitor by rememberSaveable { mutableStateOf<String?>(null) }
+    var inhibitorPercent by rememberSaveable { mutableStateOf("") }
     var qualities by remember { mutableStateOf(listOf(0.5)) }
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         FilterChip(selected = hydrates, onClick = { hydrates = !hydrates }, label = { Text("Hydrate curve") }, modifier = Modifier.testTag("envelope_hydrates"))
@@ -101,9 +120,30 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
             )
         }
     }
+    if (hydrates) {
+        // Thermodynamic inhibitor in the free water (methanol: Nielsen–Bucklin; glycols: Hammerschmidt).
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilterChip(selected = inhibitor == null, onClick = { inhibitor = null }, label = { Text("No inhibitor") })
+            for (id in HydrateInhibitors.ALL) {
+                FilterChip(selected = inhibitor == id, onClick = { inhibitor = id }, label = { Text(HydrateInhibitors.label(id)) }, modifier = Modifier.testTag("inhibitor_$id"))
+            }
+        }
+        if (inhibitor != null) {
+            OutlinedTextField(
+                value = inhibitorPercent,
+                onValueChange = { inhibitorPercent = it },
+                label = { Text("${HydrateInhibitors.label(inhibitor!!)} in the free water, wt %") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                isError = inhibitorPercent.isNotBlank() && inhibitorPercent.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 && it < 100 } == null,
+                modifier = Modifier.fillMaxWidth().testTag("inhibitor_percent"),
+            )
+        }
+    }
+    val fraction = inhibitorPercent.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 && it < 100 }?.div(100) ?: 0.0
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(
-            onClick = { actions.phaseEnvelope(obj.id, qualities, hydrates) },
+            onClick = { lastInhibitor = inhibitor; actions.phaseEnvelope(obj.id, qualities, hydrates, inhibitor, if (inhibitor == null) 0.0 else fraction) },
             enabled = state?.loading != true,
             modifier = Modifier.heightIn(min = 48.dp).testTag("phase_envelope"),
         ) { Text(if (env == null) "Trace phase envelope" else "Trace again") }

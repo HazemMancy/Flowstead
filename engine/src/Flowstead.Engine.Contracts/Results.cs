@@ -80,14 +80,74 @@ public static class ProfileKeys
 /// <summary>
 /// Phase envelope of one composition: the flowsheet gives the package, compounds and settings. <see cref="Qualities"/>:
 /// vapour fractions to draw quality lines for (none when empty). <see cref="Hydrates"/>: also trace the hydrate
-/// formation curve (D52). <see cref="Pressure"/>: the stream's pressure, for its own hydrate formation temperature.
+/// formation curve (D52). <see cref="Pressure"/>: the stream's pressure, for its own hydrate formation temperature;
+/// with <see cref="Temperature"/>, the inhibitor the stream needs. <see cref="Inhibitor"/> (<see cref="HydrateInhibitors"/>)
+/// at <see cref="InhibitorWeightFraction"/> in the free water: the inhibited curve too.
 /// </summary>
 public sealed record PhaseEnvelopeRequest(
     Flowsheet Flowsheet,
     Dictionary<string, double> Composition,
     List<double>? Qualities = null,
     bool Hydrates = false,
-    double? Pressure = null);
+    double? Pressure = null,
+    double? Temperature = null,
+    string? Inhibitor = null,
+    double InhibitorWeightFraction = 0);
+
+/// <summary>
+/// Thermodynamic hydrate inhibitors in the free water (D52): the depression of the hydrate formation temperature,
+/// by Nielsen–Bucklin for methanol (ΔT = −72 ln x_water, K; GPSA, good to about 0.8 mole fraction) and Hammerschmidt
+/// for the glycols (ΔT = 1297 W / (M (100 − W)), K, W in wt %; GPSA, good to about 70 wt %).
+/// </summary>
+public static class HydrateInhibitors
+{
+    public const string Methanol = "methanol";
+    public const string Meg = "meg";
+    public const string Deg = "deg";
+    public const string Teg = "teg";
+    public static readonly string[] All = [Methanol, Meg, Deg, Teg];
+    private const double WaterMw = 18.015;
+
+    public static double MolecularWeight(string inhibitor) => inhibitor switch
+    {
+        Methanol => 32.04,
+        Meg => 62.07,
+        Deg => 106.12,
+        Teg => 150.17,
+        _ => throw new ArgumentException($"Unknown inhibitor '{inhibitor}'"),
+    };
+
+    /// <summary>Upper weight fraction in the water where the correlation is used.</summary>
+    public static double Limit(string inhibitor) => inhibitor == Methanol ? 0.85 : 0.7;
+
+    /// <summary>Depression of the hydrate temperature (K) at weight fraction <paramref name="w"/> of inhibitor in the water.</summary>
+    public static double Depression(string inhibitor, double w)
+    {
+        if (!(w > 0)) return 0;
+        var m = MolecularWeight(inhibitor);
+        if (inhibitor == Methanol)
+        {
+            var nw = (1 - w) / WaterMw;
+            return -72 * Math.Log(nw / (nw + w / m));
+        }
+        return 1297 * (100 * w) / (m * (100 - 100 * w));
+    }
+
+    /// <summary>The weight fraction that depresses the hydrate temperature by <paramref name="dT"/> K (the inverse of <see cref="Depression"/>).</summary>
+    public static double Required(string inhibitor, double dT)
+    {
+        if (!(dT > 0)) return 0;
+        var m = MolecularWeight(inhibitor);
+        if (inhibitor == Methanol)
+        {
+            // x_water = exp(−ΔT/72); moles of methanol per mole of water, then the mass fraction.
+            var xw = Math.Exp(-dT / 72);
+            var perWater = (1 - xw) / xw * m / WaterMw;
+            return perWater / (1 + perWater);
+        }
+        return m * dT / (1297 + m * dT);
+    }
+}
 
 /// <summary>PVT experiment names (D53).</summary>
 public static class PvtExperiments
@@ -188,6 +248,11 @@ public sealed record PhaseEnvelope
     /// <summary>Hydrate formation temperature at the requested pressure, and its structure.</summary>
     public double? HydrateTemperatureAtPressure { get; init; }
     public string? HydrateStructureAtPressure { get; init; }
+    /// <summary>With an inhibitor: the curve shifted by its depression, and the depression (K).</summary>
+    public List<double> InhibitedHydrateTemperature { get; init; } = [];
+    public double? HydrateDepression { get; init; }
+    /// <summary>With the stream's temperature: the weight fraction of the inhibitor (methanol if none chosen) its free water needs to stay out of hydrates (0 when it is already warmer).</summary>
+    public double? RequiredInhibitorFraction { get; init; }
     public List<string> Warnings { get; init; } = [];
 }
 

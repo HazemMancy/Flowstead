@@ -498,14 +498,16 @@ class FlowsheetViewModel @Inject constructor(
     }
 
     /** The stream's solved pressure, when the results are current. */
-    private fun streamPressure(fs: Flowsheet, streamId: String): Double? =
-        currentSolve?.takeIf { it.modelHash == fs.modelHash() }?.result?.objects?.get(streamId)?.properties?.get("pressure")
+    private fun streamPressure(fs: Flowsheet, streamId: String): Double? = streamProperty(fs, streamId, "pressure")
+
+    private fun streamProperty(fs: Flowsheet, streamId: String, key: String): Double? =
+        currentSolve?.takeIf { it.modelHash == fs.modelHash() }?.result?.objects?.get(streamId)?.properties?.get(key)
 
     /**
      * Traces a stream's phase envelope (D50) with the chosen quality lines and the hydrate curve (D52). The engine returns
      * every point; nothing is drawn that it did not trace.
      */
-    fun phaseEnvelope(streamId: String, qualities: List<Double> = emptyList(), hydrates: Boolean = false) {
+    fun phaseEnvelope(streamId: String, qualities: List<Double> = emptyList(), hydrates: Boolean = false, inhibitor: String? = null, inhibitorFraction: Double = 0.0) {
         val fs = current ?: return
         if (local.value.envelope?.loading == true) return
         val (composition, why) = streamComposition(fs, streamId)
@@ -516,7 +518,10 @@ class FlowsheetViewModel @Inject constructor(
         local.update { it.copy(envelope = EnvelopeUi(streamId, loading = true, envelope = it.envelope?.takeIf { e -> e.streamId == streamId }?.envelope)) }
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
-            val request = PhaseEnvelopeRequest(fs, composition, qualities, hydrates, streamPressure(fs, streamId))
+            val request = PhaseEnvelopeRequest(
+                fs, composition, qualities, hydrates, streamPressure(fs, streamId), streamProperty(fs, streamId, "temperature"),
+                inhibitor.takeIf { inhibitorFraction > 0 }, inhibitorFraction,
+            )
             val next = if (url.isBlank()) EnvelopeUi(streamId, error = "Set the engine address in Settings")
             else when (val r = engine.phaseEnvelope(url, secrets.apiKey(), request)) {
                 is EngineResult.Ok -> EnvelopeUi(streamId, envelope = r.value)

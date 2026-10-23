@@ -250,7 +250,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun deleteReaction(id: String) = vm.deleteReaction(id)
             override fun setPipeSize(id: String, nps: String?, schedule: String?) = vm.setPipeSize(id, nps, schedule)
             override fun setCurve(id: String, curve: PerformanceCurve?) = vm.setCurve(id, curve)
-            override fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean) = vm.phaseEnvelope(streamId, qualities, hydrates)
+            override fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean, inhibitor: String?, inhibitorFraction: Double) =
+                vm.phaseEnvelope(streamId, qualities, hydrates, inhibitor, inhibitorFraction)
             override fun openPvt(streamId: String) = vm.openPvt(streamId)
             override fun editSizingCriteria() = vm.openSizingCriteria()
             override fun openDataSheet(id: String) = vm.openDataSheet(id)

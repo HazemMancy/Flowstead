@@ -159,6 +159,35 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
         Assert.Equal(measured, env.HydrateTemperatureAtPressure!.Value, 1.5);
     }
 
+    [Theory]
+    // GPSA: 20 wt % methanol, x_water 0.877, Nielsen–Bucklin −72 ln x = 9.47 K (Hammerschmidt would give 10.1 K);
+    // 30 wt % MEG, Hammerschmidt 1297 × 30 / (62.07 × 70) = 8.96 K.
+    [InlineData(HydrateInhibitors.Methanol, 0.20, 9.47)]
+    [InlineData(HydrateInhibitors.Meg, 0.30, 8.96)]
+    [InlineData(HydrateInhibitors.Teg, 0.30, 3.70)]
+    public void InhibitorsDepressTheHydrateTemperature(string inhibitor, double w, double dT)
+    {
+        Assert.Equal(dT, HydrateInhibitors.Depression(inhibitor, w), 0.02);
+        Assert.Equal(w, HydrateInhibitors.Required(inhibitor, dT), 0.002);
+    }
+
+    [Fact]
+    public async Task MethanolShiftsTheCurveAndTheStreamGetsItsDose()
+    {
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane"] };
+        // Methane at 7.1 MPa and 5 °C: about 4.4 K inside the hydrate region without inhibitor.
+        var env = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope",
+            new PhaseEnvelopeRequest(fs, new() { ["Methane"] = 1.0 }, Hydrates: true, Pressure: 7.1e6, Temperature: 278.15,
+                Inhibitor: HydrateInhibitors.Methanol, InhibitorWeightFraction: 0.2), Json.Options));
+        Assert.Equal(9.47, env.HydrateDepression!.Value, 0.02);
+        Assert.Equal(env.HydrateTemperature.Count, env.InhibitedHydrateTemperature.Count);
+        Assert.All(env.HydrateTemperature.Zip(env.InhibitedHydrateTemperature), x => Assert.Equal(x.First - 9.47, x.Second, 0.02));
+        // The dose that brings the hydrate temperature down to the stream's.
+        var need = env.HydrateTemperatureAtPressure!.Value - 278.15;
+        Assert.Equal(HydrateInhibitors.Required(HydrateInhibitors.Methanol, need), env.RequiredInhibitorFraction!.Value, 1e-9);
+        Assert.InRange(env.RequiredInhibitorFraction!.Value, 0.05, 0.15);
+    }
+
     [Fact]
     public async Task QualityLinesLieBetweenBubbleAndDewAndTheHydrateCurveRisesWithPressure()
     {

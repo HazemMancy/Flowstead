@@ -63,6 +63,8 @@ public static class PhaseEnvelopes
         List<string> hs = [];
         double? hAt = null;
         string? hAtS = null;
+        List<double> hti = [];
+        double? depression = null, required = null;
         if (req.Hydrates)
         {
             if (!Hydrates.HasFormers(compounds.Where((c, i) => z[i] > 0)))
@@ -81,7 +83,20 @@ public static class PhaseEnvelopes
                 }
                 if (req.Pressure is { } at && at > 0 && Hydrates.FormationTemperature(pp, compounds, z, at) is { } here)
                     (hAt, hAtS) = (here.T, here.Structure);
-                warnings.Add("Hydrates: free water assumed present, with no inhibitor or salt (van der Waals–Platteeuw, Munck et al. 1988).");
+                var inhibitor = req.Inhibitor is { } name && HydrateInhibitors.All.Contains(name) ? name : null;
+                if (inhibitor is not null && req.InhibitorWeightFraction > 0)
+                {
+                    var w = req.InhibitorWeightFraction;
+                    if (w > HydrateInhibitors.Limit(inhibitor))
+                        warnings.Add($"Hydrates: {w:P0} {inhibitor} is beyond its correlation's range (up to {HydrateInhibitors.Limit(inhibitor):P0}); the depression is extrapolated.");
+                    depression = HydrateInhibitors.Depression(inhibitor, w);
+                    hti = ht.Select(t => t - depression.Value).ToList();
+                }
+                if (hAt is { } th && req.Temperature is { } ts)
+                    required = HydrateInhibitors.Required(inhibitor ?? HydrateInhibitors.Methanol, th - ts);
+                warnings.Add(inhibitor is null || depression is null
+                    ? "Hydrates: free water assumed present, with no inhibitor or salt (van der Waals–Platteeuw, Munck et al. 1988)."
+                    : $"Hydrates: free water assumed present (van der Waals–Platteeuw, Munck et al. 1988); the inhibited curve is {depression:0.#} K lower ({(inhibitor == HydrateInhibitors.Methanol ? "Nielsen–Bucklin" : "Hammerschmidt")}), no salt.");
             }
         }
 
@@ -90,6 +105,7 @@ public static class PhaseEnvelopes
             QualityLines = lines,
             HydrateTemperature = ht, HydratePressure = hp, HydrateStructure = hs,
             HydrateTemperatureAtPressure = hAt, HydrateStructureAtPressure = hAtS,
+            InhibitedHydrateTemperature = hti, HydrateDepression = depression, RequiredInhibitorFraction = required,
             BubbleTemperature = bt, BubblePressure = bp, DewTemperature = dt, DewPressure = dp,
             CriticalTemperature = tc, CriticalPressure = pc,
             CricondenbarTemperature = bar?.T, CricondenbarPressure = bar?.P,

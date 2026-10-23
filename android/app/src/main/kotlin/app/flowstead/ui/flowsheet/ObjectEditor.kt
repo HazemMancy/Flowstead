@@ -129,7 +129,7 @@ interface EditorActions {
     /** Sets or clears a pump or compressor performance curve (D48). */
     fun setCurve(id: String, curve: PerformanceCurve?) = Unit
     /** Asks the engine for this stream's phase envelope (D50, D52); the answer arrives as [EnvelopeUi]. */
-    fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean) = Unit
+    fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean, inhibitor: String? = null, inhibitorFraction: Double = 0.0) = Unit
     /** Opens the PVT laboratory (D53) on this stream's composition. */
     fun openPvt(streamId: String) = Unit
 }

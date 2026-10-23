@@ -82,7 +82,10 @@ object Plots {
         // Quality lines (D52) dotted, then the hydrate curve (D52), each only where the engine traced it.
         val series = envelope +
             env.qualityLines.mapNotNull { ok(PlotSeries("VF ${"%.2f".format(java.util.Locale.ROOT, it.quality).trimEnd('0').trimEnd('.')}", it.temperature, it.pressure, dashed = true)) } +
-            listOfNotNull(ok(PlotSeries("Hydrate formation", env.hydrateTemperature, env.hydratePressure)))
+            listOfNotNull(
+                ok(PlotSeries("Hydrate formation", env.hydrateTemperature, env.hydratePressure)),
+                ok(PlotSeries("Hydrate, inhibited", env.inhibitedHydrateTemperature, env.hydratePressure, dashed = true)),
+            )
         val markers = listOfNotNull(
             point("Critical point", env.criticalTemperature, env.criticalPressure),
             point("Cricondenbar", env.cricondenbarTemperature, env.cricondenbarPressure),

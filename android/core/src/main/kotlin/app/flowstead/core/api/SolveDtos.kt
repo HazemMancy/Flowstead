@@ -78,7 +78,29 @@ data class PhaseEnvelopeRequest(
     val qualities: List<Double> = emptyList(),
     val hydrates: Boolean = false,
     val pressure: Double? = null,
+    /** The stream's temperature, for the inhibitor it needs. */
+    val temperature: Double? = null,
+    /** [HydrateInhibitors] at [inhibitorWeightFraction] in the free water: the inhibited curve too. */
+    val inhibitor: String? = null,
+    val inhibitorWeightFraction: Double = 0.0,
 )
+
+/** Thermodynamic hydrate inhibitors (D52); same strings as the engine. */
+object HydrateInhibitors {
+    const val METHANOL = "methanol"
+    const val MEG = "meg"
+    const val DEG = "deg"
+    const val TEG = "teg"
+    val ALL = listOf(METHANOL, MEG, DEG, TEG)
+
+    fun label(id: String): String = when (id) {
+        METHANOL -> "Methanol"
+        MEG -> "MEG"
+        DEG -> "DEG"
+        TEG -> "TEG"
+        else -> id
+    }
+}
 
 /** A line of constant vapour fraction (K, Pa). */
 @Serializable
@@ -103,6 +125,11 @@ data class PhaseEnvelope(
     val hydrateStructure: List<String> = emptyList(),
     val hydrateTemperatureAtPressure: Double? = null,
     val hydrateStructureAtPressure: String? = null,
+    /** With an inhibitor: the curve lowered by [hydrateDepression] (K), at [hydratePressure]. */
+    val inhibitedHydrateTemperature: List<Double> = emptyList(),
+    val hydrateDepression: Double? = null,
+    /** Weight fraction of the inhibitor (methanol if none chosen) the stream's free water needs; 0 when it is warm enough. */
+    val requiredInhibitorFraction: Double? = null,
     val warnings: List<String> = emptyList(),
 )
 
