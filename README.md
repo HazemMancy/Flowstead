@@ -14,16 +14,20 @@ In short:
 
 - **Beyond the DWSIM engine:** equipment that checks itself after every solve (pump
   vapour, compressor liquid, NPSH, temperature crosses, choked lines); IEC 60534
-  valve sizing; exchanger zone analysis; pump and compressor curves; hydrate
-  curves; a PVT laboratory (CCE, CVD, differential liberation, separator test);
+  valve sizing with a valve library; exchanger zone analysis; pump and compressor
+  curves (multi-speed, polynomial fit, speed from pressure); hydrate curves with
+  methanol/glycol inhibition; a PVT laboratory with regression to lab data; safety
+  analysis (API 520/521/526 relief sizing, line checks, two-zone depressuring);
   case studies, what-if sliders and plots; corrected densities and phase splits;
   line sizing to ASME B36.10M/B36.19M; data sheets, PFD and H&MB as PDF or Excel.
 - **Like HYSYS:** Hold/Active solver, stream workbook by phase, specification
-  status, free-water flash, HYSYS-matching density and viscosity options,
-  hypotheticals, Adjust/Set, envelope utility with quality lines and hydrates.
-- **Still different from HYSYS:** DWSIM's thermodynamics; one generic valve
-  trim; single-speed curves; hydrates without inhibitors; no PVT regression; no
-  dynamics. Every difference is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+  status, free-water flash, HYSYS-matching density and viscosity options, editable
+  kij matrix, hypotheticals, Adjust/Set, envelope utility with quality lines and
+  hydrates, relief scenarios from the flowsheet, blowdown, variable-speed machines.
+- **Still different from HYSYS:** DWSIM's pure-component data and kij databank
+  (HYSYS's are proprietary; enter HYSYS's kij to match); typical rather than
+  catalogue valve factors; Flowstead's own hydrate model; no dynamics. Every
+  difference is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ```
 engine/        .NET 8 service wrapping DWSIM (Linux, Docker)
