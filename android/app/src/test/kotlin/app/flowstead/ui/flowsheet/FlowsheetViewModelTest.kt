@@ -23,6 +23,8 @@ import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
 import app.flowstead.core.model.SpecStatus
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
@@ -237,6 +239,8 @@ class FlowsheetViewModelTest {
         )
         engine.reliefResult = app.flowstead.data.engine.EngineResult.Ok(app.flowstead.core.api.ReliefResult(orifice = "K", valves = 1))
         val vm = vm(fs)
+        val messages = mutableListOf<String>()
+        backgroundScope.launch { vm.messages.collect { messages += it } }
         vm.ui()
         vm.solve()
         vm.ui { it.results.status != null }
@@ -246,7 +250,9 @@ class FlowsheetViewModelTest {
         ))
         vm.ui { it.flowsheet.safety != null }
         vm.runRelief("d")
-        val sized = vm.ui { it.flowsheet.safety?.devices?.single()?.result != null }
+        // Fails with the view model's messages (a problem or the engine's reason) rather than hanging.
+        val sized = withTimeoutOrNull(60_000) { vm.ui { it.flowsheet.safety?.devices?.single()?.result != null } }
+            ?: error("Not sized; messages: $messages")
         assertEquals("K", sized.flowsheet.safety!!.devices.single().result!!.orifice)
         // The engine got the feed's fluid and flow for the blocked outlet.
         val sent = engine.reliefs.single().device
