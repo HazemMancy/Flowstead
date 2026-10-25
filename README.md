@@ -1,4 +1,5 @@
 # Flowstead
+Developed by Hazem ElMancy.
 
 **Steady-state process simulation, in your pocket.**
 
