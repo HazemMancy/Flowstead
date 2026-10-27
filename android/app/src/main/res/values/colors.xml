@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand (decision D37): Precision colours, Aurora mark. Mirrors ui/theme/Color.kt. -->
-    <color name="brand_paper">#FFF6F6F3</color>
-    <color name="brand_ink">#FF111113</color>
-    <color name="brand_signal">#FFFF5B1F</color>
-    <color name="brand_mark_tile">#FF0E1322</color>
-    <color name="brand_violet">#FF8B5CF6</color>
-    <color name="brand_cyan">#FF22D3EE</color>
+    <!-- ThermoDock brand (decision D64). Mirrors ui/theme/Color.kt. -->
+    <color name="brand_paper">#FFF3F6FA</color>
+    <color name="brand_ink">#FF0B1930</color>
+    <color name="brand_mark_tile">#FF0B1930</color>
+    <color name="brand_teal">#FF19BFAE</color>
 </resources>

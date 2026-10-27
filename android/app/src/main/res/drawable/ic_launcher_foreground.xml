@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive-icon foreground: the mark's line and nodes (bounds 19..85 × 23..81 on its 104 grid),
-     scaled ×0.62 and centred, well inside the 66 dp safe zone. The tile colour is the background layer. -->
+<!-- Adaptive-icon foreground: the mark without its tile (the background layer is the navy tile), scaled ×0.62 and centred inside the 66 dp safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
@@ -13,23 +11,18 @@
         android:translateX="21.76"
         android:translateY="21.76">
         <path
-            android:pathData="M26,74C26,44 50,40 52,52C54,64 78,60 78,30"
-            android:strokeWidth="9"
-            android:strokeLineCap="round">
-            <aapt:attr name="android:strokeColor">
-                <gradient
-                    android:type="linear"
-                    android:startX="19" android:startY="81"
-                    android:endX="85" android:endY="23"
-                    android:startColor="@color/brand_violet"
-                    android:endColor="@color/brand_cyan" />
-            </aapt:attr>
-        </path>
+            android:pathData="M21,30H37Q44,30 48,35L56,46M21,74H37Q44,74 48,69L56,58"
+            android:strokeWidth="10.5"
+            android:strokeColor="@color/brand_teal"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
         <path
-            android:fillColor="@color/brand_violet"
-            android:pathData="M26,74m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+            android:pathData="M72.5,52H85"
+            android:strokeWidth="10.5"
+            android:strokeColor="@color/brand_teal"
+            android:strokeLineCap="round" />
         <path
-            android:fillColor="@color/brand_cyan"
-            android:pathData="M78,30m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M61,52m-8.5,0a8.5,8.5 0,1 1,17 0a8.5,8.5 0,1 1,-17 0" />
     </group>
 </vector>

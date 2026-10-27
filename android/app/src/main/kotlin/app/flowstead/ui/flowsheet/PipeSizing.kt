@@ -262,7 +262,7 @@ fun SizingCriteriaSheet(
             ) { v -> set { it.copy(erosionalC = v) } }
             Calculated(
                 "API RP 14E: v_e = C / √ρ_m (ft/s, ρ_m in lb/ft³), with the no-slip mixture density. " +
-                    "Flowstead checks the highest v·√ρ_m along the line, i.e. the highest ρv².",
+                    "ThermoDock checks the highest v·√ρ_m along the line, i.e. the highest ρv².",
             )
             TextButton(onClick = close, modifier = Modifier.align(Alignment.End)) { Text("Done") }
         }

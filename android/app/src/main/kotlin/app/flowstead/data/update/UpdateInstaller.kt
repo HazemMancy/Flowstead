@@ -97,7 +97,7 @@ class UpdateInstaller @Inject constructor(
                     error("The download is damaged (checksum mismatch); try again")
                 }
                 val info = context.packageManager.getPackageArchiveInfo(file.path, 0)
-                if (info?.packageName != context.packageName) error("The file is not a Flowstead APK")
+                if (info?.packageName != context.packageName) error("The file is not a ThermoDock APK")
                 downloaded = file
                 install()
             } catch (e: CancellationException) {
@@ -178,7 +178,7 @@ class UpdateInstaller @Inject constructor(
     }
 
     companion object {
-        private const val USER_AGENT = "Flowstead (in-app update)"
+        private const val USER_AGENT = "ThermoDock (in-app update)"
         private fun sha256(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")
             file.inputStream().use { input ->

@@ -114,7 +114,7 @@ object DataSheets {
             unitSystem = units.name,
             sections = sections,
             notes = b.notes(solve),
-            footer = "Flowstead $appVersion" + (solve?.result?.let { " · DWSIM ${it.dwsimVersion}" } ?: ""),
+            footer = "ThermoDock $appVersion" + (solve?.result?.let { " · DWSIM ${it.dwsimVersion}" } ?: ""),
         )
     }
 
@@ -293,7 +293,7 @@ object DataSheets {
 
         fun notes(solve: StoredSolve?): List<String> = buildList {
             add(
-                "Process data from a steady-state simulation (Flowstead, DWSIM engine" +
+                "Process data from a steady-state simulation (ThermoDock, DWSIM engine" +
                     (solve?.result?.dwsimVersion?.let { " $it" } ?: "") + "), property package ${fs.propertyPackage ?: "not set"}.",
             )
             add("“—” marks a value the simulation did not return; nothing on this sheet is estimated.")

@@ -67,7 +67,7 @@ import app.flowstead.core.model.SpecKey
 import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.displayName
 import app.flowstead.core.units.UnitSet
-import app.flowstead.ui.theme.GeistMono
+import app.flowstead.ui.theme.Inter
 import app.flowstead.ui.theme.valueColors
 import kotlin.math.roundToInt
 
@@ -348,7 +348,7 @@ fun FlowsheetCanvas(
 
             // Tags, drawn in screen space so text stays crisp and readable at any zoom.
             val fontSize = (11f * viewport.zoom).coerceIn(8f, 16f)
-            val style = TextStyle(fontFamily = GeistMono, fontSize = fontSize.sp, color = labelColor)
+            val style = TextStyle(fontFamily = Inter, fontFeatureSettings = "tnum", fontSize = fontSize.sp, color = labelColor)
             for (o in fs.objects) {
                 val at = positionOf(o)
                 val b = CanvasGeometry.bounds(o, at)
@@ -360,7 +360,7 @@ fun FlowsheetCanvas(
             // Property tables, also in screen space; they scale with the zoom and move with their object.
             tableBoxes.clear()
             val tableSize = (9f * viewport.zoom).coerceIn(6f, 14f)
-            val cell = TextStyle(fontFamily = GeistMono, fontSize = tableSize.sp, color = colors.onSurface)
+            val cell = TextStyle(fontFamily = Inter, fontFeatureSettings = "tnum", fontSize = tableSize.sp, color = colors.onSurface)
             val head = cell.copy(fontWeight = FontWeight.Bold)
             val unitStyle = cell.copy(color = labelColor)
             for (t in fs.tables) {

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Themed-icon layer (Android 13+): the mark's line and nodes in one colour; the launcher tints it.
-     Same placement as the foreground. -->
+<!-- Themed-icon layer (Android 13+): the mark in one colour; the launcher tints it. Same placement as the foreground. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -12,12 +11,18 @@
         android:translateX="21.76"
         android:translateY="21.76">
         <path
-            android:pathData="M26,74C26,44 50,40 52,52C54,64 78,60 78,30"
-            android:strokeWidth="10"
+            android:pathData="M21,30H37Q44,30 48,35L56,46M21,74H37Q44,74 48,69L56,58"
+            android:strokeWidth="10.5"
+            android:strokeColor="#FF000000"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M72.5,52H85"
+            android:strokeWidth="10.5"
             android:strokeColor="#FF000000"
             android:strokeLineCap="round" />
         <path
             android:fillColor="#FF000000"
-            android:pathData="M26,74m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0M78,30m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0" />
+            android:pathData="M61,52m-8.5,0a8.5,8.5 0,1 1,17 0a8.5,8.5 0,1 1,-17 0" />
     </group>
 </vector>

@@ -69,9 +69,9 @@ object Credits {
 data class OssEntry(val name: String, val licence: String, val asset: String?)
 
 val OPEN_SOURCE = listOf(
-    OssEntry("Flowstead", "GPL-3.0-or-later", "licenses/GPL-3.0.txt"),
+    OssEntry("ThermoDock", "GPL-3.0-or-later", "licenses/GPL-3.0.txt"),
     OssEntry("DWSIM — open-source process simulator (engine)", "GPL-3.0", "licenses/GPL-3.0.txt"),
-    OssEntry("Geist and Geist Mono typefaces (Vercel)", "SIL Open Font License 1.1", "licenses/OFL-Geist.txt"),
+    OssEntry("Inter typeface (Rasmus Andersson)", "SIL Open Font License 1.1", "licenses/OFL-Inter.txt"),
     OssEntry("AndroidX, Jetpack Compose, Material 3", "Apache-2.0", null),
     OssEntry("Kotlin, kotlinx.coroutines, kotlinx.serialization, Ktor", "Apache-2.0", null),
     OssEntry("Dagger / Hilt", "Apache-2.0", null),
@@ -107,13 +107,13 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
             DeveloperLine()
             Column(
                 Modifier
-                    .clickable(role = Role.Button, onClickLabel = "Read what Flowstead adds") { onOpenLicense("What Flowstead adds", FEATURES_ASSET) }
+                    .clickable(role = Role.Button, onClickLabel = "Read what ThermoDock adds") { onOpenLicense("What ThermoDock adds", FEATURES_ASSET) }
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .padding(vertical = 6.dp)
                     .testTag("features"),
             ) {
-                Text("What Flowstead adds", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
+                Text("What ThermoDock adds", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
                 Text(
                     "Beyond the DWSIM engine, what works like HYSYS, and where it still differs. Tap to read.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -127,7 +127,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
             )
             Text(
                 "Calculations run on the open-source DWSIM process simulator (© Daniel Wagner and contributors, GPL-3.0). " +
-                    "Flowstead is an independent project and is not affiliated with or endorsed by the DWSIM authors.",
+                    "ThermoDock is an independent project and is not affiliated with or endorsed by the DWSIM authors.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -137,7 +137,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "Flowstead is free software under the GNU GPL v3 or later. Source code: github.com/hazemmancy/flowstead",
+                "ThermoDock (formerly Flowstead) is free software under the GNU GPL v3 or later. Source code: github.com/hazemmancy/flowstead",
                 style = MaterialTheme.typography.bodyMedium,
             )
             HorizontalDivider()

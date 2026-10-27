@@ -33,8 +33,8 @@ android {
         applicationId = "app.flowstead"
         minSdk = 26
         targetSdk = 37
-        versionCode = 16
-        versionName = "1.7.0"
+        versionCode = 17
+        versionName = "1.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "LOCAL_ENGINE", localEngine.toString())
         // The engine's runtime is built for 64-bit ARM (phones) and x86_64 (emulators).

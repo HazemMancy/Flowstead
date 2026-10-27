@@ -1,4 +1,6 @@
-# Flowstead
+# ThermoDock
+_Process engineering workbench (formerly Flowstead)._
+
 Developed by Hazem ElMancy.
 
 **Steady-state process simulation, in your pocket.**

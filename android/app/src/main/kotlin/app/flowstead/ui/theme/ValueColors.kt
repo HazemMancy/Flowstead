@@ -34,11 +34,11 @@ data class ValueColors(
 )
 
 val LightValueColors = ValueColors(
-    specified = Color(0xFF2563C9),
-    calculated = Brand.Ink,
-    underSpecified = Color(0xFFB7791F),
+    specified = Brand.BlueText,
+    calculated = Brand.Navy,
+    underSpecified = Brand.WarningSwatch,
     underSpecifiedText = Color(0xFF8F5E12),
-    error = Color(0xFFC8372D),
+    error = Brand.ErrorText,
     converged = Color(0xFF1F8A4C),
     convergedText = Color(0xFF19763F),
     convergedContainer = Color(0xFFDDF3E6),
@@ -49,11 +49,11 @@ val LightValueColors = ValueColors(
 )
 
 val DarkValueColors = ValueColors(
-    specified = Color(0xFF8AB4F8),
-    calculated = Brand.Chalk,
-    underSpecified = Color(0xFFF2B866),
-    underSpecifiedText = Color(0xFFF2B866),
-    error = Color(0xFFFF8A80),
+    specified = Brand.Blue,
+    calculated = Brand.Canvas,
+    underSpecified = Brand.Warning,
+    underSpecifiedText = Brand.Warning,
+    error = Color(0xFFFF8A95),
     converged = Color(0xFF6FE0A1),
     convergedText = Color(0xFF6FE0A1),
     convergedContainer = Color(0xFF123D2A),

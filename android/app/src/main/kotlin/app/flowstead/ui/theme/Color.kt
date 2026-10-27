@@ -7,28 +7,33 @@ package app.flowstead.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Brand palette (decision D37): "Precision" colours — paper, ink and one signal orange — with the
- * "Aurora" mark, a violet-to-cyan flow line on a dark tile. Signal orange fills and highlights; text
- * that must read as orange uses [SignalText] (light) or [SignalLight] (dark).
+ * ThermoDock palette (decision D64): midnight navy and engineering teal, technical blue for selection, warm amber
+ * and coral for warnings and errors, slate for borders. Teal is too light to carry white text (2.3:1), so filled
+ * teal buttons carry navy text (7.6:1) and teal used as text on light surfaces is [TealText] (5.1:1).
  */
 object Brand {
-    val Paper = Color(0xFFF6F6F3)
-    val PaperRaised = Color(0xFFEFEFEA)
-    val PaperHigh = Color(0xFFE8E8E2)
-    val Hairline = Color(0xFFDADAD3)
-    val Ink = Color(0xFF111113)
-    val InkRaised = Color(0xFF18181B)
-    val InkHigh = Color(0xFF222226)
-    val InkHairline = Color(0xFF2E2E33)
-    val Graphite = Color(0xFF5F5F66)
-    val Fog = Color(0xFFA8A8B0)
-    val Chalk = Color(0xFFF2F2EE)
-    val Signal = Color(0xFFFF5B1F)
-    val SignalText = Color(0xFFB83A0A)
-    val SignalLight = Color(0xFFFF8A5C)
+    val Navy = Color(0xFF0B1930)
+    val NavyRaised = Color(0xFF11233F)
+    val NavyHigh = Color(0xFF1A2F50)
+    val NavyHairline = Color(0xFF263B5E)
+    val Teal = Color(0xFF19BFAE)
+    val TealText = Color(0xFF0E7C72)
+    val TealContainer = Color(0xFFD5F4F0)
+    val TealContainerDark = Color(0xFF0D3B3A)
+    val Blue = Color(0xFF5A9FF2)
+    val BlueText = Color(0xFF2A68CF)
+    val Canvas = Color(0xFFF3F6FA)
+    val CanvasRaised = Color(0xFFE9EEF4)
+    val CanvasHigh = Color(0xFFDFE6EE)
+    val Hairline = Color(0xFFD3DBE5)
+    val Warning = Color(0xFFF2B84B)
+    /** Amber dark enough for a 3:1 badge or swatch on white. */
+    val WarningSwatch = Color(0xFFB97E10)
+    val Error = Color(0xFFE55868)
+    val ErrorText = Color(0xFFC23A4B)
+    val Slate = Color(0xFF8A98A8)
+    val SlateText = Color(0xFF5B6878)
 
-    // The mark's gradient and tile.
-    val Violet = Color(0xFF8B5CF6)
-    val Cyan = Color(0xFF22D3EE)
-    val MarkTile = Color(0xFF0E1322)
+    // The mark: teal lines and a white node on the navy tile.
+    val MarkTile = Navy
 }

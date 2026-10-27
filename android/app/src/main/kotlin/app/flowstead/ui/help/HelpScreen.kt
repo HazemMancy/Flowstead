@@ -177,7 +177,7 @@ private fun Home(open: (Page) -> Unit) {
         }
         add(Entry(Help.LIBRARY, "U values, separator internals, motors, valve factors, pipe sizes, utilities", Page.Section(Help.LIBRARY)))
         add(Entry(Help.METHODS, "Every method: the equations, how it was checked, how it differs from HYSYS", Page.Section(Help.METHODS)))
-        add(Entry("What's new", "Release notes, Flowstead ${BuildConfig.VERSION_NAME}", Page.WhatsNew))
+        add(Entry("What's new", "Release notes, ThermoDock ${BuildConfig.VERSION_NAME}", Page.WhatsNew))
         add(Entry("Support", "Report a problem, ask a question, DWSIM's documentation", Page.Support))
     }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -245,7 +245,7 @@ private fun Examples(onOpen: (String) -> Unit) {
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Text(
-                "Each example is one of Flowstead's benchmark cases, solved and checked on every engine change. Tap one to open it as a new project, then solve it.",
+                "Each example is one of ThermoDock's benchmark cases, solved and checked on every engine change. Tap one to open it as a new project, then solve it.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp),
             )
         }
@@ -257,7 +257,7 @@ private fun Examples(onOpen: (String) -> Unit) {
 private fun WhatsNew() {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (r in Help.releases) {
-            item(key = r.version) { Text("Flowstead ${r.version}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
+            item(key = r.version) { Text("ThermoDock ${r.version}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 16.dp)) }
             items(r.notes.lines().filter { it.isNotBlank() && !it.startsWith("# ") }) { line ->
                 // Release notes are Markdown: bold paragraphs and bullets read the same as help pages.
                 Markup(if (line.startsWith("### ")) "## " + line.removePrefix("### ") else line.removePrefix("#"))
@@ -270,7 +270,7 @@ private fun WhatsNew() {
 private fun Support() {
     val uri = LocalUriHandler.current
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Flowstead ${BuildConfig.VERSION_NAME}, with DWSIM 9.0.5", style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("ThermoDock ${BuildConfig.VERSION_NAME}, with DWSIM 9.0.5", style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row1("Report a problem or ask for a feature", "GitHub issues: include the project (Export DWSIM file) and what you expected") { uri.openUri(Help.ISSUES) }
         Row1("Source code and releases", Help.REPOSITORY) { uri.openUri(Help.REPOSITORY) }
         Row1("DWSIM documentation", "The thermodynamics engine behind every number") { uri.openUri(Help.DWSIM) }

@@ -45,7 +45,7 @@ import app.flowstead.ui.theme.valueColors
 /** Who built the app and on what, and "Check for updates" against the GitHub releases. */
 @Composable
 internal fun AboutSection(state: SettingsUiState, vm: SettingsViewModel, onOpenAbout: () -> Unit) {
-    Text("About Flowstead", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+    Text("About ThermoDock", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         FlowsteadMark(40.dp)
         Spacer(Modifier.padding(start = 12.dp))
@@ -74,7 +74,7 @@ internal fun AboutSection(state: SettingsUiState, vm: SettingsViewModel, onOpenA
             .testTag("check_updates_on_open"),
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Check for updates when Flowstead opens", style = MaterialTheme.typography.bodyLarge)
+            Text("Check for updates when ThermoDock opens", style = MaterialTheme.typography.bodyLarge)
             Text(
                 "Asks GitHub for the latest version; a new one is offered at most three times.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -124,12 +124,12 @@ private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: S
             val f = install.fraction
             if (f != null) LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth().testTag("update_progress"))
             else LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag("update_progress"))
-            Text("You can keep using Flowstead; the download carries on in the background.", style = hint, color = muted)
+            Text("You can keep using ThermoDock; the download carries on in the background.", style = hint, color = muted)
         }
         InstallState.Verifying -> Text("Checking the download…", style = hint, color = muted, modifier = live)
         InstallState.NeedsPermission -> {
             Text(
-                "Android needs your permission, once, for Flowstead to install its updates: allow it, come back and tap Install.",
+                "Android needs your permission, once, for ThermoDock to install its updates: allow it, come back and tap Install.",
                 style = hint, color = muted, modifier = live,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

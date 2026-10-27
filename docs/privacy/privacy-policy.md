@@ -1,8 +1,8 @@
-# Flowstead privacy policy
+# ThermoDock privacy policy
 
 _Last updated: 2026-10-22_
 
-Flowstead is an Android app for steady-state process simulation. This policy explains what the app does with your data. In short: your data stays on your phone and on the engine server you choose. The Flowstead project does not receive it.
+ThermoDock is an Android app for steady-state process simulation. This policy explains what the app does with your data. In short: your data stays on your phone and on the engine server you choose. The ThermoDock project does not receive it.
 
 ## What the app stores on your phone
 
@@ -21,14 +21,14 @@ The app talks only to the **engine address you enter in Settings**. Over HTTPS, 
 - compound searches;
 - your API key, in the request header.
 
-The one other address is **GitHub**: when the app opens (unless you turn off **Settings → Check for updates when Flowstead opens**) and when you tap **Settings → Check for updates**, the app asks api.github.com for the latest Flowstead release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. If you tap **Update**, the app downloads the new version from GitHub's release files into its own storage, checks it, and hands it to Android, which asks you to confirm the installation; the downloaded file is deleted from the app's cache with the next update.
+The one other address is **GitHub**: when the app opens (unless you turn off **Settings → Check for updates when ThermoDock opens**) and when you tap **Settings → Check for updates**, the app asks api.github.com for the latest ThermoDock release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. If you tap **Update**, the app downloads the new version from GitHub's release files into its own storage, checks it, and hands it to Android, which asks you to confirm the installation; the downloaded file is deleted from the app's cache with the next update.
 
 The engine is run by you or your organisation. Its operator can see what you send it. The engine keeps an API-key hash and, if you use stored flowsheets, those flowsheets and results. It does not keep the files you import or export.
 
 ## What the app does not do
 
 - No analytics, crash reporting, advertising or tracking SDKs.
-- No account with the Flowstead project, and no data sent to the Flowstead project or any third party (the update check above sends no data of yours).
+- No account with the ThermoDock project, and no data sent to the ThermoDock project or any third party (the update check above sends no data of yours).
 - No location, contacts, camera, microphone or other personal data.
 
 ## Files
@@ -41,7 +41,7 @@ When you import or export a file, Android's system file picker gives the app acc
 |---|---|
 | Internet | To reach your engine, and GitHub to check for and download updates |
 | Network state | To run a queued solve once you're back online |
-| Install apps (request install packages) | To install a Flowstead update you chose to download; Android asks you to confirm every installation |
+| Install apps (request install packages) | To install a ThermoDock update you chose to download; Android asks you to confirm every installation |
 
 ## Deleting your data
 
@@ -51,7 +51,7 @@ When you import or export a file, Android's system file picker gives the app acc
 
 ## Children
 
-Flowstead is a professional engineering tool and is not directed at children.
+ThermoDock is a professional engineering tool and is not directed at children.
 
 ## Changes and contact
 

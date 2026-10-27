@@ -43,7 +43,7 @@ import javax.inject.Inject
 /**
  * Checks for a new release when the app opens and offers it in a dialog (decision D45): once per launch
  * (not again on rotation or when returning to the app), at most three times per version, and never when the
- * user turned "Check for updates when Flowstead opens" off.
+ * user turned "Check for updates when ThermoDock opens" off.
  */
 @HiltViewModel
 class UpdatePromptViewModel @Inject constructor(
@@ -98,7 +98,7 @@ internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpd
     AlertDialog(
         onDismissRequest = onLater,
         icon = { FlowsteadMark(40.dp) },
-        title = { Text("Flowstead ${r.version} is ready") },
+        title = { Text("ThermoDock ${r.version} is ready") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -114,7 +114,7 @@ internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpd
                     }
                     InstallState.Verifying -> Text("Checking the download…", style = MaterialTheme.typography.bodySmall)
                     InstallState.NeedsPermission -> Text(
-                        "Android needs your permission, once, for Flowstead to install updates: Settings → About → Update.",
+                        "Android needs your permission, once, for ThermoDock to install updates: Settings → About → Update.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     is InstallState.Failed -> Text("Update failed: ${install.reason}", color = MaterialTheme.valueColors.error, style = MaterialTheme.typography.bodySmall)

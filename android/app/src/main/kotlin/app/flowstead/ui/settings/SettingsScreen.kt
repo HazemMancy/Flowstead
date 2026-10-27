@@ -119,7 +119,7 @@ private fun EngineSection(state: SettingsUiState, vm: SettingsViewModel) {
         selected = !onDevice,
         enabled = true,
         title = "Remote engine",
-        detail = "Your own Flowstead engine server: a VPS or a PC on the same network. HTTPS only.",
+        detail = "Your own ThermoDock engine server: a VPS or a PC on the same network. HTTPS only.",
         tag = "engine_remote",
     ) { vm.setEngineMode(EngineMode.Remote) }
     if (!onDevice) RemoteEngineFields(state, vm)

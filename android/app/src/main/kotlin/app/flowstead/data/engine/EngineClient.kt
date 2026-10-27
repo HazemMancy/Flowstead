@@ -215,7 +215,7 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
         val base = when (response.status) {
             HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden -> "The engine rejected the API key"
             HttpStatusCode.TooManyRequests -> "Too many requests; try again shortly"
-            HttpStatusCode.NotFound -> "This address is not a Flowstead engine"
+            HttpStatusCode.NotFound -> "This address is not a ThermoDock engine"
             HttpStatusCode.UnprocessableEntity -> "The engine could not use it"
             else -> "Engine error ${response.status.value}"
         }

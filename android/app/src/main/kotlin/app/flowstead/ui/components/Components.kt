@@ -27,7 +27,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import app.flowstead.R
 import app.flowstead.core.format.MISSING
 import app.flowstead.core.format.ValueFormat
@@ -41,17 +44,21 @@ import app.flowstead.ui.theme.valueColors
 fun FlowsteadMark(size: Dp, modifier: Modifier = Modifier) {
     Image(
         painter = painterResource(R.drawable.ic_flowstead_mark),
-        contentDescription = "Flowstead logo",
+        contentDescription = "ThermoDock logo",
         modifier = modifier.size(size),
     )
 }
 
-/** "Flowstead" in Geist, tightly set, one colour (decision D37). */
+/** "ThermoDock" in Inter: "Thermo" in the text colour, "Dock" in teal (decision D64). */
 @Composable
 fun Wordmark(style: TextStyle, modifier: Modifier = Modifier) {
+    val accent = MaterialTheme.colorScheme.secondary
     Text(
-        text = "Flowstead",
-        style = style.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.03 * style.fontSize.value).sp),
+        text = buildAnnotatedString {
+            append("Thermo")
+            withStyle(SpanStyle(color = accent)) { append("Dock") }
+        },
+        style = style.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.02 * style.fontSize.value).sp),
         color = MaterialTheme.colorScheme.onBackground,
         modifier = modifier,
     )

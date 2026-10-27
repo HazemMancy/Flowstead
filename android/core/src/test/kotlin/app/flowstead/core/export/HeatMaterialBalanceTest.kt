@@ -66,7 +66,7 @@ class HeatMaterialBalanceTest {
         assertEquals("B", sheet.revision)
         assertEquals("ACME", sheet.info.company)
         assertEquals("Letdown", sheet.info.project) // the project's name when the title block leaves it blank
-        assertTrue(sheet.footer.startsWith("Flowstead 1.1.0"))
+        assertTrue(sheet.footer.startsWith("ThermoDock 1.1.0"))
     }
 
     @Test

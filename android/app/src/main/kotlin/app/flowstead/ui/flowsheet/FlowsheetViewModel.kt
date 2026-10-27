@@ -761,7 +761,7 @@ class FlowsheetViewModel @Inject constructor(
             date = today(),
             units = unitSet.name,
             propertyPackage = fs.propertyPackage,
-            footer = "Flowstead ${BuildConfig.VERSION_NAME}" + (solve?.result?.let { " · DWSIM ${it.dwsimVersion}" } ?: ""),
+            footer = "ThermoDock ${BuildConfig.VERSION_NAME}" + (solve?.result?.let { " · DWSIM ${it.dwsimVersion}" } ?: ""),
             stale = view.stale,
             solved = solve != null,
         )

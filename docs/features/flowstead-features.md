@@ -1,10 +1,10 @@
-# What Flowstead is
+# What ThermoDock is
 
-Flowstead is a steady-state process simulator for Android. Every thermodynamic calculation runs on DWSIM 9.0.5, the open-source process simulator, on your phone or on a server you choose. Flowstead never shows a number the engine did not return: anything missing says why, and results are marked out of date as soon as the flowsheet changes.
+ThermoDock is a steady-state process simulator for Android. Every thermodynamic calculation runs on DWSIM 9.0.5, the open-source process simulator, on your phone or on a server you choose. ThermoDock never shows a number the engine did not return: anything missing says why, and results are marked out of date as soon as the flowsheet changes.
 
-## What Flowstead adds to the DWSIM engine
+## What ThermoDock adds to the DWSIM engine
 
-DWSIM desktop has some of these as separate tools; Flowstead builds them into the flowsheet, checks them against reference data, and runs them on a phone.
+DWSIM desktop has some of these as separate tools; ThermoDock builds them into the flowsheet, checks them against reference data, and runs them on a phone.
 
 - **Runs on the phone, offline.** The DWSIM engine is embedded in the app; a self-hosted server is optional.
 - **Equipment that checks itself.** After every solve each unit is checked: pressure going the wrong way, vapour into a pump, liquid into a compressor, low NPSH, temperature crosses (including inside an exchanger), choked pipes, a heater that cools. Errors stop the numbers for that unit and everything downstream; warnings flag the unit on the flowsheet.
@@ -37,7 +37,7 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - **Envelope utility** with quality lines and the hydrate curves (free water and inhibited); **case studies** with one or two independent variables.
 - **Exchanger zone analysis, pump and compressor curves, valve sizing**, as in HYSYS's equipment pages.
 
-## Where Flowstead still differs from HYSYS
+## Where ThermoDock still differs from HYSYS
 
 - The thermodynamics are DWSIM's: the same Peng–Robinson and SRK equations, but DWSIM's pure-component data and kij databank (HYSYS's are proprietary). The plain-EOS option and your own kij (for instance HYSYS's) bring the results together.
 - The valve library gives typical IEC factors by valve type, not a maker's catalogue (no Fp or inherent characteristic).

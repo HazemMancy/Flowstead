@@ -1,32 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Flowstead mark (decision D37): one stream between two nodes, feed (violet) to product (cyan),
-     as a gradient line on a dark rounded tile. 104-unit grid. -->
+<!-- ThermoDock mark (decision D64): two streams meet at a unit (the node) and leave as one, teal on a navy
+     rounded tile, the node white. 104-unit grid; FlowsteadLogo.kt draws the same geometry for documents. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="104dp"
     android:height="104dp"
     android:viewportWidth="104"
     android:viewportHeight="104">
     <path
         android:fillColor="@color/brand_mark_tile"
-        android:pathData="M30,0H74A30,30 0,0 1,104 30V74A30,30 0,0 1,74 104H30A30,30 0,0 1,0 74V30A30,30 0,0 1,30 0Z" />
+        android:pathData="M24,0H80A24,24 0,0 1,104 24V80A24,24 0,0 1,80 104H24A24,24 0,0 1,0 80V24A24,24 0,0 1,24 0Z" />
     <path
-        android:pathData="M26,74C26,44 50,40 52,52C54,64 78,60 78,30"
-        android:strokeWidth="9"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-                <gradient
-                    android:type="linear"
-                    android:startX="19" android:startY="81"
-                    android:endX="85" android:endY="23"
-                    android:startColor="@color/brand_violet"
-                    android:endColor="@color/brand_cyan" />
-            </aapt:attr>
-    </path>
+        android:pathData="M21,30H37Q44,30 48,35L56,46M21,74H37Q44,74 48,69L56,58"
+        android:strokeWidth="10.5"
+        android:strokeColor="@color/brand_teal"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
     <path
-        android:fillColor="@color/brand_violet"
-        android:pathData="M26,74m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+        android:pathData="M72.5,52H85"
+        android:strokeWidth="10.5"
+        android:strokeColor="@color/brand_teal"
+        android:strokeLineCap="round" />
     <path
-        android:fillColor="@color/brand_cyan"
-        android:pathData="M78,30m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M61,52m-8.5,0a8.5,8.5 0,1 1,17 0a8.5,8.5 0,1 1,-17 0" />
 </vector>

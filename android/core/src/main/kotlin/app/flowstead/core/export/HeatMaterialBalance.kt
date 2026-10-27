@@ -49,7 +49,7 @@ object HeatMaterialBalance {
         val f = Format(units, ctx)
         val chunks = if (streams.isEmpty()) listOf(emptyList()) else streams.chunked(streamsPerSheet.coerceAtLeast(1))
         val notes = notes(fs, solve, view)
-        val footer = "Flowstead $appVersion" + (solve?.result?.let { " · DWSIM ${it.dwsimVersion}" } ?: "")
+        val footer = "ThermoDock $appVersion" + (solve?.result?.let { " · DWSIM ${it.dwsimVersion}" } ?: "")
         return chunks.mapIndexed { i, chunk ->
             val sections = buildList {
                 if (chunk.isNotEmpty()) {
@@ -150,7 +150,7 @@ object HeatMaterialBalance {
 
     private fun notes(fs: Flowsheet, solve: StoredSolve?, view: ResultView): List<String> = buildList {
         add(
-            "Steady-state simulation results (Flowstead, DWSIM engine" + (solve?.result?.dwsimVersion?.let { " $it" } ?: "") +
+            "Steady-state simulation results (ThermoDock, DWSIM engine" + (solve?.result?.dwsimVersion?.let { " $it" } ?: "") +
                 "), property package ${fs.propertyPackage ?: "not set"}.",
         )
         add("“—” marks a value the simulation did not return; nothing here is estimated.")

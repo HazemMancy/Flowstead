@@ -60,7 +60,8 @@ object Help {
         }
     }
 
-    private fun clean(s: String) = s.replace("`", "").replace("<br>", "\n")
+    /** The app was called Flowstead until 1.8.0 (D64); the reference reads with today's name. */
+    private fun clean(s: String) = s.replace("`", "").replace("<br>", "\n").replace("Flowstead", "ThermoDock")
 
     /** The data library pages, written from the library's own tables so they always show what the tools use. */
     val library: List<HelpTopic> by lazy {
@@ -138,7 +139,7 @@ object Help {
     val releases: List<Release> by lazy {
         index.filter { it.startsWith("release-notes/") }.mapNotNull { path ->
             val v = path.removePrefix("release-notes/").removeSuffix(".md").removePrefix("v")
-            resource(path)?.let { Release(v, it) }
+            resource(path)?.let { Release(v, it.replace("Flowstead", "ThermoDock")) }
         }.sortedWith(compareByDescending<Release> { r -> r.version.split('.').map { it.toIntOrNull() ?: 0 }.let { it.getOrElse(0) { 0 } * 1_000_000 + it.getOrElse(1) { 0 } * 1000 + it.getOrElse(2) { 0 } } })
     }
 }
