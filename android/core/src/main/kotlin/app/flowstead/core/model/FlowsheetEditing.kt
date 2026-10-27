@@ -201,6 +201,9 @@ object FlowsheetEditing {
     /** Sets or clears a separator's sizing basis (D61); it changes no result. */
     fun setSizing(fs: Flowsheet, id: String, sizing: SeparatorSizingInput?): Flowsheet = update(fs, id) { it.copy(sizing = sizing) }
 
+    /** Sets or clears the sizing basis of an exchanger, heater, cooler, machine or tank (D62). */
+    fun setEquipmentSizing(fs: Flowsheet, id: String, sizing: EquipmentSizingInput?): Flowsheet = update(fs, id) { it.copy(equipmentSizing = sizing) }
+
     fun setCurve(fs: Flowsheet, id: String, curve: PerformanceCurve?): Flowsheet = update(fs, id) {
         if (curve == null) it.copy(curve = null)
         else it.copy(curve = curve, specs = it.specs - listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE, SpecKey.PRESSURE_RATIO).toSet())

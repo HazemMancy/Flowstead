@@ -127,6 +127,10 @@ data class SimObject(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val sizing: SeparatorSizingInput? = null,
+    /** Sizing basis of exchangers, heaters, coolers, machines and tanks (D62); not part of the solved model. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val equipmentSizing: EquipmentSizingInput? = null,
 )
 
 /**

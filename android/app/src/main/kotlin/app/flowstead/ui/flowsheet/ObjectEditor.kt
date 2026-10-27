@@ -134,6 +134,8 @@ interface EditorActions {
     fun openPvt(streamId: String) = Unit
     /** Sets or clears a separator's sizing basis (D61). */
     fun setSizing(id: String, sizing: app.flowstead.core.model.SeparatorSizingInput?) = Unit
+    /** Sets or clears an exchanger, heater, cooler, machine or tank's sizing basis (D62). */
+    fun setEquipmentSizing(id: String, sizing: app.flowstead.core.model.EquipmentSizingInput?) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -282,6 +284,7 @@ fun ObjectEditorSheet(
             ResultsSection(fs, obj, results, unitSet, ctx, envelope?.takeIf { it.streamId == obj.id }, actions)
             if (obj.type == ObjectType.PipeSegment) PipeSizingSection(fs, obj, results, unitSet, ctx, actions)
             if (obj.type == ObjectType.Separator || obj.type == ObjectType.ThreePhaseSeparator) SeparatorSizingSection(fs, obj, results, unitSet, ctx, actions)
+            if (obj.type in app.flowstead.core.model.EquipmentSizing.TYPES) EquipmentSizingSection(fs, obj, results, unitSet, ctx, actions)
         }
     }
 }

@@ -331,6 +331,7 @@ class FlowsheetViewModel @Inject constructor(
 
     fun setCurve(id: String, curve: PerformanceCurve?) = edit { FlowsheetEditing.setCurve(it, id, curve) }
     fun setSizing(id: String, sizing: app.flowstead.core.model.SeparatorSizingInput?) = edit { FlowsheetEditing.setSizing(it, id, sizing) }
+    fun setEquipmentSizing(id: String, sizing: app.flowstead.core.model.EquipmentSizingInput?) = edit { FlowsheetEditing.setEquipmentSizing(it, id, sizing) }
 
     fun setSizingCriteria(c: SizingCriteria) = edit { FlowsheetEditing.setSizingCriteria(it, c) }
 
