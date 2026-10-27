@@ -140,6 +140,41 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task StreamsReportBubbleAndDewPointsAndVapourFractionOneIsTheDewPoint()
+    {
+        // Propane/n-butane at 10 bara. VF 0 is the bubble point, VF 1 the dew point, and the dew point is the warmer,
+        // as in HYSYS. Every stream also carries both points as properties, from DWSIM's own flashes.
+        SimObject Stream(string id, double vf) => new()
+        {
+            Id = id, Tag = id.ToUpperInvariant(), Type = ObjectType.MaterialStream,
+            Specs = new()
+            {
+                [SpecKeys.VapourFraction] = new Spec(vf, ""),
+                [SpecKeys.Pressure] = new Spec(1e6, "bara"),
+                [SpecKeys.MolarFlow] = new Spec(100 / 3.6, "kgmol/h"),
+            },
+            Composition = new() { ["Propane"] = 0.6, ["N-butane"] = 0.4 },
+        };
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Peng-Robinson (PR)",
+            Compounds = ["Propane", "N-butane"],
+            Objects = [Stream("bub", 0), Stream("dew", 1)],
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        var bub = r.Objects["bub"].Properties;
+        var dew = r.Objects["dew"].Properties;
+        Assert.True(dew["temperature"] > bub["temperature"] + 5);
+        Assert.Equal(bub["temperature"], bub["bubblePointTemperature"], 0.1);
+        Assert.Equal(dew["temperature"], dew["dewPointTemperature"], 0.1);
+        Assert.Equal(bub["temperature"], dew["bubblePointTemperature"], 0.1);
+        Assert.Equal(1e6, bub["bubblePointPressure"], 1e6 * 0.002);
+        Assert.Equal(1e6, dew["dewPointPressure"], 1e6 * 0.002);
+        Assert.True(bub["dewPointPressure"] < 1e6); // at the bubble temperature, the dew pressure is lower
+    }
+
+    [Fact]
     public async Task ValveLetdownDropsPressureAndCoolsGas()
     {
         // Small JT check: lean gas 70 bara → 20 bara through a valve must cool down (positive JT coefficient).

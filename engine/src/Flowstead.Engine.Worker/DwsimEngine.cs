@@ -1145,6 +1145,7 @@ public sealed class DwsimEngine
         }
 
         var overall = ms.Phases[0].Properties;
+        var (bubbleT, dewT, bubbleP, dewP) = SaturationPoints(ms);
         return new ObjectResult
         {
             Status = ObjectStatus.Solved,
@@ -1154,9 +1155,56 @@ public sealed class DwsimEngine
                 ("vapourFraction", ms.Phases[2].Properties.molarfraction ?? 0.0),
                 ("molarFlow", overall.molarflow),
                 ("massFlow", overall.massflow),
-                ("massEnthalpy", overall.enthalpy * 1000.0)), // DWSIM kJ/kg
+                ("massEnthalpy", overall.enthalpy * 1000.0), // DWSIM kJ/kg
+                // HYSYS reports these too: bubble point (VF 0) and dew point (VF 1) at the stream's P, and the
+                // pressures of both at its T. Each is DWSIM's own P-VF / T-VF flash; one that fails is left out.
+                ("bubblePointTemperature", bubbleT),
+                ("dewPointTemperature", dewT),
+                ("bubblePointPressure", bubbleP),
+                ("dewPointPressure", dewP)),
             Phases = phases,
         };
+    }
+
+    /// <summary>
+    /// The stream's bubble and dew points: temperatures at its pressure, pressures at its temperature. A flash that
+    /// throws or does not land on the asked vapour fraction gives null (above the cricondentherm there is no dew point).
+    /// </summary>
+    private static (double? BubbleT, double? DewT, double? BubbleP, double? DewP) SaturationPoints(MaterialStream ms)
+    {
+        if (ms.PropertyPackage is not PropertyPackage pp) return default;
+        var t = ms.Phases[0].Properties.temperature ?? double.NaN;
+        var p = ms.Phases[0].Properties.pressure ?? double.NaN;
+        if (!double.IsFinite(t) || !double.IsFinite(p) || t <= 0 || p <= 0) return default;
+        var previous = pp.CurrentMaterialStream;
+        try
+        {
+            pp.CurrentMaterialStream = ms;
+            var z = ms.GetOverallComposition();
+            double? At(bool fixedP, double q)
+            {
+                try
+                {
+                    var r = fixedP ? (object[])pp.FlashBase.Flash_PV(z, p, q, t, pp) : (object[])pp.FlashBase.Flash_TV(z, t, q, p, pp);
+                    var x = Convert.ToDouble(r[4]);
+                    var v = Convert.ToDouble(r[1]);
+                    return double.IsFinite(x) && x > 0 && Math.Abs(v - q) < 1e-3 ? x : null;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+            return (At(true, 0), At(true, 1), At(false, 0), At(false, 1));
+        }
+        catch
+        {
+            return default;
+        }
+        finally
+        {
+            pp.CurrentMaterialStream = previous;
+        }
     }
 
     /// <summary>Keeps only finite values: a missing or NaN result is omitted, never sent as a number.</summary>

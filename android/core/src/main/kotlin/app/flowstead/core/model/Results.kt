@@ -30,6 +30,7 @@ object ResultKeys {
     val STREAM = listOf(
         "temperature", "pressure", "vapourFraction", "molarFlow", "massFlow", "volumeFlow",
         "massEnthalpy", "massEntropy", "massHeatCapacity", "density", "molecularWeight", "viscosity", "compressibilityFactor",
+        "bubblePointTemperature", "dewPointTemperature", "bubblePointPressure", "dewPointPressure",
     )
     val UNIT_OP = listOf(
         "duty", "power", "pressureDrop", "pressureRise", "pressureRatio", "outletPressure", "outletTemperature",
@@ -95,6 +96,8 @@ object ResultKeys {
         "valveOpening" -> Quantity.Fraction
         "chokedPressureDrop" -> Quantity.PressureDifference
         "inletBubblePressure" -> Quantity.Pressure
+        "bubblePointPressure", "dewPointPressure" -> Quantity.Pressure
+        "bubblePointTemperature", "dewPointTemperature" -> Quantity.Temperature
         "feedBubblePressure" -> Quantity.Pressure
         "pressure", "outletPressure" -> Quantity.Pressure
         "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop",
@@ -137,6 +140,10 @@ object ResultKeys {
         "pressure" -> "Pressure"
         "vapourFraction" -> "Vapour fraction"
         "phaseMoleFraction" -> "Phase fraction (molar)"
+        "bubblePointTemperature" -> "Bubble point temperature"
+        "dewPointTemperature" -> "Dew point temperature"
+        "bubblePointPressure" -> "Bubble point pressure"
+        "dewPointPressure" -> "Dew point pressure"
         "molarFlow" -> "Molar flow"
         "massFlow" -> "Mass flow"
         "volumeFlow" -> "Actual volume flow"

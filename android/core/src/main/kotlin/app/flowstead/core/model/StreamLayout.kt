@@ -61,6 +61,11 @@ object StreamLayout {
                 Row("Viscosity", "viscosity", null),
                 Row("Z factor", "compressibilityFactor", null),
                 Row("Thermal conductivity", "thermalConductivity", null),
+                // Bubble and dew points: temperatures at the stream's pressure, pressures at its temperature.
+                Row("Bubble point temperature", "bubblePointTemperature", null),
+                Row("Dew point temperature", "dewPointTemperature", null),
+                Row("Bubble point pressure", "bubblePointPressure", null),
+                Row("Dew point pressure", "dewPointPressure", null),
             ),
         ),
         Section("Vapour phase", Phases.VAPOUR, phaseRows("Vapour", Phases.VAPOUR, vapour = true)),
