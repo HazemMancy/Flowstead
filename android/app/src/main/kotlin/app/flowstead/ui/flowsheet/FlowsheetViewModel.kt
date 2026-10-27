@@ -545,6 +545,22 @@ class FlowsheetViewModel @Inject constructor(
     fun deleteReliefDevice(id: String) = edit { FlowsheetEditing.deleteReliefDevice(it, id) }
     fun upsertDepressuring(c: DepressuringCase) = edit { FlowsheetEditing.upsertDepressuring(it, c) }
     fun deleteDepressuring(id: String) = edit { FlowsheetEditing.deleteDepressuring(it, id) }
+    fun upsertPressurization(c: app.flowstead.core.model.PressurizationCase) = edit { FlowsheetEditing.upsertPressurization(it, c) }
+    fun deletePressurization(id: String) = edit { FlowsheetEditing.deletePressurization(it, id) }
+
+    /** Fills a pipeline network from its supply (HYSYS's pipeline pressurization), sizing the orifice when asked. */
+    fun runPressurization(id: String) {
+        val fs = current ?: return
+        val c = fs.safety?.pressurization?.firstOrNull { it.id == id } ?: return
+        val view = ResultView(currentSolve, fs.modelHash())
+        Safety.pressurizationProblem(fs, view, c)?.let { _messages.trySend(it); return }
+        engineCall(id) { url, key ->
+            when (val r = engine.depressuring(url, key, Safety.pressurizationRequest(fs, view, c))) {
+                is EngineResult.Ok -> edit(undoable = false) { FlowsheetEditing.setPressurizationResult(it, id, r.value, fs.modelHash()) }
+                is EngineResult.Failed -> _messages.send("Not run: ${r.reason}")
+            }
+        }
+    }
 
     /** Sizes one relief valve on the engine, from the protected equipment's solved contents. */
     fun runRelief(id: String) {

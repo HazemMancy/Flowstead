@@ -12,7 +12,7 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - **Heat exchanger zone analysis.** The exchanger is checked in 20 zones, so an internal pinch or temperature cross in a condenser or reboiler is caught, with the T–Q diagram.
 - **Pump and compressor curves.** The machine runs on the vendor's curve with DWSIM's rigorous head (DWSIM 9.0.5's own curve modes gave zero pump power and an ideal-gas compressor head): straight lines or a polynomial fit, curves at several speeds read by the affinity laws, and the speed found from a given outlet pressure; run-out, surge, stonewall and NPSH required are checked.
 - **Hydrate formation and inhibition.** The hydrate curve on the phase envelope and the hydrate temperature of any stream (van der Waals–Platteeuw, Munck et al.; DWSIM 9.0.5's engine has no hydrate model), within about 1 K of measured methane and propane data. Methanol, MEG, DEG or TEG enter the equilibrium through the water's activity: the inhibited curve, and the dose a stream's water needs.
-- **Safety analysis.** Relief valves sized by API 520 (two-phase by the isentropic omega method) for API 521 scenarios suggested from the flowsheet (fire, blocked outlet, control valve failure, thermal expansion), with API 526 orifices and the inlet-loss and back-pressure checks of API 520 Part II; HYSYS-like two-zone vessel depressuring (vapour and liquid apart, the wall conducting through its thickness, natural-convection and boiling coefficients) with the restriction orifice sized to the 15-minute target. DWSIM 9.0.5's engine has no relief sizing or depressuring.
+- **Safety analysis.** Relief valves sized by API 520 (two-phase by the isentropic omega method) for API 521 scenarios suggested from the flowsheet (fire, blocked outlet, control valve failure, thermal expansion), with API 526 orifices and the inlet-loss and back-pressure checks of API 520 Part II; HYSYS-like two-zone depressuring of vessels and pipelines (vapour and liquid apart, the wall conducting through its thickness, natural-convection and boiling coefficients) with the restriction orifice sized to the 15-minute target; and pipeline pressurization: the time to fill a pipeline or a network of pipelines from a supply through a control valve or orifice, with the gas and wall temperatures. DWSIM 9.0.5's engine has no relief sizing or depressuring.
 - **PVT laboratory and regression.** Saturation pressure, constant composition expansion, constant volume depletion, differential liberation and separator tests on any stream; tuning to your lab data (the plus fraction's Tc, Pc, ω and its kij with methane).
 - **Binary interaction parameters.** Every pair's kij with DWSIM's value, editable (enter HYSYS's to match it).
 - **Interactive.** Hold/Active solver, what-if sliders on every specification, case studies with one or two variables, and plots of profiles and envelopes that you can read by touch.
@@ -30,7 +30,7 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - **Densities and viscosities matched to HYSYS on request:** plain Peng–Robinson densities and Z, COSTALD liquids, Lee–Gonzalez–Eakin gas viscosity. On a C1–C5 gas at 320 barg and 35 °C (Peng–Robinson): density 361.9 kg/m³ (HYSYS 362.5), Z 0.8341 (HYSYS 0.8335), viscosity 0.0497 cP (HYSYS 0.0489).
 - **Hypothetical components** from boiling point, molecular weight and specific gravity.
 - **Adjust and Set** operations.
-- **Safety analysis:** relief scenarios suggested from the flowsheet, relief valves with several scenarios each and a governing case, line checks, two-zone blowdown with a conducting wall.
+- **Safety analysis:** relief scenarios suggested from the flowsheet, relief valves with several scenarios each and a governing case, line checks, two-zone blowdown with a conducting wall, pipeline pressurization.
 - **Binary coefficients page:** the kij matrix, editable.
 - **Variable-speed machines:** multiple curves, polynomial fit, speed from the outlet pressure; a **valve library** for sizing.
 - **Hydrate inhibitors** in the equilibrium; **PVT regression** to lab data.
@@ -43,4 +43,5 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - The valve library gives typical IEC factors by valve type, not a maker's catalogue (no Fp or inherent characteristic).
 - Hydrates are vdW–Platteeuw with Munck parameters and the inhibitor's activity from DWSIM's NRTL, not HYSYS's own model; salts and inhibitor losses to the gas are not counted.
 - PVT regression tunes the plus fraction's Tc, Pc, ω and its kij with methane (no volume-shift tuning, splitting or lumping).
-- No dynamics: steady state only (depressuring is the one time-stepping calculation).
+- Pipeline pressurization holds one pressure along the whole network (HYSYS's template resolves it along the line).
+- No dynamics: steady state only (depressuring and pressurization are the time-stepping calculations).

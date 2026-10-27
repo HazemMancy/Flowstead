@@ -24,10 +24,17 @@ public static class ValveDesigns
 }
 
 /// <summary>
-/// A cylindrical vessel with 2:1 ellipsoidal heads (m). <see cref="LiquidLevel"/>: normal liquid height from the
-/// bottom; <see cref="Elevation"/>: height of the vessel bottom above grade (fire is taken up to 7.6 m above grade).
+/// A cylindrical vessel with 2:1 ellipsoidal heads (m), or with <see cref="Pipe"/> a pipe or pipeline: a horizontal
+/// cylinder of that inside diameter and length, no heads. <see cref="LiquidLevel"/>: normal liquid height from the
+/// bottom; <see cref="Elevation"/>: height of the bottom above grade (fire is taken up to 7.6 m above grade).
 /// </summary>
-public sealed record VesselGeometry(double Diameter, double Length, bool Horizontal = false, double LiquidLevel = 0, double Elevation = 0);
+public sealed record VesselGeometry(double Diameter, double Length, bool Horizontal = false, double LiquidLevel = 0, double Elevation = 0, bool Pipe = false)
+{
+    /// <summary>Lying on its side: a horizontal vessel or a pipe.</summary>
+    public bool Lying => Horizontal || Pipe;
+    /// <summary>1 for a vessel's two 2:1 heads, 0 for a pipe.</summary>
+    public double HeadFactor => Pipe ? 0 : 1;
+}
 
 /// <summary>One relief case on a device. Fields used depend on <see cref="Kind"/> (SI throughout).</summary>
 public sealed record ReliefScenario
@@ -161,8 +168,31 @@ public sealed record DepressuringRequest
     /// <summary>Air outside: temperature (K; null for the starting fluid temperature) and coefficient (W/m²·K).</summary>
     public double? AmbientTemperature { get; init; }
     public double OutsideCoefficient { get; init; } = 10;
-    /// <summary>Wall thickness, m (null for ASME VIII-1 at 1.1 × the starting pressure, S = 138 MPa, E = 1).</summary>
+    /// <summary>Wall thickness, m (null for ASME VIII-1 at 1.1 × the higher of the starting and supply pressures, S = 138 MPa, E = 1).</summary>
     public double? WallThickness { get; init; }
+    /// <summary>
+    /// Pressurization instead of depressuring (HYSYS's pipeline pressurization): the vessel or pipeline, at
+    /// <see cref="InitialPressure"/> with <see cref="Composition"/> in it, fills from this supply through a valve or orifice
+    /// until <see cref="TargetPressure"/> (default 95 % of the way to the supply pressure).
+    /// </summary>
+    public PressurizationSupply? Supply { get; init; }
+}
+
+/// <summary>
+/// The supply a pipeline is pressurized from (a header at constant pressure and temperature) and what lets it in: a
+/// control valve (<see cref="Cv"/>, US units, at <see cref="Opening"/> of its travel, linear trim, with
+/// <see cref="ValveXt"/>), or a restriction orifice (<see cref="OrificeDiameter"/>, m, with the request's discharge
+/// coefficient). Neither: the orifice is sized to reach the target in the target time.
+/// </summary>
+public sealed record PressurizationSupply
+{
+    public required Dictionary<string, double> Composition { get; init; }
+    public required double Pressure { get; init; }
+    public required double Temperature { get; init; }
+    public double? Cv { get; init; }
+    public double Opening { get; init; } = 1;
+    public double ValveXt { get; init; } = 0.72;
+    public double? OrificeDiameter { get; init; }
 }
 
 public sealed record DepressuringResult
@@ -175,6 +205,11 @@ public sealed record DepressuringResult
     public double MinimumTemperature { get; init; }
     public double? MinimumLiquidTemperature { get; init; }
     public double MinimumWallTemperature { get; init; }
+    /// <summary>Pressurization: the highest gas temperature, and the coldest gas leaving the valve (Joule–Thomson, at the lowest pressure).</summary>
+    public double? MaximumTemperature { get; init; }
+    public double? MinimumInletTemperature { get; init; }
+    /// <summary>Pressurization through a control valve: its Cv in use (Cv × opening).</summary>
+    public double? Cv { get; init; }
     public double WallThickness { get; init; }
     public double PeakFlow { get; init; }
     public List<double> Time { get; init; } = [];
@@ -244,8 +279,8 @@ public static class ReliefMath
     public static double WettedArea(VesselGeometry g)
     {
         var fire = Math.Max(0, 7.6 - g.Elevation);
-        var head = 1.084 * g.Diameter * g.Diameter; // 2:1 ellipsoidal head surface
-        if (g.Horizontal)
+        var head = g.HeadFactor * 1.084 * g.Diameter * g.Diameter; // 2:1 ellipsoidal head surface
+        if (g.Lying)
         {
             var h = Math.Clamp(Math.Min(g.LiquidLevel, fire), 0, g.Diameter);
             var theta = Math.Acos(1 - 2 * h / g.Diameter); // half-angle of the wetted arc
@@ -259,8 +294,11 @@ public static class ReliefMath
     }
 
     /// <summary>Exposed area of a gas-filled vessel within 7.6 m of grade.</summary>
-    public static double ExposedArea(VesselGeometry g) => WettedArea(g with { LiquidLevel = g.Horizontal ? g.Diameter : g.Length + g.Diameter / 2 });
+    public static double ExposedArea(VesselGeometry g) => WettedArea(g with { LiquidLevel = g.Lying ? g.Diameter : g.Length + g.Diameter / 2 });
 
-    /// <summary>Internal volume: the shell plus two 2:1 ellipsoidal heads (π D³/24 each).</summary>
-    public static double Volume(VesselGeometry g) => Math.PI * g.Diameter * g.Diameter / 4 * g.Length + 2 * Math.PI * Math.Pow(g.Diameter, 3) / 24;
+    /// <summary>Internal volume: the shell plus two 2:1 ellipsoidal heads (π D³/24 each; none for a pipe).</summary>
+    public static double Volume(VesselGeometry g) => Math.PI * g.Diameter * g.Diameter / 4 * g.Length + g.HeadFactor * 2 * Math.PI * Math.Pow(g.Diameter, 3) / 24;
+
+    /// <summary>Inside wall surface: the shell plus the heads (none for a pipe).</summary>
+    public static double Surface(VesselGeometry g) => Math.PI * g.Diameter * g.Length + g.HeadFactor * 2 * 1.084 * g.Diameter * g.Diameter;
 }

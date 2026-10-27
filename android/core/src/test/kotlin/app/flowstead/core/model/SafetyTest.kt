@@ -105,4 +105,23 @@ class SafetyTest {
         val d = ReliefDeviceDef("d", "PSV-100", protectedId = "v", scenarios = s.take(2).map { it.scenario })
         assertEquals(listOf("FV-100 fails open"), Safety.newSuggestions(sheet, view, d).map { it.scenario.name })
     }
+
+    @Test
+    fun aPipeSegmentIsProtectedWithItsOwnGeometryAndANetworkIsOneEquivalentPipe() {
+        val pipe = SimObject("p", "L-100", ObjectType.PipeSegment, specs = mapOf(
+            SpecKey.INNER_DIAMETER to Spec(0.3, "m"), SpecKey.LENGTH to Spec(5000.0, "m"), SpecKey.OUTER_DIAMETER to Spec(0.3239, "m"),
+        ))
+        val (g, wall) = Safety.pipeGeometry(pipe)!!
+        assertEquals(app.flowstead.core.api.VesselGeometry(0.3, 5000.0, pipe = true), g)
+        assertEquals(0.01195, wall!!, 1e-6)
+        assertEquals(g, Safety.geometry(Flowsheet(objects = listOf(pipe)), "p", null))
+        // Two lines: the equivalent pipe keeps their total volume and inside surface.
+        val sections = listOf(PipeSection(0.3, 5000.0, 0.01), PipeSection(0.15, 2000.0, 0.007))
+        val (eq, w) = Safety.network(sections)!!
+        val v = sections.sumOf { Math.PI * it.insideDiameter * it.insideDiameter / 4 * it.length }
+        val a = sections.sumOf { Math.PI * it.insideDiameter * it.length }
+        assertEquals(v, Math.PI * eq.diameter * eq.diameter / 4 * eq.length, v * 1e-12)
+        assertEquals(a, Math.PI * eq.diameter * eq.length, a * 1e-12)
+        assertEquals((0.01 * Math.PI * 0.3 * 5000 + 0.007 * Math.PI * 0.15 * 2000) / a, w!!, 1e-12)
+    }
 }

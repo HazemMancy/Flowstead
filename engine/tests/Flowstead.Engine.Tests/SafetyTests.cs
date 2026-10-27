@@ -51,6 +51,11 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.Equal(0.03886, ReliefMath.EquivalentDiameter(1185.8e-6), 5);
         Assert.Equal("3K4", ReliefMath.ValveSizes["K"]);
         Assert.Equal(14, ReliefMath.ValveSizes.Count);
+        // A pipe has no heads: a 12" line 5 km long holds π/4 × 0.3² × 5000 m³ behind π × 0.3 × 5000 m² of wall.
+        var line = new VesselGeometry(0.3, 5000, Pipe: true);
+        Assert.Equal(Math.PI / 4 * 0.09 * 5000, ReliefMath.Volume(line), 1e-9);
+        Assert.Equal(Math.PI * 0.3 * 5000, ReliefMath.Surface(line), 1e-9);
+        Assert.Equal(Math.PI * 0.3 * 5000 / 2, ReliefMath.WettedArea(line with { LiquidLevel = 0.15 }), 1e-9);
         // 2 m × 6 m vertical vessel, 1.5 m of liquid, 1 m above grade: full bottom head + 1 m of shell.
         Assert.Equal(1.084 * 4 + Math.PI * 2 * 1.0, ReliefMath.WettedArea(new VesselGeometry(2, 6, false, 1.5, 1)), 9);
     }
@@ -76,6 +81,22 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.InRange(k, 1.28, 1.32);
         Assert.True(s.Details["kRealGas"] > k);
         Assert.Equal(s.RequiredArea, r.RequiredArea);
+    }
+
+    [Fact]
+    public async Task WetSourGasGetsItsIdealGasKWithoutAWarning()
+    {
+        // Saturated natural gas with CO₂ and H₂S: k comes from DWSIM's ideal-gas Cp of each component, never the fallback.
+        var gas = new Dictionary<string, double> { ["Methane"] = 0.888, ["Ethane"] = 0.05, ["Carbon dioxide"] = 0.04, ["Hydrogen sulfide"] = 0.02, ["Water"] = 0.002 };
+        var d = new ReliefDevice
+        {
+            Id = "psv", Tag = "PSV-200", SetPressure = 70e5, Composition = gas, OperatingTemperature = 320, OperatingPressure = 60e5,
+            Scenarios = [new ReliefScenario { Kind = ReliefScenarioKinds.Custom, Name = "Gas", MassFlow = 10, Temperature = 330 }],
+        };
+        var s = (await Relief(d, gas.Keys.ToArray())).Scenarios.Single();
+        Assert.DoesNotContain(s.Warnings, w => w.Contains("real-gas"));
+        Assert.InRange(s.Details["k"], 1.24, 1.32);
+        Assert.True(s.Details["kRealGas"] > s.Details["k"]);
     }
 
     [Fact]
@@ -291,5 +312,56 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.InRange(r.TimeToTarget!.Value, 0.9 * 900, 900);
         Assert.DoesNotContain(r.Warnings, w => w.Contains("did not settle"));
         Assert.True(r.MinimumWallTemperature >= Math.Min(r.MinimumTemperature, r.MinimumLiquidTemperature ?? double.MaxValue) - 0.5);
+    }
+
+    private async Task<DepressuringResult> Pressurize(PressurizationSupply supply, double? target = null, double targetTime = 3600)
+    {
+        var gas = new Dictionary<string, double> { ["Methane"] = 0.92, ["Ethane"] = 0.05, ["Propane"] = 0.03 };
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = gas.Keys.ToList() };
+        var req = new DepressuringRequest
+        {
+            // A 12" line (0.3 m inside), 5 km long, at atmospheric pressure, filled with the same gas.
+            Flowsheet = fs, Composition = gas, InitialPressure = 101325, InitialTemperature = 288.15,
+            Vessel = new VesselGeometry(0.3, 5000, Pipe: true), WallThickness = 0.0095,
+            Supply = supply with { Composition = gas }, TargetPressure = target, TargetTime = targetTime, Duration = 4 * 3600,
+        };
+        var res = await engine.Authed(15).PostAsJsonAsync("/depressuring", req, Json.Options);
+        Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+        var r = await EngineFixture.Json<DepressuringResult>(res);
+        output.WriteLine($"orifice {r.OrificeDiameter * 1000:0.#} mm (sized {r.OrificeSized}) Cv {r.Cv}, target {r.TargetPressure / 1e5:0.##} bar at {r.TimeToTarget:0} s, T {r.MinimumTemperature - 273.15:0.#}…{r.MaximumTemperature - 273.15:0.#} °C, inlet {r.MinimumInletTemperature - 273.15:0.#} °C, wall {r.MinimumWallTemperature - 273.15:0.#} °C, {r.Time.Count} steps | " + string.Join(" | ", r.Warnings));
+        for (var i = 0; i < r.Time.Count; i += Math.Max(1, r.Time.Count / 8))
+            output.WriteLine($"  t {r.Time[i]:0} s  P {r.Pressure[i] / 1e5:0.##} bar  T {r.Temperature[i] - 273.15:0.#} °C  Tw {r.WallTemperature[i] - 273.15:0.#} °C  W {r.MassFlow[i]:0.###}  M {r.Inventory[i]:0} kg");
+        return r;
+    }
+
+    [Fact]
+    public async Task PipelinePressurizesThroughAChokedOrificeAtConstantFlow()
+    {
+        var r = await Pressurize(new PressurizationSupply { Composition = [], Pressure = 70e5, Temperature = 288.15, OrificeDiameter = 0.025 });
+        Assert.True(r.Pressure.Zip(r.Pressure.Skip(1)).All(p => p.Second > p.First));
+        // Choked while the line is below about half the supply pressure: the flow is the same and the inventory grows linearly.
+        var w0 = r.MassFlow[0];
+        for (var i = 1; i < r.Time.Count && r.Pressure[i] < 0.4 * 70e5; i++)
+        {
+            Assert.Equal(w0, r.MassFlow[i], w0 * 1e-6);
+            Assert.Equal(w0 * r.Time[i], r.Inventory[i] - r.Inventory[0], w0 * r.Time[i] * 0.02);
+        }
+        // Charging heats the gas; the gas let down from 70 bar enters colder than the supply (Joule–Thomson).
+        Assert.True(r.MaximumTemperature > 288.15 + 5);
+        Assert.True(r.MinimumInletTemperature < 288.15 - 10);
+        Assert.NotNull(r.TimeToTarget);
+        Assert.Equal(0.101325e6 + 0.95 * (70e5 - 101325), r.TargetPressure, 1);
+    }
+
+    [Fact]
+    public async Task PipelinePressurizesThroughAControlValveAndTheOrificeIsSizedToTheTime()
+    {
+        var valve = await Pressurize(new PressurizationSupply { Composition = [], Pressure = 70e5, Temperature = 288.15, Cv = 20, Opening = 0.5 });
+        Assert.Equal(10, valve.Cv);
+        Assert.NotNull(valve.TimeToTarget);
+        // Sized to reach 50 bar in an hour.
+        var sized = await Pressurize(new PressurizationSupply { Composition = [], Pressure = 70e5, Temperature = 288.15 }, target: 50e5, targetTime: 3600);
+        Assert.True(sized.OrificeSized);
+        Assert.InRange(sized.TimeToTarget!.Value, 0.9 * 3600, 3600);
     }
 }

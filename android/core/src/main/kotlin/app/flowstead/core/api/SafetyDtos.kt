@@ -44,6 +44,21 @@ data class VesselGeometry(
     val horizontal: Boolean = false,
     val liquidLevel: Double = 0.0,
     val elevation: Double = 0.0,
+    /** A pipe or pipeline: a horizontal cylinder of this inside diameter and length, no heads. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val pipe: Boolean = false,
+)
+
+/** The supply a pipeline is pressurized from, and the control valve (Cv × opening) or orifice that lets it in; neither: sized. */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class PressurizationSupply(
+    val composition: Map<String, Double>,
+    val pressure: Double,
+    val temperature: Double,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val cv: Double? = null,
+    val opening: Double = 1.0,
+    val valveXt: Double = 0.72,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -156,6 +171,8 @@ data class DepressuringRequest(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val ambientTemperature: Double? = null,
     val outsideCoefficient: Double = 10.0,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val wallThickness: Double? = null,
+    /** Pressurization instead of depressuring (HYSYS's pipeline pressurization). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val supply: PressurizationSupply? = null,
 )
 
 @Serializable
@@ -167,6 +184,10 @@ data class DepressuringResult(
     val minimumTemperature: Double = 0.0,
     val minimumLiquidTemperature: Double? = null,
     val minimumWallTemperature: Double = 0.0,
+    /** Pressurization: the hottest gas, the coldest gas leaving the valve (Joule–Thomson), and the valve's Cv in use. */
+    val maximumTemperature: Double? = null,
+    val minimumInletTemperature: Double? = null,
+    val cv: Double? = null,
     val wallThickness: Double = 0.0,
     val peakFlow: Double = 0.0,
     val time: List<Double> = emptyList(),

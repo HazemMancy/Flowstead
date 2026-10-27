@@ -407,7 +407,35 @@ public sealed class DwsimEngine
     }
 
     /// <summary>Relief loads and API 520 sizing for one relief valve (D54–D56).</summary>
-    public ReliefResult Relief(ReliefRequest req) => new ReliefCalc(req, Solve).Run();
+    public ReliefResult Relief(ReliefRequest req) => new ReliefCalc(req, Solve, (z, t) => IdealGasK(req.Flowsheet, z, t)).Run();
+
+    /// <summary>
+    /// API 520's k: the ideal-gas ratio of specific heats of a vapour at <paramref name="t"/>, from DWSIM's ideal-gas Cp
+    /// of each component (molar Cp = Σ x M Cp_i, k = Cp/(Cp − R)). Null when DWSIM has no ideal-gas Cp for one of them.
+    /// </summary>
+    private double? IdealGasK(Flowsheet model, Dictionary<string, double> composition, double t)
+    {
+        try
+        {
+            var (pp, ms) = SingleStream(model, composition);
+            var x = composition.Where(c => c.Value > 0).ToList();
+            var sum = x.Sum(c => c.Value);
+            double cp = 0; // J/mol·K: kJ/kg·K × g/mol
+            foreach (var (name, xi) in x)
+            {
+                var mw = ms.Phases[0].Compounds[name].ConstantProperties.Molar_Weight;
+                var cpi = pp.AUX_CPi(name, t);
+                if (!(cpi > 0) || !double.IsFinite(cpi)) return null;
+                cp += xi / sum * mw * cpi;
+            }
+            const double R = 8.314462618;
+            return cp > R ? cp / (cp - R) : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Vessel depressuring through a restriction orifice (D57).</summary>
     public DepressuringResult Depressuring(DepressuringRequest req)

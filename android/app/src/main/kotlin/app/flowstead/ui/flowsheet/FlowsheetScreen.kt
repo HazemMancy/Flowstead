@@ -352,6 +352,9 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                     override fun saveCase(c: app.flowstead.core.model.DepressuringCase) = vm.upsertDepressuring(c)
                     override fun deleteCase(id: String) = vm.deleteDepressuring(id)
                     override fun runCase(id: String) = vm.runDepressuring(id)
+                    override fun savePressurization(c: app.flowstead.core.model.PressurizationCase) = vm.upsertPressurization(c)
+                    override fun deletePressurization(id: String) = vm.deletePressurization(id)
+                    override fun runPressurization(id: String) = vm.runPressurization(id)
                 }
             },
             onDismiss = vm::closeSafety,

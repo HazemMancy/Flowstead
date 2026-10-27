@@ -60,6 +60,10 @@ import app.flowstead.core.model.PipeSizes
 import app.flowstead.core.model.ReliefDeviceDef
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.Safety
+import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.PipeSection
+import app.flowstead.core.model.PressurizationValves
+import app.flowstead.core.model.PressurizationCase
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
@@ -81,6 +85,9 @@ interface SafetyActions {
     fun saveCase(c: DepressuringCase)
     fun deleteCase(id: String)
     fun runCase(id: String)
+    fun savePressurization(c: PressurizationCase) = Unit
+    fun deletePressurization(id: String) = Unit
+    fun runPressurization(id: String) = Unit
 }
 
 /**
@@ -118,12 +125,33 @@ fun SafetySheet(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Relief valves") })
                 FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text("Depressuring") })
+                FilterChip(selected = tab == 2, onClick = { tab = 2 }, label = { Text("Pressurization") }, modifier = Modifier.testTag("tab_pressurization"))
             }
-            if (vessels.isEmpty()) {
-                Calculated("Add a separator or tank to the flowsheet: relief valves and depressuring protect vessels.")
+            if (tab < 2 && vessels.isEmpty()) {
+                Calculated("Add a separator, tank or pipe segment to the flowsheet: relief valves and depressuring protect vessels and pipes.")
                 return@Column
             }
-            if (tab == 0) {
+            if (tab == 2) {
+                Calculated("Time to pressurize a pipeline or a network of pipelines from a supply through a control valve or orifice, as HYSYS's pipeline pressurization: pressure, gas and wall temperatures and flow against time.")
+                for (c in study?.pressurization.orEmpty()) {
+                    HorizontalDivider()
+                    Header(c.name, c.result?.timeToTarget?.let { "${ValueFormat.number(it / 60, 1)} min" }, stale = c.result != null && c.resultHash != fs.modelHash()) {
+                        openId = if (openId == c.id) null else c.id
+                    }
+                    if (openId == c.id) PressurizationEditor(fs, results, c, c.id in running, unitSet, ctx, actions)
+                }
+                HorizontalDivider()
+                TextButton(
+                    onClick = {
+                        val pipes = fs.objects.filter { it.type == ObjectType.PipeSegment }.map { it.id }
+                        val supply = fs.objects.firstOrNull { it.type == ObjectType.MaterialStream }?.id
+                        val c = PressurizationCase(UUID.randomUUID().toString(), "Pressurization ${(study?.pressurization?.size ?: 0) + 1}", supply, pipes)
+                        actions.savePressurization(c)
+                        openId = c.id
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("add_pressurization"),
+                ) { Text("Add a pressurization case") }
+            } else if (tab == 0) {
                 Calculated("API 521 relief loads and API 520 sizing, with the inlet-loss and back-pressure checks of API 520 Part II.")
                 for (d in study?.devices.orEmpty()) {
                     HorizontalDivider()
@@ -218,7 +246,7 @@ private fun ReliefEditor(
         CheckLine("Rupture disk upstream (Kc 0.9)", d.ruptureDisk) { save(d.copy(ruptureDisk = it)) }
 
         SectionLabel("Vessel")
-        VesselFields(d.vessel, "psv_${d.id}", unitSet, ctx) { save(d.copy(vessel = it)) }
+        GeometryFields(fs, d.protectedId, d.vessel, "psv_${d.id}", unitSet, ctx) { save(d.copy(vessel = it)) }
 
         SectionLabel("Relief scenarios")
         d.scenarios.forEachIndexed { i, s ->
@@ -440,9 +468,9 @@ private fun DepressuringEditor(
     fun save(x: DepressuringCase) = actions.saveCase(x)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextLine("Name", c.name, "bd_name_${c.id}") { save(c.copy(name = it)) }
-        Choice("Vessel", vessels.firstOrNull { it.id == c.protectedId }?.tag, vessels.map { it.id to "${it.tag} · ${it.type.displayName()}" }) { save(c.copy(protectedId = it)) }
-        Calculated("Starts from the vessel's operating pressure, temperature and contents (its feed, from the last solve).")
-        VesselFields(c.vessel, "bd_${c.id}", unitSet, ctx) { save(c.copy(vessel = it)) }
+        Choice("Vessel or pipe", vessels.firstOrNull { it.id == c.protectedId }?.tag, vessels.map { it.id to "${it.tag} · ${it.type.displayName()}" }) { save(c.copy(protectedId = it)) }
+        Calculated("Starts from its operating pressure, temperature and contents (its feed, from the last solve).")
+        GeometryFields(fs, c.protectedId, c.vessel, "bd_${c.id}", unitSet, ctx) { save(c.copy(vessel = it)) }
         QuantityField("Back pressure", Spec(c.backPressure, unitSet.unitFor(Quantity.Pressure).id), Quantity.Pressure, unitSet.unitFor(Quantity.Pressure), ctx, "bd_back_${c.id}", hint = "atmospheric") {
             save(c.copy(backPressure = it?.si ?: 101325.0))
         }
@@ -480,6 +508,143 @@ private fun DepressuringEditor(
             Text("Peak flow ${ValueFormat.number(wu.fromSi(r.peakFlow, ctx), wu.decimals)} ${wu.symbol}", style = MaterialTheme.typography.bodyMedium)
             r.warnings.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText) }
             PlotsSection(Safety.depressuringPlots(r), unitSet, ctx, c.resultHash != fs.modelHash(), "bd_${c.id}")
+        }
+    }
+}
+
+/** A vessel's dimensions to type, or a pipe segment's own (from its inside diameter, length and outside diameter). */
+@Composable
+private fun GeometryFields(fs: Flowsheet, protectedId: String?, given: VesselGeometry?, key: String, unitSet: UnitSet, ctx: UnitContext, onChange: (VesselGeometry?) -> Unit) {
+    val pipe = fs.objects.firstOrNull { it.id == protectedId && it.type == ObjectType.PipeSegment }
+    if (pipe == null) {
+        VesselFields(given, key, unitSet, ctx, onChange)
+        return
+    }
+    val geometry = Safety.pipeGeometry(pipe)
+    if (geometry == null) {
+        Text("Give ${pipe.tag} its inside diameter and length (in its editor): the pipe's volume and surface come from them.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText)
+        return
+    }
+    val (g, wall) = geometry
+    val lu = unitSet.unitFor(Quantity.Length)
+    val du = defaultUnit(SpecKey.INNER_DIAMETER, Quantity.Length, unitSet)
+    val volume = Math.PI * g.diameter * g.diameter / 4 * g.length
+    Calculated(
+        "Pipe ${pipe.tag}: inside ${ValueFormat.number(du.fromSi(g.diameter, ctx), du.decimals)} ${du.symbol} × ${ValueFormat.number(lu.fromSi(g.length, ctx), lu.decimals)} ${lu.symbol}, " +
+            "volume ${ValueFormat.number(volume, 3)} m³" + (wall?.let { ", wall ${ValueFormat.number(it * 1000, 2)} mm" } ?: " (wall from ASME pressure design: set the pipe size to use its schedule)") + ".",
+    )
+}
+
+// ------------------------------------------------------------------ pressurization
+
+@Composable
+private fun PressurizationEditor(
+    fs: Flowsheet,
+    results: ResultView,
+    c: PressurizationCase,
+    busy: Boolean,
+    unitSet: UnitSet,
+    ctx: UnitContext,
+    actions: SafetyActions,
+) {
+    fun save(x: PressurizationCase) = actions.savePressurization(x)
+    val pu = unitSet.unitFor(Quantity.Pressure)
+    val tu = unitSet.unitFor(Quantity.Temperature)
+    val lu = unitSet.unitFor(Quantity.Length)
+    val du = defaultUnit(SpecKey.INNER_DIAMETER, Quantity.Length, unitSet)
+    val streams = fs.objects.filter { it.type == ObjectType.MaterialStream }
+    val pipes = fs.objects.filter { it.type == ObjectType.PipeSegment }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextLine("Name", c.name, "pz_name_${c.id}") { save(c.copy(name = it)) }
+        Choice("Supply stream", streams.firstOrNull { it.id == c.supplyId }?.tag, streams.map { it.id to it.tag }) { save(c.copy(supplyId = it)) }
+        Calculated("The supply's pressure, temperature and composition come from the last solve; it holds steady while the line fills.")
+        SectionLabel("Pipeline (one network at one pressure)")
+        pipes.forEach { p ->
+            CheckLine("${p.tag}" + (Safety.pipeGeometry(p)?.first?.let { g -> " · ${ValueFormat.number(du.fromSi(g.diameter, ctx), du.decimals)} ${du.symbol} × ${ValueFormat.number(lu.fromSi(g.length, ctx), lu.decimals)} ${lu.symbol}" } ?: " · no size yet"),
+                p.id in c.pipeIds) { on -> save(c.copy(pipeIds = if (on) c.pipeIds + p.id else c.pipeIds - p.id)) }
+        }
+        c.sections.forEachIndexed { i, sec ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    QuantityField("Inside diameter", Spec(sec.insideDiameter, du.id), Quantity.Length, du, ctx, "pz_d_${c.id}_$i") { v ->
+                        v?.let { save(c.copy(sections = c.sections.toMutableList().also { l -> l[i] = sec.copy(insideDiameter = it.si) })) }
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    QuantityField("Length", Spec(sec.length, lu.id), Quantity.Length, lu, ctx, "pz_l_${c.id}_$i") { v ->
+                        v?.let { save(c.copy(sections = c.sections.toMutableList().also { l -> l[i] = sec.copy(length = it.si) })) }
+                    }
+                }
+                TextButton(onClick = { save(c.copy(sections = c.sections.filterIndexed { j, _ -> j != i })) }) { Text("Remove") }
+            }
+        }
+        TextButton(onClick = { save(c.copy(sections = c.sections + PipeSection(0.2, 1000.0))) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Add a pipe section by hand") }
+        Safety.network(Safety.sections(fs, c))?.let { (g, _) ->
+            Calculated("Network volume ${ValueFormat.number(Math.PI * g.diameter * g.diameter / 4 * g.length, 3)} m³.")
+        }
+        SectionLabel("Starting state")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                QuantityField("Pressure", Spec(c.initialPressure, pu.id), Quantity.Pressure, pu, ctx, "pz_p0_${c.id}", hint = "atmospheric") { save(c.copy(initialPressure = it?.si ?: 101325.0)) }
+            }
+            Column(Modifier.weight(1f)) {
+                QuantityField("Temperature", c.initialTemperature?.let { Spec(it, tu.id) }, Quantity.Temperature, tu, ctx, "pz_t0_${c.id}", hint = "the supply's") { save(c.copy(initialTemperature = it?.si)) }
+            }
+        }
+        Calculated("The line starts holding the supply gas at that pressure.")
+        SectionLabel("Inlet")
+        Choice("Through", when (c.valve) { PressurizationValves.CV -> "Control valve (Cv)"; PressurizationValves.ORIFICE -> "Restriction orifice"; else -> "Orifice sized to the target time" },
+            listOf(PressurizationValves.CV to "Control valve (Cv)", PressurizationValves.ORIFICE to "Restriction orifice", PressurizationValves.SIZE to "Orifice sized to the target time")) { save(c.copy(valve = it)) }
+        when (c.valve) {
+            PressurizationValves.CV -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        QuantityField("Rated Cv", c.cv?.let { Spec(it, "ratio") }, Quantity.Ratio, unitSet.unitFor(Quantity.Ratio), ctx, "pz_cv_${c.id}") { save(c.copy(cv = it?.si)) }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        QuantityField("Opening", Spec(c.opening, "frac"), Quantity.Fraction, unitSet.unitFor(Quantity.Fraction), ctx, "pz_op_${c.id}", hint = "100 %") { save(c.copy(opening = it?.si ?: 1.0)) }
+                    }
+                }
+                QuantityField("xT (IEC 60534)", Spec(c.valveXt, "ratio"), Quantity.Ratio, unitSet.unitFor(Quantity.Ratio), ctx, "pz_xt_${c.id}", hint = "0.72 globe") { save(c.copy(valveXt = it?.si ?: 0.72)) }
+            }
+            PressurizationValves.ORIFICE ->
+                QuantityField("Orifice diameter", c.orificeDiameter?.let { Spec(it, du.id) }, Quantity.Length, du, ctx, "pz_ro_${c.id}") { save(c.copy(orificeDiameter = it?.si)) }
+            else -> Unit
+        }
+        SectionLabel("Target")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                QuantityField("Pressure", c.targetPressure?.let { Spec(it, pu.id) }, Quantity.Pressure, pu, ctx, "pz_pt_${c.id}", hint = "95 % of the supply") { save(c.copy(targetPressure = it?.si)) }
+            }
+            Column(Modifier.weight(1f)) {
+                QuantityField("In (time)", Spec(c.targetTime, unitSet.unitFor(Quantity.Time).id), Quantity.Time, unitSet.unitFor(Quantity.Time), ctx, "pz_tt_${c.id}", hint = "1 h") { save(c.copy(targetTime = it?.si ?: 3600.0, duration = maxOf(c.duration, 2 * (it?.si ?: 3600.0)))) }
+            }
+        }
+        val problem = Safety.pressurizationProblem(fs, results, c)
+        problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText) }
+        RunRow(busy, problem == null, if (c.result == null) "Run" else "Run again", "Filling the line… (a few minutes on the phone)", { actions.runPressurization(c.id) }, { actions.deletePressurization(c.id) })
+        c.result?.let { r ->
+            val wu = unitSet.unitFor(Quantity.MassFlow)
+            fun t(v: Double) = "${ValueFormat.number(tu.fromSi(v, ctx), tu.decimals)} ${tu.symbol}"
+            SectionLabel("Result")
+            Text(
+                "Target ${ValueFormat.number(pu.fromSi(r.targetPressure, ctx), pu.decimals)} ${pu.symbol} " +
+                    (r.timeToTarget?.let { "reached after ${ValueFormat.number(it / 60, 1)} min" } ?: "not reached"),
+                style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("pz_result"),
+            )
+            Text(
+                r.cv?.let { "Through Cv ${ValueFormat.number(it, 1)}" } ?: ("Through a ${ValueFormat.number(r.orificeDiameter * 1000, 1)} mm orifice" + if (r.orificeSized) " (sized)" else ""),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Gas ${t(r.minimumTemperature)} to ${r.maximumTemperature?.let(::t) ?: "—"}" + (r.minimumInletTemperature?.let { "; enters as cold as ${t(it)} (let down from the supply)" } ?: "") +
+                    "; lowest inner wall ${t(r.minimumWallTemperature)}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text("Peak flow ${ValueFormat.number(wu.fromSi(r.peakFlow, ctx), wu.decimals)} ${wu.symbol}", style = MaterialTheme.typography.bodyMedium)
+            r.warnings.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText) }
+            PlotsSection(Safety.depressuringPlots(r, filling = true), unitSet, ctx, c.resultHash != fs.modelHash(), "pz_${c.id}")
         }
     }
 }

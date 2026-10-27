@@ -162,6 +162,21 @@ object FlowsheetEditing {
     fun deleteDepressuring(fs: Flowsheet, id: String): Flowsheet =
         fs.copy(safety = fs.safety?.let { it.copy(depressuring = it.depressuring.filterNot { c -> c.id == id }) })
 
+    /** As [upsertDepressuring], for pipeline pressurization cases; renaming keeps the result. */
+    fun upsertPressurization(fs: Flowsheet, c: PressurizationCase): Flowsheet {
+        val study = fs.safety ?: SafetyStudy()
+        val old = study.pressurization.firstOrNull { it.id == c.id }
+        fun def(x: PressurizationCase) = x.copy(name = "", result = null, resultHash = null)
+        val kept = if (old != null && def(old) == def(c)) c.copy(result = old.result, resultHash = old.resultHash) else c.copy(result = null, resultHash = null)
+        return fs.copy(safety = study.copy(pressurization = if (old == null) study.pressurization + kept else study.pressurization.map { if (it.id == c.id) kept else it }))
+    }
+
+    fun setPressurizationResult(fs: Flowsheet, id: String, result: DepressuringResult, hash: String): Flowsheet =
+        fs.copy(safety = fs.safety?.let { s -> s.copy(pressurization = s.pressurization.map { if (it.id == id) it.copy(result = result, resultHash = hash) else it }) })
+
+    fun deletePressurization(fs: Flowsheet, id: String): Flowsheet =
+        fs.copy(safety = fs.safety?.let { it.copy(pressurization = it.pressurization.filterNot { c -> c.id == id }) })
+
     fun deleteCaseStudy(fs: Flowsheet, id: String): Flowsheet = fs.copy(caseStudies = fs.caseStudies.filterNot { it.id == id })
 
     fun setCaseResults(fs: Flowsheet, id: String, results: CaseResults): Flowsheet =

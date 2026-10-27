@@ -22,7 +22,7 @@ namespace Flowstead.Engine.Worker;
 /// </list>
 /// Orifices are the API 526 effective areas D to T; above T, several equal valves (<see cref="ReliefMath"/>).
 /// </summary>
-public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> solve)
+public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> solve, Func<Dictionary<string, double>, double, double?>? idealGasK = null)
 {
     private const double Patm = 101325;
     private const double PaPerPsi = 6894.757;
@@ -304,11 +304,13 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
     {
         var z = Phase(inlet, "vapour", "compressibilityFactor");
         var m = Phase(inlet, "vapour", "molecularWeight");
-        // API 520-1 takes k as the ideal-gas ratio of specific heats at the relieving temperature: the same vapour
-        // flashed by DWSIM at 1 kPa. (The real-gas Cp/Cv at relieving pressure is higher and would undersize the valve.)
-        var lowP = Flash(inlet.Phases!["vapour"].Composition, T: t, P: 1000);
-        var k = lowP is null ? Phase(inlet, "vapour", "heatCapacityRatio") : Phase(lowP, "vapour", "heatCapacityRatio");
-        if (lowP is null) warnings.Add("The ideal-gas k was not available; the real-gas Cp/Cv at relieving conditions was used.");
+        // API 520-1 takes k as the ideal-gas ratio of specific heats at the relieving temperature: from DWSIM's ideal-gas
+        // Cp of each component, k = Cp/(Cp − R). (The real-gas Cp/Cv at relieving pressure is higher and would undersize
+        // the valve.) Only if DWSIM has no ideal-gas Cp for a component is the real-gas value used, and said so.
+        var kIdeal = idealGasK?.Invoke(inlet.Phases!["vapour"].Composition, t);
+        var k = kIdeal is > 1 and < 2 ? kIdeal.Value : Phase(inlet, "vapour", "heatCapacityRatio");
+        if (kIdeal is not (> 1 and < 2))
+            warnings.Add("DWSIM has no ideal-gas heat capacity for a component of this vapour, so k is the real-gas Cp/Cv at relieving conditions; it is higher than API 520's ideal-gas k and gives a slightly smaller area.");
         var kd = _d.Kd ?? 0.975;
         var kb = _d.Design == ValveDesigns.BalancedBellows ? _d.Kb : 1.0;
         (d["k"], d["kRealGas"], d["z"], d["molecularWeight"], d["kd"]) = (k, Phase(inlet, "vapour", "heatCapacityRatio"), z, m, kd);
