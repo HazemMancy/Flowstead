@@ -234,6 +234,19 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             }
         }
     }
+    val safetyActions = remember(vm) {
+        object : SafetyActions {
+            override fun saveDevice(d: app.flowstead.core.model.ReliefDeviceDef) = vm.upsertReliefDevice(d)
+            override fun deleteDevice(id: String) = vm.deleteReliefDevice(id)
+            override fun runDevice(id: String) = vm.runRelief(id)
+            override fun saveCase(c: app.flowstead.core.model.DepressuringCase) = vm.upsertDepressuring(c)
+            override fun deleteCase(id: String) = vm.deleteDepressuring(id)
+            override fun runCase(id: String) = vm.runDepressuring(id)
+            override fun savePressurization(c: app.flowstead.core.model.PressurizationCase) = vm.upsertPressurization(c)
+            override fun deletePressurization(id: String) = vm.deletePressurization(id)
+            override fun runPressurization(id: String) = vm.runPressurization(id)
+        }
+    }
     val editorActions = remember(vm) {
         object : EditorActions {
             override fun rename(id: String, tag: String) = vm.rename(id, tag)
@@ -321,6 +334,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 actions = editorActions,
                 onDismiss = vm::closeEditor,
                 envelope = ui.envelope,
+                safety = safetyActions,
+                safetyRunning = ui.safetyRunning,
             )
         }
     }
@@ -344,19 +359,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             running = ui.safetyRunning,
             unitSet = ui.unitSet,
             ctx = ui.unitContext,
-            actions = remember(vm) {
-                object : SafetyActions {
-                    override fun saveDevice(d: app.flowstead.core.model.ReliefDeviceDef) = vm.upsertReliefDevice(d)
-                    override fun deleteDevice(id: String) = vm.deleteReliefDevice(id)
-                    override fun runDevice(id: String) = vm.runRelief(id)
-                    override fun saveCase(c: app.flowstead.core.model.DepressuringCase) = vm.upsertDepressuring(c)
-                    override fun deleteCase(id: String) = vm.deleteDepressuring(id)
-                    override fun runCase(id: String) = vm.runDepressuring(id)
-                    override fun savePressurization(c: app.flowstead.core.model.PressurizationCase) = vm.upsertPressurization(c)
-                    override fun deletePressurization(id: String) = vm.deletePressurization(id)
-                    override fun runPressurization(id: String) = vm.runPressurization(id)
-                }
-            },
+            actions = safetyActions,
             onDismiss = vm::closeSafety,
         )
     }

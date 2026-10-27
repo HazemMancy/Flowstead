@@ -326,7 +326,11 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
 /** SHA-256 of the canonical flowsheet JSON: identifies exactly which flowsheet a result belongs to. */
 fun Flowsheet.modelHash(): String {
     // Only what the engine solves counts: sizing criteria, data-sheet text, flowsheet tables, the solver mode, case studies and the safety analysis change no result.
-    val solved = copy(sizingCriteria = null, documentInfo = null, tables = emptyList(), solverActive = false, caseStudies = emptyList(), safety = null, objects = objects.map { if (it.sheet.isEmpty()) it else it.copy(sheet = emptyMap()) })
+    // A PSV on the flowsheet is not solved either (the engine leaves it out).
+    val solved = copy(
+        sizingCriteria = null, documentInfo = null, tables = emptyList(), solverActive = false, caseStudies = emptyList(), safety = null,
+        objects = objects.filter { it.type != ObjectType.ReliefValve }.map { if (it.sheet.isEmpty()) it else it.copy(sheet = emptyMap()) },
+    )
     val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), solved)
     return java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
 }

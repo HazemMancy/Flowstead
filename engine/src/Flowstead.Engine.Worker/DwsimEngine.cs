@@ -144,7 +144,7 @@ public sealed class DwsimEngine
     {
         var sw = Stopwatch.StartNew();
         // Sets first, so the validator sees the specifications DWSIM will get.
-        model = SetSolver.Apply(model);
+        model = SetSolver.Apply(model.WithoutDrawings());
         var messages = Validator.Validate(model, _automation.AvailableCompounds.Keys, MvpPackages.Select(p => p.Name)
             .Concat(_automation.AvailablePropertyPackages.Keys));
         if (messages.Any(m => m.Level == MessageLevel.Error))
@@ -544,6 +544,7 @@ public sealed class DwsimEngine
 
     private (IFlowsheet, Dictionary<string, ISimulationObject>) Build(Flowsheet model, WaterMode? water = null, bool forExport = false)
     {
+        model = model.WithoutDrawings();
         var fs = _automation.CreateFlowsheet();
         // DWSIM hands every flowsheet the engine's own compound dictionary; hypotheticals go into a copy so they
         // never leak into later solves or the compound search.
@@ -1221,4 +1222,16 @@ public sealed class DwsimEngine
 internal static class ObjectTypeExtensions
 {
     public static bool IsStream(this ObjectType t) => t is ObjectType.MaterialStream or ObjectType.EnergyStream;
+
+    /// <summary>
+    /// The flowsheet without its relief valves: a PSV on the flowsheet only marks what it protects (its sizing is
+    /// Safety analysis'), so DWSIM never sees it and it never stops a solve.
+    /// </summary>
+    public static Flowsheet WithoutDrawings(this Flowsheet fs) =>
+        fs.Objects.All(o => o.Type != ObjectType.ReliefValve) ? fs : fs with
+        {
+            Objects = fs.Objects.Where(o => o.Type != ObjectType.ReliefValve).ToList(),
+            Connections = fs.Connections.Where(c => fs.Objects.Any(o => o.Type != ObjectType.ReliefValve && o.Id == c.FromObject)
+                && fs.Objects.Any(o => o.Type != ObjectType.ReliefValve && o.Id == c.ToObject)).ToList(),
+        };
 }

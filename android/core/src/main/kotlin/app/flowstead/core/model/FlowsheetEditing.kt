@@ -38,7 +38,9 @@ object FlowsheetEditing {
 
     fun add(fs: Flowsheet, type: ObjectType, x: Double, y: Double, id: String = newId()): Pair<Flowsheet, SimObject> {
         val obj = SimObject(id = id, tag = nextTag(fs, type), type = type, x = snap(x), y = snap(y))
-        return fs.copy(objects = fs.objects + obj) to obj
+        val added = fs.copy(objects = fs.objects + obj)
+        // A PSV drawn on the flowsheet is a Safety analysis relief valve with the same id and tag.
+        return (if (type == ObjectType.ReliefValve) upsertReliefDevice(added, ReliefDeviceDef(id = id, tag = obj.tag)) else added) to obj
     }
 
     fun move(fs: Flowsheet, id: String, x: Double, y: Double): Flowsheet =
@@ -51,14 +53,20 @@ object FlowsheetEditing {
         if (fs.objects.any { it.id != id && it.tag.equals(clean, ignoreCase = true) }) {
             throw EditRejected("Tag $clean is already used")
         }
-        return update(fs, id) { it.copy(tag = clean) }
+        val renamed = update(fs, id) { it.copy(tag = clean) }
+        val device = renamed.safety?.devices?.firstOrNull { it.id == id } ?: return renamed
+        return upsertReliefDevice(renamed, device.copy(tag = clean))
     }
 
-    fun delete(fs: Flowsheet, id: String): Flowsheet = fs.copy(
-        objects = fs.objects.filterNot { it.id == id },
-        connections = fs.connections.filterNot { it.fromObject == id || it.toObject == id },
-        tables = fs.tables.filterNot { it.objectId == id },
-    )
+    fun delete(fs: Flowsheet, id: String): Flowsheet {
+        val removed = fs.copy(
+            objects = fs.objects.filterNot { it.id == id },
+            connections = fs.connections.filterNot { it.fromObject == id || it.toObject == id },
+            tables = fs.tables.filterNot { it.objectId == id },
+        )
+        // A PSV's relief valve goes with it.
+        return if (fs.obj(id)?.type == ObjectType.ReliefValve) deleteReliefDevice(removed, id) else removed
+    }
 
     /** Shows (or updates) [id]'s property table with [keys]; no keys removes it. Keeps its position. */
     fun setTable(fs: Flowsheet, id: String, keys: List<String>): Flowsheet {
@@ -138,14 +146,21 @@ object FlowsheetEditing {
         val old = study.devices.firstOrNull { it.id == d.id }
         fun def(x: ReliefDeviceDef) = x.copy(tag = "", result = null, resultHash = null)
         val kept = if (old != null && def(old) == def(d)) d.copy(result = old.result, resultHash = old.resultHash) else d.copy(result = null, resultHash = null)
-        return fs.copy(safety = study.copy(devices = if (old == null) study.devices + kept else study.devices.map { if (it.id == d.id) kept else it }))
+        // Its PSV on the flowsheet, if it has one, carries the same tag.
+        val objects = fs.objects.map { if (it.id == d.id && it.type == ObjectType.ReliefValve && d.tag.isNotBlank()) it.copy(tag = d.tag) else it }
+        return fs.copy(objects = objects, safety = study.copy(devices = if (old == null) study.devices + kept else study.devices.map { if (it.id == d.id) kept else it }))
     }
 
     fun setReliefResult(fs: Flowsheet, id: String, result: ReliefResult, hash: String): Flowsheet =
         fs.copy(safety = fs.safety?.let { s -> s.copy(devices = s.devices.map { if (it.id == id) it.copy(result = result, resultHash = hash) else it }) })
 
+    /** Removes the relief valve and its PSV on the flowsheet, if it has one. */
     fun deleteReliefDevice(fs: Flowsheet, id: String): Flowsheet =
-        fs.copy(safety = fs.safety?.let { it.copy(devices = it.devices.filterNot { d -> d.id == id }) })
+        fs.copy(
+            objects = fs.objects.filterNot { it.id == id && it.type == ObjectType.ReliefValve },
+            tables = fs.tables.filterNot { it.objectId == id && fs.obj(id)?.type == ObjectType.ReliefValve },
+            safety = fs.safety?.let { it.copy(devices = it.devices.filterNot { d -> d.id == id }) },
+        )
 
     /** As [upsertReliefDevice], for depressuring cases (D57); renaming keeps the result. */
     fun upsertDepressuring(fs: Flowsheet, c: DepressuringCase): Flowsheet {

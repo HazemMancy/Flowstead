@@ -243,7 +243,22 @@ object Specification {
         ObjectType.EnergyStream -> SpecStatus.Complete
         ObjectType.Adjust -> adjust(fs, o)
         ObjectType.Set -> set(fs, o)
+        ObjectType.ReliefValve -> reliefValve(fs, o)
         else -> unitOp(fs, o)
+    }
+
+    /**
+     * A PSV on the flowsheet is its Safety analysis device (same id): it needs what it protects and its set pressure.
+     * It never stops a solve; the engine does not see it.
+     */
+    fun reliefValve(fs: Flowsheet, o: SimObject): SpecStatus {
+        val d = fs.safety?.devices?.firstOrNull { it.id == o.id }
+        val needs = buildList {
+            if (d?.protectedId == null) add("the equipment it protects")
+            if (d?.setPressure == null) add("set pressure")
+        }
+        if (d?.protectedId != null && fs.obj(d.protectedId) == null) return SpecStatus.Invalid("The protected equipment no longer exists")
+        return if (needs.isEmpty()) SpecStatus.Complete else SpecStatus.UnderSpecified(needs)
     }
 
     /** Mirrors the engine's ValidateAdjust. */
@@ -513,7 +528,7 @@ object Specification {
         fs.objects.filter { it.type == ObjectType.Adjust }.drop(1).forEach { add(it.id to "${it.tag}: only one Adjust per flowsheet is supported") }
         if (fs.compounds.isEmpty()) add(null to "Add components")
         if (fs.objects.isEmpty()) add(null to "The flowsheet is empty")
-        for (o in fs.objects) {
+        for (o in fs.objects.filter { it.type != ObjectType.ReliefValve }) {
             when (val st = statusOf(fs, o)) {
                 SpecStatus.Complete -> Unit
                 is SpecStatus.UnderSpecified -> add(o.id to "${o.tag}: needs ${st.needs.joinToString("; ")}")

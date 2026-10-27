@@ -146,6 +146,8 @@ fun ObjectEditorSheet(
     actions: EditorActions,
     onDismiss: () -> Unit,
     envelope: EnvelopeUi? = null,
+    safety: SafetyActions? = null,
+    safetyRunning: Set<String> = emptySet(),
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
@@ -258,6 +260,16 @@ fun ObjectEditorSheet(
                     Calculated("ISO 5167 orifice meter. The outlet is at the permanent (recovered) pressure.")
                 }
                 ObjectType.Adjust -> AdjustEditor(fs, obj, unitSet, ctx, actions)
+                // A PSV on the flowsheet is its Safety analysis relief valve (same id): the same fields and result here.
+                ObjectType.ReliefValve -> {
+                    Calculated("Pressure safety valve: API 521 relief loads and API 520 sizing from the solved flowsheet, as in Safety analysis. It takes no part in the solve.")
+                    val d = fs.safety?.devices?.firstOrNull { it.id == obj.id }
+                    when {
+                        safety == null -> Unit
+                        d == null -> TextButton(onClick = { safety.saveDevice(app.flowstead.core.model.ReliefDeviceDef(obj.id, obj.tag)) }) { Text("Set up its relief valve") }
+                        else -> ReliefEditor(fs, results, d, fs.objects.filter { it.type in app.flowstead.core.model.Safety.PROTECTABLE }, d.id in safetyRunning, unitSet, ctx, safety)
+                    }
+                }
                 ObjectType.Recycle -> Calculated(
                     "Tear stream: the engine iterates until the assumed and calculated streams agree (1e-6 kg/s, 0.001 K). " +
                         "Iterations are reported in the results.",

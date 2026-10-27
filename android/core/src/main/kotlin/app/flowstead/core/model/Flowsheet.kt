@@ -243,7 +243,7 @@ enum class ObjectType(val category: Category, val available: Boolean = true, val
     @SerialName("valve") Valve(Category.Piping),
     @SerialName("pipe_segment") PipeSegment(Category.Piping),
     @SerialName("orifice_plate") OrificePlate(Category.Piping),
-    @SerialName("relief_valve") ReliefValve(Category.Piping, available = false),
+    @SerialName("relief_valve") ReliefValve(Category.Piping),
 
     @SerialName("mixer") Mixer(Category.Mixing),
     @SerialName("splitter") Splitter(Category.Mixing),

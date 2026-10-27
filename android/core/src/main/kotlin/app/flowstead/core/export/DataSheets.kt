@@ -77,7 +77,7 @@ object DataSheets {
     const val MISSING = "—"
 
     /** Unit operations that get a data sheet (streams and logical blocks don't). */
-    fun isEquipment(t: ObjectType): Boolean = !t.isStream && t !in setOf(ObjectType.Recycle, ObjectType.Adjust, ObjectType.Set, ObjectType.EnergyRecycle)
+    fun isEquipment(t: ObjectType): Boolean = !t.isStream && t !in setOf(ObjectType.Recycle, ObjectType.Adjust, ObjectType.Set, ObjectType.EnergyRecycle, ObjectType.ReliefValve)
 
     fun build(
         projectName: String,

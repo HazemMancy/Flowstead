@@ -28,6 +28,28 @@ class FlowsheetEditingTest {
     }
 
     @Test
+    fun aPsvOnTheFlowsheetIsItsSafetyReliefValve() {
+        val (withVessel, vessel) = FlowsheetEditing.add(base, ObjectType.Separator, 0.0, 0.0)
+        val (fs, psv) = FlowsheetEditing.add(withVessel, ObjectType.ReliefValve, 48.0, 0.0)
+        assertEquals("PSV-100", psv.tag)
+        val device = fs.safety!!.devices.single()
+        assertEquals(psv.id to "PSV-100", device.id to device.tag)
+        // Needs what it protects and its set pressure, but never stops a solve or changes the model hash.
+        assertIs<SpecStatus.UnderSpecified>(Specification.status(fs, psv))
+        assertTrue(Specification.problems(fs).none { it.first == psv.id })
+        assertEquals(withVessel.modelHash(), fs.modelHash())
+
+        var edited = FlowsheetEditing.upsertReliefDevice(fs, device.copy(protectedId = vessel.id, setPressure = 10e5))
+        assertEquals(SpecStatus.Complete, Specification.status(edited, edited.obj(psv.id)!!))
+        edited = FlowsheetEditing.rename(edited, psv.id, "PSV-7")
+        assertEquals("PSV-7", edited.safety!!.devices.single().tag)
+        edited = FlowsheetEditing.upsertReliefDevice(edited, edited.safety!!.devices.single().copy(tag = "PSV-8"))
+        assertEquals("PSV-8", edited.obj(psv.id)!!.tag)
+        assertTrue(FlowsheetEditing.delete(edited, psv.id).safety!!.devices.isEmpty())
+        assertTrue(FlowsheetEditing.deleteReliefDevice(edited, psv.id).objects.none { it.id == psv.id })
+    }
+
+    @Test
     fun positionsSnapToGrid() {
         val (fs, o) = FlowsheetEditing.add(base, ObjectType.Valve, 37.0, 50.0)
         assertEquals(48.0 to 48.0, o.x to o.y)

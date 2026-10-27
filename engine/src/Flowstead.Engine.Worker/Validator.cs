@@ -80,6 +80,7 @@ public static class Validator
 
     public static List<SolverMessage> Validate(Flowsheet fs, IEnumerable<string> knownCompounds, IEnumerable<string> knownPackages)
     {
+        fs = fs.WithoutDrawings();
         var m = new List<SolverMessage>();
         void Err(string text, string? id = null) => m.Add(new SolverMessage(MessageLevel.Error, text, id));
 

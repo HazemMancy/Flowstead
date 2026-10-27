@@ -216,7 +216,7 @@ private fun Header(title: String, summary: String?, stale: Boolean, onClick: () 
 // ------------------------------------------------------------------ relief valves
 
 @Composable
-private fun ReliefEditor(
+internal fun ReliefEditor(
     fs: Flowsheet,
     results: ResultView,
     d: ReliefDeviceDef,

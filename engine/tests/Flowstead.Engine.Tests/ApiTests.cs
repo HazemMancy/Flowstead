@@ -197,11 +197,14 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
                 },
                 new SimObject { Id = "v", Tag = "PV-100", Type = ObjectType.Valve, Specs = new() { [SpecKeys.OutletPressure] = new Spec(2e6, "bara") } },
                 new SimObject { Id = "out", Tag = "LP", Type = ObjectType.MaterialStream },
+                // A PSV on the flowsheet is a marker only: DWSIM never sees it and it gets no result.
+                new SimObject { Id = "psv", Tag = "PSV-100", Type = ObjectType.ReliefValve },
             ],
             Connections = [new Connection("in", 0, "v", 0), new Connection("v", 0, "out", 0)],
         };
         var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
         Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        Assert.DoesNotContain("psv", r.Objects.Keys);
         var outlet = r.Objects["out"].Properties;
         Assert.Equal(2e6, outlet["pressure"], 1);
         Assert.InRange(outlet["temperature"], 273.15, 313.15 - 5); // cooled by more than 5 K

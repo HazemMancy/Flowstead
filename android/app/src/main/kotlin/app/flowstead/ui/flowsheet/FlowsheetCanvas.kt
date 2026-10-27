@@ -329,6 +329,16 @@ fun FlowsheetCanvas(
                         }
                     }
 
+                    // A PSV on the flowsheet: a dashed line to the equipment its relief valve protects.
+                    for (psv in fs.objects.filter { it.type == ObjectType.ReliefValve }) {
+                        val target = fs.safety?.devices?.firstOrNull { it.id == psv.id }?.protectedId
+                            ?.let { id -> fs.objects.firstOrNull { it.id == id } } ?: continue
+                        drawLine(
+                            colors.secondary, positionOf(psv), positionOf(target), 1.5f, StrokeCap.Round,
+                            PathEffect.dashPathEffect(floatArrayOf(3f, 4f)),
+                        )
+                    }
+
                     wire?.let { (a, b) ->
                         drawLine(colors.secondary, a, b, 2f, StrokeCap.Round, PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
                         drawCircle(colors.secondary, 5f, b)
