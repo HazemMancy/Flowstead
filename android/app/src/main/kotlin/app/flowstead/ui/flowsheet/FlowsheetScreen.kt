@@ -191,14 +191,14 @@ fun FlowsheetScreen(
             FlowsheetUiState.NotFound -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("This project no longer exists.")
             }
-            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, onOpenResults, onOpenLog, Modifier.padding(padding))
+            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, onOpenResults, onOpenLog, onOpenHelp, Modifier.padding(padding))
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () -> Unit, onOpenLog: () -> Unit, modifier: Modifier) {
+private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () -> Unit, onOpenLog: () -> Unit, onOpenHelp: (String?) -> Unit, modifier: Modifier) {
     val density = LocalDensity.current.density
     var viewport by remember { mutableStateOf(Viewport()) }
     var canvasRect by remember { mutableStateOf(Rect.Zero) }
