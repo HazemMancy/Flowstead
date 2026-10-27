@@ -123,6 +123,10 @@ data class SimObject(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val curve: PerformanceCurve? = null,
+    /** Separator sizing basis (D61); not part of the solved model. Written only when set. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val sizing: SeparatorSizingInput? = null,
 )
 
 /**

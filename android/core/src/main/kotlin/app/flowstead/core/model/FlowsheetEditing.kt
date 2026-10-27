@@ -198,6 +198,9 @@ object FlowsheetEditing {
         fs.copy(caseStudies = fs.caseStudies.map { if (it.id == id) it.copy(results = results) else it })
 
     /** Sets or clears a pump or compressor curve (D48). Running on a curve replaces the outlet pressure spec. */
+    /** Sets or clears a separator's sizing basis (D61); it changes no result. */
+    fun setSizing(fs: Flowsheet, id: String, sizing: SeparatorSizingInput?): Flowsheet = update(fs, id) { it.copy(sizing = sizing) }
+
     fun setCurve(fs: Flowsheet, id: String, curve: PerformanceCurve?): Flowsheet = update(fs, id) {
         if (curve == null) it.copy(curve = null)
         else it.copy(curve = curve, specs = it.specs - listOf(SpecKey.OUTLET_PRESSURE, SpecKey.PRESSURE_RISE, SpecKey.PRESSURE_RATIO).toSet())
