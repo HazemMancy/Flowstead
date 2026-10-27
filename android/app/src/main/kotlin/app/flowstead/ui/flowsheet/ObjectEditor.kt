@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Tune
@@ -136,6 +137,8 @@ interface EditorActions {
     fun setSizing(id: String, sizing: app.flowstead.core.model.SeparatorSizingInput?) = Unit
     /** Sets or clears an exchanger, heater, cooler, machine or tank's sizing basis (D62). */
     fun setEquipmentSizing(id: String, sizing: app.flowstead.core.model.EquipmentSizingInput?) = Unit
+    /** F1: opens the help page for this type of object. */
+    fun openHelp(type: ObjectType) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -736,6 +739,9 @@ private fun Header(obj: SimObject, actions: EditorActions) {
                     .onFocusChanged { if (!it.isFocused && tag != obj.tag) actions.rename(obj.id, tag) }
                     .testTag("tag_field"),
             )
+        }
+        IconButton(onClick = { actions.openHelp(obj.type) }, modifier = Modifier.testTag("object_help")) {
+            Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "Help on ${obj.type.displayName()}")
         }
         if (DataSheets.isEquipment(obj.type)) {
             IconButton(onClick = { actions.openDataSheet(obj.id) }, modifier = Modifier.testTag("open_data_sheet")) {

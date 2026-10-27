@@ -92,6 +92,7 @@ fun FlowsheetScreen(
     onOpenFluid: () -> Unit,
     onOpenResults: () -> Unit,
     onOpenLog: () -> Unit,
+    onOpenHelp: (String?) -> Unit = {},
     viewModel: FlowsheetViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -162,6 +163,11 @@ fun FlowsheetScreen(
                                 enabled = ready != null,
                                 onClick = { menu = false; viewModel.openCaseStudies() },
                                 modifier = Modifier.testTag("menu_case_studies"),
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Help & Resources") },
+                                onClick = { menu = false; onOpenHelp(null) },
+                                modifier = Modifier.testTag("menu_help"),
                             )
                             DropdownMenuItem(
                                 text = { Text("Project documents: PFD, H&MB, data sheets") },
@@ -263,6 +269,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun deleteReaction(id: String) = vm.deleteReaction(id)
             override fun setPipeSize(id: String, nps: String?, schedule: String?) = vm.setPipeSize(id, nps, schedule)
             override fun setCurve(id: String, curve: PerformanceCurve?) = vm.setCurve(id, curve)
+            override fun openHelp(type: app.flowstead.core.model.ObjectType) = onOpenHelp(app.flowstead.core.help.Help.forType(type)?.id)
             override fun setSizing(id: String, sizing: app.flowstead.core.model.SeparatorSizingInput?) = vm.setSizing(id, sizing)
             override fun setEquipmentSizing(id: String, sizing: app.flowstead.core.model.EquipmentSizingInput?) = vm.setEquipmentSizing(id, sizing)
             override fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean, inhibitor: String?, inhibitorFraction: Double) =

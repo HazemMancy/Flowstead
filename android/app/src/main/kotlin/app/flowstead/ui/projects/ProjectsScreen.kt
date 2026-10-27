@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Info
@@ -83,6 +84,7 @@ fun ProjectsScreen(
     onOpenProject: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenHelp: () -> Unit = {},
     viewModel: ProjectsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -116,6 +118,7 @@ fun ProjectsScreen(
         },
         onOpenSettings = onOpenSettings,
         onOpenAbout = onOpenAbout,
+        onOpenHelp = onOpenHelp,
     )
 }
 
@@ -140,6 +143,7 @@ fun ProjectsContent(
     onImportReportDone: (open: Boolean) -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
+    onOpenHelp: () -> Unit = {},
 ) {
     var dialog by remember { mutableStateOf<ProjectDialog?>(null) }
 
@@ -154,6 +158,9 @@ fun ProjectsContent(
                         IconButton(onClick = onImport, modifier = Modifier.testTag("import")) {
                             Icon(Icons.Filled.FileOpen, contentDescription = "Import DWSIM file")
                         }
+                    }
+                    IconButton(onClick = onOpenHelp, modifier = Modifier.testTag("open_help")) {
+                        Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "Help and resources")
                     }
                     IconButton(onClick = onOpenAbout) { Icon(Icons.Filled.Info, contentDescription = "About Flowstead") }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }

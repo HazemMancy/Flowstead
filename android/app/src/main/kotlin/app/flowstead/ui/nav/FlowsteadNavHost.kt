@@ -12,6 +12,7 @@ import androidx.navigation.toRoute
 import app.flowstead.ui.about.AboutScreen
 import app.flowstead.ui.about.LicenseTextScreen
 import app.flowstead.ui.flowsheet.FlowsheetScreen
+import app.flowstead.ui.help.HelpScreen
 import app.flowstead.ui.fluid.FluidPackageScreen
 import app.flowstead.ui.projects.ProjectsScreen
 import app.flowstead.ui.results.ResultsScreen
@@ -26,6 +27,7 @@ import kotlinx.serialization.Serializable
 @Serializable data object SettingsRoute
 @Serializable data object AboutRoute
 @Serializable data class LicenseRoute(val title: String, val asset: String)
+@Serializable data class HelpRoute(val topicId: String? = null)
 
 @Composable
 fun FlowsteadNavHost() {
@@ -36,6 +38,7 @@ fun FlowsteadNavHost() {
                 onOpenProject = { nav.navigate(FlowsheetRoute(it)) },
                 onOpenSettings = { nav.navigate(SettingsRoute) },
                 onOpenAbout = { nav.navigate(AboutRoute) },
+                onOpenHelp = { nav.navigate(HelpRoute()) },
             )
         }
         composable<FlowsheetRoute> { entry ->
@@ -45,6 +48,7 @@ fun FlowsteadNavHost() {
                 onOpenFluid = { nav.navigate(FluidRoute(route.projectId)) },
                 onOpenResults = { nav.navigate(ResultsRoute(route.projectId)) },
                 onOpenLog = { nav.navigate(ResultsRoute(route.projectId, log = true)) },
+                onOpenHelp = { nav.navigate(HelpRoute(it)) },
             )
         }
         composable<ResultsRoute> { entry ->
@@ -61,6 +65,13 @@ fun FlowsteadNavHost() {
             AboutScreen(
                 onBack = { nav.popBackStack() },
                 onOpenLicense = { title, asset -> nav.navigate(LicenseRoute(title, asset)) },
+            )
+        }
+        composable<HelpRoute> { entry ->
+            HelpScreen(
+                topicId = entry.toRoute<HelpRoute>().topicId,
+                onBack = { nav.popBackStack() },
+                onOpenProject = { id -> nav.navigate(FlowsheetRoute(id)) { popUpTo(ProjectsRoute) } },
             )
         }
         composable<LicenseRoute> { entry ->
