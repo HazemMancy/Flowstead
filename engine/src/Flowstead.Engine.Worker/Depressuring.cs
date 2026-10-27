@@ -44,14 +44,15 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
             return given with { OrificeSized = false, Warnings = [.. _warnings.Distinct(), .. given.Warnings] };
         }
 
-        // Size the orifice: blowdown time scales roughly as 1/area, so correct the area by t/target until within 4 %.
+        // Size the orifice: blowdown time goes roughly as 1/area, so each run (stopped at the target) scales the area by
+        // t/target, aiming at 97 % of the target time; within 92–100 % is accepted. Four runs at most: each is hundreds of flashes.
         var diameter = 0.025;
-        for (var i = 0; i < 6; i++)
+        for (var i = 0; i < 4; i++)
         {
             var run = Blowdown(diameter, target, stopAtTarget: true);
             var ratio = (run.TimeToTarget ?? req.Duration * 2) / req.TargetTime;
-            if (run.TimeToTarget is not null && ratio is > 0.96 and <= 1.0) break;
-            diameter *= Math.Sqrt(Math.Clamp(ratio, 0.2, 5) / 0.98);
+            if (run.TimeToTarget is not null && ratio is > 0.92 and <= 1.0) break;
+            diameter *= Math.Sqrt(Math.Clamp(ratio, 0.2, 5) / 0.97);
         }
         var final = Blowdown(diameter, target);
         if (final.TimeToTarget is not { } reached || reached > req.TargetTime * 1.0001)
@@ -136,19 +137,26 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         List<double> lf = [liq.Empty ? 0 : liq.Volume / volume];
         double t = 0;
         double? reached = null;
+        double? pPrev = null;
+        double dtPrev = 0;
         var minWall = Math.Min(dry.T[0], wet.T[0]);
         while (t < req.Duration && p > req.BackPressure * 1.02)
         {
             var source = !vap.Empty ? vap : liq;
             var (w, hOut) = Outflow(source, p, orifice);
             if (flow.Count == 0) flow.Add(w);
-            var dt = Math.Clamp(0.02 * source.M / Math.Max(w, 1e-9), 0.5, 30);
+            // Each step removes about 4 % of the zone being emptied (the vapour while there is any).
+            var dt = Math.Clamp(0.04 * source.M / Math.Max(w, 1e-9), 0.5, 30);
             if (t + dt > req.Duration) dt = req.Duration - t;
             var dm = Math.Min(w * dt, 0.5 * source.M);
 
             // Heat from each wall section to its zone, at the start of the step.
-            var qDry = vap.Empty || dry.Area <= 0 ? 0 : Coefficient(vap, dry.T[0], p, wetted: false, fixedH) * dry.Area * (dry.T[0] - vap.T);
-            var qWet = liq.Empty || wet.Area <= 0 ? 0 : Coefficient(liq, wet.T[0], p, wetted: true, fixedH) * wet.Area * (wet.T[0] - liq.T);
+            // The walls conduct through the step with the inside coefficient at its start; the surface flux follows the
+            // wall's temperature within the step, so the wall can't be cooled past the fluid. Their heat goes to the zones.
+            var hDry = vap.Empty || dry.Area <= 0 ? 0 : Coefficient(vap, dry.T[0], p, wetted: false, fixedH);
+            var hWet = liq.Empty || wet.Area <= 0 ? 0 : Coefficient(liq, wet.T[0], p, wetted: true, fixedH);
+            var qDry = Conduct(dry, dt, dx, hDry, vap.T, req.OutsideCoefficient, ambient, 0) / dt;
+            var qWet = Conduct(wet, dt, dx, hWet, liq.T, req.OutsideCoefficient, ambient, fireFlux) / dt;
 
             // Mass and enthalpy out of the source zone, its composition as it is.
             var mwOut = source.Flash!.Properties["massFlow"] / source.Flash.Properties["molarFlow"]; // kg/mol
@@ -160,18 +168,18 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
             vap.H += qDry * dt;
             liq.H += qWet * dt;
 
-            if (Settle(vap, liq, volume, p) is not { } pNew)
+            // The new pressure's first guess carries on the last step's rate of fall.
+            var guess = pPrev is { } pp && dtPrev > 0 ? p + (p - pp) * dt / dtPrev : p * 0.98;
+            if (Settle(vap, liq, volume, p, Math.Clamp(guess, 0.5 * p, p)) is not { } pNew)
             {
                 _warnings.Add($"DWSIM's flashes did not settle at {t + dt:0} s; the blowdown stops there.");
                 break;
             }
+            (pPrev, dtPrev) = (p, dt);
             p = pNew;
             Move(vap, liq, "liquid1", p); // rain-out
             Move(liq, vap, "vapour", p);  // boil-off
 
-            // Walls: transient conduction through the thickness; the inner surfaces give up the heat the zones took.
-            Conduct(dry, dt, dx, innerFlux: dry.Area > 0 ? qDry / dry.Area : 0, outerFlux: req.OutsideCoefficient * (ambient - dry.T[^1]));
-            Conduct(wet, dt, dx, innerFlux: wet.Area > 0 ? qWet / wet.Area : 0, outerFlux: fireFlux + req.OutsideCoefficient * (ambient - wet.T[^1]));
             SetAreas(dry, wet, liq.Empty ? 0 : liq.Volume, surface);
 
             t += dt;
@@ -228,7 +236,7 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
     /// The new pressure: each zone's enthalpy takes V dP, and its pressure–enthalpy flash gives its volume; the secant
     /// finds where the two volumes fill the vessel. The zones are then committed at that pressure.
     /// </summary>
-    private double? Settle(Zone vap, Zone liq, double volume, double pOld)
+    private double? Settle(Zone vap, Zone liq, double volume, double pOld, double pGuess)
     {
         var zones = new[] { vap, liq }.Where(z => z.M > 1e-6).ToList();
         var h0 = zones.Select(z => z.H).ToList();
@@ -246,7 +254,7 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         }
         // Secant until the root is bracketed, then Illinois regula falsi. DWSIM's flash tolerances make the volume
         // slightly noisy near a phase boundary, so the best point within 0.2 % of the vessel's volume is accepted.
-        double p0 = pOld, p1 = pOld * 0.98;
+        double p0 = pOld, p1 = Math.Abs(pGuess - pOld) > 1e-6 * pOld ? pGuess : pOld * 0.98;
         var e0 = Excess(p0);
         var e1 = Excess(p1);
         if (double.IsNaN(e0) || double.IsNaN(e1)) return null;
@@ -260,14 +268,15 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
             if (e > 0) { lo = pp; elo = e; kept = 1; } else { hi = pp; ehi = e; kept = -1; }
         }
         Bracket(p0, e0); Bracket(p1, e1);
-        for (var i = 0; i < 40 && !(Math.Abs(bestE) < 1e-7 * volume); i++)
+        // Converged at 0.02 % of the vessel's volume: well inside what DWSIM's flash tolerances resolve.
+        for (var i = 0; i < 40 && !(Math.Abs(bestE) < 2e-4 * volume); i++)
         {
             double p2;
             if (lo is { } l && hi is { } h)
             {
                 p2 = h - ehi * (l - h) / (elo - ehi);
                 if (!(p2 > Math.Min(l, h) && p2 < Math.Max(l, h))) p2 = 0.5 * (l + h);
-                if (Math.Abs(l - h) < 1e-9 * pOld) break;
+                if (Math.Abs(l - h) < 1e-7 * pOld) break;
             }
             else
             {
@@ -284,7 +293,11 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
             (p0, e0, p1, e1) = (p1, e1, p2, e2);
             if (Math.Abs(e2) < Math.Abs(bestE)) (best, bestE) = (p2, e2);
         }
-        if (!(Math.Abs(bestE) < 2e-3 * volume)) return null;
+        // Near a phase boundary (water appearing in the liquid, for one) DWSIM's flash can jump: the volume then changes
+        // abruptly across a few pascals and no pressure fills the vessel exactly. When the bracket has closed on such a
+        // jump, take its better side; the small volume error is made up at the next step.
+        var collapsed = lo is { } l2 && hi is { } h2 && Math.Abs(h2 - l2) < 1e-5 * pOld;
+        if (!(Math.Abs(bestE) < 2e-3 * volume) && !(collapsed && Math.Abs(bestE) < 0.02 * volume)) return null;
         p1 = best;
         for (var i = 0; i < zones.Count; i++)
         {
@@ -383,25 +396,38 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
     }
 
     /// <summary>Explicit conduction through a wall section (inner node 0), the step split for stability.</summary>
-    private static void Conduct(Wall w, double dt, double dx, double innerFlux, double outerFlux)
+    /// <summary>
+    /// Transient conduction through one wall section for <paramref name="dt"/> (explicit, on stable substeps): the inner
+    /// surface gives heat to the fluid at h_in (T_wall − T_fluid), the outer takes air at h_out and the fire flux. Returns
+    /// the heat given to the fluid (J).
+    /// </summary>
+    private static double Conduct(Wall w, double dt, double dx, double hIn, double tFluid, double hOut, double tAmbient, double fire)
     {
-        if (w.Area <= 0) return;
-        var alpha = SteelK / (SteelDensity * SteelCp);
-        var sub = Math.Max(1, (int)Math.Ceiling(dt / (0.4 * dx * dx / alpha)));
+        if (w.Area <= 0) return 0;
+        var rc = SteelDensity * SteelCp;
+        var alpha = SteelK / rc;
+        // Stable substeps for conduction and for the surface films (a half-cell must not swing past the fluid's temperature).
+        var limit = Math.Min(0.4 * dx * dx / alpha, 0.4 * rc * dx / 2 / Math.Max(Math.Max(hIn, hOut), 1e-9));
+        var sub = Math.Max(1, (int)Math.Ceiling(dt / limit));
         var h = dt / sub;
         var next = new double[Nodes];
+        double given = 0;
         for (var s = 0; s < sub; s++)
         {
+            var inner = hIn * (w.T[0] - tFluid);
+            var outer = fire + hOut * (tAmbient - w.T[^1]);
+            given += inner * h;
             for (var i = 0; i < Nodes; i++)
             {
-                // Half-cells at the surfaces carry the fluxes: the inner one loses innerFlux to the fluid, the outer gains outerFlux.
+                // Half-cells at the surfaces carry the fluxes.
                 var cell = i == 0 || i == Nodes - 1 ? dx / 2 : dx;
-                var left = i == 0 ? -innerFlux : SteelK * (w.T[i - 1] - w.T[i]) / dx;
-                var right = i == Nodes - 1 ? outerFlux : SteelK * (w.T[i + 1] - w.T[i]) / dx;
-                next[i] = w.T[i] + h * (left + right) / (SteelDensity * SteelCp * cell);
+                var left = i == 0 ? -inner : SteelK * (w.T[i - 1] - w.T[i]) / dx;
+                var right = i == Nodes - 1 ? outer : SteelK * (w.T[i + 1] - w.T[i]) / dx;
+                next[i] = w.T[i] + h * (left + right) / (rc * cell);
             }
             Array.Copy(next, w.T, Nodes);
         }
+        return given * w.Area;
     }
 
     /// <summary>Splits the surface between wetted and dry by the liquid level; wall that changes side brings its temperatures.</summary>

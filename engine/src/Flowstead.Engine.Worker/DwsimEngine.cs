@@ -6,6 +6,7 @@
 // Every conversion between the two lives in this file, marked "DWSIM kJ" or "DWSIM kW".
 
 using System.Diagnostics;
+using System.Text.Json;
 using DWSIM.Interfaces;
 using DWSIM.Interfaces.Enums;
 using FlashSetting = DWSIM.Interfaces.Enums.FlashSetting;
@@ -417,7 +418,7 @@ public sealed class DwsimEngine
             if (req.Flowsheet.Hypotheticals.FirstOrDefault(h => h.Name == name) is { } hypo) return Hypotheticals.Characterise(hypo).Critical_Pressure;
             return _automation.AvailableCompounds.TryGetValue(name, out var c) && double.IsFinite(c.Critical_Pressure) && c.Critical_Pressure > 0 ? c.Critical_Pressure : null;
         }
-        return new DepressuringCalc(req, Solve, Pc).Run();
+        return new DepressuringCalc(req, StreamFlasher(), Pc).Run();
     }
 
     /// <summary>
@@ -937,6 +938,41 @@ public sealed class DwsimEngine
     }
 
     // ------------------------------------------------------------------ results
+
+    /// <summary>
+    /// Fast flashes for calculations that flash one stream thousands of times (a blowdown): the single-stream DWSIM
+    /// flowsheet is built once and each call only resets the stream's state and composition and recalculates it,
+    /// read back the same way as a solve. Anything other than a lone material stream goes to <see cref="Solve"/>.
+    /// </summary>
+    private Func<Flowsheet, SolveResult> StreamFlasher()
+    {
+        string? key = null;
+        MaterialStream? ms = null;
+        return model =>
+        {
+            if (model.Objects is not [{ Type: ObjectType.MaterialStream } o] || model.Connections.Count > 0) return Solve(model);
+            var k = JsonSerializer.Serialize(model with { Objects = [] }, Json.Options);
+            try
+            {
+                if (ms is null || k != key)
+                {
+                    var (_, map) = Build(model);
+                    (ms, key) = ((MaterialStream)map[o.Id], k);
+                }
+                ApplyStream(model, o, ms);
+                ms.ErrorMessage = "";
+                ms.Calculate();
+                ms.Calculated = true;
+            }
+            catch (Exception e)
+            {
+                ms = null; // rebuild on the next call
+                return new SolveResult { Status = SolveStatus.Failed, Messages = [new SolverMessage(MessageLevel.Error, Plain(e), o.Id)] };
+            }
+            var r = Extract(o, ms);
+            return new SolveResult { Status = r.Status == ObjectStatus.Solved ? SolveStatus.Converged : SolveStatus.Failed, Objects = new() { [o.Id] = r } };
+        };
+    }
 
     private static ObjectResult Extract(SimObject o, ISimulationObject so)
     {

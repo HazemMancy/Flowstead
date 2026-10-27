@@ -127,7 +127,7 @@ fun SafetySheet(
                 Calculated("API 521 relief loads and API 520 sizing, with the inlet-loss and back-pressure checks of API 520 Part II.")
                 for (d in study?.devices.orEmpty()) {
                     HorizontalDivider()
-                    Header(d.tag, d.result?.let { "${it.valves} × ${it.orifice}" }, stale = d.result != null && d.resultHash != fs.modelHash()) {
+                    Header(d.tag, d.result?.let { r -> r.orifice?.let { o -> (if (r.valves > 1) "${r.valves} × " else "") + (r.valveSize ?: o) } }, stale = d.result != null && d.resultHash != fs.modelHash()) {
                         openId = if (openId == d.id) null else d.id
                     }
                     if (openId == d.id) ReliefEditor(fs, results, d, vessels, d.id in running, unitSet, ctx, actions)
@@ -263,15 +263,30 @@ private fun ReliefResults(r: ReliefResult, d: ReliefDeviceDef, unitSet: UnitSet,
     fun p(v: Double) = "${ValueFormat.number(pu.fromSi(v, ctx), pu.decimals)} ${pu.symbol}"
     fun w(v: Double) = "${ValueFormat.number(wu.fromSi(v, ctx), wu.decimals)} ${wu.symbol}"
     fun area(v: Double) = "${ValueFormat.number(v * 1e6, 1)} mm² (${ValueFormat.number(v / 6.4516e-4, 3)} in²)"
+    fun dia(v: Double) = "Ø ${ValueFormat.number(v * 1000, 1)} mm (${ValueFormat.number(v / 0.0254, 2)} in)"
     SectionLabel("Result")
     val orifice = r.orifice
     val orificeArea = r.orificeArea
     if (orifice != null && orificeArea != null) {
+        // The answer first, as a data sheet gives it: API 526 letter and valve size, then the areas and diameters.
         Text(
-            "${r.valves} × $orifice orifice (${area(orificeArea)} each)",
-            style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("psv_orifice"),
+            (if (r.valves > 1) "${r.valves} × " else "") + "API 526 orifice $orifice" + (r.valveSize?.let { " · valve $it" } ?: ""),
+            style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("psv_orifice"),
         )
-        r.requiredArea?.let { Text("Governing: ${r.governing} needs ${area(it)}", style = MaterialTheme.typography.bodyMedium) }
+        r.valveSize?.let {
+            Text("$it: inlet × orifice × outlet in inches, the smallest standard API 526 size; the maker confirms the flange rating.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(
+            "Selected: ${area(orificeArea)}" + (r.orificeDiameter?.let { ", ${dia(it)}" } ?: "") + if (r.valves > 1) " each" else "",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        r.requiredArea?.let {
+            Text(
+                "Required: ${area(it)}" + (r.requiredDiameter?.let { d -> ", ${dia(d)}" + if (r.valves > 1) " per valve" else "" } ?: "") + " · governed by ${r.governing}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
         r.ratedFlow?.let { Text("Rated flow ${w(it)} (used for the line checks)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     for (s in r.scenarios) {
@@ -286,7 +301,7 @@ private fun ReliefResults(r: ReliefResult, d: ReliefDeviceDef, unitSet: UnitSet,
                     listOfNotNull(
                         s.massFlow?.let { w(it) }, phase, "relieving at ${p(s.relievingPressure)}",
                         s.relievingTemperature?.let { "${ValueFormat.number(tu.fromSi(it, ctx), tu.decimals)} ${tu.symbol}" },
-                        s.requiredArea?.let { "needs ${area(it)}" },
+                        s.requiredArea?.let { a -> "needs ${area(a)}, ${dia(kotlin.math.sqrt(4 * a / Math.PI))}" },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                 )

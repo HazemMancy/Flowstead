@@ -207,7 +207,11 @@ fun FlowsheetCanvas(
                                 }
                                 val releaseWorld = vp.toWorld(last, density)
                                 when {
-                                    obj != null -> dragging?.let { (id, at) -> act.move(id, at.x.toDouble(), at.y.toDouble()) }
+                                    obj != null -> dragging?.let { (id, at) ->
+                                        // Dropped on the grid and lined up with what it connects to, so its lines run straight.
+                                        val snapped = CanvasGeometry.snap(fs, obj, at)
+                                        act.move(id, snapped.x.toDouble(), snapped.y.toDouble())
+                                    }
                                     port != null -> act.wire(port.objectId, port.port, hitTest(fs, releaseWorld, vp.zoom), releaseWorld)
                                 }
                                 dragging = null
@@ -256,7 +260,7 @@ fun FlowsheetCanvas(
                             ?: fs.objects.firstOrNull { it.id == c.toObject }
                         val energy = stream?.type == ObjectType.EnergyStream
                         val color = if (energy) palette.energy else stream?.let { streamColor(it, palette, results, twoPhase) } ?: palette.stroke
-                        val pts = CanvasGeometry.elbow(a, b)
+                        val pts = CanvasGeometry.route(a, b)
                         val path = Path().apply {
                             moveTo(pts[0].x, pts[0].y)
                             pts.drop(1).forEach { lineTo(it.x, it.y) }

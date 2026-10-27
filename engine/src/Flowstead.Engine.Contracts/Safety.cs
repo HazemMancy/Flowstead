@@ -122,6 +122,11 @@ public sealed record ReliefResult
     public string? Orifice { get; init; }
     public double? OrificeArea { get; init; }
     public int Valves { get; init; }
+    /// <summary>Equivalent diameters (m) of the required area (per valve) and of the selected orifice.</summary>
+    public double? RequiredDiameter { get; init; }
+    public double? OrificeDiameter { get; init; }
+    /// <summary>The smallest standard API 526 valve with that orifice, e.g. "3K4" (inlet × letter × outlet, inches).</summary>
+    public string? ValveSize { get; init; }
     /// <summary>Governing-case flow scaled to the selected orifice (kg/s), used for the line checks.</summary>
     public double? RatedFlow { get; init; }
     public LineCheck? Inlet { get; init; }
@@ -197,17 +202,30 @@ public static class ReliefMath
         ("L", 1840.6), ("M", 2322.6), ("N", 2800.0), ("P", 4116.1), ("Q", 7129.0), ("R", 10322.6), ("T", 16774.2),
     ];
 
-    /// <summary>The smallest API 526 orifice that covers the area (m²); above T, the smallest letter that n equal valves need (letter null).</summary>
-    public static (string? Letter, double Area, int Valves) SelectOrifice(double areaM2)
+    /// <summary>The smallest API 526 orifice that covers the area (m²); above T, the smallest letter that n equal valves need.</summary>
+    public static (string Letter, double Area, int Valves) SelectOrifice(double areaM2)
     {
         var mm2 = areaM2 * 1e6;
         foreach (var (l, a) in Orifices)
             if (a >= mm2) return (l, a / 1e6, 1);
         var n = (int)Math.Ceiling(mm2 / Orifices[^1].Mm2);
         foreach (var (l, a) in Orifices)
-            if (a * n >= mm2) return (null, a / 1e6, n);
-        return (null, Orifices[^1].Mm2 / 1e6, n);
+            if (a * n >= mm2) return (l, a / 1e6, n);
+        return (Orifices[^1].Letter, Orifices[^1].Mm2 / 1e6, n);
     }
+
+    /// <summary>
+    /// The smallest standard API 526 valve for each orifice letter, inlet × letter × outlet in inches (1D2 … 8T10).
+    /// API 526 lists larger inlet and outlet sizes for higher pressure classes; the maker's data sheet confirms.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> ValveSizes = new Dictionary<string, string>
+    {
+        ["D"] = "1D2", ["E"] = "1E2", ["F"] = "1½F2", ["G"] = "1½G2½", ["H"] = "1½H3", ["J"] = "2J3", ["K"] = "3K4",
+        ["L"] = "3L4", ["M"] = "4M6", ["N"] = "4N6", ["P"] = "4P6", ["Q"] = "6Q8", ["R"] = "6R8", ["T"] = "8T10",
+    };
+
+    /// <summary>Diameter of a circle of the given area (m², m).</summary>
+    public static double EquivalentDiameter(double areaM2) => Math.Sqrt(4 * areaM2 / Math.PI);
 
     /// <summary>The omega method's critical pressure ratio ηc: η² + (ω² − 2ω)(1 − η)² + 2ω² ln η + 2ω²(1 − η) = 0, by bisection.</summary>
     public static double CriticalRatio(double omega)

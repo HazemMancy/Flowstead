@@ -186,8 +186,8 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(request)
-                // A blowdown with orifice sizing is many flashes.
-                timeout { requestTimeoutMillis = 10 * 60_000L }
+                // A blowdown with orifice sizing is thousands of flashes; the engine allows 15 minutes.
+                timeout { requestTimeoutMillis = 20 * 60_000L }
             }
         }
 

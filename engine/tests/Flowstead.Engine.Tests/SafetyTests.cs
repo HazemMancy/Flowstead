@@ -23,7 +23,14 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         foreach (var s in r.Scenarios)
             output.WriteLine($"{s.Name}: W {s.MassFlow:0.####} kg/s {s.Phase} P1 {s.RelievingPressure / 1e5:0.###} bar T {s.RelievingTemperature:0.##} K A {s.RequiredArea * 1e6:0.#} mm² ({s.Method}) {s.Error} " +
                 string.Join(" ", s.Details.Select(kv => $"{kv.Key}={kv.Value:0.####}")) + " | " + string.Join(" | ", s.Warnings));
-        output.WriteLine($"governing {r.Governing}: {r.RequiredArea * 1e6:0.#} mm² → {r.Valves} × {r.Orifice} ({r.OrificeArea * 1e6:0.#} mm²), rated {r.RatedFlow:0.###} kg/s");
+        output.WriteLine($"governing {r.Governing}: {r.RequiredArea * 1e6:0.#} mm² (Ø {r.RequiredDiameter * 1000:0.#} mm) → {r.Valves} × {r.Orifice} ({r.OrificeArea * 1e6:0.#} mm², Ø {r.OrificeDiameter * 1000:0.#} mm), valve {r.ValveSize}, rated {r.RatedFlow:0.###} kg/s");
+        if (r.Orifice is { } letter)
+        {
+            // Every sized valve reports its letter, its valve size and both equivalent diameters.
+            Assert.Equal(ReliefMath.ValveSizes[letter], r.ValveSize);
+            Assert.Equal(ReliefMath.EquivalentDiameter(r.OrificeArea!.Value), r.OrificeDiameter!.Value, 9);
+            Assert.True(r.RequiredDiameter <= r.OrificeDiameter);
+        }
         return r;
     }
 
@@ -37,9 +44,13 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.Equal(Math.Exp(-0.5), ReliefMath.CriticalRatio(1), 6);
         // API 526: 3000 mm² needs a P orifice (N is 2800); 20 000 mm² needs two R valves.
         Assert.Equal(("P", 4116.1e-6, 1), ReliefMath.SelectOrifice(3000e-6));
-        var (_, area, n) = ReliefMath.SelectOrifice(20000e-6);
-        Assert.Equal(2, n);
+        var (letter, area, n) = ReliefMath.SelectOrifice(20000e-6);
+        Assert.Equal(("R", 2), (letter, n));
         Assert.Equal(10322.6e-6, area, 1e-12);
+        // Diameters: a K orifice's 1185.8 mm² is a 38.9 mm (1.53 in) circle; its smallest API 526 valve is 3K4.
+        Assert.Equal(0.03886, ReliefMath.EquivalentDiameter(1185.8e-6), 5);
+        Assert.Equal("3K4", ReliefMath.ValveSizes["K"]);
+        Assert.Equal(14, ReliefMath.ValveSizes.Count);
         // 2 m × 6 m vertical vessel, 1.5 m of liquid, 1 m above grade: full bottom head + 1 m of shell.
         Assert.Equal(1.084 * 4 + Math.PI * 2 * 1.0, ReliefMath.WettedArea(new VesselGeometry(2, 6, false, 1.5, 1)), 9);
     }
@@ -261,5 +272,24 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.True(r.MinimumLiquidTemperature < 300 - 20);
         var wetMin = r.WettedWallTemperature.Where(v => v is not null).Min()!.Value;
         Assert.True(wetMin < r.WallTemperature.Min());
+    }
+
+    [Fact]
+    public async Task SeparatorWithWaterBlowsDownToTheEndAndIsSized()
+    {
+        // A field separator: gas, NGL and free water, horizontal, 30 % full. DWSIM's three-phase flash jumps near the
+        // water's phase boundary; the blowdown must ride over it (it used to stop after a few seconds and the orifice
+        // sizing then grew the orifice without end), and the wall must never end colder than the fluid it touches.
+        var z = new Dictionary<string, double> { ["Methane"] = 0.70, ["Ethane"] = 0.08, ["Propane"] = 0.05, ["N-butane"] = 0.04, ["N-pentane"] = 0.03, ["N-hexane"] = 0.03, ["Water"] = 0.07 };
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = z.Keys.ToList() };
+        var req = new DepressuringRequest { Flowsheet = fs, Composition = z, InitialPressure = 50e5, InitialTemperature = 303.15, Vessel = new VesselGeometry(2, 6, Horizontal: true, LiquidLevel: 0.6) };
+        var res = await engine.Authed(15).PostAsJsonAsync("/depressuring", req, Json.Options);
+        Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+        var r = await EngineFixture.Json<DepressuringResult>(res);
+        output.WriteLine($"orifice {r.OrificeDiameter * 1000:0.#} mm, target at {r.TimeToTarget:0} s, Tmin {r.MinimumTemperature - 273.15:0.#} °C, liquid {r.MinimumLiquidTemperature - 273.15:0.#} °C, wall {r.MinimumWallTemperature - 273.15:0.#} °C, {r.Time.Count} steps; " + string.Join(" | ", r.Warnings));
+        Assert.True(r.OrificeSized);
+        Assert.InRange(r.TimeToTarget!.Value, 0.9 * 900, 900);
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("did not settle"));
+        Assert.True(r.MinimumWallTemperature >= Math.Min(r.MinimumTemperature, r.MinimumLiquidTemperature ?? double.MaxValue) - 0.5);
     }
 }

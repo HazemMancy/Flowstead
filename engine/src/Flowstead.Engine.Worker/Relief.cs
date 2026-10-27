@@ -44,7 +44,7 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
         var governing = sized.MaxBy(r => r.RequiredArea!.Value)!;
         var area = governing.RequiredArea!.Value;
         var (letter, orificeArea, valves) = ReliefMath.SelectOrifice(area);
-        if (letter is null) warnings.Add("Larger than one T orifice: several valves are needed.");
+        if (valves > 1) warnings.Add($"Larger than one T orifice: {valves} valves with {letter} orifices are needed.");
         var rated = governing.MassFlow!.Value * (orificeArea * valves / area);
         // The relieving fluid of the governing case (its composition and temperature at the valve inlet).
         LineCheck? inlet = null, outlet = null;
@@ -56,7 +56,9 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
         return new ReliefResult
         {
             Scenarios = results, Governing = governing.Name, RequiredArea = area,
-            Orifice = letter ?? "T", OrificeArea = orificeArea, Valves = valves, RatedFlow = rated,
+            Orifice = letter, OrificeArea = orificeArea, Valves = valves, RatedFlow = rated,
+            RequiredDiameter = ReliefMath.EquivalentDiameter(area / valves), OrificeDiameter = ReliefMath.EquivalentDiameter(orificeArea),
+            ValveSize = ReliefMath.ValveSizes.GetValueOrDefault(letter),
             Inlet = inlet, Outlet = outlet, Warnings = warnings,
         };
     }

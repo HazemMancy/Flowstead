@@ -124,6 +124,11 @@ data class ReliefResult(
     val orifice: String? = null,
     val orificeArea: Double? = null,
     val valves: Int = 0,
+    /** Equivalent diameters (m) of the required area (per valve) and of the selected orifice. */
+    val requiredDiameter: Double? = null,
+    val orificeDiameter: Double? = null,
+    /** The smallest standard API 526 valve with that orifice, e.g. "3K4" (inlet × letter × outlet, inches). */
+    val valveSize: String? = null,
     val ratedFlow: Double? = null,
     val inlet: LineCheck? = null,
     val outlet: LineCheck? = null,

@@ -149,7 +149,7 @@ object PfdPdf {
                 val (a, b) = CanvasGeometry.endpoints(fs, conn) { CanvasGeometry.center(it) } ?: continue
                 val stream = fs.objects.firstOrNull { it.id == conn.fromObject && it.type.isStream } ?: fs.objects.firstOrNull { it.id == conn.toObject }
                 val energy = stream?.type == ObjectType.EnergyStream
-                val pts = CanvasGeometry.elbow(a, b)
+                val pts = CanvasGeometry.route(a, b)
                 val path = Path().apply {
                     moveTo(pts[0].x, pts[0].y)
                     pts.drop(1).forEach { lineTo(it.x, it.y) }

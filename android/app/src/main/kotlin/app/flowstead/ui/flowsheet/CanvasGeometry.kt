@@ -80,10 +80,28 @@ object CanvasGeometry {
         }
     }
 
-    /** Orthogonal elbow route, the way process flow diagrams are drawn. */
-    fun elbow(a: Offset, b: Offset): List<Offset> {
-        val midX = (a.x + b.x) / 2
-        return listOf(a, Offset(midX, a.y), Offset(midX, b.y), b)
+    /** A connection's route: one straight line from end to end (the user lines objects up; [snap] helps). */
+    fun route(a: Offset, b: Offset): List<Offset> = listOf(a, b)
+
+    const val GRID = 12f
+    private const val ALIGN = 20f
+
+    /**
+     * Where a dropped object settles: on the 12-unit grid, then, if one of its connections ends within 20 units of
+     * level (or plumb) with the other end, moved so that line is exactly horizontal (or vertical).
+     */
+    fun snap(fs: Flowsheet, o: SimObject, at: Offset): Offset {
+        var p = Offset(Math.round(at.x / GRID) * GRID, Math.round(at.y / GRID) * GRID)
+        val pos = { x: SimObject -> if (x.id == o.id) p else center(x) }
+        val pairs = fs.connections.filter { it.fromObject == o.id || it.toObject == o.id }.mapNotNull { c ->
+            val (a, b) = endpoints(fs, c, pos) ?: return@mapNotNull null
+            if (c.fromObject == o.id) a to b else b to a // (my end, the other end)
+        }
+        pairs.mapNotNull { (mine, other) -> (other.y - mine.y).takeIf { kotlin.math.abs(it) <= ALIGN } }.minByOrNull { kotlin.math.abs(it) }
+            ?.let { p = p.copy(y = p.y + it) }
+        pairs.mapNotNull { (mine, other) -> (other.x - mine.x).takeIf { kotlin.math.abs(it) <= ALIGN && kotlin.math.abs(other.y - mine.y) > ALIGN } }
+            .minByOrNull { kotlin.math.abs(it) }?.let { p = p.copy(x = p.x + it) }
+        return p
     }
 }
 

@@ -53,9 +53,12 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<ReliefResult> ReliefAsync(ReliefRequest req, CancellationToken ct) =>
         pool.CallAsync<ReliefResult>(WorkerMethods.Relief, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
-    /// <summary>A blowdown is hundreds of flashes (more when the orifice is sized): twice the solve timeout.</summary>
+    /// <summary>
+    /// A blowdown is thousands of flashes (three-phase with water), and sizing the orifice runs it up to five times:
+    /// fifteen times the solve timeout (15 minutes by default).
+    /// </summary>
     public Task<DepressuringResult> DepressuringAsync(DepressuringRequest req, CancellationToken ct) =>
-        pool.CallAsync<DepressuringResult>(WorkerMethods.Depressuring, req, TimeSpan.FromSeconds(2 * options.SolveTimeoutSeconds), ct);
+        pool.CallAsync<DepressuringResult>(WorkerMethods.Depressuring, req, TimeSpan.FromSeconds(15 * options.SolveTimeoutSeconds), ct);
 
     public Task<List<BinaryParameterInfo>> InteractionParametersAsync(Flowsheet fs, CancellationToken ct) =>
         pool.CallAsync<List<BinaryParameterInfo>>(WorkerMethods.InteractionParameters, fs, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
