@@ -1,4 +1,4 @@
-// Flowstead Android build. SPDX-License-Identifier: GPL-3.0-or-later
+// ThermoDock Android build. SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.jvm) apply false

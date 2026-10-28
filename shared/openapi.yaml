@@ -1,7 +1,7 @@
-# Flowstead engine API. SPDX-License-Identifier: GPL-3.0-or-later
+# ThermoDock engine API. SPDX-License-Identifier: GPL-3.0-or-later
 openapi: 3.1.0
 info:
-  title: Flowstead engine
+  title: ThermoDock engine
   version: 0.1.0
   description: |
     Steady-state solves on DWSIM 9.0.5. All numbers are SI: K, Pa, mol/s, kg/s, m³/s, W, J/kg,
@@ -145,7 +145,7 @@ paths:
         "503": { $ref: "#/components/responses/EngineUnavailable" }
   /import:
     post:
-      summary: Map a DWSIM .dwxmz/.dwxml to a Flowstead flowsheet. Unsupported objects are left out with a warning each.
+      summary: Map a DWSIM .dwxmz/.dwxml to a ThermoDock flowsheet. Unsupported objects are left out with a warning each.
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/DwsimFile" } } }
@@ -270,7 +270,7 @@ components:
     apiKey:
       type: http
       scheme: bearer
-      description: Per-device key from `Flowstead.Engine.Api keys add <device>`.
+      description: Per-device key from `ThermoDock.Engine.Api keys add <device>`.
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string } }
   responses:
@@ -323,7 +323,7 @@ components:
       required: [name, mvp]
       properties:
         name: { type: string, examples: ["Peng-Robinson (PR)"] }
-        mvp: { type: boolean, description: In Flowstead's supported MVP set }
+        mvp: { type: boolean, description: In ThermoDock's supported MVP set }
     CompoundInfo:
       type: object
       properties:

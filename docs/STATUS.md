@@ -6,7 +6,7 @@ _Last updated: 2026-10-20_
 
 - **M1 scaffold:** GPL-3.0 licence, NOTICE, DWSIM submodule pinned at `1abf72d1` (9.0.5), `ENGINE_VERSION.md`, CI.
 - **M2 engine spike:** DWSIM 9.0.5 solves a C1/C2/C3 PR stream headless on .NET 8 Linux (`docs/engine-spike.md`).
-- **M3 engine API:** ASP.NET Core service (`engine/src/Flowstead.Engine.Api`) in front of a pool of DWSIM worker processes (`Flowstead.Engine.Worker`, line-JSON over stdio).
+- **M3 engine API:** ASP.NET Core service (`engine/src/ThermoDock.Engine.Api`) in front of a pool of DWSIM worker processes (`ThermoDock.Engine.Worker`, line-JSON over stdio).
   - Endpoints: `/health`, `/compounds` (HYSYS-style aliases: CO2, nC4, TEG…), `/property-packages` (PR/LK registered), `/solve` (stateless), `/flowsheets` CRUD, `/flowsheets/{id}/solve`, `/flowsheets/{id}/results` (with staleness). Spec: `shared/openapi.yaml`, `shared/schema/flowsheet.schema.json`.
   - Per-device API keys (hashed, CLI-issued), 120 req/min per key, solve timeout with worker kill and restart. One slow solve never blocks another.
   - Feed-stream degrees-of-freedom validation, with plain-language messages, before DWSIM sees the flowsheet.
@@ -57,7 +57,7 @@ _Last updated: 2026-10-20_
 - **M8 files and offline** (pending CI on the commit that adds it):
   - **Engine** (D20):
     - `POST /export` and `GET /flowsheets/{id}/export` write a solved `.dwxmz`.
-    - `POST /import` maps a `.dwxmz`/`.dwxml` to the Flowstead model, with a warning for each object or mode left out.
+    - `POST /import` maps a `.dwxmz`/`.dwxml` to the ThermoDock model, with a warning for each object or mode left out.
     - All 8 benchmarks export → import → re-solve to the same numbers.
     - A file saved by DWSIM with a pipe checks the warnings.
     - The container smoke test round-trips a file.
@@ -99,7 +99,7 @@ _Last updated: 2026-10-20_
   - Benchmark 09 checks both against hand references (Darcy–Weisbach/Colebrook within 0.5 %, ISO 5167 within 2 %).
   - Relief valve still to come: API 520 sizing in the engine layer, because DWSIM's steady-state relief valve does no calculation.
 - **M15 separators and logic (D26):**
-  - Component splitter; tank (flash, plus liquid residence time); air cooler (process side); Set (target = m × source + b, solved by Flowstead).
+  - Component splitter; tank (flash, plus liquid residence time); air cooler (process side); Set (target = m × source + b, solved by ThermoDock).
   - Benchmark 10 checks the component, mole and mass balances and the Set.
   - Filter, solids separator and energy recycle stay "Coming".
 
@@ -116,7 +116,7 @@ _Last updated: 2026-10-20_
 
 - **M19 equipment data sheets (D31):**
   - PDF or Excel data sheet for any equipment (data-sheet icon in its editor), or every equipment in one document (⋮ menu; Excel: one worksheet each).
-  - Flowstead logo and name on every sheet; the client's company goes in the title block.
+  - ThermoDock logo and name on every sheet; the client's company goes in the title block.
   - Title block, operating conditions per stream, design basis, performance, line sizing, reactions, composition, mechanical data, notes, revisions.
   - The emulator job renders a sample (benchmark 16's two lines) and prints it as base64 in the job log for review.
 
@@ -138,7 +138,7 @@ _Last updated: 2026-10-20_
 - **1.6.0 (D54–D58, released 2026-10-23):** safety analysis: relief valves sized by API 520 for API 521 scenarios (fire, blocked outlet, control valve failure, thermal expansion, given flow), API 526 orifices, inlet-loss and built-up back-pressure checks with DWSIM's pipe model, and two-zone vessel depressuring (vapour, liquid, discretised wet and dry wall) with orifice sizing. Also HYSYS parity: relief scenarios suggested from the flowsheet, isentropic omega, a valve library (IEC FL/xT by type), variable-speed pump and compressor maps, hydrate inhibitors (methanol, glycols) and PVT regression of the plus fraction to lab data.
 - **1.6.1 (D59–D62, released 2026-10-27):** depressuring with free water runs to the end and sizes its orifice (DWSIM flash jumps ridden over, fast single-stream flashes, stable wall film); relief valves show the API 526 letter, the standard valve size and equivalent diameters, with k from DWSIM's ideal-gas Cp; pipe segments can be protected and depressured; pipeline pressurization (D59); straight connection lines with snapping; bubble and dew point temperatures and pressures on every stream; relief valves (PSV) on the flowsheet, linked to Safety analysis (D60); separator sizing with internals and nozzles (D61); sizing of exchangers, heaters, coolers, air coolers, pump and compressor drivers and tanks with an engineering data library (D62).
 - **1.7.0 (D63):** Help & Resources as HYSYS's ribbon, offline: F1 help from every editor, searchable manual and tutorials, the methods reference bundled from DECISIONS.md, data library pages, the benchmark cases as examples that open as projects, what's new and support.
-- **1.8.0 (D64):** renamed to ThermoDock: new mark (two streams into a unit, teal on navy), navy/teal palette with accessible text variants, Inter with tabular figures; updates in place from 1.7.0; tray column sizing from each stage's solved traffic and properties (D65).
+- **1.8.0 (D64):** renamed to ThermoDock: new mark (two streams into a unit, teal on navy), navy/teal palette with accessible text variants, Inter with tabular figures; updates in place from 1.7.0; tray column sizing from each stage's solved traffic and properties (D65); ThermoDock in every name of the app and repository, with the app id, phone database, keystore aliases and server data path kept so data and updates carry over (D66).
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 
@@ -166,7 +166,7 @@ _Last updated: 2026-10-20_
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).
 - The engine Docker image is verified in CI only (no Docker daemon in the sandbox).
 - The engine DLLs come from the official 9.0.5 package, not yet rebuilt from the pinned source (D1).
-- DWSIM's rigorous PR VLLE flash did not find the water phase in benchmark 04; Flowstead uses DWSIM's free-water flash instead (D17). Glycol/amine systems still use rigorous VLLE and need checking case by case.
+- DWSIM's rigorous PR VLLE flash did not find the water phase in benchmark 04; ThermoDock uses DWSIM's free-water flash instead (D17). Glycol/amine systems still use rigorous VLLE and need checking case by case.
 - DWSIM absolute enthalpy uses a different reference state from HYSYS. Compare duties and ΔH, not absolute H (`docs/engine-spike.md`).
 - The brief's amber/green value colours fail 4.5:1 as text. Darker text variants are used (D14).
 - Room schema v2 is committed (`android/app/schemas/`); v1 was never exported, so the 1→2 migration is covered by code review only.

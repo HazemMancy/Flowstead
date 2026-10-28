@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Flowstead — fetch the pinned DWSIM engine binaries.
-# Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+# ThermoDock — fetch the pinned DWSIM engine binaries.
+# Copyright (C) 2026 ThermoDock contributors. SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Downloads the official DWSIM 9.0.5 linux-amd64 package, verifies its SHA-256
 # (see ENGINE_VERSION.md) and extracts the assemblies, databases and native
@@ -17,7 +17,7 @@ dl="$here/.dl"
 deb="$dl/dwsim_${VERSION}-amd64.deb"
 
 # IPOPT is not shipped: DWSIM's libIpopt39.so is a symlink to a system library. Replace it with
-# Flowstead's stand-in (engine/native/ipopt_stub.c), so a DWSIM path that reaches IPOPT fails
+# ThermoDock's stand-in (engine/native/ipopt_stub.c), so a DWSIM path that reaches IPOPT fails
 # cleanly instead of crashing the worker from a finalizer.
 ipopt_stub() {
   rm -f "$out/libIpopt39.so"

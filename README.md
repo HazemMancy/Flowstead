@@ -5,13 +5,13 @@ Developed by Hazem ElMancy.
 
 **Steady-state process simulation, in your pocket.**
 
-Flowstead is an Android app for building, solving and checking process
+ThermoDock is an Android app for building, solving and checking process
 flowsheets on a phone: flashes, separators, compressor and cooler trains, valve
 letdowns, pipelines, recycle loops, columns and reactors. Every calculation runs
 on the open-source **DWSIM** 9.0.5 engine, embedded in the app (offline) or on a
-server you host. Flowstead never shows a number the engine did not return.
+server you host. ThermoDock never shows a number the engine did not return.
 
-**[What Flowstead adds to DWSIM, what works like HYSYS, and where it still differs →](docs/features/flowstead-features.md)**
+**[What ThermoDock adds to DWSIM, what works like HYSYS, and where it still differs →](docs/features/thermodock-features.md)**
 
 In short:
 
@@ -29,7 +29,7 @@ In short:
   hydrates, relief scenarios from the flowsheet, blowdown, variable-speed machines.
 - **Still different from HYSYS:** DWSIM's pure-component data and kij databank
   (HYSYS's are proprietary; enter HYSYS's kij to match); typical rather than
-  catalogue valve factors; Flowstead's own hydrate model; no dynamics. Every
+  catalogue valve factors; ThermoDock's own hydrate model; no dynamics. Every
   difference is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ```
@@ -45,10 +45,10 @@ docs/          plan, decisions, status, reports
 
 ```bash
 engine/scripts/fetch-dwsim.sh            # downloads + verifies DWSIM 9.0.5 binaries
-dotnet run --project engine/src/Flowstead.Engine.Spike -c Release
+dotnet run --project engine/src/ThermoDock.Engine.Spike -c Release
 ```
 
 ## Licence
 
 GPL-3.0-or-later. See `LICENSE` and `NOTICE.md`.
-Powered by DWSIM (GPL-3.0). Flowstead is not affiliated with the DWSIM project.
+Powered by DWSIM (GPL-3.0). ThermoDock is not affiliated with the DWSIM project.

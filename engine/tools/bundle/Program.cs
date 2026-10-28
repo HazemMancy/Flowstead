@@ -1,10 +1,10 @@
-// Flowstead — selects the DWSIM files the on-device engine ships (decision D26) and copies them,
-// with Flowstead's own engine assemblies, into a folder the Android build packs as an asset.
+// ThermoDock — selects the DWSIM files the on-device engine ships (decision D26) and copies them,
+// with ThermoDock's own engine assemblies, into a folder the Android build packs as an asset.
 //   dotnet run --project engine/tools/bundle -- <dwsim-bin> <engine-bin> <framework-dir> <out-dir>
 // Selection: the assembly-reference closure of DWSIM's solver assemblies, minus desktop UI, Office,
 // PDF, cloud and OpenGL libraries a headless solve never runs. Files every solve needs at run time
 // (user compounds, data tables) are copied too. The result is listed in <out-dir>/MANIFEST.txt.
-// Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ThermoDock contributors. SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
@@ -72,12 +72,12 @@ foreach (var dir in new[] { "addcomps", "data" })
     }
 }
 foreach (var d in new[] { "extenders", "ppacks", "unitops" }) Directory.CreateDirectory(Path.Combine(dwsimOut, d)); // DWSIM scans these
-foreach (var f in Directory.GetFiles(engineBin, "Flowstead.Engine.*.dll")) File.Copy(f, Path.Combine(appOut, Path.GetFileName(f)));
+foreach (var f in Directory.GetFiles(engineBin, "ThermoDock.Engine.*.dll")) File.Copy(f, Path.Combine(appOut, Path.GetFileName(f)));
 
 long Size(string dir) => Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
 using (var m = new StreamWriter(Path.Combine(outDir, "MANIFEST.txt")))
 {
-    m.WriteLine($"Flowstead on-device engine bundle: {selected.Count} DWSIM assemblies, {Size(outDir) / 1e6:0.0} MB");
+    m.WriteLine($"ThermoDock on-device engine bundle: {selected.Count} DWSIM assemblies, {Size(outDir) / 1e6:0.0} MB");
     m.WriteLine("Shipped:");
     foreach (var (n, p) in selected) m.WriteLine($"  {new FileInfo(p).Length / 1e6,6:0.0} MB  {n}");
     m.WriteLine("Left out (desktop UI, Office, PDF, cloud, OpenGL, or not in DWSIM's package):");

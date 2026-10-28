@@ -1,4 +1,4 @@
-// Flowstead Android build. SPDX-License-Identifier: GPL-3.0-or-later
+// ThermoDock Android build. SPDX-License-Identifier: GPL-3.0-or-later
 pluginManagement {
     repositories {
         google {
@@ -21,6 +21,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Flowstead"
+rootProject.name = "ThermoDock"
 include(":core")
 include(":app")

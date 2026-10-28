@@ -1,8 +1,8 @@
 /*
- * Flowstead — JNI bridge to the embedded engine host (app.flowstead.data.engine.local.NativeEngine).
+ * ThermoDock — JNI bridge to the embedded engine host (app.thermodock.data.engine.local.NativeEngine).
  * Strings cross as UTF-8 byte arrays: JNI's own string functions use modified UTF-8, which can't
  * carry every character a compound name or a message might contain.
- * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 ThermoDock contributors. SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include <android/log.h>
 #include <jni.h>
@@ -13,7 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "flowstead_host.h"
+#include "thermodock_host.h"
 
 static char *copy_bytes(JNIEnv *env, jbyteArray a) {
     jsize n = (*env)->GetArrayLength(env, a);
@@ -34,7 +34,7 @@ static jbyteArray to_bytes(JNIEnv *env, const char *s) {
 static void *pump(void *arg) {
     FILE *in = fdopen((int)(intptr_t)arg, "r");
     char line[2048];
-    while (in && fgets(line, sizeof line, in)) __android_log_write(ANDROID_LOG_INFO, "FlowsteadEngine", line);
+    while (in && fgets(line, sizeof line, in)) __android_log_write(ANDROID_LOG_INFO, "ThermoDockEngine", line);
     return NULL;
 }
 
@@ -51,7 +51,7 @@ static void logcat_stdio(void) {
 
 /* Returns null on success, else the reason as UTF-8 bytes. */
 JNIEXPORT jbyteArray JNICALL
-Java_app_flowstead_data_engine_local_NativeEngine_start(JNIEnv *env, jclass cls, jbyteArray framework, jbyteArray app,
+Java_app_thermodock_data_engine_local_NativeEngine_start(JNIEnv *env, jclass cls, jbyteArray framework, jbyteArray app,
                                                         jbyteArray dwsim, jbyteArray natives) {
     (void)cls;
     char *f = copy_bytes(env, framework), *a = copy_bytes(env, app), *d = copy_bytes(env, dwsim), *n = copy_bytes(env, natives);
@@ -67,7 +67,7 @@ Java_app_flowstead_data_engine_local_NativeEngine_start(JNIEnv *env, jclass cls,
 
 /* EmbeddedHost.<method>(arg): the WorkerResponse JSON as UTF-8 bytes, or null on a runtime failure. */
 JNIEXPORT jbyteArray JNICALL
-Java_app_flowstead_data_engine_local_NativeEngine_invoke(JNIEnv *env, jclass cls, jbyteArray method, jbyteArray arg) {
+Java_app_thermodock_data_engine_local_NativeEngine_invoke(JNIEnv *env, jclass cls, jbyteArray method, jbyteArray arg) {
     (void)cls;
     char *m = copy_bytes(env, method), *a = copy_bytes(env, arg);
     char *r = fh_invoke(m, a);

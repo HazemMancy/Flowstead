@@ -1,5 +1,5 @@
 {
-  "description": "Cross-language unit-conversion vectors. Every Flowstead conversion implementation (Kotlin core, any engine-side code) must reproduce these. Values: 'value' in 'unit' equals 'si' in the quantity's SI unit, with atmospheric pressure 'patmPa' where given (default 101325).",
+  "description": "Cross-language unit-conversion vectors. Every ThermoDock conversion implementation (Kotlin core, any engine-side code) must reproduce these. Values: 'value' in 'unit' equals 'si' in the quantity's SI unit, with atmospheric pressure 'patmPa' where given (default 101325).",
   "relativeTolerance": 1e-9,
   "vectors": [
     { "quantity": "Temperature", "unit": "K", "value": 300.0, "si": 300.0 },

@@ -1,17 +1,18 @@
-# Flowstead engine on a VPS or a LAN PC. SPDX-License-Identifier: GPL-3.0-or-later
+# ThermoDock engine on a VPS or a LAN PC. SPDX-License-Identifier: GPL-3.0-or-later
 #
-#   FLOWSTEAD_DOMAIN=engine.example.com docker compose up -d       # public host: automatic Let's Encrypt
-#   FLOWSTEAD_DOMAIN=192.168.1.20 docker compose up -d             # LAN: Caddy's internal CA (install its root on the phone)
-#   docker compose exec engine dotnet /app/Flowstead.Engine.Api.dll keys add my-phone
+#   THERMODOCK_DOMAIN=engine.example.com docker compose up -d       # public host: automatic Let's Encrypt
+#   THERMODOCK_DOMAIN=192.168.1.20 docker compose up -d             # LAN: Caddy's internal CA (install its root on the phone)
+#   docker compose exec engine dotnet /app/ThermoDock.Engine.Api.dll keys add my-phone
 services:
   engine:
     build: ../engine
-    image: flowstead-engine
+    image: thermodock-engine
     restart: unless-stopped
     environment:
       Engine__Workers: "2"
       Engine__SolveTimeoutSeconds: "60"
     volumes:
+      # Volume and path kept from the Flowstead name (D66): an existing server keeps its API keys.
       - flowstead-data:/var/lib/flowstead
     expose:
       - "8080"
@@ -24,7 +25,7 @@ services:
       - "443:443"
       - "80:80"
     environment:
-      FLOWSTEAD_DOMAIN: ${FLOWSTEAD_DOMAIN:?set FLOWSTEAD_DOMAIN to the engine's host name or IP}
+      THERMODOCK_DOMAIN: ${THERMODOCK_DOMAIN:?set THERMODOCK_DOMAIN to the engine's host name or IP}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://flowstead.app/schema/flowsheet.schema.json",
-  "title": "Flowstead flowsheet",
-  "description": "The master copy of a Flowstead project (decision D5). Mirrors android/core app.flowstead.core.model.Flowsheet and engine Flowstead.Engine.Contracts.Flowsheet. All numbers SI.",
+  "$id": "https://thermodock.app/schema/flowsheet.schema.json",
+  "title": "ThermoDock flowsheet",
+  "description": "The master copy of a ThermoDock project (decision D5). Mirrors android/core app.thermodock.core.model.Flowsheet and engine ThermoDock.Engine.Contracts.Flowsheet. All numbers SI.",
   "type": "object",
   "properties": {
     "schemaVersion": {
@@ -57,7 +57,7 @@
     },
     "liquidDensity": {
       "enum": ["costald", "eos"],
-      "description": "Liquid density method. Absent: the engine default (DWSIM's Rackett and experimental data, with Flowstead's supercritical rule for cubic packages). \"costald\": COSTALD for every liquid, as HYSYS does for hydrocarbons."
+      "description": "Liquid density method. Absent: the engine default (DWSIM's Rackett and experimental data, with ThermoDock's supercritical rule for cubic packages). \"costald\": COSTALD for every liquid, as HYSYS does for hydrocarbons."
     },
     "volumeShift": {
       "enum": ["none"],

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ThermoDock.Engine.Contracts/ThermoDock.Engine.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>DwsimBin</_Parameter1>
+      <_Parameter2>$(DwsimBin)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Compile against DWSIM; load at run time from DWSIM_HOME. -->
+    <Reference Include="$(DwsimBin)/DWSIM.Automation.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.Interfaces.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.Thermodynamics.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.UnitOperations.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.GlobalSettings.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.SharedClasses.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.FlowsheetBase.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.FlowsheetSolver.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/CapeOpen.dll" Private="false" />
+  </ItemGroup>
+</Project>

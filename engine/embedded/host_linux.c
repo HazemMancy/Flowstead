@@ -1,14 +1,14 @@
 /*
- * Flowstead — Linux test host for the embedded engine: speaks the worker's stdin/stdout protocol
+ * ThermoDock — Linux test host for the embedded engine: speaks the worker's stdin/stdout protocol
  * (ready line, then one JSON request per line), so the same test drivers work against it.
- *   flowstead-embedded <framework_dir> <app_dir> <native_dirs> <dwsim_home>
- * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+ *   thermodock-embedded <framework_dir> <app_dir> <native_dirs> <dwsim_home>
+ * Copyright (C) 2026 ThermoDock contributors. SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "flowstead_host.h"
+#include "thermodock_host.h"
 
 int main(int argc, char **argv) {
     if (argc != 5) {

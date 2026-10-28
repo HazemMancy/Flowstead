@@ -4,7 +4,7 @@
 
 ## What ran
 
-`engine/src/Flowstead.Engine.Spike` is a .NET 8 console app. It compiles against
+`engine/src/ThermoDock.Engine.Spike` is a .NET 8 console app. It compiles against
 the DWSIM 9.0.5 assemblies (`engine/dwsim-bin`, from `scripts/fetch-dwsim.sh`)
 and loads them at run time through an `AssemblyResolve` hook pointing at
 `DWSIM_HOME`.

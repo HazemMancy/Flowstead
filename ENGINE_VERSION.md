@@ -1,6 +1,6 @@
 # Engine version
 
-Flowstead's engine is DWSIM. Nothing here tracks a moving branch.
+ThermoDock's engine is DWSIM. Nothing here tracks a moving branch.
 
 | Item | Value |
 |---|---|

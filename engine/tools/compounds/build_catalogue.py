@@ -22,7 +22,7 @@ from rdkit.Chem.rdMolDescriptors import CalcMolFormula
 
 RDLogger.DisableLog("rdApp.*")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-WORKER = os.path.join(ROOT, "engine/src/Flowstead.Engine.Worker/bin/Release/net8.0/linux-x64/Flowstead.Engine.Worker.dll")
+WORKER = os.path.join(ROOT, "engine/src/ThermoDock.Engine.Worker/bin/Release/net8.0/linux-x64/ThermoDock.Engine.Worker.dll")
 OUT = os.path.join(ROOT, "shared/compounds/catalogue.json")
 
 # Engineering shorthand, the same table as the engine's DwsimEngine.Aliases and the app's search.

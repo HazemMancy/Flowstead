@@ -1,12 +1,12 @@
 /*
- * Flowstead — a stand-in for the IPOPT 3.9 C interface (libIpopt39) that DWSIM's Cureos.Numerics binds to.
- * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+ * ThermoDock — a stand-in for the IPOPT 3.9 C interface (libIpopt39) that DWSIM's Cureos.Numerics binds to.
+ * Copyright (C) 2026 ThermoDock contributors. SPDX-License-Identifier: GPL-3.0-or-later
  *
  * IPOPT is not shipped with the engine. Without any libIpopt39, a DWSIM code path that creates an IPOPT
  * problem (some flash fallbacks, the Gibbs-minimisation flash) leaves a half-built object whose finalizer
  * calls FreeIpoptProblem, fails to load the library, and takes the whole process down from the finalizer
  * thread. With this library every solve reports Internal_Error, which DWSIM handles as an ordinary
- * "did not converge", and nothing crashes. Flowstead configures DWSIM's managed optimisers instead.
+ * "did not converge", and nothing crashes. ThermoDock configures DWSIM's managed optimisers instead.
  */
 #include <stdlib.h>
 

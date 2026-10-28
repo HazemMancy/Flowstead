@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
-        android:name=".FlowsteadApp"
+        android:name=".ThermoDockApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -17,7 +17,7 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Flowstead.Starting">
+        android:theme="@style/Theme.ThermoDock.Starting">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -32,7 +32,7 @@
             android:name=".data.update.InstallResultReceiver"
             android:exported="false" />
 
-        <!-- WorkManager is configured by FlowsteadApp (Hilt worker factory), not by its default initializer. -->
+        <!-- WorkManager is configured by ThermoDockApp (Hilt worker factory), not by its default initializer. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

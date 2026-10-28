@@ -1,4 +1,4 @@
-# Flowstead — build plan (draft for review)
+# ThermoDock — build plan (draft for review)
 
 Status: **plan only, no production code yet.** Answers to the open questions in §8 gate Milestone 1.
 
@@ -76,16 +76,16 @@ The brief says "ASP.NET Core .NET 8 service wrapping DWSIM". That works, but the
 ## 3. Repo layout
 
 ```
-flowstead/
+thermodock/
 ├─ LICENSE                      # GPL-3.0 full text
 ├─ NOTICE.md                    # DWSIM attribution, third-party licences (OFL fonts, etc.)
 ├─ ENGINE_VERSION.md            # pinned DWSIM commit + binary bundle SHA-256
 ├─ engine/
-│  ├─ Flowstead.Engine.sln
-│  ├─ src/Flowstead.Engine.Api/        # ASP.NET Core minimal API (net8.0)
-│  ├─ src/Flowstead.Engine.Core/       # DWSIM adapter: our model ⇄ DWSIM objects, solve jobs
-│  ├─ src/Flowstead.Engine.Units/      # the ONE unit-conversion module (+ tests)
-│  ├─ src/Flowstead.Engine.Spike/      # Milestone 2 console spike
+│  ├─ ThermoDock.Engine.sln
+│  ├─ src/ThermoDock.Engine.Api/        # ASP.NET Core minimal API (net8.0)
+│  ├─ src/ThermoDock.Engine.Core/       # DWSIM adapter: our model ⇄ DWSIM objects, solve jobs
+│  ├─ src/ThermoDock.Engine.Units/      # the ONE unit-conversion module (+ tests)
+│  ├─ src/ThermoDock.Engine.Spike/      # Milestone 2 console spike
 │  ├─ tests/…                          # xUnit: units, adapter, API, benchmark harness
 │  ├─ dwsim-bin/                       # (gitignored) fetched/built DWSIM DLL bundle
 │  └─ Dockerfile                       # sdk build stage → aspnet:8.0 runtime stage
@@ -103,11 +103,11 @@ flowstead/
 
 ## 4. Engine design
 
-- **Isolation:** DWSIM uses process-wide static state (`GlobalSettings.Settings`, the static `FlowsheetBase.Extenders`, and caches). Two flowsheets solving in parallel threads of one process is not safe. Plan: a **worker pool of child processes**. The API process sends work to N long-lived `Flowstead.Engine.Worker` processes over stdin/stdout JSON-RPC. Each solve has a timeout. On timeout the worker is killed and recycled, because DWSIM's `CalculateFlowsheet3(fs, timeout)` cancellation is cooperative and can't be relied on. This meets "one flowsheet never blocks another" and gives hard cancellation.
+- **Isolation:** DWSIM uses process-wide static state (`GlobalSettings.Settings`, the static `FlowsheetBase.Extenders`, and caches). Two flowsheets solving in parallel threads of one process is not safe. Plan: a **worker pool of child processes**. The API process sends work to N long-lived `ThermoDock.Engine.Worker` processes over stdin/stdout JSON-RPC. Each solve has a timeout. On timeout the worker is killed and recycled, because DWSIM's `CalculateFlowsheet3(fs, timeout)` cancellation is cooperative and can't be relied on. This meets "one flowsheet never blocks another" and gives hard cancellation.
 - **Model:** our own JSON flowsheet model (`shared/schema`) is the source of truth. The adapter builds a fresh DWSIM `Flowsheet2` from it for every solve. We never keep live DWSIM objects between requests. Results are read back into our model with an explicit `source: "engine"` flag per value.
 - **Storage:** SQLite for flowsheets and results on the server (one file, easy on a VPS).
 - **`.dwxmz`:** import uses `FlowsheetBase` XML loading and maps it to our model. Unsupported objects are kept as opaque blocks with a warning, and are never silently dropped. Export writes through DWSIM's own serializer, so desktop DWSIM opens the files natively.
-- **Units:** SI inside the engine; `Flowstead.Engine.Units` does every conversion. The Android app has a Kotlin twin that is checked against the **same shared test-vector JSON**, so both sides agree to the last digit.
+- **Units:** SI inside the engine; `ThermoDock.Engine.Units` does every conversion. The Android app has a Kotlin twin that is checked against the **same shared test-vector JSON**, so both sides agree to the last digit.
 - **Auth:** per-device API keys (see Q4), HTTPS via a reverse proxy (Caddy in the docker-compose), and ASP.NET Core rate limiting.
 
 ---
@@ -160,5 +160,5 @@ flowstead/
 7. **Hosting target:** x64 VPS only, or should the engine image also run on arm64 (Raspberry Pi, Ampere)? CoolProp's `.so` is x64; the rest is managed code.
 8. **Licence of our own code:** GPL-3.0-only or GPL-3.0-or-later? DWSIM's headers say "either version 3 … or (at your option) any later version", so both are compatible.
 9. **Units:** for the barg reference, should the default atmospheric pressure be 101.325 kPa, and should it be per-project or global? Should Sm³/d and MMSCFD use 15 °C / 101.325 kPa and 60 °F / 14.696 psia respectively?
-10. **App ID / package name:** e.g. `com.flowstead.app`? This is fixed once it's on the Play Store.
+10. **App ID / package name:** e.g. `com.thermodock.app`? This is fixed once it's on the Play Store.
 11. **Separator palette:** DWSIM's `Vessel` handles 2- and 3-phase in one class. Is one palette item with a "3-phase" toggle OK, or do you want two separate icons like HYSYS?

@@ -1,4 +1,4 @@
-// Flowstead Android app. SPDX-License-Identifier: GPL-3.0-or-later
+// ThermoDock Android app. SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
     // AGP 9 compiles Kotlin itself (built-in Kotlin); no org.jetbrains.kotlin.android plugin.
     alias(libs.plugins.android.application)
@@ -12,10 +12,10 @@ plugins {
 val localEngineDir = rootDir.resolve("../engine/embedded/android")
 val localEngine = localEngineDir.resolve("out/assets/engine/VERSION").exists()
 
-val releaseKeystore: String? = System.getenv("FLOWSTEAD_KEYSTORE")?.takeIf { it.isNotBlank() }
+val releaseKeystore: String? = System.getenv("THERMODOCK_KEYSTORE")?.takeIf { it.isNotBlank() }
 
 android {
-    namespace = "app.flowstead"
+    namespace = "app.thermodock"
     compileSdk = 37
 
     // Shipped from their single sources: the privacy policy and the feature overview (shown under About)
@@ -30,6 +30,7 @@ android {
     }
 
     defaultConfig {
+        // Kept from the Flowstead name (D66): a new id would be a different app to Android, and 1.x users could not update.
         applicationId = "app.flowstead"
         minSdk = 26
         targetSdk = 37
@@ -51,13 +52,14 @@ android {
             keyPassword = "android"
         }
         // The owner's release key (decision D34), from the environment: CI decodes the
-        // FLOWSTEAD_KEYSTORE_BASE64 secret to a file. Store and key share one password (PKCS12).
+        // THERMODOCK_KEYSTORE_BASE64 secret to a file. Store and key share one password (PKCS12).
         if (releaseKeystore != null) {
             create("release") {
                 storeFile = file(releaseKeystore)
-                storePassword = System.getenv("FLOWSTEAD_KEYSTORE_PASSWORD")
+                storePassword = System.getenv("THERMODOCK_KEYSTORE_PASSWORD")
+                // Kept from the Flowstead name (D66): the alias inside the release keystore.
                 keyAlias = "flowstead"
-                keyPassword = System.getenv("FLOWSTEAD_KEYSTORE_PASSWORD")
+                keyPassword = System.getenv("THERMODOCK_KEYSTORE_PASSWORD")
             }
         }
     }
@@ -114,9 +116,9 @@ kotlin {
 }
 
 tasks.withType<Test>().configureEach {
-    systemProperty("flowstead.repoDir", rootDir.parentFile.canonicalPath)
+    systemProperty("thermodock.repoDir", rootDir.parentFile.canonicalPath)
     val screenshots = layout.buildDirectory.dir("screenshots")
-    systemProperty("flowstead.screenshotDir", screenshots.get().asFile.path)
+    systemProperty("thermodock.screenshotDir", screenshots.get().asFile.path)
     outputs.dir(screenshots) // so a cached test run still restores the images
 
     testLogging {
