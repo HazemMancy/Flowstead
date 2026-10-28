@@ -100,11 +100,15 @@ object Ports {
             ObjectType.ShortcutColumn -> add(mIn(0, "Feed"))
             else -> { add(mIn(0, "Feed 1", dy = -0.05f)); add(mIn(1, "Feed 2", dy = 0.12f, required = false)); add(mIn(2, "Feed 3", dy = 0.28f, required = false)) }
         }
-        add(if (cond) mOut(0, "Distillate", dy = -0.4f) else mOut(0, "Overhead", dx = -0.27f, dy = -0.5f))
+        // On the symbol (Icons.kt): the shell's centreline is at dx −0.27; the condenser and reboiler are circles of
+        // radius 0.1 h in the right-hand corners, centred at dx 0.32, dy ∓0.4. Distillate leaves the reflux line at
+        // dy −0.15; bottoms leave the reboiler on its right; the duties sit on the condenser's right and the
+        // reboiler's bottom; a vapour product leaves the condenser's top.
+        add(if (cond) mOut(0, "Distillate", dy = -0.15f) else mOut(0, "Overhead", dx = -0.27f, dy = -0.5f))
         add(if (reb) mOut(1, "Bottoms", dy = 0.4f) else mOut(1, "Bottoms", dx = -0.27f, dy = 0.5f))
-        if (cond && type != ObjectType.ShortcutColumn) add(mOut(2, "Vapour product", dx = 0.37f, dy = -0.5f, required = false))
-        if (cond) add(eOut(3, "Condenser duty", dx = 0.5f, dy = -0.3f))
-        if (reb) add(eIn(4, "Reboiler duty", dx = 0.37f, dy = 0.5f))
+        if (cond && type != ObjectType.ShortcutColumn) add(mOut(2, "Vapour product", dx = 0.32f, dy = -0.5f, required = false))
+        if (cond) add(eOut(3, "Condenser duty", dx = 0.5f, dy = -0.4f))
+        if (reb) add(eIn(4, "Reboiler duty", dx = 0.32f, dy = 0.5f))
     }
 
     fun find(type: ObjectType, side: PortSide, index: Int): Port? = of(type).firstOrNull { it.side == side && it.index == index }

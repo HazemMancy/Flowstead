@@ -107,8 +107,8 @@ internal fun AboutSection(state: SettingsUiState, vm: SettingsViewModel, onOpenA
 }
 
 /**
- * Update in the app (decision D43): download in the background with progress, check it, then Android's own
- * "Update this app?" prompt. The browser download stays as the fallback if anything goes wrong.
+ * Update (decision D68): the release's APK opens in the browser, which downloads it; the user opens the file to
+ * install it over this version.
  */
 @Composable
 private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: SettingsViewModel) {
@@ -140,7 +140,7 @@ private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: S
             }
         }
         is InstallState.Prompted -> {
-            Text("Confirm the update in Android's prompt. Your projects are kept.", style = hint, color = muted, modifier = live)
+            Text("The download opened in your browser: open the file when it finishes to install it. Your projects are kept.", style = hint, color = muted, modifier = live)
             install.confirm?.let { confirm ->
                 Button(onClick = { runCatching { context.startActivity(confirm) } }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text("Open the install prompt")
@@ -152,7 +152,7 @@ private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: S
                 Text("Update failed: ${install.reason}", color = MaterialTheme.valueColors.error, style = MaterialTheme.typography.bodyMedium, modifier = live)
             }
             Text(
-                "Downloads in the app, then Android asks you to confirm. Your projects are kept.",
+                "Opens the download in your browser; open the file when it finishes to install it. Your projects are kept.",
                 style = hint, color = muted,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

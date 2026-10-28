@@ -47,7 +47,7 @@ class HelpTest {
     @Test
     fun releasesAreNewestFirst() {
         val versions = Help.releases.map { it.version }
-        assertTrue("1.8.4" in versions && "1.8.5" in versions)
-        assertEquals("1.8.5", versions.first())
+        assertTrue("1.8.5" in versions && "1.8.6" in versions)
+        assertEquals("1.8.6", versions.first())
     }
 }

@@ -29,7 +29,7 @@ import app.flowstead.data.update.AppUpdater
 import app.flowstead.data.update.DataStoreUpdatePromptStore
 import app.flowstead.data.update.UpdatePromptStore
 import app.flowstead.data.update.GithubUpdateChecker
-import app.flowstead.data.update.UpdateInstaller
+import app.flowstead.data.update.BrowserUpdater
 import app.flowstead.data.update.UpdateChecker
 import app.flowstead.data.settings.DataStoreSettingsRepository
 import app.flowstead.data.settings.EncryptedSecretStore
@@ -112,6 +112,6 @@ abstract class BindingsModule {
     @Binds abstract fun compounds(impl: AssetCompoundLibrary): CompoundLibrary
     @Binds abstract fun solveQueue(impl: WorkManagerSolveQueue): SolveQueue
     @Binds abstract fun updates(impl: GithubUpdateChecker): UpdateChecker
-    @Binds abstract fun updater(impl: UpdateInstaller): AppUpdater
+    @Binds abstract fun updater(impl: BrowserUpdater): AppUpdater
     @Binds abstract fun updatePrompts(impl: DataStoreUpdatePromptStore): UpdatePromptStore
 }

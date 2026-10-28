@@ -175,6 +175,28 @@ class StoreScreenshots {
         }
     }
 
+    /** The depropanizer example (laid out as in Help), zoomed on T-100: lines must meet the column, condenser and reboiler. */
+    @Composable
+    private fun Column() {
+        val example = app.flowstead.core.help.Help.example("11-depropanizer") ?: error("example missing")
+        val t = example.objects.first { it.tag == "T-100" }
+        val zoom = 2f
+        val viewport = Viewport(offset = Offset(540f - t.x.toFloat() * zoom * 3f, 1000f - t.y.toFloat() * zoom * 3f), zoom = zoom)
+        FlowsheetCanvas(
+            flowsheet = example,
+            status = example.objects.associate { it.id to Specification.status(example, it) },
+            selectedId = null,
+            results = ResultView(null, example.modelHash()),
+            viewport = viewport,
+            onViewport = {},
+            actions = noActions,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+
+    @Test fun columnLight() = shoot("8-column", false) { Column() }
+    @Test fun columnDark() = shoot("8-column", true) { Column() }
+
     @Test fun libraryLight() = shoot("7-compound-library", false) { Library() }
 
     @Composable

@@ -27,7 +27,11 @@ import app.flowstead.core.model.ResultView
 import app.flowstead.core.units.UnitSet
 import app.flowstead.ui.flowsheet.CanvasGeometry
 import app.flowstead.ui.flowsheet.IconPalette
+import app.flowstead.ui.flowsheet.drawNozzles
 import app.flowstead.ui.flowsheet.drawUnitIcon
+import app.flowstead.ui.flowsheet.streamColor
+import app.flowstead.ui.theme.Brand
+import app.flowstead.ui.theme.LightValueColors
 import java.io.OutputStream
 import androidx.compose.ui.graphics.Color as ComposeColor
 
@@ -64,16 +68,17 @@ object PfdPdf {
     private val muted = Color.rgb(0x5F, 0x5F, 0x66)
     private val grid = Color.rgb(0x80, 0x80, 0x80)
 
-    // Print palette: flat ink symbols on white (no 3D shading on paper), energy lines signal red-orange and dashed as on screen.
+    // Print palette: the canvas in the light theme, 3D symbols and streams in their phase colours, so the PFD looks
+    // like the flowsheet on screen.
     private val palette = IconPalette(
         fill = ComposeColor.White,
-        stroke = ComposeColor(0xFF111113),
-        accent = ComposeColor(0xFFFF5B1F),
-        vapour = ComposeColor(0xFF111113),
-        liquid = ComposeColor(0xFF111113),
-        energy = ComposeColor(0xFFE8461A),
-        shaded = false,
+        stroke = Brand.Navy,
+        accent = Brand.TealText,
+        vapour = LightValueColors.vapour,
+        liquid = LightValueColors.liquid,
+        energy = LightValueColors.energy,
     )
+    private val twoPhase = LightValueColors.twoPhase
 
     private fun paint(size: Float, bold: Boolean = false, color: Int = ink, mono: Boolean = false) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = size
@@ -146,6 +151,7 @@ object PfdPdf {
         c.translate(tx, ty)
         c.scale(scale, scale)
         CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(c), Size(PAGE_W, PAGE_H)) {
+            // As on the canvas: lines in their stream's phase colour, nozzles, then the 3D symbols.
             for (conn in fs.connections) {
                 val pts = CanvasGeometry.connectionRoute(fs, conn) { CanvasGeometry.center(it) } ?: continue
                 val stream = fs.objects.firstOrNull { it.id == conn.fromObject && it.type.isStream } ?: fs.objects.firstOrNull { it.id == conn.toObject }
@@ -155,13 +161,15 @@ object PfdPdf {
                     pts.drop(1).forEach { lineTo(it.x, it.y) }
                 }
                 drawPath(
-                    path, if (energy) palette.energy else palette.stroke,
+                    path, stream?.let { streamColor(it, palette, view, twoPhase) } ?: palette.stroke,
                     style = Stroke(width = 1.4f, cap = StrokeCap.Round, pathEffect = if (energy) PathEffect.dashPathEffect(floatArrayOf(5f, 4f)) else null),
                 )
             }
             for (o in fs.objects) {
-                val color = if (o.type == ObjectType.EnergyStream) palette.energy else palette.stroke
-                drawUnitIcon(o.type, CanvasGeometry.center(o), CanvasGeometry.size(o.type), palette, strokeWidth = 1.4f, streamColor = color)
+                val at = CanvasGeometry.center(o)
+                val size = CanvasGeometry.size(o.type)
+                if (!o.type.isStream) drawNozzles(o.type, at, size, palette, strokeWidth = 1.4f)
+                drawUnitIcon(o.type, at, size, palette, strokeWidth = 1.4f, streamColor = streamColor(o, palette, view, twoPhase))
             }
         }
         for (o in fs.objects) {

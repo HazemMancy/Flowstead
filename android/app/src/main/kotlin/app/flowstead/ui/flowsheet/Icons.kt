@@ -20,6 +20,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.PortKind
+import app.flowstead.core.model.Ports
+import app.flowstead.core.model.facing
 
 /**
  * Colours an icon needs; resolved from the theme by the caller. [shaded] draws the bodies in 3D (lit steel with a
@@ -34,6 +37,30 @@ data class IconPalette(
     val energy: Color,
     val shaded: Boolean = true,
 )
+
+/**
+ * A short nozzle from each port into its symbol, drawn before the symbol so its body covers the inner end: a line
+ * always reaches the equipment, whatever the gap between a port on the symbol's box and the outline inside it.
+ */
+fun DrawScope.drawNozzles(type: ObjectType, c: Offset, size: Size, p: IconPalette, strokeWidth: Float) {
+    for (port in Ports.of(type)) {
+        val at = Offset(c.x + port.dx * size.width, c.y + port.dy * size.height)
+        val (fx, fy) = port.facing
+        val len = minOf(size.width, size.height) * 0.22f
+        drawLine(
+            if (port.kind == PortKind.Energy) p.energy else p.stroke, at, Offset(at.x - fx * len, at.y - fy * len),
+            strokeWidth, StrokeCap.Round,
+        )
+    }
+}
+
+/** A material stream's colour by phase from its vapour fraction (results first, else its spec): vapour, liquid or two-phase. */
+fun phaseColor(vapourFraction: Double?, p: IconPalette, twoPhase: Color): Color = when {
+    vapourFraction == null -> p.stroke
+    vapourFraction >= 0.9999 -> p.vapour
+    vapourFraction <= 0.0001 -> p.liquid
+    else -> twoPhase
+}
 
 /** How a body is lit: a vertical or horizontal cylinder, a round casing, or a flat plate. */
 private enum class Shade { Upright, Lying, Round, Plate }
@@ -492,42 +519,51 @@ private class UnitIconPainter(
     // ---- columns
 
     /**
-     * Trayed column; a distillation column carries an overhead condenser and a kettle reboiler,
-     * absorbers only what their name says. The shortcut column shows fewer, dashed trays.
+     * Trayed column; a distillation column carries an overhead condenser and a kettle reboiler, absorbers only what
+     * their name says. The shortcut column shows fewer, dashed trays. The geometry matches the column ports (Ports.kt):
+     * the shell fills the left 46 % of the box (centreline dx −0.27) and reaches the top or bottom edge where there is
+     * no condenser or reboiler; condenser and reboiler are circles of radius 0.1 h touching the right corners, so the
+     * distillate, bottoms, duty and vapour-product ports all sit on a line or circle of the symbol.
      */
     fun column(condenser: Boolean, reboiler: Boolean, trays: Int, shortcut: Boolean = false) {
         val shellW = w * 0.46f
-        val shell = Rect(Offset(left + w * 0.04f, top + h * 0.08f), Size(shellW, h * 0.84f))
-        roundRect(shell, shellW / 2)
+        val r = h * 0.1f
+        val shellTop = if (condenser) top + h * 0.16f else top
+        val shellBottom = if (reboiler) bottom - h * 0.16f else bottom
+        val shell = Rect(left, shellTop, left + shellW, shellBottom)
+        roundRect(shell, shellW / 2, shade = Shade.Upright)
         val span = shell.height - shellW
         for (i in 1..trays) {
             val y = shell.top + shellW / 2 + span * i / (trays + 1)
             val fromLeft = i % 2 == 0
-            val x0 = if (fromLeft) shell.left else shell.left + shellW * 0.3f
-            val x1 = if (fromLeft) shell.right - shellW * 0.3f else shell.right
+            val x0 = if (fromLeft) shell.left + sw else shell.left + shellW * 0.3f
+            val x1 = if (fromLeft) shell.right - shellW * 0.3f else shell.right - sw
             line(Offset(x0, y), Offset(x1, y), p.stroke, sw * 0.8f, dashed = shortcut)
         }
-        val r = w * 0.13f
-        val x = right - r - sw
+        val ox = right - r
+        val lw = sw * 0.9f
         if (condenser) {
-            // Overhead vapour to the condenser, reflux back to the top tray.
-            val o = Offset(x, top + h * 0.1f)
-            line(Offset(shell.center.x, shell.top), Offset(shell.center.x, top + sw), p.vapour, sw * 0.9f)
-            line(Offset(shell.center.x, top + sw), Offset(o.x - r * 0.7f, top + sw), p.vapour, sw * 0.9f)
+            // Overhead vapour up and into the condenser's left side; condensate down from its bottom, split into
+            // reflux (back into the shell under the top) and distillate (out to the right-hand edge).
+            val o = Offset(ox, top + r)
+            val split = shell.top + shellW * 0.75f
+            line(Offset(shell.center.x, shell.top), Offset(shell.center.x, o.y), p.vapour, lw)
+            line(Offset(shell.center.x, o.y), Offset(o.x - r, o.y), p.vapour, lw)
+            line(Offset(o.x, o.y + r), Offset(o.x, split), p.liquid, lw)
+            line(Offset(shell.right, split), Offset(right, split), p.liquid, lw)
             circle(o, r)
-            line(Offset(o.x - r * 0.6f, o.y + r * 0.3f), Offset(o.x + r * 0.6f, o.y - r * 0.3f), p.liquid, sw * 0.9f)
-            line(Offset(o.x, o.y + r), Offset(o.x, shell.top + shellW * 0.75f), p.liquid, sw * 0.9f)
-            line(Offset(o.x, shell.top + shellW * 0.75f), Offset(shell.right, shell.top + shellW * 0.75f), p.liquid, sw * 0.9f)
+            line(Offset(o.x - r * 0.6f, o.y + r * 0.3f), Offset(o.x + r * 0.6f, o.y - r * 0.3f), p.liquid, lw)
         }
         if (reboiler) {
-            // Bottoms liquid to the kettle, vapour back under the bottom tray.
-            val o = Offset(x, bottom - h * 0.1f)
-            line(Offset(shell.center.x, shell.bottom), Offset(shell.center.x, bottom - sw), p.liquid, sw * 0.9f)
-            line(Offset(shell.center.x, bottom - sw), Offset(o.x - r * 0.7f, bottom - sw), p.liquid, sw * 0.9f)
+            // Bottoms liquid down and into the reboiler's left side; vapour back up from its top under the bottom tray.
+            val o = Offset(ox, bottom - r)
+            val back = shell.bottom - shellW * 0.75f
+            line(Offset(shell.center.x, shell.bottom), Offset(shell.center.x, o.y), p.liquid, lw)
+            line(Offset(shell.center.x, o.y), Offset(o.x - r, o.y), p.liquid, lw)
+            line(Offset(o.x, o.y - r), Offset(o.x, back), p.vapour, lw)
+            line(Offset(o.x, back), Offset(shell.right, back), p.vapour, lw)
             circle(o, r)
-            line(Offset(o.x - r * 0.6f, o.y - r * 0.3f), Offset(o.x + r * 0.6f, o.y + r * 0.3f), p.energy, sw * 0.9f)
-            line(Offset(o.x, o.y - r), Offset(o.x, shell.bottom - shellW * 0.75f), p.vapour, sw * 0.9f)
-            line(Offset(o.x, shell.bottom - shellW * 0.75f), Offset(shell.right, shell.bottom - shellW * 0.75f), p.vapour, sw * 0.9f)
+            line(Offset(o.x - r * 0.6f, o.y - r * 0.3f), Offset(o.x + r * 0.6f, o.y + r * 0.3f), p.energy, lw)
         }
     }
 

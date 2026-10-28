@@ -281,6 +281,7 @@ fun FlowsheetCanvas(
                             val b = CanvasGeometry.bounds(o, at).inflate(6f)
                             drawRoundRect(colors.secondary, b.topLeft, b.size, CornerRadius(10f), style = Stroke(2.5f))
                         }
+                        if (!o.type.isStream) drawNozzles(o.type, at, s, palette, strokeWidth = 2f)
                         drawUnitIcon(o.type, at, s, palette, strokeWidth = 2f, streamColor = streamColor(o, palette, results, twoPhase))
 
                         // Ports
@@ -309,8 +310,9 @@ fun FlowsheetCanvas(
                             }
                         }
                         if (badge != null) {
+                            // Outside the top-left corner, clear of the ports, which sit on the symbol's edges.
                             val b = CanvasGeometry.bounds(o, at)
-                            drawCircle(badge, 4.5f, Offset(b.right, b.top))
+                            drawCircle(badge, 4.5f, Offset(b.left - 7f, b.top - 7f))
                         }
                     }
 
@@ -415,18 +417,12 @@ fun FlowsheetCanvas(
 }
 
 /** Vapour amber, liquid teal-blue, two-phase violet; from the solved vapour fraction, else from a VF spec. */
-private fun streamColor(o: SimObject, p: IconPalette, results: ResultView, twoPhase: Color): Color = when (o.type) {
+/** A stream's colour on the canvas and the printed PFD: energy, or its phase. */
+internal fun streamColor(o: SimObject, p: IconPalette, results: ResultView, twoPhase: Color): Color = when (o.type) {
     ObjectType.EnergyStream -> p.energy
-    ObjectType.MaterialStream -> {
-        val vf = (results.value(o.id, "vapourFraction") as? DisplayValue.Calculated)?.si
-            ?: o.specs[SpecKey.VAPOUR_FRACTION]?.si
-        when {
-            vf == null -> p.stroke
-            vf >= 0.9999 -> p.vapour
-            vf <= 0.0001 -> p.liquid
-            else -> twoPhase
-        }
-    }
+    ObjectType.MaterialStream -> phaseColor(
+        (results.value(o.id, "vapourFraction") as? DisplayValue.Calculated)?.si ?: o.specs[SpecKey.VAPOUR_FRACTION]?.si, p, twoPhase,
+    )
     else -> p.stroke
 }
 
