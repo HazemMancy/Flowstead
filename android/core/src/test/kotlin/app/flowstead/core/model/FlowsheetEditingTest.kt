@@ -91,8 +91,13 @@ class FlowsheetEditingTest {
         assertTrue(FlowsheetEditing.attachableStreams(fs, sep.id, port(ObjectType.Separator, PortSide.Inlet)).isEmpty()) // feed is consumed
         assertEquals(listOf(q), FlowsheetEditing.attachableStreams(fs, valve.id, port(ObjectType.Heater, PortSide.Inlet, 1)))
 
-        assertEquals(360.0 to 0.0, FlowsheetEditing.newStreamPosition(valve, outlet))
-        assertEquals(120.0 to 0.0, FlowsheetEditing.newStreamPosition(valve, inlet))
+        // Level with the valve's nozzles, which sit a little below its centre.
+        val nozzle = Symbols.portPosition(ObjectType.Valve, outlet, valve.x, valve.y).second
+        assertTrue(nozzle > 0.0)
+        assertEquals(360.0 to nozzle, FlowsheetEditing.newStreamPosition(valve, outlet))
+        assertEquals(120.0 to nozzle, FlowsheetEditing.newStreamPosition(valve, inlet))
+        val (made, product) = FlowsheetEditing.connectNewStream(fs, valve.id, outlet, 360.0, 0.0)
+        assertEquals(nozzle, made.obj(product.id)!!.y) // dropped near level: lined up exactly
 
         fs = FlowsheetEditing.disconnectPort(fs, valve.id, inlet)
         assertTrue(fs.connections.isEmpty())
@@ -136,6 +141,16 @@ class FlowsheetEditingTest {
         fs = FlowsheetEditing.connect(fs, s.id, v2.id, port(ObjectType.Valve, PortSide.Outlet))
         assertEquals("1 already comes from another unit",
             assertFailsWith<EditRejected> { FlowsheetEditing.connect(fs, s.id, v1.id, port(ObjectType.Valve, PortSide.Outlet)) }.message)
+    }
+
+    @Test
+    fun aStreamCannotLeaveAUnitAndGoBackIntoIt() {
+        var fs = base
+        val (a, s) = FlowsheetEditing.add(fs, ObjectType.MaterialStream, 0.0, 0.0); fs = a
+        val (b, v) = FlowsheetEditing.add(fs, ObjectType.Separator, 0.0, 0.0); fs = b
+        fs = FlowsheetEditing.connect(fs, s.id, v.id, port(ObjectType.Separator, PortSide.Outlet, 1))
+        assertEquals("1 can't leave V-100 and go back into it",
+            assertFailsWith<EditRejected> { FlowsheetEditing.connect(fs, s.id, v.id, port(ObjectType.Separator, PortSide.Inlet, 1)) }.message)
     }
 
     @Test

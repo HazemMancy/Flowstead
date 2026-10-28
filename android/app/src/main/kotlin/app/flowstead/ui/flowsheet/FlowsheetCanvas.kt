@@ -255,12 +255,11 @@ fun FlowsheetCanvas(
                 scale(k, k, pivot = Offset.Zero) {
                     // Connections
                     for (c in fs.connections) {
-                        val (a, b) = CanvasGeometry.endpoints(fs, c, ::positionOf) ?: continue
+                        val pts = CanvasGeometry.connectionRoute(fs, c, ::positionOf) ?: continue
                         val stream = fs.objects.firstOrNull { it.id == c.fromObject && it.type.isStream }
                             ?: fs.objects.firstOrNull { it.id == c.toObject }
                         val energy = stream?.type == ObjectType.EnergyStream
                         val color = if (energy) palette.energy else stream?.let { streamColor(it, palette, results, twoPhase) } ?: palette.stroke
-                        val pts = CanvasGeometry.route(a, b)
                         val path = Path().apply {
                             moveTo(pts[0].x, pts[0].y)
                             pts.drop(1).forEach { lineTo(it.x, it.y) }

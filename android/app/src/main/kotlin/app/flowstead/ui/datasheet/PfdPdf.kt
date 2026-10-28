@@ -146,10 +146,9 @@ object PfdPdf {
         c.scale(scale, scale)
         CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(c), Size(PAGE_W, PAGE_H)) {
             for (conn in fs.connections) {
-                val (a, b) = CanvasGeometry.endpoints(fs, conn) { CanvasGeometry.center(it) } ?: continue
+                val pts = CanvasGeometry.connectionRoute(fs, conn) { CanvasGeometry.center(it) } ?: continue
                 val stream = fs.objects.firstOrNull { it.id == conn.fromObject && it.type.isStream } ?: fs.objects.firstOrNull { it.id == conn.toObject }
                 val energy = stream?.type == ObjectType.EnergyStream
-                val pts = CanvasGeometry.route(a, b)
                 val path = Path().apply {
                     moveTo(pts[0].x, pts[0].y)
                     pts.drop(1).forEach { lineTo(it.x, it.y) }

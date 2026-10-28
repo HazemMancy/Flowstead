@@ -18,7 +18,7 @@ class EditRejected(message: String) : IllegalArgumentException(message)
  *
  * Connection rules (they mirror DWSIM): a connection always joins a stream and a unit
  * operation; a unit-op port carries one stream; a stream has at most one source and one
- * destination; port kind (material/energy) must match the stream kind.
+ * destination, and they are different units; port kind (material/energy) must match the stream kind.
  */
 object FlowsheetEditing {
     const val GRID = 24.0
@@ -315,6 +315,12 @@ object FlowsheetEditing {
                 throw EditRejected("${stream.tag} already comes from another unit")
             }
         }
+        // As in HYSYS, a stream can't be a product and a feed of the same unit.
+        val otherEnd = when (port.side) {
+            PortSide.Inlet -> fs.connections.firstOrNull { it.toObject == streamId }?.fromObject
+            PortSide.Outlet -> fs.connections.firstOrNull { it.fromObject == streamId }?.toObject
+        }
+        if (otherEnd == unitId) throw EditRejected("${stream.tag} can't leave ${unit.tag} and go back into it")
         if (port.side == PortSide.Outlet && stream.hasFeedSpecs()) {
             // A product stream is calculated; its old feed specs would over-specify it.
             return fs.copy(
@@ -331,7 +337,16 @@ object FlowsheetEditing {
      */
     fun connectNewStream(fs: Flowsheet, unitId: String, port: Port, x: Double, y: Double): Pair<Flowsheet, SimObject> {
         val type = if (port.kind == PortKind.Energy) ObjectType.EnergyStream else ObjectType.MaterialStream
-        val (withStream, stream) = add(fs, type, x, y)
+        var (withStream, stream) = add(fs, type, x, y)
+        // Dropped nearly level with a port on a side of the unit: exactly level, so the line runs straight.
+        val unit = fs.obj(unitId)
+        if (unit != null && port.facing.second == 0) {
+            val portY = Symbols.portPosition(unit.type, port, unit.x, unit.y).second
+            if (kotlin.math.abs(stream.y - portY) <= GRID) {
+                stream = stream.copy(y = portY)
+                withStream = withStream.copy(objects = withStream.objects.map { if (it.id == stream.id) stream else it })
+            }
+        }
         return connect(withStream, stream.id, unitId, port) to stream
     }
 
@@ -375,19 +390,22 @@ object FlowsheetEditing {
         }
     }
 
-    /** Where a stream made from a port (not dragged) is placed: beside the port, on its side of the unit. */
+    /**
+     * Where a stream made from a port (not dragged) is placed: beside the port, on its side of the unit, level with it
+     * when the port is on a side. A stream on a port on the top or bottom gets its own row above or below; an energy
+     * stream goes below, to the left of a duty it feeds and to the right of a duty it takes, so each line has one bend.
+     */
     fun newStreamPosition(unit: SimObject, port: Port): Pair<Double, Double> {
-        // Nozzles a little off the centreline (valve, pump) keep the stream level with the unit;
-        // ports clearly above or below (separator outlets, tee branches) get their own row.
-        val dy = when {
-            port.dy <= -0.3f -> -72.0
-            port.dy >= 0.3f -> 72.0
-            else -> 0.0
+        val portY = Symbols.portPosition(unit.type, port, unit.x, unit.y).second
+        val y = when (port.facing.second) {
+            -1 -> unit.y - 72.0
+            1 -> unit.y + 72.0
+            else -> portY
         }
         return when {
-            port.kind == PortKind.Energy -> unit.x to unit.y + 96.0
-            port.side == PortSide.Inlet -> unit.x - 120.0 to unit.y + dy
-            else -> unit.x + 120.0 to unit.y + dy
+            port.kind == PortKind.Energy -> (if (port.side == PortSide.Inlet) unit.x - 72.0 else unit.x + 72.0) to unit.y + 96.0
+            port.side == PortSide.Inlet -> unit.x - 120.0 to y
+            else -> unit.x + 120.0 to y
         }
     }
 

@@ -128,11 +128,11 @@ object Help {
 
     private fun JsonObject.text(key: String) = this[key]?.jsonPrimitive?.content
 
-    /** The example's flowsheet, laid out left to right when the case gives no positions. */
+    /** The example's flowsheet, laid out left to right as a PFD (every example the same way, whatever positions the case has). */
     fun example(id: String): Flowsheet? {
         val json = resource("examples/$id.json")?.let { FlowsheetJson.parseToJsonElement(it).jsonObject } ?: return null
         val fs = FlowsheetJson.decodeFromJsonElement(Flowsheet.serializer(), json["flowsheet"] ?: return null)
-        return AutoLayout.ifNeeded(fs)
+        return AutoLayout.layout(fs)
     }
 
     val releases: List<Release> by lazy {

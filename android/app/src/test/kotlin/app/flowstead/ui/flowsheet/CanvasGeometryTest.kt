@@ -27,7 +27,29 @@ class CanvasGeometryTest {
         val moved = fs.copy(objects = listOf(feed.copy(x = at.x.toDouble(), y = at.y.toDouble()), valve))
         val (a, b) = CanvasGeometry.endpoints(moved, moved.connections.single()) { CanvasGeometry.center(it) }!!
         assertEquals(a.y, b.y, 1e-3f)
-        assertEquals(1, CanvasGeometry.route(a, b).size - 1) // one straight segment
+        assertEquals(1, CanvasGeometry.connectionRoute(moved, moved.connections.single()) { CanvasGeometry.center(it) }!!.size - 1) // one straight segment
+    }
+
+    @Test
+    fun linesRunOnlyAcrossAndDownAndLeavePortsSquare() {
+        // A feed well above the valve's inlet: out of the arrow's head, across, down, and into the inlet from the left.
+        val high = fs.copy(objects = listOf(feed.copy(y = 80.0), valve))
+        val pts = CanvasGeometry.connectionRoute(high, high.connections.single()) { CanvasGeometry.center(it) }!!
+        pts.zipWithNext().forEach { (p, q) -> assertTrue(abs(p.x - q.x) < 1e-3f || abs(p.y - q.y) < 1e-3f, "diagonal run $p → $q") }
+        val (start, port) = CanvasGeometry.endpoints(high, high.connections.single()) { CanvasGeometry.center(it) }!!
+        assertEquals(start, pts.first())
+        assertEquals(port, pts.last())
+        assertEquals(port.y, pts[pts.size - 2].y, 1e-3f) // the last run comes in level, from the left
+        assertTrue(pts[pts.size - 2].x < port.x)
+    }
+
+    @Test
+    fun aLineGoingBackRunsUnderTheSymbolsInItsWay() {
+        // A stream placed right of the valve, feeding it: the line goes round underneath, clear of the valve.
+        val behind = fs.copy(objects = listOf(feed.copy(x = 420.0, y = 200.0), valve))
+        val pts = CanvasGeometry.connectionRoute(behind, behind.connections.single()) { CanvasGeometry.center(it) }!!
+        val bottom = CanvasGeometry.bounds(valve).bottom
+        assertTrue(pts.maxOf { it.y } > bottom, "the return run should pass below the valve")
     }
 
     @Test

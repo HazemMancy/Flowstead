@@ -14,10 +14,14 @@ import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortSide
 import app.flowstead.core.model.Ports
 import app.flowstead.core.model.SimObject
+import app.flowstead.core.model.Symbols
+import app.flowstead.core.model.facing
 import app.flowstead.core.model.obj
+import kotlin.math.abs
 
 /** World units are dp at zoom 1. Sizes keep every touch target at least 48 dp at the default zoom. */
 object CanvasGeometry {
+    // The same sizes as Symbols (core), as floats for drawing.
     const val UNIT_SIZE = 56f
     const val STREAM_W = 48f
     const val STREAM_H = 24f
@@ -28,29 +32,7 @@ object CanvasGeometry {
     const val MAX_ZOOM = 3f
 
     /** Symbol box of each type (see Icons.kt); ports are placed as fractions of it. */
-    fun size(type: ObjectType): Size {
-        val u = UNIT_SIZE
-        return when (type) {
-            ObjectType.MaterialStream, ObjectType.EnergyStream -> Size(STREAM_W, STREAM_H)
-            ObjectType.Separator, ObjectType.SolidsSeparator -> Size(u * 0.7f, u * 1.2f)
-            ObjectType.ThreePhaseSeparator -> Size(u * 1.4f, u * 0.8f)
-            ObjectType.HeatExchanger -> Size(u * 1.3f, u * 0.8f)
-            ObjectType.AirCooler -> Size(u * 1.3f, u)
-            ObjectType.Compressor, ObjectType.Expander -> Size(u * 1.1f, u)
-            ObjectType.Valve -> Size(u, u * 0.85f)
-            ObjectType.PipeSegment -> Size(u * 1.5f, u * 0.5f)
-            ObjectType.OrificePlate -> Size(u, u * 0.6f)
-            ObjectType.ReliefValve -> Size(u * 0.85f, u)
-            ObjectType.Mixer, ObjectType.Splitter -> Size(u * 0.85f, u)
-            ObjectType.Tank -> Size(u * 0.95f, u * 1.1f)
-            ObjectType.ShortcutColumn, ObjectType.DistillationColumn, ObjectType.Absorber,
-            ObjectType.RefluxedAbsorber, ObjectType.ReboiledAbsorber -> Size(u * 1.1f, u * 2f)
-            ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor -> Size(u * 0.9f, u * 1.15f)
-            ObjectType.Cstr -> Size(u, u * 1.15f)
-            ObjectType.Pfr -> Size(u * 1.6f, u * 0.6f)
-            else -> Size(u, u)
-        }
-    }
+    fun size(type: ObjectType): Size = Symbols.size(type).let { (w, h) -> Size(w.toFloat(), h.toFloat()) }
 
     fun center(o: SimObject) = Offset(o.x.toFloat(), o.y.toFloat())
 
@@ -80,8 +62,95 @@ object CanvasGeometry {
         }
     }
 
-    /** A connection's route: one straight line from end to end (the user lines objects up; [snap] helps). */
-    fun route(a: Offset, b: Offset): List<Offset> = listOf(a, b)
+    /**
+     * A connection's route, as HYSYS draws it: horizontal and vertical runs only. The line leaves an outlet port and
+     * meets an inlet port square to the side of the symbol the port is on, and leaves or enters a stream's arrow
+     * from its tail or head, so lines never cut across a symbol at an angle.
+     */
+    fun connectionRoute(fs: Flowsheet, c: Connection, positionOf: (SimObject) -> Offset): List<Offset>? {
+        val from = fs.obj(c.fromObject) ?: return null
+        val to = fs.obj(c.toObject) ?: return null
+        val right = Offset(1f, 0f)
+        // A line going back runs underneath, below every symbol (and its label) in its way.
+        val boxes = fs.objects.map { bounds(it, positionOf(it)) }
+        val clear = { x0: Float, x1: Float, y: Float ->
+            var under = y
+            var passes = 0
+            while (passes++ < 16) {
+                val hit = boxes.filter { it.right > x0 && it.left < x1 && under > it.top - 4f && under < it.bottom + LABEL }.maxOfOrNull { it.bottom } ?: break
+                under = hit + LABEL + 4f
+            }
+            under
+        }
+        return if (from.type.isStream) {
+            val port = Ports.find(to.type, PortSide.Inlet, c.toPort) ?: return null
+            route(streamOutlet(from, positionOf(from)), right, portPosition(to, port, positionOf(to)), -port.facingOffset(), clear)
+        } else {
+            val port = Ports.find(from.type, PortSide.Outlet, c.fromPort) ?: return null
+            route(portPosition(from, port, positionOf(from)), port.facingOffset(), streamInlet(to, positionOf(to)), right, clear)
+        }
+    }
+
+    /** Room under a symbol for its tag. */
+    private const val LABEL = 20f
+
+    private fun Port.facingOffset() = facing.let { (x, y) -> Offset(x.toFloat(), y.toFloat()) }
+
+    private const val STUB = 12f
+    private const val DETOUR = 36f
+
+    /**
+     * An orthogonal route from [a], leaving in direction [da], to [b], arriving in direction [db] (unit vectors along
+     * an axis). Short stubs keep the first and last runs square to the symbols; one or two bends join them. A line
+     * going back runs underneath, at the height [clear] gives for the span it crosses.
+     */
+    fun route(
+        a: Offset, da: Offset, b: Offset, db: Offset,
+        clear: (x0: Float, x1: Float, y: Float) -> Float = { _, _, y -> y },
+    ): List<Offset> {
+        val a1 = a + da * STUB
+        val b1 = b - db * STUB
+        val aSide = da.y == 0f
+        val bSide = db.y == 0f
+        val bends: List<Offset> = when {
+            aSide && bSide -> when {
+                da == db && (b1.x - a1.x) * da.x >= 0 ->
+                    if (abs(a1.y - b1.y) < 0.5f) emptyList() else ((a1.x + b1.x) / 2).let { listOf(Offset(it, a1.y), Offset(it, b1.y)) }
+                // Going back (a recycle, or an arrow placed behind its port): round underneath, as recycles are drawn.
+                else -> clear(minOf(a1.x, b1.x), maxOf(a1.x, b1.x), maxOf(a1.y, b1.y) + DETOUR).let { listOf(Offset(a1.x, it), Offset(b1.x, it)) }
+            }
+            !aSide && !bSide -> when {
+                da == db && (b1.y - a1.y) * da.y >= 0 ->
+                    if (abs(a1.x - b1.x) < 0.5f) emptyList() else ((a1.y + b1.y) / 2).let { listOf(Offset(a1.x, it), Offset(b1.x, it)) }
+                else -> (if (abs(a1.x - b1.x) < 0.5f) a1.x + DETOUR else (a1.x + b1.x) / 2).let { listOf(Offset(it, a1.y), Offset(it, b1.y)) }
+            }
+            aSide -> Offset(b1.x, a1.y).let { c ->
+                if ((c.x - a1.x) * da.x >= 0 && (b1.y - c.y) * db.y >= 0) listOf(c) else listOf(Offset(a1.x, b1.y))
+            }
+            else -> Offset(a1.x, b1.y).let { c ->
+                if ((c.y - a1.y) * da.y >= 0 && (b1.x - c.x) * db.x >= 0) listOf(c) else listOf(Offset(b1.x, a1.y))
+            }
+        }
+        return simplify(listOf(a, a1) + bends + listOf(b1, b))
+    }
+
+    /** Drops repeated points and points in the middle of a straight run. */
+    private fun simplify(points: List<Offset>): List<Offset> {
+        val out = mutableListOf<Offset>()
+        for (p in points) {
+            if (out.isNotEmpty() && (out.last() - p).getDistance() < 0.01f) continue
+            if (out.size >= 2) {
+                val q = out[out.size - 2]
+                val m = out.last()
+                val straight = (abs(q.x - m.x) < 0.01f && abs(m.x - p.x) < 0.01f) || (abs(q.y - m.y) < 0.01f && abs(m.y - p.y) < 0.01f)
+                // Keep a point where the run turns back on itself, so the line is not drawn over twice.
+                val forward = (m - q).x * (p - m).x + (m - q).y * (p - m).y > 0
+                if (straight && forward) out.removeAt(out.size - 1)
+            }
+            out += p
+        }
+        return out
+    }
 
     const val GRID = 12f
     private const val ALIGN = 20f
@@ -97,10 +166,10 @@ object CanvasGeometry {
             val (a, b) = endpoints(fs, c, pos) ?: return@mapNotNull null
             if (c.fromObject == o.id) a to b else b to a // (my end, the other end)
         }
-        pairs.mapNotNull { (mine, other) -> (other.y - mine.y).takeIf { kotlin.math.abs(it) <= ALIGN } }.minByOrNull { kotlin.math.abs(it) }
+        pairs.mapNotNull { (mine, other) -> (other.y - mine.y).takeIf { abs(it) <= ALIGN } }.minByOrNull { abs(it) }
             ?.let { p = p.copy(y = p.y + it) }
-        pairs.mapNotNull { (mine, other) -> (other.x - mine.x).takeIf { kotlin.math.abs(it) <= ALIGN && kotlin.math.abs(other.y - mine.y) > ALIGN } }
-            .minByOrNull { kotlin.math.abs(it) }?.let { p = p.copy(x = p.x + it) }
+        pairs.mapNotNull { (mine, other) -> (other.x - mine.x).takeIf { abs(it) <= ALIGN && abs(other.y - mine.y) > ALIGN } }
+            .minByOrNull { abs(it) }?.let { p = p.copy(x = p.x + it) }
         return p
     }
 }
