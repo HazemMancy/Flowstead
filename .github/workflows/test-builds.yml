@@ -1,0 +1,68 @@
+# Play Protect diagnosis (D67): two signed builds of the current app that differ from the release in one thing each,
+# published as a pre-release (never "latest", so the in-app updater ignores it) for installing on a phone.
+#   A: application id app.thermodock (name ThermoDock): does the old id under the new name trigger the block?
+#   B: application id app.flowstead, name "ThermoDock Workbench": does the name "ThermoDock" itself trigger it?
+name: test-builds
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_CERT_SHA256: d7883cfc24f1cb62db989086d69d217beed109b5b84164ff5394ad9e3e0bb921
+  TAG: play-protect-test
+
+jobs:
+  test-apks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            engine/.dl
+            engine/embedded/android/.dl
+          key: on-device-engine-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/embedded/android/prepare.sh') }}
+      - name: Prepare the on-device engine (DWSIM + .NET runtime for Android)
+        run: engine/embedded/android/ci-prepare.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Release key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.FLOWSTEAD_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          echo "THERMODOCK_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+      - name: Build A (new app id) and B (other name)
+        working-directory: android
+        env:
+          THERMODOCK_KEYSTORE_PASSWORD: ${{ secrets.FLOWSTEAD_KEYSTORE_PASSWORD }}
+        run: |
+          ./gradlew :app:assembleRelease -PtestAppId=app.thermodock
+          cp app/build/outputs/apk/release/app-release.apk ../test-A-app.thermodock.apk
+          ./gradlew :app:assembleRelease -PtestAppLabel="ThermoDock Workbench"
+          cp app/build/outputs/apk/release/app-release.apk ../test-B-ThermoDock-Workbench.apk
+      - name: Check the signatures
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          aapt=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt | sort -V | tail -1)
+          for f in test-A-app.thermodock.apk test-B-ThermoDock-Workbench.apk; do
+            "$apksigner" verify --print-certs "$f" | grep -qi "certificate SHA-256 digest: $RELEASE_CERT_SHA256" || { echo "::error::$f not signed with the release key."; exit 1; }
+            "$aapt" dump badging "$f" | grep -E "^package:|^application-label:"
+          done
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Play Protect test builds, not for general use. A: app id app.thermodock (installs beside the real app). B: name ThermoDock Workbench, app id app.flowstead (updates the installed app). Commit ${GITHUB_SHA}."
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" test-A-app.thermodock.apk test-B-ThermoDock-Workbench.apk \
+            --prerelease --latest=false --target "$GITHUB_SHA" --title "Play Protect test builds" --notes "$notes"

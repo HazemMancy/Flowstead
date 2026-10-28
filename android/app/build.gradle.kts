@@ -31,7 +31,9 @@ android {
 
     defaultConfig {
         // Kept from the Flowstead name (D66): a new id would be a different app to Android, and 1.x users could not update.
-        applicationId = "app.flowstead"
+        applicationId = (findProperty("testAppId") as String?) ?: "app.flowstead"
+        // Play Protect test builds only (test-builds.yml): another app id or display name. Releases set neither.
+        manifestPlaceholders["appLabel"] = (findProperty("testAppLabel") as String?) ?: "@string/app_name"
         minSdk = 26
         targetSdk = 37
         versionCode = 17
