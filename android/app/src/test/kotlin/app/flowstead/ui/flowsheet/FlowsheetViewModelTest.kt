@@ -4,7 +4,6 @@
  */
 package app.flowstead.ui.flowsheet
 
-import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.flowstead.FakeDocumentIo
@@ -109,7 +108,9 @@ class FlowsheetViewModelTest {
         val fs = vm.ui { it.flowsheet.objects.size == 3 }.flowsheet
         val stream = fs.objects.single { it.type == ObjectType.MaterialStream }
         assertEquals(setOf(Connection(valve.id, 0, stream.id, 0), Connection(stream.id, 0, sep.id, 0)), fs.connections.toSet())
-        assertEquals(Offset(120f, 0f), Offset(stream.x.toFloat(), stream.y.toFloat()))
+        // Halfway, level with the valve's outlet nozzle (a little below its centre) so the line runs straight.
+        val nozzle = app.flowstead.core.model.Symbols.portPosition(ObjectType.Valve, Ports.find(ObjectType.Valve, PortSide.Outlet, 0)!!, 0.0, 0.0).second
+        assertEquals(120.0 to nozzle, stream.x to stream.y)
     }
 
     private fun completeFeed(): Flowsheet {
@@ -345,7 +346,7 @@ class FlowsheetViewModelTest {
         val fs = vm.ui { it.flowsheet.objects.size == 2 }.flowsheet
         val stream = fs.objects.single { it.type == ObjectType.MaterialStream }
         assertEquals(listOf(Connection(valve.id, 0, stream.id, 0)), fs.connections)
-        assertEquals(360.0 to 0.0, stream.x to stream.y)
+        assertEquals(360.0 to app.flowstead.core.model.Symbols.portPosition(ObjectType.Valve, outlet, 240.0, 0.0).second, stream.x to stream.y)
 
         vm.disconnectPort(valve.id, outlet)
         assertTrue(vm.ui { it.flowsheet.connections.isEmpty() }.flowsheet.objects.size == 2)

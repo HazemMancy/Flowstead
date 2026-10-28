@@ -114,13 +114,13 @@ object CanvasGeometry {
         val bSide = db.y == 0f
         val bends: List<Offset> = when {
             aSide && bSide -> when {
-                da == db && (b1.x - a1.x) * da.x >= 0 ->
+                same(da, db) && (b1.x - a1.x) * da.x >= 0 ->
                     if (abs(a1.y - b1.y) < 0.5f) emptyList() else ((a1.x + b1.x) / 2).let { listOf(Offset(it, a1.y), Offset(it, b1.y)) }
                 // Going back (a recycle, or an arrow placed behind its port): round underneath, as recycles are drawn.
                 else -> clear(minOf(a1.x, b1.x), maxOf(a1.x, b1.x), maxOf(a1.y, b1.y) + DETOUR).let { listOf(Offset(a1.x, it), Offset(b1.x, it)) }
             }
             !aSide && !bSide -> when {
-                da == db && (b1.y - a1.y) * da.y >= 0 ->
+                same(da, db) && (b1.y - a1.y) * da.y >= 0 ->
                     if (abs(a1.x - b1.x) < 0.5f) emptyList() else ((a1.y + b1.y) / 2).let { listOf(Offset(a1.x, it), Offset(b1.x, it)) }
                 else -> (if (abs(a1.x - b1.x) < 0.5f) a1.x + DETOUR else (a1.x + b1.x) / 2).let { listOf(Offset(it, a1.y), Offset(it, b1.y)) }
             }
@@ -133,6 +133,9 @@ object CanvasGeometry {
         }
         return simplify(listOf(a, a1) + bends + listOf(b1, b))
     }
+
+    /** Equal directions; compares the numbers, since Offset's own equality tells −0 from 0. */
+    private fun same(a: Offset, b: Offset) = a.x == b.x && a.y == b.y
 
     /** Drops repeated points and points in the middle of a straight run. */
     private fun simplify(points: List<Offset>): List<Offset> {
