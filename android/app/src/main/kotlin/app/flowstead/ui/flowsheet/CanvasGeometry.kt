@@ -82,12 +82,18 @@ object CanvasGeometry {
             }
             under
         }
+        // An arrow a hair off its port's level (within the pipe's half-thickness) takes the line straight in, rather
+        // than through a tiny step that reads as a break.
+        fun level(streamEnd: Offset, port: Port, at: Offset) =
+            if (port.facing.second == 0 && abs(streamEnd.y - at.y) <= STREAM_H * 0.15f) streamEnd.copy(y = at.y) else streamEnd
         return if (from.type.isStream) {
             val port = Ports.find(to.type, PortSide.Inlet, c.toPort) ?: return null
-            route(streamOutlet(from, positionOf(from)), right, portPosition(to, port, positionOf(to)), -port.facingOffset(), clear)
+            val at = portPosition(to, port, positionOf(to))
+            route(level(streamOutlet(from, positionOf(from)), port, at), right, at, -port.facingOffset(), clear)
         } else {
             val port = Ports.find(from.type, PortSide.Outlet, c.fromPort) ?: return null
-            route(portPosition(from, port, positionOf(from)), port.facingOffset(), streamInlet(to, positionOf(to)), right, clear)
+            val at = portPosition(from, port, positionOf(from))
+            route(at, port.facingOffset(), level(streamInlet(to, positionOf(to)), port, at), right, clear)
         }
     }
 

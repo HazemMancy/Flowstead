@@ -143,7 +143,7 @@ _Last updated: 2026-10-20_
 - **1.8.2 (D68):** updates through the browser: the app no longer holds the install-packages permission or installs APKs itself, the pattern Play Protect weighs most against sideloaded apps. The app is called Flowstead again, with the new mark, palette and type (D69). Repository, code and documents use Flowstead throughout again (D70).
 - **1.8.3 (D70):** Flowstead throughout, updates from github.com/HazemMancy/Flowstead; the 1.8.0–1.8.2 releases renamed to match.
 - **1.8.4 (D71):** download and update inside the app again, as in 1.7.0, with the browser download as fallback.
-- **Next (D72):** stream lines drawn as on a PFD: horizontal and vertical runs, square to the ports, recycles round underneath; examples laid out with each stream level with its port; a stream can no longer leave a unit and go back into it.
+- **1.8.5 (D72, D73):** 3D symbols (lit steel with soft shadows; streams as lit pipes; logic tinted; the printed PFD flat). Stream lines drawn as on a PFD (horizontal and vertical runs, square to the ports, recycles round underneath); examples laid out with each stream level with its port; a stream can no longer leave a unit and go back into it.
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 
