@@ -1,5 +1,5 @@
 <Project>
-  <!-- ThermoDock engine — shared build settings. SPDX-License-Identifier: GPL-3.0-or-later -->
+  <!-- Flowstead engine — shared build settings. SPDX-License-Identifier: GPL-3.0-or-later -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>

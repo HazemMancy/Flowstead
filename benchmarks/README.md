@@ -4,11 +4,11 @@ Each case folder holds:
 
 | File | Content |
 |---|---|
-| `input.json` | ThermoDock flowsheet (`shared/schema/flowsheet.schema.json`) plus a name and description |
+| `input.json` | Flowstead flowsheet (`shared/schema/flowsheet.schema.json`) plus a name and description |
 | `expected.json` | `checks`: values with tolerances. `source` says where they came from. `reference`: independent values (IAPWS, NIST, HYSYS, desktop DWSIM). `blocking: true` makes a reference fail CI. |
 | `case.dwxmz` | The same case, built, solved and saved by the engine (headless DWSIM 9.0.5, `tools/export_dwxmz.sh`). It opens in desktop DWSIM with its results, for cross-checking there. It is not an independent reference: it was not built by hand in desktop DWSIM. |
 
-`engine/tests/ThermoDock.Engine.Tests/BenchmarkTests.cs` solves every case through the HTTP API and fails on any deviation. CI runs it on every engine change.
+`engine/tests/Flowstead.Engine.Tests/BenchmarkTests.cs` solves every case through the HTTP API and fails on any deviation. CI runs it on every engine change.
 
 Tolerances follow the brief: ±0.01 K on temperature, ±0.1 % relative elsewhere, 1e-4 absolute on mole and phase fractions.
 
@@ -35,6 +35,6 @@ Tolerances follow the brief: ±0.01 K on temperature, ±0.1 % relative elsewhere
 To regenerate the provisional values after an intentional engine change:
 
 ```bash
-dotnet build engine/ThermoDock.Engine.sln -c Release
+dotnet build engine/Flowstead.Engine.sln -c Release
 python3 -I benchmarks/tools/make_expected.py benchmarks/0*/
 ```

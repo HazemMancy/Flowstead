@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ThermoDock brand (decision D64). Mirrors ui/theme/Color.kt. -->
+    <!-- Flowstead brand (decision D64). Mirrors ui/theme/Color.kt. -->
     <color name="brand_paper">#FFF3F6FA</color>
     <color name="brand_ink">#FF0B1930</color>
     <color name="brand_mark_tile">#FF0B1930</color>

@@ -1,13 +1,13 @@
 # On-device engine spike (M10)
 
-**Question:** could ThermoDock solve on the phone itself, with DWSIM running on Android, so that no engine server is needed?
+**Question:** could Flowstead solve on the phone itself, with DWSIM running on Android, so that no engine server is needed?
 
 **Short answer:** probably yes for the MVP property packages. It is not proven, because it was not run on a device. The managed code has no blocker I could find. The real costs are about 40 MB of extra download, roughly 250 MB of RAM while solving, and a .NET-to-Kotlin bridge. My recommendation is to keep the remote engine for v1 and run the device experiment described at the end before committing to anything.
 
 ## What was and wasn't done
 
 - **Not done:** running DWSIM on Android. This environment has no Android SDK, emulator or arm64 hardware. No number below was measured on a phone.
-- **Done:** I measured the real ThermoDock engine worker (DWSIM 9.0.5, .NET 8, linux-x64, the dev container) solving all 8 benchmarks.
+- **Done:** I measured the real Flowstead engine worker (DWSIM 9.0.5, .NET 8, linux-x64, the dev container) solving all 8 benchmarks.
   - From `/proc`: which files it maps, peak memory, and timings.
   - Static analysis of every assembly it loads: IL-only or mixed-mode, and every P/Invoke target.
   - Scripts are in `engine/tools/footprint/`: `measure.py` drives the worker over its stdin protocol, and `PInvokeScan.cs` reads the assembly metadata.
@@ -49,7 +49,7 @@ The largest are:
 | `DWSIM.Thermodynamics.dll` | 21.7 MB | Property packages, flash algorithms, compound database |
 | `DWSIM.UnitOperations.dll` | 8.5 MB | Unit operations |
 | `System.Windows.Forms.dll` | 4.8 MB | Referenced by shared classes; no Win32 code runs in a headless solve |
-| `IronPython.dll` + `Microsoft.Scripting.dll` | 2.3 MB | Scripting support; unused by ThermoDock |
+| `IronPython.dll` + `Microsoft.Scripting.dll` | 2.3 MB | Scripting support; unused by Flowstead |
 | `MathNet.Numerics.dll` | 1.6 MB | Numerics |
 
 Half the payload is the drawing assembly, which a phone engine does not need. Removing it means changing `FlowsheetBase`, which is a DWSIM source change in the pinned submodule.
@@ -84,7 +84,7 @@ DWSIM is .NET Framework 4.6.2 IL, and it already runs unchanged on .NET 8 here. 
 
 **Trimming:** unsafe, for the same reflection reason. The realistic size cut is to drop known-unused assemblies (IronPython, ReoGrid, docking, the drawing surface once it is decoupled) and to verify by running the benchmark suite on the device.
 
-**Licence:** no new issue. The engine is GPL-3.0 and so is ThermoDock (D8). Distributing DWSIM inside the APK means shipping its corresponding source, which the pinned submodule already provides.
+**Licence:** no new issue. The engine is GPL-3.0 and so is Flowstead (D8). Distributing DWSIM inside the APK means shipping its corresponding source, which the pinned submodule already provides.
 
 ## Risks only a device can answer
 

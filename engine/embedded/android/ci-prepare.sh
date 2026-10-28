@@ -5,5 +5,5 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../../.." && pwd)"
 "$root/engine/scripts/fetch-dwsim.sh"
-dotnet build "$root/engine/src/ThermoDock.Engine.Worker" -c Release -v quiet -nologo
+dotnet build "$root/engine/src/Flowstead.Engine.Worker" -c Release -v quiet -nologo
 "$root/engine/embedded/android/prepare.sh"

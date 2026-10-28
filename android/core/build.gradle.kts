@@ -1,4 +1,4 @@
-// ThermoDock core: pure-Kotlin model, units and formatting. SPDX-License-Identifier: GPL-3.0-or-later
+// Flowstead core: pure-Kotlin model, units and formatting. SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
@@ -26,7 +26,7 @@ tasks.test {
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.SHORT
     }
     // Shared cross-language unit-conversion vectors live at the repo root.
-    systemProperty("thermodock.sharedDir", rootDir.resolve(if (rootDir.name == "core") "../../shared" else "../shared").canonicalPath)
+    systemProperty("flowstead.sharedDir", rootDir.resolve(if (rootDir.name == "core") "../../shared" else "../shared").canonicalPath)
 }
 
 // Help & Resources (D63): the methods reference, release notes and example flowsheets ship with the app, taken

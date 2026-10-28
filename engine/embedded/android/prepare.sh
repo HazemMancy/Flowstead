@@ -2,12 +2,12 @@
 # Prepares everything the Android build needs to run DWSIM on the phone (decision D25), in
 # engine/embedded/android/out (git-ignored). The app build picks it up when it exists.
 #
-#   engine/scripts/fetch-dwsim.sh && dotnet build engine/src/ThermoDock.Engine.Worker -c Release
+#   engine/scripts/fetch-dwsim.sh && dotnet build engine/src/Flowstead.Engine.Worker -c Release
 #   engine/embedded/android/prepare.sh
 #
 # out/jniLibs/<abi>/        Mono runtime + its native helpers + libSkiaSharp (DWSIM's 1.68.2.1)
 # out/include/              Mono embedding headers (for the JNI bridge)
-# out/assets/engine/        dwsim.zip (DWSIM selection + ThermoDock engine), framework-<abi>.zip, VERSION
+# out/assets/engine/        dwsim.zip (DWSIM selection + Flowstead engine), framework-<abi>.zip, VERSION
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -euo pipefail
 
@@ -32,8 +32,8 @@ fetch() { # id version -> path
   echo "$f"
 }
 
-worker_bin="$root/engine/src/ThermoDock.Engine.Worker/bin/Release/net8.0/linux-x64"
-[ -f "$worker_bin/ThermoDock.Engine.Worker.dll" ] || { echo "Build the worker first (dotnet build engine/src/ThermoDock.Engine.Worker -c Release)" >&2; exit 2; }
+worker_bin="$root/engine/src/Flowstead.Engine.Worker/bin/Release/net8.0/linux-x64"
+[ -f "$worker_bin/Flowstead.Engine.Worker.dll" ] || { echo "Build the worker first (dotnet build engine/src/Flowstead.Engine.Worker -c Release)" >&2; exit 2; }
 [ -f "$root/engine/dwsim-bin/DWSIM.Thermodynamics.dll" ] || { echo "Run engine/scripts/fetch-dwsim.sh first" >&2; exit 2; }
 
 rm -rf "$out"
@@ -70,7 +70,7 @@ for pair in "arm64-v8a:android-arm64" "x86_64:android-x64"; do
   framework_dir="$tmp/fw-$abi"
 done
 
-# DWSIM selection + ThermoDock engine assemblies (ABI-neutral IL).
+# DWSIM selection + Flowstead engine assemblies (ABI-neutral IL).
 dotnet run --project "$root/engine/tools/bundle" -c Release -- \
   "$root/engine/dwsim-bin" "$worker_bin" "$framework_dir" "$tmp/bundle"
 cp "$tmp/bundle/MANIFEST.txt" "$out/MANIFEST.txt"

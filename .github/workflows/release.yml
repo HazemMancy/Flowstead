@@ -1,6 +1,5 @@
 # Publishes a GitHub Release with the signed, R8-minified release APK when a version tag (v*) is pushed,
 # or on demand. The APK is signed with the owner's release key (decision D34), held in two repository
-# Secret names kept from the Flowstead name (D66) until they are renamed in the repository settings.
 # secrets: FLOWSTEAD_KEYSTORE_BASE64 (the PKCS12 keystore, base64) and FLOWSTEAD_KEYSTORE_PASSWORD.
 # The workflow refuses to publish if they are missing or the APK's certificate isn't the release key's.
 name: release
@@ -53,11 +52,11 @@ jobs:
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
-          echo "THERMODOCK_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+          echo "FLOWSTEAD_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
       - name: Test and build the release APK
         working-directory: android
         env:
-          THERMODOCK_KEYSTORE_PASSWORD: ${{ secrets.FLOWSTEAD_KEYSTORE_PASSWORD }}
+          FLOWSTEAD_KEYSTORE_PASSWORD: ${{ secrets.FLOWSTEAD_KEYSTORE_PASSWORD }}
         run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleRelease
       - name: Check the signature
         run: |

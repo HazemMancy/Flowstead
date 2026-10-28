@@ -57,7 +57,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: thermodock-debug-apk
+          name: flowstead-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
       - name: Upload reports
         if: always()
@@ -89,11 +89,11 @@ jobs:
           key: dwsim-9.0.5-52c041b1
       - name: Start engine container
         run: |
-          docker build -t thermodock-engine engine/
-          docker run -d --name eng -p 8080:8080 thermodock-engine
+          docker build -t flowstead-engine engine/
+          docker run -d --name eng -p 8080:8080 flowstead-engine
           for i in $(seq 1 60); do curl -fs localhost:8080/healthz && break; sleep 2; done
-          echo "THERMODOCK_E2E_KEY=$(docker exec eng dotnet /app/ThermoDock.Engine.Api.dll keys add ci-e2e | tail -1)" >> "$GITHUB_ENV"
-          echo "THERMODOCK_E2E_URL=http://localhost:8080" >> "$GITHUB_ENV"
+          echo "FLOWSTEAD_E2E_KEY=$(docker exec eng dotnet /app/Flowstead.Engine.Api.dll keys add ci-e2e | tail -1)" >> "$GITHUB_ENV"
+          echo "FLOWSTEAD_E2E_URL=http://localhost:8080" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -101,11 +101,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: End-to-end test
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest --tests 'app.thermodock.e2e.*'
+        run: ./gradlew :app:testDebugUnitTest --tests 'app.flowstead.e2e.*'
       - name: Fail if any end-to-end test was skipped
         working-directory: android
         run: |
-          f=app/build/test-results/testDebugUnitTest/TEST-app.thermodock.e2e.EngineEndToEndTest.xml
+          f=app/build/test-results/testDebugUnitTest/TEST-app.flowstead.e2e.EngineEndToEndTest.xml
           grep -oE 'tests="[0-9]+" skipped="[0-9]+" failures="[0-9]+" errors="[0-9]+"' "$f"
           grep -q 'skipped="0"' "$f"
       - name: Engine logs
@@ -153,23 +153,23 @@ jobs:
           disable-animations: true
           script: |
             adb logcat -c
-            (adb logcat -v time ThermoDockOnDevice:I ThermoDockPdf:I ThermoDockEngine:V mono:V monodroid:W DOTNET:W '*:E' > logcat.txt &)
-            cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.thermodock.OnDeviceBenchmarkTest
+            (adb logcat -v time FlowsteadOnDevice:I FlowsteadPdf:I FlowsteadEngine:V mono:V monodroid:W DOTNET:W '*:E' > logcat.txt &)
+            cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
             # The same benchmarks against the R8-minified release build that is published.
             rm -rf android/app/build/outputs/androidTest-results
-            cd android && timeout 1200 ./gradlew -PtestMinified :app:connectedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.thermodock.OnDeviceBenchmarkTest
+            cd android && timeout 1200 ./gradlew -PtestMinified :app:connectedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest
             # A runner that crashes before any test still "passes": require a passed test in the release results.
             f=$(find android/app/build/outputs/androidTest-results -name 'TEST-*.xml' -print -quit); echo "$f"; test -n "$f" && grep -q '<testcase' "$f" && ! grep -q '<failure' "$f"
       - name: Device log
         if: always()
         # Repeated stack frames (a runaway recursion) are counted, not printed, so the callers stay visible.
         run: |
-          grep -v "ThermoDockPdf" logcat.txt | grep -E "ThermoDockOnDevice|ThermoDockEngine|mono|DOTNET|FATAL|thermodock| F/|AndroidRuntime" \
+          grep -v "FlowsteadPdf" logcat.txt | grep -E "FlowsteadOnDevice|FlowsteadEngine|mono|DOTNET|FATAL|flowstead| F/|AndroidRuntime" \
             | sed -E 's/^[0-9-]+ [0-9:.]+ //' | uniq -c | sed -E 's/^ +1 //' | tail -400 || true
       - name: Sample data sheet PDF (base64, for review)
         if: always()
         run: |
-          grep "ThermoDockPdf" logcat.txt | sed -E 's/^.*ThermoDockPdf\( *[0-9]+\): //' || true
+          grep "FlowsteadPdf" logcat.txt | sed -E 's/^.*FlowsteadPdf\( *[0-9]+\): //' || true
       - name: Upload device test reports
         if: always()
         uses: actions/upload-artifact@v4

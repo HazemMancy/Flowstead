@@ -11,7 +11,7 @@ letdowns, pipelines, recycle loops, columns and reactors. Every calculation runs
 on the open-source **DWSIM** 9.0.5 engine, embedded in the app (offline) or on a
 server you host. Flowstead never shows a number the engine did not return.
 
-**[What Flowstead adds to DWSIM, what works like HYSYS, and where it still differs →](docs/features/thermodock-features.md)**
+**[What Flowstead adds to DWSIM, what works like HYSYS, and where it still differs →](docs/features/flowstead-features.md)**
 
 In short:
 
@@ -45,7 +45,7 @@ docs/          plan, decisions, status, reports
 
 ```bash
 engine/scripts/fetch-dwsim.sh            # downloads + verifies DWSIM 9.0.5 binaries
-dotnet run --project engine/src/ThermoDock.Engine.Spike -c Release
+dotnet run --project engine/src/Flowstead.Engine.Spike -c Release
 ```
 
 ## Licence
