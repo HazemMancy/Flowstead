@@ -102,7 +102,7 @@ internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpd
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "A new version is available. Update opens the download in your browser; open the file when it finishes to install it. Your projects are kept.",
+                    "A new version is available. Updating takes a minute and keeps all your projects.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 when (install) {
