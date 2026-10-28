@@ -1,0 +1,50 @@
+<!doctype html>
+<!-- LinkedIn page cover, 6:1 (rendered 4200×700). Desktop puts the page logo over the bottom-left and phones crop the sides,
+     so the text sits right of centre and the left quarter carries only background lines. Render: node src/render.js -->
+<html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;font-weight:700;src:url(../../../android/app/src/main/res/font/inter_bold.ttf)}
+@font-face{font-family:Inter;font-weight:500;src:url(../../../android/app/src/main/res/font/inter_medium.ttf)}
+html,body{margin:0;width:1200px;height:200px;overflow:hidden;background:#0B1F33}
+.wrap{position:relative;width:1200px;height:200px;background:radial-gradient(ellipse 60% 120% at 62% 50%,#12304D 0%,#0B1F33 70%)}
+.flow{position:absolute;inset:0}
+.text{position:absolute;left:470px;top:44px}
+.name{font:700 64px/1 Inter;color:#FFFFFF;letter-spacing:-1.5px}
+.name span{color:#12A89D}
+.tag{margin-top:14px;font:500 21px/1.2 Inter;color:#C9D6E2}
+.by{margin-top:12px;font:500 11.5px/1 Inter;color:#7FDCD3;letter-spacing:2.2px}
+</style></head><body><div class="wrap">
+<!-- A faint flowsheet: feed → separator, vapour (amber) up and over, liquid (teal) on through a pump and exchanger. -->
+<svg class="flow" width="1200" height="200" viewBox="0 0 1200 200" xmlns="http://www.w3.org/2000/svg" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <g opacity="0.30" stroke-width="2.5">
+    <path d="M0 120H150" stroke="#7FDCD3"/>
+    <path d="M144 112l10 8-10 8" stroke="#7FDCD3"/>
+    <rect x="156" y="62" width="44" height="116" rx="22" stroke="#E8EEF3"/>
+    <path d="M178 62V26H330" stroke="#F2A33A"/>
+    <path d="M324 18l10 8-10 8" stroke="#F2A33A"/>
+    <path d="M330 26H400" stroke="#F2A33A" stroke-dasharray="2 8"/>
+    <path d="M178 178V188H262" stroke="#12A89D"/>
+    <circle cx="284" cy="188" r="22" stroke="#E8EEF3"/>
+    <path d="M306 188H420" stroke="#12A89D" stroke-dasharray="2 8"/>
+    <path d="M1075 200V194" stroke="#12A89D"/>
+    
+    <rect x="1040" y="150" width="70" height="44" rx="8" stroke="#E8EEF3"/>
+    <path d="M1048 158l54 28" stroke="#E8EEF3"/>
+    <path d="M1110 172H1200" stroke="#12A89D"/>
+    <path d="M940 30H1080V108H1200" stroke="#F2A33A"/>
+    <path d="M1074 100l10 8-10 8" stroke="#F2A33A" transform="translate(116 0)"/>
+  </g>
+</svg>
+<svg style="position:absolute;left:356px;top:40px" width="104" height="120" viewBox="22 14 76 92" xmlns="http://www.w3.org/2000/svg">
+  <rect x="28" y="20" width="24" height="80" rx="12" fill="#12A89D"/>
+  <path d="M34 42h12M34 54h12M34 66h12M34 78h12" stroke="#0B1F33" stroke-width="3" stroke-linecap="round"/>
+  <path d="M50 33h30" stroke="#F2A33A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M78 23l15 10-15 10z" fill="#F2A33A" stroke="#F2A33A" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M50 60h18" stroke="#7FDCD3" stroke-width="10" stroke-linecap="round"/>
+  <path d="M66 51l13 9-13 9z" fill="#7FDCD3" stroke="#7FDCD3" stroke-width="2" stroke-linejoin="round"/>
+</svg>
+<div class="text">
+  <div class="name">Flow<span>stead</span></div>
+  <div class="tag">Steady-state process simulation, in your pocket.</div>
+  <div class="by">PROCESS ENGINEERING WORKBENCH FOR ANDROID · POWERED BY DWSIM</div>
+</div>
+</div></body></html>
