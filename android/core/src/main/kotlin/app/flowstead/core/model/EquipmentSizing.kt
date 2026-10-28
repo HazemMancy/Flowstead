@@ -104,6 +104,12 @@ data class EquipmentSizingInput(
     /** Tank: working liquid residence time, and the fraction of the volume the working liquid fills. */
     val residenceTime: Double? = null,
     val fillFraction: Double? = null,
+    /** Tray columns (D65): tray spacing (m), design fraction of flood, downcomer fraction of the area, tray efficiency, system (foaming) factor. */
+    val traySpacing: Double? = null,
+    val floodFraction: Double? = null,
+    val downcomerFraction: Double? = null,
+    val trayEfficiency: Double? = null,
+    val systemFactor: Double? = null,
 )
 
 /** One line of a sizing result: an SI value in [quantity], or a text. */
@@ -120,7 +126,10 @@ object EquipmentSizing {
     val TYPES = setOf(
         ObjectType.HeatExchanger, ObjectType.Heater, ObjectType.Cooler, ObjectType.AirCooler,
         ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander, ObjectType.Tank,
+        ObjectType.DistillationColumn, ObjectType.Absorber, ObjectType.ReboiledAbsorber, ObjectType.RefluxedAbsorber,
     )
+
+    val COLUMNS = setOf(ObjectType.DistillationColumn, ObjectType.Absorber, ObjectType.ReboiledAbsorber, ObjectType.RefluxedAbsorber)
 
     /** The library service a type starts from. */
     fun defaultService(type: ObjectType): String? = when (type) {
@@ -230,6 +239,34 @@ object EquipmentSizing {
                     ),
                     notes = listOf("Residence time ${"%.0f".format(time / 60)} min, filled to ${"%.0f".format(fill * 100)} %" +
                         if (input.residenceTime == null || input.fillFraction == null) " (data library: 10 min, 85 %)." else "."),
+                )
+            }
+            in COLUMNS -> {
+                val profile = results.profiles(o.id) ?: return null
+                val ts = input.traySpacing ?: ColumnSizing.DEFAULT_TRAY_SPACING
+                val ff = input.floodFraction ?: ColumnSizing.DEFAULT_FLOOD
+                val dc = input.downcomerFraction ?: ColumnSizing.DEFAULT_DOWNCOMER
+                val eff = input.trayEfficiency ?: ColumnSizing.DEFAULT_EFFICIENCY
+                val r = ColumnSizing.size(o.type, profile, ts, ff, dc, eff, input.systemFactor ?: 1.0)
+                    ?: return EquipmentSizingResult(emptyList(), warnings = listOf("The solve has no stage properties for this column: solve again with this engine version."))
+                val worst = r.trays.first { it.stage == r.controllingStage }
+                EquipmentSizingResult(
+                    listOf(
+                        SizingLine("Diameter required", r.requiredDiameter, Quantity.Length),
+                        SizingLine("Diameter", r.diameter, Quantity.Length),
+                        SizingLine("Controlling stage", r.controllingStage.toDouble(), Quantity.Count),
+                        SizingLine("Flood velocity there", worst.floodVelocity, Quantity.Velocity),
+                        SizingLine("Flow parameter there", worst.flowParameter, Quantity.Ratio),
+                        SizingLine("Theoretical trays", r.trays.size.toDouble(), Quantity.Count),
+                        SizingLine("Actual trays", r.actualTrays.toDouble(), Quantity.Count),
+                        SizingLine("Height (tangent to tangent)", r.height, Quantity.Length),
+                    ),
+                    notes = listOf(
+                        "Fair's flooding correlation at ${"%.0f".format(ff * 100)} % of flood, ${"%.0f".format(ts * 1000)} mm tray spacing, " +
+                            "${"%.0f".format(dc * 100)} % downcomer area, ${"%.0f".format(eff * 100)} % tray efficiency; " +
+                            "${ColumnSizing.TOP_SPACE} m above the top tray and ${ColumnSizing.BOTTOM_SPACE} m below the bottom one.",
+                    ),
+                    warnings = r.warnings,
                 )
             }
             else -> null

@@ -222,14 +222,19 @@ internal object HelpTopics {
             - Heights and L/D per Svrcek & Monnery; nozzles by momentum (ρv²) and velocity, as standard pipe sizes.
             """.trimIndent(),
             listOf("separator sizing", "Souders-Brown", "K factor", "demister", "mist eliminator", "vane", "cyclone", "inlet device", "retention time", "API 12J", "nozzle"), listOf("D61")),
-        HelpTopic("eq_sizing", SIZING, "Exchanger, machine and tank sizing",
+        HelpTopic("eq_sizing", SIZING, "Exchanger, machine, tank and column sizing",
             """
             = A = Q / (U · F · LMTD)
             = LMTD = (ΔT1 − ΔT2) / ln(ΔT1/ΔT2)
             F for 1-2 shells in series (Bowman, Mueller & Nagle), with the fewest shells that keep F ≥ 0.75. U from the data library by service, with the area over the whole range.
             Drivers: shaft power × the API 610 (pumps) or API 617 (compressors) margin, then the next IEC 60072 motor. Tanks: volume from a residence time.
+            ## Tray columns
+            = F_LV = (L/V) · √(ρV/ρL)  (mass flows)
+            = C_sb,flood = 0.0105 + 0.1496 · TS^0.755 · exp(−1.463 · F_LV^0.842)  (m/s, TS in m; Fair, Lygeros–Magoulas fit)
+            = U_flood = C_sb · (σ/20)^0.2 · √((ρL − ρV)/ρV)
+            Every tray between the condenser and the reboiler is checked with its own solved vapour and liquid flows, densities, molar masses and surface tension; the widest sets the diameter, at 80 % of flood with 12 % downcomer area by default. Height: actual trays (theoretical / efficiency) × spacing plus 1.2 m above and 1.8 m below.
             """.trimIndent(),
-            listOf("area", "U value", "LMTD", "F factor", "shells", "motor", "driver", "API 610", "API 617", "tank"), listOf("D62")),
+            listOf("area", "U value", "LMTD", "F factor", "shells", "motor", "driver", "API 610", "API 617", "tank", "column", "tray", "flooding", "diameter"), listOf("D62", "D65")),
         // Tutorials
         HelpTopic("tut_first", TUTORIALS, "Tutorial: your first flowsheet (gas letdown)",
             """

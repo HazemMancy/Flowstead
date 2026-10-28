@@ -40,12 +40,14 @@ import app.flowstead.ui.theme.valueColors
 internal fun EquipmentSizingSection(fs: Flowsheet, obj: SimObject, results: ResultView, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
     HorizontalDivider()
     val machine = obj.type in setOf(ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander)
-    Text(if (machine) "Driver sizing" else "Equipment sizing", style = MaterialTheme.typography.titleSmall)
+    val column = obj.type in EquipmentSizing.COLUMNS
+    Text(if (machine) "Driver sizing" else if (column) "Tray sizing" else "Equipment sizing", style = MaterialTheme.typography.titleSmall)
     val input = obj.equipmentSizing
     if (input == null) {
         Calculated(
             when {
                 machine -> "The driver from the solved power: API 610 / 617 margin and the next standard IEC motor."
+                column -> "Tray column diameter and height from each tray's solved vapour and liquid traffic (Fair's flooding correlation, as HYSYS's tray sizing)."
                 obj.type == ObjectType.Tank -> "The tank volume and dimensions from the liquid flow and a residence time."
                 else -> "The heat-transfer area from the solved duty and temperatures, with U from the data library or your own."
             },
@@ -59,6 +61,24 @@ internal fun EquipmentSizingSection(fs: Flowsheet, obj: SimObject, results: Resu
     when {
         machine -> PlainNumber("Driver margin", input.margin?.let { it * 100 }, "${key}_m", "%", hint = "API") {
             save(input.copy(margin = it?.takeIf { v -> v >= 100 }?.div(100)))
+        }
+        column -> {
+            val length = unitSet.unitFor(Quantity.Length)
+            QuantityField("Tray spacing", input.traySpacing?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_ts", hint = "610 mm (24 in)") {
+                save(input.copy(traySpacing = it?.si?.takeIf { v -> v > 0.2 && v < 1.5 }))
+            }
+            PlainNumber("Design flood", input.floodFraction?.let { it * 100 }, "${key}_ff", "%", hint = "80") {
+                save(input.copy(floodFraction = it?.takeIf { v -> v > 30 && v <= 100 }?.div(100)))
+            }
+            PlainNumber("Downcomer area", input.downcomerFraction?.let { it * 100 }, "${key}_dc", "% of tower", hint = "12") {
+                save(input.copy(downcomerFraction = it?.takeIf { v -> v >= 5 && v <= 40 }?.div(100)))
+            }
+            PlainNumber("Tray efficiency", input.trayEfficiency?.let { it * 100 }, "${key}_eff", "%", hint = "70") {
+                save(input.copy(trayEfficiency = it?.takeIf { v -> v > 10 && v <= 100 }?.div(100)))
+            }
+            PlainNumber("System (foaming) factor", input.systemFactor, "${key}_sf", hint = "1.0 non-foaming") {
+                save(input.copy(systemFactor = it?.takeIf { v -> v > 0.3 && v <= 1.0 }))
+            }
         }
         obj.type == ObjectType.Tank -> {
             val time = unitSet.unitFor(Quantity.Time)

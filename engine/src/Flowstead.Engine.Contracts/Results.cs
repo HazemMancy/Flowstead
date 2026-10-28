@@ -75,6 +75,13 @@ public static class ProfileKeys
     public const string Stage = "stage";
     public const string VapourFlow = "vapourFlow";
     public const string LiquidFlow = "liquidFlow";
+    // Column, per stage, from DWSIM's property package at the stage's T, P and phase compositions (D65): vapour and
+    // liquid density (kg/m³), molar mass (kg/kmol) and the liquid's surface tension (N/m), for tray sizing.
+    public const string VapourDensity = "vapourDensity";
+    public const string LiquidDensity = "liquidDensity";
+    public const string VapourMolarMass = "vapourMolarMass";
+    public const string LiquidMolarMass = "liquidMolarMass";
+    public const string SurfaceTension = "surfaceTension";
 }
 
 /// <summary>

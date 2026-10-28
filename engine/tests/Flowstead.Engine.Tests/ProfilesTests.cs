@@ -20,7 +20,7 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
         var input = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(Dir, name, "input.json")))!;
         var fs = input["flowsheet"].Deserialize<Flowsheet>(Json.Options)!;
         var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
-        Assert.Equal(SolveStatus.Converged, r.Status);
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
         return r;
     }
 
@@ -59,6 +59,26 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
         Assert.True(temperature[^1] > temperature[0]);
         // Flows are mol/s, as the streams: the liquid leaving the reboiler is the bottoms product.
         Assert.Equal(r.Objects["b"].Properties["molarFlow"], p[ProfileKeys.LiquidFlow][^1], r.Objects["b"].Properties["molarFlow"] * 0.001);
+    }
+
+    [Fact]
+    public async Task ColumnStagesCarryTheirPhasePropertiesForTraySizing()
+    {
+        var r = await Benchmark("11-depropanizer");
+        var p = r.Objects["t"].Profiles!;
+        SameLength(p);
+        foreach (var k in new[] { ProfileKeys.VapourDensity, ProfileKeys.LiquidDensity, ProfileKeys.VapourMolarMass, ProfileKeys.LiquidMolarMass, ProfileKeys.SurfaceTension })
+            output.WriteLine(k + ": " + string.Join(", ", p[k].Select(v => v.ToString("G4"))));
+        // The bottoms product is the reboiler's liquid: the same fluid at the same state, so the same density and molar mass.
+        var bottoms = r.Objects["b"];
+        var rhoB = bottoms.Phases!.Values.First(ph => ph != bottoms.Phases["overall"] && ph.Properties.ContainsKey("density")).Properties["density"];
+        Assert.Equal(rhoB, p[ProfileKeys.LiquidDensity][^1], rhoB * 0.02);
+        Assert.Equal(bottoms.Properties.GetValueOrDefault("molecularWeight", bottoms.Phases["overall"].Properties["molecularWeight"]), p[ProfileKeys.LiquidMolarMass][^1], 0.5);
+        // C2–iC5 at about 14 bar: a dense vapour, a light liquid, hydrocarbon surface tensions of a few mN/m.
+        Assert.All(p[ProfileKeys.VapourDensity], v => Assert.InRange(v, 10, 80));
+        Assert.All(p[ProfileKeys.LiquidDensity], v => Assert.InRange(v, 350, 650));
+        Assert.All(p[ProfileKeys.SurfaceTension], v => Assert.InRange(v, 5e-4, 0.02));
+        Assert.True(p[ProfileKeys.VapourMolarMass][0] < p[ProfileKeys.VapourMolarMass][^1]); // lighter at the top
     }
 
     [Fact]

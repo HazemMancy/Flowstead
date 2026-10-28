@@ -1,7 +1,9 @@
 // Flowstead engine worker — columns: how Flowstead's HYSYS-style column model maps to DWSIM's.
 // Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Collections;
 using DWSIM.Interfaces;
+using DWSIM.Thermodynamics.PropertyPackages;
 using DWSIM.UnitOperations.UnitOperations;
 using DWSIM.UnitOperations.UnitOperations.Auxiliary.SepOps;
 using Flowstead.Engine.Contracts;
@@ -351,6 +353,55 @@ public static class Columns
         };
         if (c.Vf is { } v && v.Length == stages.Count && v.All(double.IsFinite)) profile[ProfileKeys.VapourFlow] = [.. v];
         if (c.Lf is { } l && l.Length == stages.Count && l.All(double.IsFinite)) profile[ProfileKeys.LiquidFlow] = [.. l];
+        AddPhaseProperties(c, t, p, profile);
         return profile;
+    }
+
+    /// <summary>
+    /// Each stage's vapour and liquid properties for tray sizing (D65), from the property package at the stage's T and
+    /// P and its final vapour (yf) and liquid (xf) compositions: vapour density P·M/(Z·R·T) with DWSIM's vapour Z,
+    /// DWSIM's liquid density, molar masses, and the liquid's surface tension as the mole-fraction average of the pure
+    /// components' at T (as DWSIM's own mixture rule). A key is left out unless every stage has a finite, positive value.
+    /// </summary>
+    private static void AddPhaseProperties(Column c, List<double> t, List<double> p, Dictionary<string, List<double>> profile)
+    {
+        if (c.PropertyPackage is not PropertyPackage pp || c.xf is not { } xs || c.yf is not { } ys || xs.Count != t.Count || ys.Count != t.Count) return;
+        // The package's functions take their compound list from its current stream; every stream has the flowsheet's.
+        var stream = c.FlowSheet?.SimulationObjects.Values.OfType<DWSIM.Thermodynamics.Streams.MaterialStream>().FirstOrDefault();
+        if (stream is null) return;
+        var previous = pp.CurrentMaterialStream;
+        try
+        {
+            pp.CurrentMaterialStream = stream;
+            var consts = pp.DW_GetConstantProperties();
+            List<double> rv = [], rl = [], mv = [], ml = [], st = [];
+            for (var i = 0; i < t.Count; i++)
+            {
+                var x = ((IEnumerable)xs[i]!).Cast<object>().Select(Convert.ToDouble).ToArray();
+                var y = ((IEnumerable)ys[i]!).Cast<object>().Select(Convert.ToDouble).ToArray();
+                var mY = pp.AUX_MMM(y, "V");
+                var mX = pp.AUX_MMM(x, "L");
+                var z = pp.AUX_Z(y, t[i], p[i], DWSIM.Interfaces.Enums.PhaseName.Vapor);
+                mv.Add(mY);
+                ml.Add(mX);
+                rv.Add(p[i] * mY / 1000.0 / (z * 8.314462618 * t[i]));
+                rl.Add(pp.AUX_LIQDENS(t[i], x, p[i], 0, false));
+                st.Add(x.Select((xi, k) => xi * pp.AUX_SURFTi(consts[k], t[i])).Sum());
+            }
+            void Put(string key, List<double> v) { if (v.All(d => double.IsFinite(d) && d > 0)) profile[key] = v; }
+            Put(ProfileKeys.VapourDensity, rv);
+            Put(ProfileKeys.LiquidDensity, rl);
+            Put(ProfileKeys.VapourMolarMass, mv);
+            Put(ProfileKeys.LiquidMolarMass, ml);
+            Put(ProfileKeys.SurfaceTension, st);
+        }
+        catch
+        {
+            // No phase properties: the profile keeps its flows and the app says sizing needs them.
+        }
+        finally
+        {
+            pp.CurrentMaterialStream = previous;
+        }
     }
 }
