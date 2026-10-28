@@ -277,6 +277,10 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun openPvt(streamId: String) = vm.openPvt(streamId)
             override fun editSizingCriteria() = vm.openSizingCriteria()
             override fun openDataSheet(id: String) = vm.openDataSheet(id)
+            override fun duplicateStream(id: String) { vm.duplicateStream(id) }
+            override fun copyStreamData(targetId: String, items: List<app.flowstead.core.model.StreamCopy.Item>) = vm.copyStreamData(targetId, items)
+            override fun setCompositionBasis(basis: app.flowstead.core.model.CompositionBasis) = vm.setCompositionBasis(basis)
+            override fun loadCompoundBasis() = vm.loadCompoundBasis()
         }
     }
 
@@ -345,6 +349,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 envelope = ui.envelope,
                 safety = safetyActions,
                 safetyRunning = ui.safetyRunning,
+                compositionBasis = ui.compositionBasis,
+                compoundBasis = ui.compoundBasis,
             )
         }
     }
@@ -446,6 +452,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 onDismiss = { quickActionsFor = null },
                 onTable = if (PropertyTables.available(ui.flowsheet, obj).isEmpty()) null else ({ tableFor = id }),
                 hasTable = ui.flowsheet.tables.any { it.objectId == id },
+                onDuplicate = if (obj.type == app.flowstead.core.model.ObjectType.MaterialStream) ({ vm.duplicateStream(id); Unit }) else null,
             )
         }
     }

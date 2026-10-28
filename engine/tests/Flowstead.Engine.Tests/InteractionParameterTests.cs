@@ -49,3 +49,24 @@ public sealed class InteractionParameterTests(EngineFixture engine, ITestOutputH
         Assert.Equal(plain, await Bubble(Fluid()), plain * 1e-6);
     }
 }
+
+[Collection(EngineCollection.Name)]
+public sealed class CompoundBasisTests(EngineFixture engine, ITestOutputHelper output)
+{
+    [Fact]
+    public async Task MolecularWeightsAndStandardLiquidDensitiesForEnteringMassOrVolume()
+    {
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane", "Propane", "N-hexane", "Water"] };
+        var r = await engine.Authed().PostAsJsonAsync("/compounds/basis", fs, Json.Options);
+        Assert.True(r.IsSuccessStatusCode, await r.Content.ReadAsStringAsync());
+        var basis = (await EngineFixture.Json<List<CompoundBasis>>(r)).ToDictionary(b => b.Name);
+        foreach (var b in basis.Values) output.WriteLine($"{b.Name}: MW {b.MolecularWeight:0.000}, ρ60F {b.StdLiquidDensity:0.0} kg/m³");
+        Assert.Equal(16.043, basis["Methane"].MolecularWeight, 0.01);
+        Assert.Equal(18.015, basis["Water"].MolecularWeight, 0.01);
+        // GPA 2145 for methane (2.5 lb/gal); propane 507, n-hexane 664, water 999 kg/m³ at 60 °F within 1 %.
+        Assert.Equal(299.6, basis["Methane"].StdLiquidDensity!.Value, 0.5);
+        Assert.Equal(507.0, basis["Propane"].StdLiquidDensity!.Value, 5.0);
+        Assert.Equal(664.0, basis["N-hexane"].StdLiquidDensity!.Value, 6.7);
+        Assert.Equal(999.0, basis["Water"].StdLiquidDensity!.Value, 10.0);
+    }
+}

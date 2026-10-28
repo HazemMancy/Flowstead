@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -93,8 +96,11 @@ import app.flowstead.core.model.ValveLibrary
 import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.UnitStreams
 import app.flowstead.core.model.Specification
+import app.flowstead.core.model.StreamCopy
+import app.flowstead.core.model.CompositionBasis
 import app.flowstead.core.model.displayName
 import app.flowstead.core.model.isFeed
+import app.flowstead.core.model.obj
 import app.flowstead.core.model.streamAt
 import app.flowstead.core.units.EngUnit
 import app.flowstead.core.units.Quantity
@@ -139,6 +145,14 @@ interface EditorActions {
     fun setEquipmentSizing(id: String, sizing: app.flowstead.core.model.EquipmentSizingInput?) = Unit
     /** F1: opens the help page for this type of object. */
     fun openHelp(type: ObjectType) = Unit
+    /** A new feed stream with all the data of material stream [id] (D77). */
+    fun duplicateStream(id: String) = Unit
+    /** Puts chosen values of another stream on feed stream [targetId] (D77). */
+    fun copyStreamData(targetId: String, items: List<StreamCopy.Item>) = Unit
+    /** How compositions are entered and shown (D78). */
+    fun setCompositionBasis(basis: CompositionBasis) = Unit
+    /** Asks the engine for the molecular weights and liquid densities a mass or volume basis needs. */
+    fun loadCompoundBasis() = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -155,6 +169,8 @@ fun ObjectEditorSheet(
     envelope: EnvelopeUi? = null,
     safety: SafetyActions? = null,
     safetyRunning: Set<String> = emptySet(),
+    compositionBasis: CompositionBasis = CompositionBasis.MoleFraction,
+    compoundBasis: CompoundBasisUi? = null,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
@@ -172,7 +188,10 @@ fun ObjectEditorSheet(
             HorizontalDivider()
             when (obj.type) {
                 ObjectType.MaterialStream ->
-                    if (fs.isFeed(obj)) FeedStreamEditor(fs, obj, unitSet, ctx, actions) else Calculated("This stream is calculated from the unit it comes from.")
+                    if (fs.isFeed(obj)) FeedStreamEditor(fs, obj, results, unitSet, ctx, actions, compositionBasis, compoundBasis) else {
+                        Calculated("This stream is calculated from the unit it comes from.")
+                        DuplicateButton(obj, actions, "Duplicate as a feed (its solved T, P, flow and composition)")
+                    }
                 ObjectType.EnergyStream -> Calculated("Energy streams carry the duty or power of the unit they connect to.")
                 ObjectType.Valve -> {
                     ExclusiveSpecs(
@@ -788,13 +807,73 @@ internal fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun FeedStreamEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
+private fun FeedStreamEditor(
+    fs: Flowsheet, obj: SimObject, results: ResultView, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions,
+    basis: CompositionBasis, basisData: CompoundBasisUi?,
+) {
+    CopyFromStream(fs, obj, results, unitSet, actions)
     SectionLabel("Conditions — give two")
     for (key in SpecKey.STREAM_STATE) SpecField(obj, key, unitSet, ctx, actions)
     SectionLabel("Flow — give one")
     for (key in SpecKey.STREAM_FLOW) SpecField(obj, key, unitSet, ctx, actions)
-    SectionLabel("Composition (mole fractions)")
-    CompositionEditor(fs, obj, actions)
+    SectionLabel("Composition")
+    CompositionEditor(fs, obj, actions, basis, basisData)
+    DuplicateButton(obj, actions, "Duplicate stream (all its data)")
+}
+
+@Composable
+private fun DuplicateButton(obj: SimObject, actions: EditorActions, label: String) {
+    OutlinedButton(onClick = { actions.duplicateStream(obj.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("duplicate_stream")) { Text(label) }
+}
+
+/**
+ * "Copy from another stream": pick a material stream, then tick what to take: each condition and flow it has (specified
+ * on a feed, solved on a calculated stream) and its composition. Copied conditions, flow and composition replace this
+ * stream's own.
+ */
+@Composable
+private fun CopyFromStream(fs: Flowsheet, obj: SimObject, results: ResultView, unitSet: UnitSet, actions: EditorActions) {
+    var open by remember(obj.id) { mutableStateOf(false) }
+    val sources = fs.objects.filter { it.type == ObjectType.MaterialStream && it.id != obj.id }
+    if (sources.isEmpty()) return
+    OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("copy_from")) { Text("Copy from another stream…") }
+    if (!open) return
+    var sourceId by remember(obj.id) { mutableStateOf<String?>(null) }
+    val items = sourceId?.let { id -> fs.obj(id)?.let { StreamCopy.available(fs, it, results, unitSet) } }.orEmpty()
+    val ticked = remember(sourceId) { mutableStateMapOf<String, Boolean>().apply { items.forEach { put(it.key, true) } } }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { open = false },
+        title = { Text("Copy into ${obj.tag}") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("From", style = MaterialTheme.typography.labelLarge)
+                sources.forEach { s ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { sourceId = s.id }) {
+                        RadioButton(selected = sourceId == s.id, onClick = { sourceId = s.id })
+                        Text(s.tag + if (fs.isFeed(s)) "  (feed)" else "  (calculated)")
+                    }
+                }
+                if (sourceId != null) {
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    if (items.isEmpty()) Calculated("Nothing to copy: solve first, so the calculated stream has current results.")
+                    items.forEach { item ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { ticked[item.key] = ticked[item.key] != true }) {
+                            Checkbox(checked = ticked[item.key] == true, onCheckedChange = { ticked[item.key] = it })
+                            Text(item.label)
+                        }
+                    }
+                    Calculated("Copied conditions, flow and composition replace this stream's own.")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = items.any { ticked[it.key] == true },
+                onClick = { actions.copyStreamData(obj.id, items.filter { ticked[it.key] == true }); open = false },
+            ) { Text("Copy") }
+        },
+        dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+    )
 }
 
 /** One of several alternative specs (e.g. outlet pressure OR pressure drop). */
@@ -997,8 +1076,12 @@ internal fun UnitPicker(selected: EngUnit, options: List<EngUnit>, onPick: (EngU
     }
 }
 
+/**
+ * The composition in the chosen basis (D78): mole, mass or liquid volume at 60 °F, as fractions or percent. The stream
+ * keeps mole fractions; mass and volume are converted with the engine's molecular weights and liquid densities.
+ */
 @Composable
-private fun CompositionEditor(fs: Flowsheet, obj: SimObject, actions: EditorActions) {
+private fun CompositionEditor(fs: Flowsheet, obj: SimObject, actions: EditorActions, basis: CompositionBasis, basisData: CompoundBasisUi?) {
     if (fs.compounds.isEmpty()) {
         Text(
             "Add components in Fluid package first.",
@@ -1007,24 +1090,49 @@ private fun CompositionEditor(fs: Flowsheet, obj: SimObject, actions: EditorActi
         )
         return
     }
-    val texts = remember(obj.id, obj.composition, fs.compounds) {
+    Choice("Basis", basis.label, CompositionBasis.entries.map { it.name to it.label }, testTag = "composition_basis") {
+        actions.setCompositionBasis(CompositionBasis.valueOf(it))
+    }
+    val data = basisData?.data
+    if (basis.needsEngineData) {
+        LaunchedEffect(basis, basisData == null) { if (basisData == null) actions.loadCompoundBasis() }
+        val missing = data?.let { basis.missing(fs.compounds, it) }.orEmpty()
+        val problem = when {
+            basisData == null || basisData.loading -> "Getting molecular weights and liquid densities from the engine…"
+            basisData.error != null -> "${basisData.error}. Mole fractions still work without the engine."
+            missing.isNotEmpty() -> "The engine has no ${if (basis.kind == CompositionBasis.Kind.Volume) "liquid density" else "molecular weight"} for ${missing.joinToString()}: use another basis."
+            else -> null
+        }
+        if (problem != null) {
+            Calculated(problem)
+            return
+        }
+    }
+    val shown = remember(obj.id, obj.composition, fs.compounds, basis, data) {
+        val x = fs.compounds.associateWith { obj.composition[it] ?: 0.0 }
+        // Mole bases show what was typed (even unnormalised); mass and volume are shown from the mole fractions.
+        if (x.values.all { it == 0.0 }) emptyMap() else if (basis.needsEngineData) basis.fromMole(x, data) ?: emptyMap() else x.mapValues { it.value * basis.total }
+    }
+    val texts = remember(shown) {
         mutableStateMapOf<String, String>().apply {
-            fs.compounds.forEach { c -> put(c, obj.composition[c]?.let { ValueFormat.number(it, 6).replace(",", "") } ?: "") }
+            fs.compounds.forEach { c -> put(c, shown[c]?.takeIf { it > 0 || obj.composition.containsKey(c) }?.let { ValueFormat.number(it, 6).replace(",", "") } ?: "") }
         }
     }
 
     fun parsed(): Map<String, Double>? {
         val out = mutableMapOf<String, Double>()
         for ((c, t) in texts) {
-            val s = t.trim().replace(',', '.')
-            if (s.isEmpty()) continue
-            out[c] = s.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: return null
+            val v = t.trim().replace(',', '.')
+            if (v.isEmpty()) continue
+            out[c] = v.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: return null
         }
         return out
     }
 
     fun commit() {
-        parsed()?.let { if (it != obj.composition.filterValues { x -> x > 0 }) actions.setComposition(obj.id, it) }
+        val entered = parsed() ?: return
+        if (entered == shown.filterValues { it > 0 }) return
+        basis.toMole(entered, data)?.let { if (it != obj.composition.filterValues { x -> x > 0 }) actions.setComposition(obj.id, it) }
     }
 
     for (c in fs.compounds) {
@@ -1032,6 +1140,7 @@ private fun CompositionEditor(fs: Flowsheet, obj: SimObject, actions: EditorActi
             value = texts[c].orEmpty(),
             onValueChange = { texts[c] = it },
             label = { Text(c) },
+            suffix = if (basis.percent) ({ Text("%") }) else null,
             singleLine = true,
             placeholder = { Text("0") },
             textStyle = NumberStyles.valueSpecified.copy(color = MaterialTheme.valueColors.specified),
@@ -1042,19 +1151,20 @@ private fun CompositionEditor(fs: Flowsheet, obj: SimObject, actions: EditorActi
     val values = parsed()
     val sum = values?.values?.sum()
     val v = MaterialTheme.valueColors
-    val sumOk = sum != null && kotlin.math.abs(sum - 1.0) <= Specification.COMPOSITION_TOLERANCE
+    val sumOk = sum != null && kotlin.math.abs(sum - basis.total) <= Specification.COMPOSITION_TOLERANCE * basis.total
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             when {
-                values == null -> "Check the fractions: numbers ≥ 0 only"
+                values == null -> "Check the values: numbers ≥ 0 only"
+                basis.needsEngineData && !sumOk -> "Sum = ${ValueFormat.number(sum ?: 0.0, 6)}; normalised when saved"
                 else -> "Sum = ${ValueFormat.number(sum ?: 0.0, 6)}"
             },
             style = NumberStyles.value,
-            color = if (sumOk) v.convergedText else v.underSpecifiedText,
+            color = if (sumOk || basis.needsEngineData) v.convergedText else v.underSpecifiedText,
             modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
         )
-        TextButton(
-            onClick = { values?.let { actions.normalise(obj.id, it) } },
+        if (!basis.needsEngineData) TextButton(
+            onClick = { values?.let { actions.normalise(obj.id, it.mapValues { e -> e.value / basis.total }) } },
             enabled = values != null && (sum ?: 0.0) > 0 && !sumOk,
             modifier = Modifier.heightIn(min = 48.dp),
         ) { Text("Normalise") }
@@ -1071,6 +1181,7 @@ fun ObjectQuickActions(
     onDismiss: () -> Unit,
     onTable: (() -> Unit)? = null,
     hasTable: Boolean = false,
+    onDuplicate: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -1079,6 +1190,7 @@ fun ObjectQuickActions(
             Column {
                 listOfNotNull(
                     "Edit" to onEdit,
+                    onDuplicate?.let { "Duplicate (all its data)" to it },
                     onTable?.let { (if (hasTable) "Edit table on flowsheet…" else "Show table on flowsheet…") to it },
                     "Disconnect all" to onDisconnect,
                     "Delete" to onDelete,

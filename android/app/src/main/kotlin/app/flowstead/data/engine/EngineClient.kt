@@ -60,6 +60,9 @@ interface EngineClient {
     /** The constants the engine's correlations give these hypotheticals. */
     suspend fun estimateHypotheticals(baseUrl: String, apiKey: String?, hypotheticals: List<Hypothetical>): EngineResult<List<HypotheticalProperties>> =
         EngineResult.Failed("This engine can't estimate hypotheticals")
+    /** Each compound's molecular weight and ideal liquid density at 60 °F, for mass and volume compositions (D78). */
+    suspend fun compoundBasis(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<List<app.flowstead.core.api.CompoundBasis>> =
+        EngineResult.Failed("This engine can't give compound data; update it")
     /** DWSIM's phase envelope of one composition with a flowsheet's package and compounds (D50, D52). */
     suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, request: PhaseEnvelopeRequest): EngineResult<PhaseEnvelope> =
         EngineResult.Failed("This engine can't trace phase envelopes")
@@ -130,6 +133,15 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(hypotheticals)
+            }
+        }
+
+    override suspend fun compoundBasis(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<List<app.flowstead.core.api.CompoundBasis>> =
+        call {
+            http.post("$baseUrl/compounds/basis") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(flowsheet)
             }
         }
 

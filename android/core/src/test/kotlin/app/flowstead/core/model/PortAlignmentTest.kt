@@ -58,3 +58,31 @@ class PortAlignmentTest {
         }
     }
 }
+
+class ModelHashTest {
+    private val fs = Flowsheet(
+        propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"),
+        objects = listOf(SimObject("f", "FEED", ObjectType.MaterialStream, x = 0.0, y = 0.0), SimObject("v", "VLV-100", ObjectType.Valve, x = 120.0)),
+        connections = listOf(Connection("f", 0, "v", 0)),
+    )
+
+    @Test
+    fun movingASymbolChangesNoResult() {
+        val moved = FlowsheetEditing.move(fs, "v", 300.0, 84.0)
+        assertEquals(fs.modelHash(), moved.modelHash())
+        assertTrue(fs.legacyModelHash() != moved.legacyModelHash())
+    }
+
+    @Test
+    fun resultsSavedUnderTheOldHashStayCurrent() {
+        val legacy = fs.legacyModelHash()
+        val solve = StoredSolve(app.flowstead.core.api.SolveResult(app.flowstead.core.api.SolveStatus.Converged), legacy, 0)
+        val withSafety = fs.copy(safety = SafetyStudy(devices = listOf(ReliefDeviceDef(id = "d", tag = "PSV-100", resultHash = legacy))))
+        val (migrated, migratedSolve) = migrateResultHashes(withSafety, solve)
+        assertEquals(withSafety.modelHash(), migratedSolve!!.modelHash)
+        assertEquals(withSafety.modelHash(), migrated.safety!!.devices.single().resultHash)
+        // Anything else is left as it was.
+        val other = StoredSolve(app.flowstead.core.api.SolveResult(app.flowstead.core.api.SolveStatus.Converged), "something else", 0)
+        assertEquals(other, migrateResultHashes(fs, other).second)
+    }
+}

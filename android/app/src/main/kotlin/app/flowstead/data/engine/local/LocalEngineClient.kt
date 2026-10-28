@@ -64,6 +64,11 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
             engine.call("estimateHypotheticals", FlowsheetJson.encodeToJsonElement(ListSerializer(Hypothetical.serializer()), hypotheticals))
         }
 
+    override suspend fun compoundBasis(baseUrl: String, apiKey: String?, flowsheet: Flowsheet): EngineResult<List<app.flowstead.core.api.CompoundBasis>> =
+        decode(ListSerializer(app.flowstead.core.api.CompoundBasis.serializer())) {
+            engine.call("compoundBasis", FlowsheetJson.encodeToJsonElement(Flowsheet.serializer(), flowsheet))
+        }
+
     override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, request: PhaseEnvelopeRequest): EngineResult<PhaseEnvelope> =
         decode(PhaseEnvelope.serializer()) {
             engine.call("phaseEnvelope", FlowsheetJson.encodeToJsonElement(PhaseEnvelopeRequest.serializer(), request))

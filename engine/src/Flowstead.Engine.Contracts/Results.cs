@@ -382,11 +382,15 @@ public static class WorkerMethods
     public const string Depressuring = "depressuring";
     public const string PvtRegression = "pvtRegression";
     public const string InteractionParameters = "interactionParameters";
+    public const string CompoundBasis = "compoundBasis";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }
 
 public sealed record SearchCompoundsParams(string Query, int Limit = 25);
+
+/// <summary>A compound's molecular weight (kg/kmol) and ideal liquid density at 60 °F (kg/m³; null if none), D78.</summary>
+public sealed record CompoundBasis(string Name, double MolecularWeight, double? StdLiquidDensity);
 
 /// <summary>
 /// The constants the engine uses for a hypothetical (SI: K, Pa, m³/kmol). <see cref="Estimated"/> lists the

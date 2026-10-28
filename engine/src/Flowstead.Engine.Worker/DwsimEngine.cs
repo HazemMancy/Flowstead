@@ -478,6 +478,22 @@ public sealed class DwsimEngine
         return (pp, ms);
     }
 
+    /// <summary>
+    /// Each compound's molecular weight (kg/kmol) and ideal liquid density at 60 °F (kg/m³, <see cref="StandardLiquid"/>,
+    /// null when there is no basis for one): what converts a composition entered by mass or by liquid volume into mole
+    /// fractions (D78), with the same constants the solve uses.
+    /// </summary>
+    public List<CompoundBasis> CompoundBasis(Flowsheet model)
+    {
+        if (model.Compounds.Count == 0) throw new InvalidDataException("Add components first");
+        var (pp, ms) = SingleStream(model with { Objects = [], Connections = [], Reactions = [] }, model.Compounds.ToDictionary(c => c, _ => 1.0));
+        return model.Compounds.Select(name =>
+        {
+            var c = ms.Phases[0].Compounds[name].ConstantProperties;
+            return new CompoundBasis(name, c.Molar_Weight, StandardLiquid.Density(c, pp));
+        }).ToList();
+    }
+
     public List<HypotheticalProperties> EstimateHypotheticals(List<Hypothetical> hypotheticals)
     {
         var errors = new List<string>();

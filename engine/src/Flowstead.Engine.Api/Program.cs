@@ -126,6 +126,10 @@ api.MapPost("/import", async (DwsimFile file, EngineService e, CancellationToken
 api.MapPost("/hypotheticals/estimate", async (List<Hypothetical> hypotheticals, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.EstimateHypotheticalsAsync(hypotheticals, ct), "invalid_hypothetical"));
 
+// Molecular weights and ideal liquid densities at 60 °F, for compositions entered by mass or liquid volume (D78).
+api.MapPost("/compounds/basis", async (Flowsheet fs, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.CompoundBasisAsync(fs, ct), "invalid_fluid"));
+
 // Phase envelope of one composition (D50).
 api.MapPost("/phase-envelope", async (PhaseEnvelopeRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PhaseEnvelopeAsync(req, ct), "invalid_envelope"));

@@ -21,7 +21,7 @@ The app talks only to the **engine address you enter in Settings**. Over HTTPS, 
 - compound searches;
 - your API key, in the request header.
 
-The one other address is **GitHub**: when the app opens (unless you turn off **Settings → Check for updates when Flowstead opens**) and when you tap **Settings → Check for updates**, the app asks api.github.com for the latest Flowstead release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. If you tap **Update**, the app opens the release's download link in your browser; the browser downloads the file and you install it as any download. The app itself downloads and installs nothing.
+The one other address is **GitHub**: when the app opens (unless you turn off **Settings → Check for updates when Flowstead opens**) and when you tap **Settings → Check for updates**, the app asks api.github.com for the latest Flowstead release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. If you tap **Update**, Android's download service downloads the release's APK and its checksum file from GitHub, and the app checks the file against the checksum. You install it by tapping Android's "Download complete" notification; Android asks you to confirm. The app itself installs nothing. You can also download the update in your browser instead.
 
 The engine is run by you or your organisation. Its operator can see what you send it. The engine keeps an API-key hash and, if you use stored flowsheets, those flowsheets and results. It does not keep the files you import or export.
 
@@ -41,7 +41,6 @@ When you import or export a file, Android's system file picker gives the app acc
 |---|---|
 | Internet | To reach your engine, and GitHub to check for and download updates |
 | Network state | To run a queued solve once you're back online |
-| Install apps (request install packages) | To install a Flowstead update you chose to download; Android asks you to confirm every installation |
 
 ## Deleting your data
 

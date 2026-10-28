@@ -324,13 +324,46 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
 }
 
 /** SHA-256 of the canonical flowsheet JSON: identifies exactly which flowsheet a result belongs to. */
-fun Flowsheet.modelHash(): String {
-    // Only what the engine solves counts: sizing criteria, data-sheet text, flowsheet tables, the solver mode, case studies and the safety analysis change no result.
-    // A PSV on the flowsheet is not solved either (the engine leaves it out).
-    val solved = copy(
-        sizingCriteria = null, documentInfo = null, tables = emptyList(), solverActive = false, caseStudies = emptyList(), safety = null,
-        objects = objects.filter { it.type != ObjectType.ReliefValve }.map { if (it.sheet.isEmpty() && it.sizing == null && it.equipmentSizing == null) it else it.copy(sheet = emptyMap(), sizing = null, equipmentSizing = null) },
-    )
-    val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), solved)
+fun Flowsheet.modelHash(): String = hashOf(solvedPart(), positions = false)
+
+/**
+ * The hash before 1.8.8, which also counted where symbols sit on the canvas: moving one marked every result out of
+ * date and made the active solver solve again. Kept only to recognise results saved under it ([migrateResultHashes]).
+ */
+fun Flowsheet.legacyModelHash(): String = hashOf(solvedPart(), positions = true)
+
+// Only what the engine solves counts: sizing criteria, data-sheet text, flowsheet tables, the solver mode, case studies,
+// the safety analysis and where symbols sit change no result. A PSV on the flowsheet is not solved either (the engine
+// leaves it out).
+private fun Flowsheet.solvedPart() = copy(
+    sizingCriteria = null, documentInfo = null, tables = emptyList(), solverActive = false, caseStudies = emptyList(), safety = null,
+    objects = objects.filter { it.type != ObjectType.ReliefValve }.map { if (it.sheet.isEmpty() && it.sizing == null && it.equipmentSizing == null) it else it.copy(sheet = emptyMap(), sizing = null, equipmentSizing = null) },
+)
+
+private fun hashOf(solved: Flowsheet, positions: Boolean): String {
+    val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) })
+    val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), fs)
     return java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
+}
+
+/**
+ * Results saved under the pre-1.8.8 hash ([legacyModelHash]) of this very flowsheet are re-stamped with today's hash,
+ * so they stay current after the update: the last solve, case-study runs and safety results.
+ */
+fun migrateResultHashes(fs: Flowsheet, solve: StoredSolve?): Pair<Flowsheet, StoredSolve?> {
+    val legacy = fs.legacyModelHash()
+    val now = fs.modelHash()
+    if (legacy == now) return fs to solve
+    fun h(x: String?) = if (x == legacy) now else x
+    val migrated = fs.copy(
+        caseStudies = fs.caseStudies.map { cs -> cs.results?.let { r -> if (r.modelHash == legacy) cs.copy(results = r.copy(modelHash = now)) else cs } ?: cs },
+        safety = fs.safety?.let { s ->
+            s.copy(
+                devices = s.devices.map { it.copy(resultHash = h(it.resultHash)) },
+                depressuring = s.depressuring.map { it.copy(resultHash = h(it.resultHash)) },
+                pressurization = s.pressurization.map { it.copy(resultHash = h(it.resultHash)) },
+            )
+        },
+    )
+    return migrated to solve?.let { if (it.modelHash == legacy) it.copy(modelHash = now) else it }
 }

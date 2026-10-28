@@ -7,6 +7,7 @@ package app.flowstead.data
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetJson
 import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.migrateResultHashes
 import app.flowstead.core.model.modelHash
 import app.flowstead.data.db.ProjectDao
 import app.flowstead.data.db.ProjectEntity
@@ -64,15 +65,12 @@ class RoomProjectRepository @Inject constructor(
 
     override fun observeProject(id: String): Flow<Project?> = dao.observe(id).map { e ->
         e?.let {
-            Project(
-                id = it.id,
-                name = it.name,
-                flowsheet = FlowsheetJson.decodeFromString(Flowsheet.serializer(), it.flowsheetJson),
-                updatedAt = it.updatedAt,
-                solve = it.resultJson?.let { json ->
-                    runCatching { FlowsheetJson.decodeFromString(StoredSolve.serializer(), json) }.getOrNull()
-                },
+            // Results saved before positions left the model hash (1.8.8) stay current.
+            val (flowsheet, solve) = migrateResultHashes(
+                FlowsheetJson.decodeFromString(Flowsheet.serializer(), it.flowsheetJson),
+                it.resultJson?.let { json -> runCatching { FlowsheetJson.decodeFromString(StoredSolve.serializer(), json) }.getOrNull() },
             )
+            Project(id = it.id, name = it.name, flowsheet = flowsheet, updatedAt = it.updatedAt, solve = solve)
         }
     }
 

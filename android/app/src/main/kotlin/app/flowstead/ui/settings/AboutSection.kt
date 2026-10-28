@@ -107,8 +107,8 @@ internal fun AboutSection(state: SettingsUiState, vm: SettingsViewModel, onOpenA
 }
 
 /**
- * Update (decision D68): the release's APK opens in the browser, which downloads it; the user opens the file to
- * install it over this version.
+ * Update (decision D79): the release's APK downloads here through Android's download service and is checked against its
+ * published checksum; Android's "Download complete" notification installs it. The browser download is the fallback.
  */
 @Composable
 private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: SettingsViewModel) {
@@ -124,7 +124,7 @@ private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: S
             val f = install.fraction
             if (f != null) LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth().testTag("update_progress"))
             else LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag("update_progress"))
-            Text("You can keep using Flowstead; the download carries on in the background.", style = hint, color = muted)
+            Text("You can keep using Flowstead; the download carries on in the background and in the notification.", style = hint, color = muted)
         }
         InstallState.Verifying -> Text("Checking the download…", style = hint, color = muted, modifier = live)
         InstallState.NeedsPermission -> {
@@ -137,6 +137,15 @@ private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: S
                     Text("Allow")
                 }
                 Button(onClick = vm::retryInstall, modifier = Modifier.heightIn(min = 48.dp).testTag("retry_install")) { Text("Install") }
+            }
+        }
+        is InstallState.Downloaded -> {
+            Text(
+                "Downloaded and checked. Tap the \"Flowstead ${install.version}\" notification to install it over this version, or open Downloads. Your projects are kept.",
+                style = hint, color = muted, modifier = live,
+            )
+            OutlinedButton(onClick = { runCatching { context.startActivity(install.downloads) } }, modifier = Modifier.heightIn(min = 48.dp).testTag("open_downloads")) {
+                Text("Open Downloads")
             }
         }
         is InstallState.Prompted -> {
@@ -152,7 +161,7 @@ private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: S
                 Text("Update failed: ${install.reason}", color = MaterialTheme.valueColors.error, style = MaterialTheme.typography.bodyMedium, modifier = live)
             }
             Text(
-                "Opens the download in your browser; open the file when it finishes to install it. Your projects are kept.",
+                "Downloads the update here and checks it; then tap Android's \"Download complete\" notification to install it. Your projects are kept.",
                 style = hint, color = muted,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

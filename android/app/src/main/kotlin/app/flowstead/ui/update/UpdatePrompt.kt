@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -94,6 +95,7 @@ fun UpdatePromptHost(viewModel: UpdatePromptViewModel = hiltViewModel()) {
 @Composable
 internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpdate: () -> Unit, onLater: () -> Unit) {
     val uri = LocalUriHandler.current
+    val context = LocalContext.current
     val busy = install is InstallState.Downloading || install == InstallState.Verifying
     AlertDialog(
         onDismissRequest = onLater,
@@ -102,7 +104,7 @@ internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpd
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "A new version is available. Update opens the download in your browser; open the file when it finishes to install it. Your projects are kept.",
+                    "A new version is available. Update downloads it here and checks it; then tap Android's \"Download complete\" notification to install it. Your projects are kept.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 when (install) {
@@ -117,6 +119,10 @@ internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpd
                         "Android needs your permission, once, for Flowstead to install updates: Settings → About → Update.",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    is InstallState.Downloaded -> Text(
+                        "Downloaded and checked. Tap the \"Flowstead ${install.version}\" notification to install it, or find it in Downloads.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     is InstallState.Failed -> Text("Update failed: ${install.reason}", color = MaterialTheme.valueColors.error, style = MaterialTheme.typography.bodySmall)
                     else -> Unit
                 }
@@ -125,12 +131,14 @@ internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpd
         confirmButton = {
             if (install is InstallState.Failed) {
                 TextButton(onClick = { uri.openUri(r.apkUrl ?: r.pageUrl); onLater() }) { Text("Download in the browser") }
+            } else if (install is InstallState.Downloaded) {
+                TextButton(onClick = { runCatching { context.startActivity(install.downloads) }; onLater() }) { Text("Open Downloads") }
             } else {
                 TextButton(onClick = onUpdate, enabled = !busy && r.apkUrl != null, modifier = Modifier.testTag("prompt_update")) { Text("Update") }
             }
         },
         dismissButton = {
-            TextButton(onClick = onLater, modifier = Modifier.testTag("prompt_later")) { Text(if (busy) "Hide" else "Later") }
+            TextButton(onClick = onLater, modifier = Modifier.testTag("prompt_later")) { Text(if (busy) "Hide" else if (install is InstallState.Downloaded) "Done" else "Later") }
         },
         modifier = Modifier.testTag("update_prompt"),
     )

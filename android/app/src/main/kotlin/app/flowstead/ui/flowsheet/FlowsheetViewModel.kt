@@ -47,6 +47,8 @@ import app.flowstead.core.api.SeparatorStage
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.StreamCopy
+import app.flowstead.core.model.CompositionBasis
 import app.flowstead.core.model.isFeed
 import app.flowstead.core.model.modelHash
 import app.flowstead.data.Clock
@@ -124,6 +126,17 @@ data class FlowsheetUi(
     val tuning: TuningUi? = null,
     val safetyOpen: Boolean = false,
     val safetyRunning: Set<String> = emptySet(),
+    /** How compositions are entered and shown (D78), and the engine's molecular weights and liquid densities for it. */
+    val compositionBasis: CompositionBasis = CompositionBasis.MoleFraction,
+    val compoundBasis: CompoundBasisUi? = null,
+)
+
+/** The engine's molecular weights and ideal liquid densities for the fluid [key] (package, compounds, hypotheticals). */
+data class CompoundBasisUi(
+    val key: String,
+    val data: Map<String, app.flowstead.core.api.CompoundBasis>? = null,
+    val loading: Boolean = false,
+    val error: String? = null,
 )
 
 /** [FlowsheetUi.dataSheetFor] for one document with every equipment's data sheet. */
@@ -178,6 +191,8 @@ class FlowsheetViewModel @Inject constructor(
         val safetyOpen: Boolean = false,
         /** Ids of relief valves and depressuring cases the engine is working on. */
         val safetyRunning: Set<String> = emptySet(),
+        val compositionBasis: CompositionBasis = CompositionBasis.MoleFraction,
+        val compoundBasis: CompoundBasisUi? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -232,6 +247,8 @@ class FlowsheetViewModel @Inject constructor(
                 tuning = l.tuning,
                 safetyOpen = l.safetyOpen,
                 safetyRunning = l.safetyRunning,
+                compositionBasis = l.compositionBasis,
+                compoundBasis = l.compoundBasis?.takeIf { it.key == fluidKey(fs) },
             ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FlowsheetUiState.Loading)
@@ -326,6 +343,45 @@ class FlowsheetViewModel @Inject constructor(
         edit { FlowsheetEditing.setExclusiveSpec(it, id, key, spec, group) }
 
     fun setRef(id: String, key: String, value: String?) = edit { FlowsheetEditing.setRef(it, id, key, value) }
+
+    /** A new feed stream with everything [id] can give (its specs, or its current results), selected for editing. */
+    fun duplicateStream(id: String) = viewModelScope.launch {
+        val units = settingsRepository.settings.first().unitSet
+        edit { fs ->
+            val (next, copy) = StreamCopy.duplicate(fs, id, ResultView(currentSolve, fs.modelHash()), units)
+            local.update { it.copy(selectedId = copy.id, editingId = copy.id) }
+            next
+        }
+    }
+
+    // ---- composition basis (D78)
+
+    fun setCompositionBasis(basis: CompositionBasis) {
+        local.update { it.copy(compositionBasis = basis) }
+        if (basis.needsEngineData) loadCompoundBasis()
+    }
+
+    private fun fluidKey(fs: Flowsheet) = listOf(fs.propertyPackage, fs.compounds, fs.hypotheticals).toString()
+
+    /** Asks the engine for the fluid's molecular weights and liquid densities, once per fluid. */
+    fun loadCompoundBasis() {
+        val fs = current ?: return
+        val key = fluidKey(fs)
+        local.value.compoundBasis?.let { if (it.key == key && (it.loading || it.data != null)) return }
+        local.update { it.copy(compoundBasis = CompoundBasisUi(key, loading = true)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val next = if (url.isBlank()) CompoundBasisUi(key, error = "Set the engine address in Settings")
+            else when (val r = engine.compoundBasis(url, secrets.apiKey(), fs)) {
+                is EngineResult.Ok -> CompoundBasisUi(key, data = r.value.associateBy { it.name })
+                is EngineResult.Failed -> CompoundBasisUi(key, error = r.reason)
+            }
+            local.update { it.copy(compoundBasis = next) }
+        }
+    }
+
+    /** Puts chosen values of another stream on feed stream [targetId]. */
+    fun copyStreamData(targetId: String, items: List<StreamCopy.Item>) = edit { StreamCopy.apply(it, targetId, items) }
 
     fun setPipeSize(id: String, nps: String?, schedule: String?) = edit { FlowsheetEditing.setPipeSize(it, id, nps, schedule) }
 

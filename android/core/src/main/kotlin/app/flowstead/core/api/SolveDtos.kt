@@ -267,3 +267,7 @@ object Phases {
         else -> key
     }
 }
+
+/** A compound's molecular weight (kg/kmol) and ideal liquid density at 60 °F (kg/m³, null if the engine has none), D78. */
+@Serializable
+data class CompoundBasis(val name: String, val molecularWeight: Double, val stdLiquidDensity: Double? = null)
