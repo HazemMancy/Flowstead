@@ -6,7 +6,7 @@
 | `logo-1200.png` | 1200 × 1200 | Same logo, sharper, for anywhere a larger square is wanted |
 | `cover-4200x700.png` | 4200 × 700 (6:1) | Page cover (LinkedIn shows it at 1128 × 191) |
 
-The mark is the app icon's (res/drawable/ic_flowstead_mark.xml, D64): two streams meet at a white node, teal (#19BFAE) on midnight navy (#0B1930). The wordmark is Inter Bold, "Flow" white and "stead" teal; background lines use technical blue (#5A9FF2).
+The mark is drawn as on the brand sheet (`src/mark.js`, geometry measured from it): two teal streams (#14D3CF) meet at a white node set in a gap ring and leave as one outlet, teal on the logo tile and blue (#28B4E9) in the cover lockup, on a navy gradient (#05295A to #02172C). The wordmark is Inter Bold, "Flow" white and "stead" teal; background lines use technical blue (#5A9FF2).
 On the cover the text sits right of centre, because desktop puts the page logo over the bottom-left and
 phones crop the sides. To regenerate after an edit:
 

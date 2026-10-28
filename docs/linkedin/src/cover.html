@@ -1,22 +1,22 @@
 <!doctype html>
 <!-- LinkedIn page cover, 6:1 (rendered 4200×700). Desktop puts the page logo over the bottom-left and phones crop the sides,
      so the lockup sits right of centre and the left quarter carries only background lines. Render: node src/render.js -->
-<html><head><meta charset="utf-8"><style>
+<html><head><meta charset="utf-8"><script src="mark.js"></script><style>
 @font-face{font-family:Inter;font-weight:700;src:url(../../../android/app/src/main/res/font/inter_bold.ttf)}
 @font-face{font-family:Inter;font-weight:600;src:url(../../../android/app/src/main/res/font/inter_semibold.ttf)}
 @font-face{font-family:Inter;font-weight:500;src:url(../../../android/app/src/main/res/font/inter_medium.ttf)}
-html,body{margin:0;width:1200px;height:200px;overflow:hidden;background:#0B1930}
-.wrap{position:relative;width:1200px;height:200px;background:radial-gradient(ellipse 55% 130% at 55% 50%,#11284A 0%,#0B1930 72%)}
+html,body{margin:0;width:1200px;height:200px;overflow:hidden;background:#02172C}
+.wrap{position:relative;width:1200px;height:200px;background:radial-gradient(ellipse 55% 140% at 55% 45%,#062B5C 0%,#031D3D 45%,#02142A 85%)}
 .flow{position:absolute;inset:0}
-.mark{position:absolute;left:330px;top:34px}
+.mark{position:absolute;left:296px;top:40px}
 .lock{position:absolute;left:462px;top:42px}
 .name{font:700 66px/1 Inter;color:#FFFFFF;letter-spacing:-1.5px}
-.name span{color:#19BFAE}
+.name span{color:#14D3CF}
 .sub{margin-top:10px;font:500 13px/1 Inter;color:#C9D6E2;letter-spacing:5.2px}
 .tag{position:absolute;left:462px;top:146px;font:600 20px/1.2 Inter;color:#FFFFFF}
-.tag span{color:#19BFAE}
+.tag span{color:#14D3CF}
 .verbs{position:absolute;right:40px;top:50px;font:500 11px/2 Inter;color:#C9D6E2;letter-spacing:3.4px;text-align:left}
-.verbs i{display:block;width:36px;height:2px;margin-top:6px;background:#19BFAE}
+.verbs i{display:block;width:36px;height:2px;margin-top:6px;background:#14D3CF}
 </style></head><body><div class="wrap">
 <!-- A faint flowsheet in the app's own lines: feed and heater into a separator, gas out the top, liquid to a pump. -->
 <svg class="flow" width="1200" height="200" viewBox="0 0 1200 200" xmlns="http://www.w3.org/2000/svg" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -26,20 +26,18 @@ html,body{margin:0;width:1200px;height:200px;overflow:hidden;background:#0B1930}
     <path d="M60 136q7-12 14 0t14 0"/>
     <path d="M96 132H172"/><path d="M164 125l9 7-9 7"/>
     <rect x="176" y="70" width="40" height="110" rx="20"/>
-    <path d="M196 70V30H300"/><path d="M292 23l9 7-9 7"/>
+    <path d="M196 70V30H250"/><path d="M242 23l9 7-9 7"/>
     <path d="M196 180V192H252"/>
     <circle cx="272" cy="186" r="18"/>
-    <path d="M272 168v-6h24"/><path d="M288 155l9 7-9 7"/>
+    <path d="M272 168v-6h12"/><path d="M276 155l9 7-9 7"/>
   </g>
 </svg>
-<svg class="mark" width="124" height="124" viewBox="0 0 104 104" xmlns="http://www.w3.org/2000/svg">
-  <path d="M21 30H37Q44 30 48 35L56 46M21 74H37Q44 74 48 69L56 58M72.5 52H85" fill="none" stroke="#19BFAE" stroke-width="10.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="61" cy="52" r="8.5" fill="#FFFFFF"/>
-</svg>
+<svg class="mark" width="150" height="114" viewBox="10 9.5 151 114" xmlns="http://www.w3.org/2000/svg" id="mk"></svg>
 <div class="lock">
   <div class="name">Flow<span>stead</span></div>
   <div class="sub">PROCESS ENGINEERING WORKBENCH</div>
 </div>
 <div class="tag">Engineering clarity. <span>Wherever you work.</span></div>
 <div class="verbs">SIMULATE<br>CALCULATE<br>CHECK<br>DESIGN<br>ANYTIME, ANYWHERE<i></i></div>
-</div></body></html>
+</div>
+<script>document.getElementById('mk').innerHTML = flowsteadMark(BLUE_OUTLET);</script></body></html>

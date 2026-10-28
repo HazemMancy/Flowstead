@@ -1,16 +1,14 @@
 <!doctype html>
-<!-- LinkedIn page logo: the app's mark (res/drawable/ic_flowstead_mark.xml, D64) full bleed on navy, kept inside the
-     circle LinkedIn crops to in some places. Render: node src/render.js -->
-<html><head><meta charset="utf-8"><style>
-html,body{margin:0;width:400px;height:400px;overflow:hidden;background:#0B1930}
+<!-- LinkedIn page logo: the brand-sheet app icon, full bleed (LinkedIn rounds or circles it), mark kept inside the circle.
+     Render: node src/render.js -->
+<html><head><meta charset="utf-8"><script src="mark.js"></script><style>
+html,body{margin:0;width:400px;height:400px;overflow:hidden;background:#02172C}
 svg{display:block}
 </style></head><body>
-<svg width="400" height="400" viewBox="0 0 104 104" xmlns="http://www.w3.org/2000/svg">
-  <defs><radialGradient id="g" cx="50%" cy="42%" r="72%"><stop offset="0" stop-color="#11284A"/><stop offset="1" stop-color="#0B1930"/></radialGradient></defs>
-  <rect width="104" height="104" fill="url(#g)"/>
-  <g transform="translate(52 52) scale(0.80) translate(-53 -52)">
-    <path d="M21 30H37Q44 30 48 35L56 46M21 74H37Q44 74 48 69L56 58M72.5 52H85" fill="none" stroke="#19BFAE" stroke-width="10.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="61" cy="52" r="8.5" fill="#FFFFFF"/>
-  </g>
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#05295A"/><stop offset="1" stop-color="#02172C"/></linearGradient></defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <g id="mk" transform="translate(200 200) scale(1.62) translate(-85.5 -66.5)"></g>
 </svg>
+<script>document.getElementById('mk').innerHTML = flowsteadMark(TEAL_OUTLET);</script>
 </body></html>
