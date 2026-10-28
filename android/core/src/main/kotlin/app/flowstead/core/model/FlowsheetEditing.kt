@@ -43,8 +43,14 @@ object FlowsheetEditing {
         return (if (type == ObjectType.ReliefValve) upsertReliefDevice(added, ReliefDeviceDef(id = id, tag = obj.tag)) else added) to obj
     }
 
-    fun move(fs: Flowsheet, id: String, x: Double, y: Double): Flowsheet =
-        update(fs, id) { it.copy(x = snap(x), y = snap(y)) }
+    /**
+     * Moves an object to exactly ([x], [y]): the canvas has already placed it on its grid and lined it up with its
+     * connections (CanvasGeometry.snap), which rounding again here would undo for nozzles off their symbol's centre.
+     */
+    fun move(fs: Flowsheet, id: String, x: Double, y: Double): Flowsheet {
+        if (!x.isFinite() || !y.isFinite()) throw EditRejected("Not a position")
+        return update(fs, id) { it.copy(x = x, y = y) }
+    }
 
     fun rename(fs: Flowsheet, id: String, tag: String): Flowsheet {
         val clean = tag.trim()

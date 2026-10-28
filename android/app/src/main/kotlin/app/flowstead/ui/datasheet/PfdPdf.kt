@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.PortAlignment
 import app.flowstead.core.model.PropertyTables
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.units.UnitSet
@@ -117,7 +118,9 @@ object PfdPdf {
     private val tableCell = paint(TABLE_SIZE, mono = true)
     private val tableUnit = paint(TABLE_SIZE, mono = true, color = muted)
 
-    private fun drawing(c: Canvas, fs: Flowsheet, view: ResultView, units: UnitSet, area: Rect) {
+    private fun drawing(c: Canvas, saved: Flowsheet, view: ResultView, units: UnitSet, area: Rect) {
+        // Lined up as on the canvas.
+        val fs = PortAlignment.align(saved)
         if (fs.objects.isEmpty()) {
             val p = paint(14f, color = muted)
             val msg = "The flowsheet is empty."

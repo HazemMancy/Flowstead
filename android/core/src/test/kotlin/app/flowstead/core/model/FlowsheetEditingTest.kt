@@ -50,11 +50,12 @@ class FlowsheetEditingTest {
     }
 
     @Test
-    fun positionsSnapToGrid() {
+    fun newObjectsSnapToGridAndMovesKeepTheCanvasPosition() {
         val (fs, o) = FlowsheetEditing.add(base, ObjectType.Valve, 37.0, 50.0)
         assertEquals(48.0 to 48.0, o.x to o.y)
-        val moved = FlowsheetEditing.move(fs, o.id, -13.0, 11.9).obj(o.id)!!
-        assertEquals(-24.0 to 0.0, moved.x to moved.y)
+        // The canvas lines a dropped object up with its connections; the move keeps that exact position.
+        val moved = FlowsheetEditing.move(fs, o.id, -12.0, 7.14).obj(o.id)!!
+        assertEquals(-12.0 to 7.14, moved.x to moved.y)
     }
 
     @Test

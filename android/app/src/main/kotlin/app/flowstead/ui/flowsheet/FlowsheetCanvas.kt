@@ -57,6 +57,7 @@ import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.PortAlignment
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
 import app.flowstead.core.model.PortSide
@@ -113,7 +114,9 @@ fun FlowsheetCanvas(
     val textMeasurer = rememberTextMeasurer()
     val labelColor = colors.onSurfaceVariant
 
-    val fs by rememberUpdatedState(flowsheet)
+    // Drawn lined up: arrows and units a few units off their nozzles are shown level (saved positions unchanged).
+    val shown = remember(flowsheet) { PortAlignment.align(flowsheet) }
+    val fs by rememberUpdatedState(shown)
     val twoPhase = values.twoPhase
     val vp by rememberUpdatedState(viewport)
     val act by rememberUpdatedState(actions)
