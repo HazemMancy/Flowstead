@@ -28,7 +28,7 @@ class GithubUpdateChecker @Inject constructor(private val http: HttpClient) : Up
     override suspend fun check(installed: String): Result<UpdateCheck> = runCatching {
         suspend fun latest(url: String) = http.get(url) {
             header("Accept", "application/vnd.github+json")
-            header("User-Agent", "ThermoDock/$installed") // GitHub's API requires one
+            header("User-Agent", "Flowstead/$installed") // GitHub's API requires one
         }
         // The repository's new address first; its old one until GitHub has the rename (D66).
         val response = latest(Updates.LATEST_RELEASE_URL).takeIf { it.status.value != 404 } ?: latest(Updates.LATEST_RELEASE_URL_BEFORE_RENAME)

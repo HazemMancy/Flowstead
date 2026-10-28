@@ -79,7 +79,7 @@ fun DataSheetSheet(
             )
             if (equipment == null && projectDocuments != null) {
                 Text(
-                    "Every document carries the title block below and the ThermoDock name. Process values come from the last solve; " +
+                    "Every document carries the title block below and the Flowstead name. Process values come from the last solve; " +
                         "anything the engine didn't return prints as “—”.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

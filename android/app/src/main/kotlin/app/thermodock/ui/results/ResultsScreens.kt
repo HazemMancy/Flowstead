@@ -302,7 +302,7 @@ fun SolverLogContent(u: ResultsUi, modifier: Modifier = Modifier) {
                     LogLine("Status", r.status.name.lowercase())
                     LogLine("Wall time", "%.2f s".format(java.util.Locale.ROOT, r.elapsedMs / 1000.0))
                     r.iterations?.let { LogLine("Recycle iterations", it.toString()) }
-                    LogLine("Engine", "ThermoDock ${r.engineVersion} · DWSIM ${r.dwsimVersion}")
+                    LogLine("Engine", "Flowstead ${r.engineVersion} · DWSIM ${r.dwsimVersion}")
                     LogLine("Objects solved", "${r.objects.values.count { it.status == app.thermodock.core.api.ObjectStatus.Solved }} of ${u.flowsheet.objects.size}")
                 }
             }

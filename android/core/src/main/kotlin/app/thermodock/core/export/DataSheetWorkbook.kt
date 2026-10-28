@@ -265,7 +265,7 @@ object DataSheetWorkbook {
             """<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">""" +
             """<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>${6 * emu}</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>${6 * emu}</xdr:rowOff></xdr:from>""" +
             """<xdr:ext cx="${w * emu}" cy="${h * emu}"/>""" +
-            """<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="ThermoDock logo" descr="ThermoDock"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>""" +
+            """<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Flowstead logo" descr="Flowstead"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>""" +
             """<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>""" +
             """<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w * emu}" cy="${h * emu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>""" +
             """<xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>"""
@@ -310,7 +310,7 @@ object DataSheetWorkbook {
 
     private const val ROOT_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>"""
 
-    private const val APP_PROPS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>ThermoDock</Application></Properties>"""
+    private const val APP_PROPS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Flowstead</Application></Properties>"""
 
     private val STYLES: String = buildString {
         append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")

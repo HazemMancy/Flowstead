@@ -180,7 +180,7 @@ private fun TuningSection(
     onApply: () -> Unit,
 ) {
     SectionLabel("Tune to lab data")
-    Calculated("Type your lab measurements; ThermoDock adjusts the plus fraction (hypothetical components: Tc, Pc, ω, and kij with methane) to match them.")
+    Calculated("Type your lab measurements; Flowstead adjusts the plus fraction (hypothetical components: Tc, Pc, ω, and kij with methane) to match them.")
     var rows by remember { mutableStateOf(listOf<PvtObservation>()) }
     rows.forEachIndexed { i, o ->
         val kind = PvtTuning.kind(o) ?: PvtTuning.KINDS.first()

@@ -95,6 +95,6 @@ class ResultsScreenTest {
         compose.setContent { ThermoDockTheme { SolverLogContent(ui()) } }
         compose.onNodeWithText("Recycle tolerance relaxed").assertIsDisplayed()
         compose.onNodeWithText("Warning · LP").assertIsDisplayed()
-        compose.onNodeWithText("ThermoDock 0.1.0 · DWSIM 9.0.5").assertIsDisplayed()
+        compose.onNodeWithText("Flowstead 0.1.0 · DWSIM 9.0.5").assertIsDisplayed()
     }
 }

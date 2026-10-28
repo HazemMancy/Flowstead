@@ -33,9 +33,9 @@ internal object HelpTopics {
 
     val ALL: List<HelpTopic> = listOf(
         HelpTopic(
-            "start", START, "Welcome to ThermoDock",
+            "start", START, "Welcome to Flowstead",
             """
-            ThermoDock is a steady-state process simulator and engineering workbench. Every number it shows is computed by DWSIM 9.0.5's thermodynamics, on the phone or on your own engine server; ThermoDock never invents a value.
+            Flowstead is a steady-state process simulator and engineering workbench. Every number it shows is computed by DWSIM 9.0.5's thermodynamics, on the phone or on your own engine server; Flowstead never invents a value.
             ## Where things are
             - **Projects**: each project is one flowsheet with its fluid package, results and studies.
             - **Fluid package**: components, property package, hypotheticals and binary interaction parameters.
@@ -66,7 +66,7 @@ internal object HelpTopics {
             "solver", START, "Solving: Hold and Active",
             """
             **Hold**: nothing solves until you press Solve. **Active**: the flowsheet solves a moment after each change, as HYSYS's solver does when it is on.
-            Before anything is sent, ThermoDock checks degrees of freedom on the phone, so the engine only sees complete input. Recycles are converged to 1e-6 kg/s, 0.001 K and 1 Pa within 100 iterations; an Adjust varies one specification to meet a target.
+            Before anything is sent, Flowstead checks degrees of freedom on the phone, so the engine only sees complete input. Recycles are converged to 1e-6 kg/s, 0.001 K and 1 Pa within 100 iterations; an Adjust varies one specification to meet a target.
             If the engine is a server and the phone is offline, the solve is queued and runs when the connection is back.
             """.trimIndent(),
             keywords = listOf("hold", "active", "solve", "recycle", "queue", "offline"),
@@ -188,7 +188,7 @@ internal object HelpTopics {
             "Every specification has a slider for quick what-ifs. A **case study** varies one specification over a range, solves the whole flowsheet at each point and plots the results you choose.",
             listOf("case study", "sensitivity", "slider", "what if"), listOf("D51")),
         HelpTopic("pvt", ANALYSIS, "PVT laboratory",
-            "From any stream: saturation pressure, constant composition expansion, constant volume depletion, differential liberation and separator tests. Type your lab data and ThermoDock tunes the plus fraction (Tc, Pc, ω and kij with methane) to match it.",
+            "From any stream: saturation pressure, constant composition expansion, constant volume depletion, differential liberation and separator tests. Type your lab data and Flowstead tunes the plus fraction (Tc, Pc, ω and kij with methane) to match it.",
             listOf("PVT", "CCE", "CVD", "differential liberation", "regression", "tuning"), listOf("D53")),
         HelpTopic("checks", ANALYSIS, "Unit checks and warnings",
             "After every solve the engine checks each unit against its streams as HYSYS does: temperature crosses, pressure the wrong way across a unit, vapour in a pump feed, liquid at a compressor suction, NPSH below 1 m, choked pipes and more. Warnings show on the unit and on the canvas.",

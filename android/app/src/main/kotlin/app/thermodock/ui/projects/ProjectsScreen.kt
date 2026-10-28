@@ -162,7 +162,7 @@ fun ProjectsContent(
                     IconButton(onClick = onOpenHelp, modifier = Modifier.testTag("open_help")) {
                         Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "Help and resources")
                     }
-                    IconButton(onClick = onOpenAbout) { Icon(Icons.Filled.Info, contentDescription = "About ThermoDock") }
+                    IconButton(onClick = onOpenAbout) { Icon(Icons.Filled.Info, contentDescription = "About Flowstead") }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),

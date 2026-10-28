@@ -44,19 +44,19 @@ import app.thermodock.ui.theme.valueColors
 fun ThermoDockMark(size: Dp, modifier: Modifier = Modifier) {
     Image(
         painter = painterResource(R.drawable.ic_thermodock_mark),
-        contentDescription = "ThermoDock logo",
+        contentDescription = "Flowstead logo",
         modifier = modifier.size(size),
     )
 }
 
-/** "ThermoDock" in Inter: "Thermo" in the text colour, "Dock" in teal (decision D64). */
+/** "Flowstead" in Inter: "Flow" in the text colour, "stead" in teal (decision D69). */
 @Composable
 fun Wordmark(style: TextStyle, modifier: Modifier = Modifier) {
     val accent = MaterialTheme.colorScheme.secondary
     Text(
         text = buildAnnotatedString {
-            append("Thermo")
-            withStyle(SpanStyle(color = accent)) { append("Dock") }
+            append("Flow")
+            withStyle(SpanStyle(color = accent)) { append("stead") }
         },
         style = style.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.02 * style.fontSize.value).sp),
         color = MaterialTheme.colorScheme.onBackground,

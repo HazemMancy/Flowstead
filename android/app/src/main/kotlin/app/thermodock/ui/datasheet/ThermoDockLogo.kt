@@ -15,7 +15,7 @@ import java.io.ByteArrayOutputStream
 
 /**
  * The ThermoDock mark (res/drawable/ic_thermodock_mark.xml, decision D64: two streams meet at a unit and leave as
- * one, teal on a navy tile with a white node) and the "ThermoDock" wordmark, drawn with Canvas so documents carry
+ * one, teal on a navy tile with a white node) and the "Flowstead" wordmark, drawn with Canvas so documents carry
  * them as vectors.
  */
 object ThermoDockLogo {
@@ -52,7 +52,7 @@ object ThermoDockLogo {
         c.restore()
     }
 
-    /** Mark plus "ThermoDock" ("Thermo" navy, "Dock" teal) to its right, [height] tall; returns the width used. */
+    /** Mark plus "Flowstead" ("Flow" navy, "stead" teal) to its right, [height] tall; returns the width used. */
     fun drawLockup(c: Canvas, x: Float, y: Float, height: Float): Float {
         drawMark(c, x, y, height)
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -63,11 +63,11 @@ object ThermoDockLogo {
         }
         val tx = x + height * 1.25f
         val baseline = y + height * 0.70f
-        c.drawText("Thermo", tx, baseline, text)
-        val dx = text.measureText("Thermo")
+        c.drawText("Flow", tx, baseline, text)
+        val dx = text.measureText("Flow")
         text.color = tealText
-        c.drawText("Dock", tx + dx, baseline, text)
-        return tx + dx + text.measureText("Dock") - x
+        c.drawText("stead", tx + dx, baseline, text)
+        return tx + dx + text.measureText("stead") - x
     }
 
     /** The lockup as a PNG on a transparent background, for documents that take images (Excel). */

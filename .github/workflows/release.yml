@@ -71,15 +71,15 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/release.p12"
           version=$(grep -oE 'versionName = "[^"]+"' android/app/build.gradle.kts | cut -d'"' -f2)
-          apk="thermodock-${TAG}.apk"
+          apk="flowstead-${TAG}.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$apk"
-          cp android/app/build/outputs/mapping/release/mapping.txt "thermodock-${TAG}-mapping.txt"
+          cp android/app/build/outputs/mapping/release/mapping.txt "flowstead-${TAG}-mapping.txt"
           sha256sum "$apk" > "$apk.sha256"
           # What's new: docs/release-notes/<tag>.md when there is one.
           news=""
           if [ -f "docs/release-notes/${TAG}.md" ]; then news="$(cat "docs/release-notes/${TAG}.md")"; fi
           notes=$(cat <<NOTES
-          ThermoDock ${TAG} (app version ${version}; formerly Flowstead).
+          Flowstead ${TAG} (app version ${version}).
 
           ${news}
 
@@ -87,15 +87,15 @@ jobs:
 
           **Coming from a 0.x test build?** Those were signed with the public debug key and this release is signed with the release key, so Android can't install it over them: export each project you want to keep (project menu → Export DWSIM file), uninstall the old app, install this one and import the files (Projects → Import DWSIM file). Data-sheet fields and line-sizing criteria are not part of a DWSIM file. Later releases install as updates.
 
-          **Solves on the phone:** DWSIM runs on the device (Settings → Engine → On this phone, the default); the first solve after starting the app takes a few seconds while DWSIM loads. A remote ThermoDock engine (\`docs/engine-setup.md\`) is optional.
+          **Solves on the phone:** DWSIM runs on the device (Settings → Engine → On this phone, the default); the first solve after starting the app takes a few seconds while DWSIM loads. A remote Flowstead engine (\`docs/engine-setup.md\`) is optional.
 
-          Release certificate SHA-256: \`${RELEASE_CERT_SHA256}\`. \`thermodock-${TAG}-mapping.txt\` de-obfuscates crash reports. Status and known limitations: \`docs/STATUS.md\`.
+          Release certificate SHA-256: \`${RELEASE_CERT_SHA256}\`. \`flowstead-${TAG}-mapping.txt\` de-obfuscates crash reports. Status and known limitations: \`docs/STATUS.md\`.
 
           Commit: ${GITHUB_SHA}
           NOTES
           )
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$apk" "$apk.sha256" "thermodock-${TAG}-mapping.txt" --clobber
+            gh release upload "$TAG" "$apk" "$apk.sha256" "flowstead-${TAG}-mapping.txt" --clobber
           else
-            gh release create "$TAG" "$apk" "$apk.sha256" "thermodock-${TAG}-mapping.txt" --target "$GITHUB_SHA" --latest --title "ThermoDock ${TAG}" --notes "$notes"
+            gh release create "$TAG" "$apk" "$apk.sha256" "flowstead-${TAG}-mapping.txt" --target "$GITHUB_SHA" --latest --title "Flowstead ${TAG}" --notes "$notes"
           fi
