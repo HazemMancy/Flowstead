@@ -8,16 +8,23 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.lerp
 import app.flowstead.core.model.ObjectType
 
-/** Colours an icon needs; resolved from the theme by the caller. */
+/**
+ * Colours an icon needs; resolved from the theme by the caller. [shaded] draws the bodies in 3D (lit steel with a
+ * soft shadow); off, they are flat, as on the printed PFD.
+ */
 data class IconPalette(
     val fill: Color,
     val stroke: Color,
@@ -25,7 +32,11 @@ data class IconPalette(
     val vapour: Color,
     val liquid: Color,
     val energy: Color,
+    val shaded: Boolean = true,
 )
+
+/** How a body is lit: a vertical or horizontal cylinder, a round casing, or a flat plate. */
+private enum class Shade { Upright, Lying, Round, Plate }
 
 /**
  * Process-flow-diagram symbols in the style engineers know from HYSYS and ISO 10628: vessels with
@@ -56,35 +67,99 @@ private class UnitIconPainter(
     /** Point at fractions of the box: (0,0) top-left, (1,1) bottom-right. */
     fun at(fx: Float, fy: Float) = Offset(left + fx * w, top + fy * h)
 
-    fun shape(path: Path, fill: Color = p.fill) {
-        d.drawPath(path, fill)
-        d.drawPath(path, p.stroke, style = stroke)
+    // ---- 3D: equipment is drawn as lit steel, light from the upper left, with a soft shadow below right.
+
+    /** Steel body colour, a little cooler than the surface it sits on. */
+    val steel = lerp(p.fill, Color(0xFF9AA9BA), 0.32f)
+    val edge = lerp(p.stroke, steel, 0.25f)
+    val shadow = Color.Black.copy(alpha = 0.16f)
+    val drop = Offset(sw * 0.9f, sw * 1.5f)
+
+    /** The brush for a body in [r], lit for its [shade]; a plain colour when the palette is flat. */
+    fun brush(r: Rect, shade: Shade, base: Color = steel): Brush {
+        if (!p.shaded) return SolidColor(p.fill)
+        val hi = lerp(base, Color.White, 0.75f)
+        val lo = lerp(base, Color.Black, 0.3f)
+        val bands = arrayOf(0f to lerp(base, lo, 0.6f), 0.22f to base, 0.38f to hi, 0.62f to base, 1f to lo)
+        return when (shade) {
+            Shade.Upright -> Brush.horizontalGradient(*bands, startX = r.left, endX = r.right)
+            Shade.Lying -> Brush.verticalGradient(*bands, startY = r.top, endY = r.bottom)
+            Shade.Round -> Brush.radialGradient(
+                listOf(hi, base, lo), center = Offset(r.left + r.width * 0.36f, r.top + r.height * 0.32f), radius = maxOf(r.width, r.height) * 0.8f,
+            )
+            Shade.Plate -> Brush.linearGradient(listOf(hi, base, lo), start = r.topLeft, end = r.bottomRight)
+        }
+    }
+
+    fun outline(): Color = if (p.shaded) edge else p.stroke
+
+    /** A body: its shadow, the lit fill, the outline. A colour other than the surface is drawn flat (marks, dots). */
+    fun shape(path: Path, fill: Color = p.fill, shade: Shade = Shade.Plate) {
+        if (fill != p.fill) {
+            d.drawPath(path, fill)
+            d.drawPath(path, p.stroke, style = stroke)
+            return
+        }
+        if (p.shaded) d.translate(drop.x, drop.y) { drawPath(path, shadow) }
+        d.drawPath(path, brush(path.getBounds(), shade))
+        d.drawPath(path, outline(), style = stroke)
     }
 
     fun line(a: Offset, b: Offset, color: Color = p.stroke, width: Float = sw, dashed: Boolean = false) =
         d.drawLine(color, a, b, width, StrokeCap.Round, if (dashed) PathEffect.dashPathEffect(floatArrayOf(sw * 2.5f, sw * 2f)) else null)
 
-    fun roundRect(r: Rect, radius: Float, fill: Color = p.fill) {
-        d.drawRoundRect(fill, r.topLeft, r.size, CornerRadius(radius))
-        d.drawRoundRect(p.stroke, r.topLeft, r.size, CornerRadius(radius), style = stroke)
+    fun roundRect(r: Rect, radius: Float, fill: Color = p.fill, shade: Shade = if (r.height > r.width) Shade.Upright else Shade.Lying) {
+        if (fill != p.fill) {
+            d.drawRoundRect(fill, r.topLeft, r.size, CornerRadius(radius))
+            d.drawRoundRect(p.stroke, r.topLeft, r.size, CornerRadius(radius), style = stroke)
+            return
+        }
+        if (p.shaded) d.drawRoundRect(shadow, r.topLeft + drop, r.size, CornerRadius(radius))
+        d.drawRoundRect(brush(r, shade), r.topLeft, r.size, CornerRadius(radius))
+        d.drawRoundRect(outline(), r.topLeft, r.size, CornerRadius(radius), style = stroke)
     }
 
     fun circle(center: Offset, r: Float, fill: Color = p.fill) {
-        d.drawCircle(fill, r, center)
-        d.drawCircle(p.stroke, r, center, style = stroke)
+        if (fill != p.fill) {
+            d.drawCircle(fill, r, center)
+            d.drawCircle(p.stroke, r, center, style = stroke)
+            return
+        }
+        if (p.shaded) d.drawCircle(shadow, r, center + drop)
+        d.drawCircle(brush(Rect(center, r), Shade.Round), r, center)
+        d.drawCircle(outline(), r, center, style = stroke)
     }
 
-    fun arrowHead(tip: Offset, dir: Offset, len: Float, color: Color) {
+    /** Liquid in a vessel below [level], shaded like the vessel. */
+    fun liquidPool(r: Rect, radius: Float, shade: Shade) {
+        if (!p.shaded) {
+            d.drawRoundRect(p.liquid.copy(alpha = 0.22f), r.topLeft, r.size, CornerRadius(radius))
+            return
+        }
+        val base = lerp(steel, p.liquid, 0.45f)
+        val b = when (shade) {
+            Shade.Lying -> Brush.verticalGradient(listOf(lerp(base, Color.White, 0.25f), base, lerp(base, Color.Black, 0.25f)), startY = r.top, endY = r.bottom)
+            else -> Brush.horizontalGradient(listOf(lerp(base, Color.Black, 0.15f), lerp(base, Color.White, 0.35f), base, lerp(base, Color.Black, 0.28f)), startX = r.left, endX = r.right)
+        }
+        d.drawRoundRect(b, r.topLeft, r.size, CornerRadius(radius))
+    }
+
+    fun arrowHead(tip: Offset, dir: Offset, len: Float, color: Color, solid: Boolean = false) {
         val n = Offset(-dir.y, dir.x)
-        d.drawPath(
-            Path().apply {
-                moveTo(tip.x, tip.y)
-                lineTo(tip.x - dir.x * len + n.x * len * 0.55f, tip.y - dir.y * len + n.y * len * 0.55f)
-                lineTo(tip.x - dir.x * len - n.x * len * 0.55f, tip.y - dir.y * len - n.y * len * 0.55f)
-                close()
-            },
-            color,
-        )
+        val path = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(tip.x - dir.x * len + n.x * len * 0.55f, tip.y - dir.y * len + n.y * len * 0.55f)
+            lineTo(tip.x - dir.x * len - n.x * len * 0.55f, tip.y - dir.y * len - n.y * len * 0.55f)
+            close()
+        }
+        if (!solid || !p.shaded) {
+            d.drawPath(path, color)
+            return
+        }
+        // A stream's arrowhead: lit from above, with a shadow, like the pipe it ends.
+        d.translate(drop.x * 0.6f, drop.y * 0.6f) { drawPath(path, shadow) }
+        val r = path.getBounds()
+        d.drawPath(path, Brush.verticalGradient(listOf(lerp(color, Color.White, 0.45f), color, lerp(color, Color.Black, 0.3f)), startY = r.top, endY = r.bottom))
     }
 
     fun draw(type: ObjectType, streamColor: Color) {
@@ -137,9 +212,22 @@ private class UnitIconPainter(
 
     // ---- streams
 
+    /** A material stream is a short lit pipe ending in an arrowhead; an energy stream stays a dashed line. */
     fun streamArrow(color: Color, dashed: Boolean) {
-        line(Offset(left, c.y), Offset(right - h * 0.5f, c.y), color, sw * 1.6f, dashed)
-        arrowHead(Offset(right, c.y), Offset(1f, 0f), h * 0.6f, color)
+        val end = right - h * 0.5f
+        if (dashed || !p.shaded) {
+            line(Offset(left, c.y), Offset(end, c.y), color, sw * 1.6f, dashed)
+            arrowHead(Offset(right, c.y), Offset(1f, 0f), h * 0.6f, color)
+            return
+        }
+        val t = h * 0.3f
+        val pipe = Rect(Offset(left, c.y - t / 2), Size(end - left + sw, t))
+        d.drawRoundRect(shadow, pipe.topLeft + drop * 0.6f, pipe.size, CornerRadius(t / 2))
+        d.drawRoundRect(
+            Brush.verticalGradient(listOf(lerp(color, Color.White, 0.5f), color, lerp(color, Color.Black, 0.3f)), startY = pipe.top, endY = pipe.bottom),
+            pipe.topLeft, pipe.size, CornerRadius(t / 2),
+        )
+        arrowHead(Offset(right, c.y), Offset(1f, 0f), h * 0.6f, color, solid = true)
     }
 
     // ---- heat transfer
@@ -198,8 +286,7 @@ private class UnitIconPainter(
         }
         d.drawPath(zig, p.liquid, style = thin)
         val fan = at(0.5f, 0.32f)
-        d.drawOval(p.fill, Offset(fan.x - w * 0.34f, fan.y - h * 0.1f), Size(w * 0.68f, h * 0.2f))
-        d.drawOval(p.stroke, Offset(fan.x - w * 0.34f, fan.y - h * 0.1f), Size(w * 0.68f, h * 0.2f), style = stroke)
+        shape(Path().apply { addOval(Rect(Offset(fan.x - w * 0.34f, fan.y - h * 0.1f), Size(w * 0.68f, h * 0.2f))) }, shade = Shade.Lying)
         line(Offset(fan.x - w * 0.28f, fan.y), Offset(fan.x + w * 0.28f, fan.y), p.accent)
         line(fan, Offset(fan.x, top + h * 0.06f))
         roundRect(Rect(Offset(fan.x - w * 0.07f, top), Size(w * 0.14f, h * 0.1f)), 2f)
@@ -244,7 +331,7 @@ private class UnitIconPainter(
             lineTo(left + w * 0.06f, c.y + l)
             close()
         }
-        shape(body)
+        shape(body, shade = Shade.Lying)
         line(Offset(c.x, c.y + minOf(l, r)), Offset(c.x, bottom), p.stroke, sw * 1.4f)
         circle(Offset(c.x, bottom - h * 0.02f), h * 0.05f, p.stroke)
     }
@@ -339,10 +426,7 @@ private class UnitIconPainter(
         val body = Rect(at(0.08f, 0f), at(0.92f, 1f))
         roundRect(body, body.width * 0.42f)
         val level = top + h * 0.66f
-        d.drawRoundRect(
-            p.liquid.copy(alpha = 0.22f), Offset(body.left + sw, level), Size(body.width - 2 * sw, body.bottom - level - sw),
-            CornerRadius(body.width * 0.4f),
-        )
+        liquidPool(Rect(Offset(body.left + sw, level), Size(body.width - 2 * sw, body.bottom - level - sw)), body.width * 0.4f, Shade.Upright)
         line(Offset(body.left + w * 0.06f, level), Offset(body.right - w * 0.06f, level), p.liquid, sw)
         val mesh = top + h * 0.2f
         line(Offset(body.left + w * 0.1f, mesh), Offset(body.right - w * 0.1f, mesh), p.stroke, sw * 0.7f, dashed = true)
@@ -356,6 +440,7 @@ private class UnitIconPainter(
         roundRect(boot, 3f)
         roundRect(body, body.height / 2)
         val level = top + body.height * 0.58f
+        liquidPool(Rect(Offset(body.left + sw, level), Size(body.width - 2 * sw, body.bottom - level - sw)), body.height * 0.4f, Shade.Lying)
         line(Offset(left + w * 0.08f, level), Offset(left + w * 0.62f, level), p.liquid)
         line(Offset(left + w * 0.66f, level + body.height * 0.08f), Offset(right - w * 0.08f, level + body.height * 0.08f), p.vapour, sw * 0.9f)
         line(Offset(left + w * 0.62f, top + body.height * 0.4f), Offset(left + w * 0.62f, body.bottom), p.stroke, sw * 0.9f)
@@ -368,7 +453,7 @@ private class UnitIconPainter(
         roundRect(wall, 2f)
         shape(Path().apply { moveTo(wall.left, wall.top); lineTo(c.x, top); lineTo(wall.right, wall.top); close() })
         val level = top + h * 0.6f
-        d.drawRect(p.liquid.copy(alpha = 0.22f), Offset(wall.left + sw, level), Size(wall.width - 2 * sw, wall.bottom - level - sw))
+        liquidPool(Rect(Offset(wall.left + sw, level), Size(wall.width - 2 * sw, wall.bottom - level - sw)), 1f, Shade.Upright)
         line(Offset(wall.left + 3f, level), Offset(wall.right - 3f, level), p.liquid)
     }
 
@@ -508,8 +593,12 @@ private class UnitIconPainter(
             if (round) addOval(Rect(c, minOf(w, h) * 0.44f))
             else { moveTo(c.x, top + h * 0.04f); lineTo(right - w * 0.04f, c.y); lineTo(c.x, bottom - h * 0.04f); lineTo(left + w * 0.04f, c.y); close() }
         }
-        d.drawPath(path, p.fill)
-        d.drawPath(path, p.stroke, style = if (dashed) Stroke(sw, pathEffect = PathEffect.dashPathEffect(floatArrayOf(sw * 2.5f, sw * 2f))) else stroke)
+        // Logic blocks are tinted with the accent, so they read as controls, not equipment.
+        if (p.shaded) {
+            d.translate(drop.x, drop.y) { drawPath(path, shadow) }
+            d.drawPath(path, brush(path.getBounds(), if (round) Shade.Round else Shade.Plate, lerp(p.fill, p.accent, 0.18f)))
+        } else d.drawPath(path, p.fill)
+        d.drawPath(path, outline(), style = if (dashed) Stroke(sw, pathEffect = PathEffect.dashPathEffect(floatArrayOf(sw * 2.5f, sw * 2f))) else stroke)
         mark()
     }
 
