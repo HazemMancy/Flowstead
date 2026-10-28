@@ -1,6 +1,6 @@
 # ThermoDock privacy policy
 
-_Last updated: 2026-10-22_
+_Last updated: 2026-10-28_
 
 ThermoDock is an Android app for steady-state process simulation. This policy explains what the app does with your data. In short: your data stays on your phone and on the engine server you choose. The ThermoDock project does not receive it.
 
@@ -21,7 +21,7 @@ The app talks only to the **engine address you enter in Settings**. Over HTTPS, 
 - compound searches;
 - your API key, in the request header.
 
-The one other address is **GitHub**: when the app opens (unless you turn off **Settings → Check for updates when ThermoDock opens**) and when you tap **Settings → Check for updates**, the app asks api.github.com for the latest ThermoDock release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. If you tap **Update**, the app downloads the new version from GitHub's release files into its own storage, checks it, and hands it to Android, which asks you to confirm the installation; the downloaded file is deleted from the app's cache with the next update.
+The one other address is **GitHub**: when the app opens (unless you turn off **Settings → Check for updates when ThermoDock opens**) and when you tap **Settings → Check for updates**, the app asks api.github.com for the latest ThermoDock release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. If you tap **Update**, the app opens the release's download link in your browser; the browser downloads the file and you install it as any download. The app itself downloads and installs nothing.
 
 The engine is run by you or your organisation. Its operator can see what you send it. The engine keeps an API-key hash and, if you use stored flowsheets, those flowsheets and results. It does not keep the files you import or export.
 

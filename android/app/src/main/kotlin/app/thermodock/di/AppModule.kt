@@ -29,7 +29,7 @@ import app.thermodock.data.update.AppUpdater
 import app.thermodock.data.update.DataStoreUpdatePromptStore
 import app.thermodock.data.update.UpdatePromptStore
 import app.thermodock.data.update.GithubUpdateChecker
-import app.thermodock.data.update.UpdateInstaller
+import app.thermodock.data.update.BrowserUpdater
 import app.thermodock.data.update.UpdateChecker
 import app.thermodock.data.settings.DataStoreSettingsRepository
 import app.thermodock.data.settings.EncryptedSecretStore
@@ -112,6 +112,6 @@ abstract class BindingsModule {
     @Binds abstract fun compounds(impl: AssetCompoundLibrary): CompoundLibrary
     @Binds abstract fun solveQueue(impl: WorkManagerSolveQueue): SolveQueue
     @Binds abstract fun updates(impl: GithubUpdateChecker): UpdateChecker
-    @Binds abstract fun updater(impl: UpdateInstaller): AppUpdater
+    @Binds abstract fun updater(impl: BrowserUpdater): AppUpdater
     @Binds abstract fun updatePrompts(impl: DataStoreUpdatePromptStore): UpdatePromptStore
 }
