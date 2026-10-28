@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- LinkedIn Featured link image, 1.91:1 (1200×627). The phones show the app's own symbol sheet, rendered by CI
+     (StoreScreenshots), light and dark. Render: node src/render.js -->
+<html><head><meta charset="utf-8"><script src="mark.js"></script><style>
+@font-face{font-family:Inter;font-weight:700;src:url(../../../android/app/src/main/res/font/inter_bold.ttf)}
+@font-face{font-family:Inter;font-weight:600;src:url(../../../android/app/src/main/res/font/inter_semibold.ttf)}
+@font-face{font-family:Inter;font-weight:500;src:url(../../../android/app/src/main/res/font/inter_medium.ttf)}
+html,body{margin:0;width:1200px;height:627px;overflow:hidden;background:#02172C}
+.wrap{position:relative;width:1200px;height:627px;overflow:hidden;
+  background:radial-gradient(ellipse 70% 90% at 78% 40%,#0A3466 0%,#04224A 40%,#02142A 80%)}
+.grid{position:absolute;inset:0;background-image:radial-gradient(#5A9FF2 1px,transparent 1.2px);background-size:24px 24px;opacity:.10}
+.lock{position:absolute;left:64px;top:64px;display:flex;align-items:center;gap:18px}
+.name{font:700 58px/1 Inter;color:#fff;letter-spacing:-1.4px}
+.name span{color:#14D3CF}
+.sub{margin-top:8px;font:500 12px/1 Inter;color:#C9D6E2;letter-spacing:4.2px}
+h1{position:absolute;left:64px;top:206px;margin:0;font:700 40px/1.12 Inter;color:#fff;letter-spacing:-.8px;width:560px}
+h1 span{color:#14D3CF}
+.lead{position:absolute;left:64px;top:312px;width:540px;font:500 18px/1.45 Inter;color:#C9D6E2}
+.chips{position:absolute;left:64px;top:420px;width:580px;display:flex;flex-wrap:wrap;gap:10px}
+.chip{font:600 14px/1 Inter;color:#E8F4FA;padding:10px 14px;border-radius:999px;background:rgba(20,211,207,.10);border:1px solid rgba(20,211,207,.35)}
+.foot{position:absolute;left:64px;bottom:40px;font:500 13px/1 Inter;color:#8FA6BF;letter-spacing:.3px}
+.phone{position:absolute;width:250px;height:520px;border-radius:38px;background:#0B0F16;padding:10px;box-sizing:border-box;
+  box-shadow:0 30px 60px rgba(0,0,0,.55),0 0 0 2px #2A3546 inset}
+.phone .scr{width:100%;height:100%;border-radius:29px;overflow:hidden;position:relative;background:#F3F6FA}
+.phone img{width:100%;display:block}
+.phone .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:12px;height:12px;border-radius:50%;background:#0B0F16;z-index:2}
+.p1{left:690px;top:80px;transform:rotate(-6deg)}
+.p2{left:905px;top:40px;transform:rotate(5deg)}
+.p2 .scr{background:#0B1930}
+</style></head><body><div class="wrap">
+<div class="grid"></div>
+<div class="lock">
+  <svg width="92" height="70" viewBox="10 9.5 151 114" id="mk"></svg>
+  <div><div class="name">Flow<span>stead</span></div><div class="sub">PROCESS ENGINEERING WORKBENCH</div></div>
+</div>
+<h1>Steady-state process simulation, <span>in your pocket.</span></h1>
+<div class="lead">An open-source Android app for process engineers: build a flowsheet, solve it on the phone with the DWSIM engine, then size, check and document it.</div>
+<div class="chips">
+  <div class="chip">Flowsheets &amp; solver</div><div class="chip">Columns &amp; reactors</div>
+  <div class="chip">API 520 / 521 relief</div><div class="chip">Equipment sizing</div>
+  <div class="chip">PFD &amp; H&amp;MB export</div><div class="chip">Works offline</div>
+</div>
+<div class="foot">Open source (GPL-3.0) · Powered by DWSIM · github.com/HazemMancy/Flowstead</div>
+<div class="phone p1"><div class="notch"></div><div class="scr"><img src="screen-symbols-light.png"></div></div>
+<div class="phone p2"><div class="notch"></div><div class="scr"><img src="screen-symbols-dark.png"></div></div>
+</div>
+<script>document.getElementById('mk').innerHTML = flowsteadMark(BLUE_OUTLET);</script>
+</body></html>
