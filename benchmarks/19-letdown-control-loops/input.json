@@ -1,0 +1,49 @@
+{
+  "name": "Gas let-down with control loops",
+  "description": "Natural gas at 70 bara, 40 °C let down to 30 bara and heated to 30 °C. PIC-100 moves the valve's outlet pressure to hold the product at 30 bara; TIC-100 moves the heater's duty to hold it at 30 °C. The valve's Joule-Thomson cooling ties the loops together, so they are solved together. PR.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": ["Methane", "Ethane", "Propane"],
+    "objects": [
+      {
+        "id": "feed", "tag": "1", "type": "material_stream",
+        "specs": {
+          "temperature": { "si": 313.15, "unit": "C" },
+          "pressure": { "si": 7000000.0, "unit": "bara" },
+          "molarFlow": { "si": 100.0, "unit": "kgmol/h" }
+        },
+        "composition": { "Methane": 0.85, "Ethane": 0.10, "Propane": 0.05 }
+      },
+      { "id": "vlv", "tag": "VLV-100", "type": "valve", "specs": { "outletPressure": { "si": 5000000.0, "unit": "bara" } } },
+      { "id": "s2", "tag": "2", "type": "material_stream" },
+      { "id": "e100", "tag": "E-100", "type": "heater", "specs": { "duty": { "si": 100000.0, "unit": "kW" } } },
+      { "id": "product", "tag": "3", "type": "material_stream" },
+      {
+        "id": "pic", "tag": "PIC-100", "type": "controller",
+        "refs": { "manipulatedObject": "vlv", "manipulatedSpec": "outletPressure", "controlledObject": "product", "controlledProperty": "pressure" },
+        "specs": {
+          "target": { "si": 3000000.0, "unit": "bara" },
+          "tolerance": { "si": 100.0, "unit": "dkPa" },
+          "minimum": { "si": 1000000.0, "unit": "bara" },
+          "maximum": { "si": 6900000.0, "unit": "bara" }
+        }
+      },
+      {
+        "id": "tic", "tag": "TIC-100", "type": "controller",
+        "refs": { "manipulatedObject": "e100", "manipulatedSpec": "duty", "controlledObject": "product", "controlledProperty": "temperature" },
+        "specs": {
+          "target": { "si": 303.15, "unit": "C" },
+          "tolerance": { "si": 0.01, "unit": "dC" },
+          "minimum": { "si": 0.0, "unit": "kW" },
+          "maximum": { "si": 2000000.0, "unit": "kW" }
+        }
+      }
+    ],
+    "connections": [
+      { "fromObject": "feed", "fromPort": 0, "toObject": "vlv", "toPort": 0 },
+      { "fromObject": "vlv", "fromPort": 0, "toObject": "s2", "toPort": 0 },
+      { "fromObject": "s2", "fromPort": 0, "toObject": "e100", "toPort": 0 },
+      { "fromObject": "e100", "fromPort": 0, "toObject": "product", "toPort": 0 }
+    ]
+  }
+}

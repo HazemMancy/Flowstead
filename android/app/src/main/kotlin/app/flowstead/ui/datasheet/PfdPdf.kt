@@ -25,6 +25,9 @@ import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.PortAlignment
 import app.flowstead.core.model.PropertyTables
 import app.flowstead.core.model.ResultView
+import app.flowstead.core.model.SetKeys
+import app.flowstead.core.model.AdjustKeys
+import app.flowstead.core.model.isLoop
 import app.flowstead.core.units.UnitSet
 import app.flowstead.ui.flowsheet.CanvasGeometry
 import app.flowstead.ui.flowsheet.IconPalette
@@ -168,6 +171,14 @@ object PfdPdf {
                     style = Stroke(width = 1.4f, cap = StrokeCap.Round, pathEffect = if (energy) PathEffect.dashPathEffect(floatArrayOf(5f, 4f)) else null),
                 )
             }
+            // Control loops and Sets: dashed signal lines to what they measure and move (D84).
+            for (l in fs.objects.filter { it.type.isLoop || it.type == ObjectType.Set }) {
+                val keys = if (l.type.isLoop) listOf(AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.CONTROLLED_OBJECT) else listOf(SetKeys.SOURCE_OBJECT, SetKeys.TARGET_OBJECT)
+                for (k in keys) {
+                    val target = l.refs[k]?.let { id -> fs.objects.firstOrNull { it.id == id } } ?: continue
+                    drawLine(palette.accent, CanvasGeometry.center(l), CanvasGeometry.center(target), 0.9f, StrokeCap.Round, PathEffect.dashPathEffect(floatArrayOf(3f, 3f)))
+                }
+            }
             for (o in fs.objects) {
                 val at = CanvasGeometry.center(o)
                 val size = CanvasGeometry.size(o.type)
@@ -177,6 +188,12 @@ object PfdPdf {
         }
         for (o in fs.objects) {
             val b = CanvasGeometry.bounds(o)
+            if (o.type == ObjectType.Controller) {
+                val (letters, number) = o.tag.split('-', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+                c.drawText(letters, b.center.x - tag.measureText(letters) / 2, b.center.y - 1.5f, tag)
+                c.drawText(number, b.center.x - tag.measureText(number) / 2, b.center.y + TAG_SIZE + 0.5f, tag)
+                continue
+            }
             c.drawText(o.tag, b.center.x - tag.measureText(o.tag) / 2, b.bottom + 4f + TAG_SIZE, tag)
         }
         val box = Paint().apply { color = ink; strokeWidth = 0.6f; style = Paint.Style.STROKE }

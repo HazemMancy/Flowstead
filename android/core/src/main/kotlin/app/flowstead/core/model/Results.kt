@@ -71,14 +71,16 @@ object ResultKeys {
         ObjectType.OrificePlate -> listOf("pressureDrop", "orificePressureDrop", "beta", "temperatureChange")
         ObjectType.Recycle -> listOf("iterations")
         ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
+        // A faceplate: measured value (PV), setpoint (SP), output (OP, % of its range) and the value it moves.
+        ObjectType.Controller -> listOf("controlledValue", "target", "output", "manipulatedValue", "iterations")
         else -> emptyList()
     }
 
     /** Like [quantity], but an Adjust's values take the quantity of what they reference. */
     fun quantityFor(o: SimObject, key: String): Quantity = when {
-        o.type == ObjectType.Adjust && key == "manipulatedValue" ->
+        o.type.isLoop && key == "manipulatedValue" ->
             o.refs[AdjustKeys.MANIPULATED_SPEC]?.let { runCatching { SpecKey.quantity(it) }.getOrNull() } ?: Quantity.Ratio
-        o.type == ObjectType.Adjust && key == "controlledValue" ->
+        o.type.isLoop && (key == "controlledValue" || key == "target") ->
             o.refs[AdjustKeys.CONTROLLED_PROPERTY]?.let { quantity(it) } ?: Quantity.Ratio
         o.type == ObjectType.Set && key == "targetValue" ->
             o.refs[SetKeys.VARIABLE]?.let { runCatching { SpecKey.quantity(it) }.getOrNull() } ?: Quantity.Ratio
@@ -106,6 +108,7 @@ object ResultKeys {
         "compressibilityFactor", "pressureRatio", "beta", "refluxRatio", "minimumRefluxRatio",
         "minimumStages", "actualStages", "optimalFeedStage" -> Quantity.Ratio
         "iterations" -> Quantity.Count
+        "output" -> Quantity.Fraction
         "adiabaticHead", "polytropicHead", "head", "curveHead", "npshRequired" -> Quantity.Length
         "inletVolumeFlow" -> Quantity.VolumeFlow
         "surgeMargin" -> Quantity.Fraction
@@ -227,6 +230,8 @@ object ResultKeys {
         "liquidHoldup" -> "Liquid holdup (mean)"
         "manipulatedValue" -> "Varied value"
         "controlledValue" -> "Controlled value"
+        "target" -> "Setpoint (SP)"
+        "output" -> "Output (OP)"
         else -> key.removePrefix(CONVERSION_PREFIX).takeIf { key.startsWith(CONVERSION_PREFIX) }?.let { "$it conversion" } ?: key
     }
 

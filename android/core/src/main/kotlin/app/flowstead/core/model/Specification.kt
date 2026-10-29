@@ -241,7 +241,7 @@ object Specification {
     private fun statusOf(fs: Flowsheet, o: SimObject): SpecStatus = when (o.type) {
         ObjectType.MaterialStream -> if (fs.isFeed(o)) feedStream(fs, o) else SpecStatus.Complete
         ObjectType.EnergyStream -> SpecStatus.Complete
-        ObjectType.Adjust -> adjust(fs, o)
+        ObjectType.Adjust, ObjectType.Controller -> adjust(fs, o)
         ObjectType.Set -> set(fs, o)
         ObjectType.ReliefValve -> reliefValve(fs, o)
         else -> unitOp(fs, o)
@@ -521,10 +521,24 @@ object Specification {
         else -> emptyList()
     }
 
-    /** Problems that stop any solve: nothing can be calculated until they are fixed (null = flowsheet). */
+    /**
+     * Problems that stop any solve: nothing can be calculated until they are fixed (null = flowsheet). Two loops
+     * varying one spec, or controlling one value, have no answer together (D84).
+     */
     fun blocking(flowsheet: Flowsheet): List<Pair<String?, String>> = buildList {
+        val loops = flowsheet.objects.filter { it.type.isLoop }
+        fun clash(a: String, b: String, what: String) {
+            val seen = mutableMapOf<Pair<String?, String?>, SimObject>()
+            for (l in loops) {
+                val k = l.refs[a] to l.refs[b]
+                if (k.first == null || k.second == null) continue
+                seen[k]?.let { first -> add(l.id to "${l.tag}: ${flowsheet.obj(k.first!!)?.tag ?: k.first} ${SpecKey.label(k.second!!).lowercase()} is already $what by ${first.tag}") }
+                    ?: run { seen[k] = l }
+            }
+        }
+        clash(AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.MANIPULATED_SPEC, "varied")
+        clash(AdjustKeys.CONTROLLED_OBJECT, AdjustKeys.CONTROLLED_PROPERTY, "controlled")
         if (flowsheet.propertyPackage.isNullOrBlank()) add(null to "Choose a property package")
-        flowsheet.objects.filter { it.type == ObjectType.Adjust }.drop(1).forEach { add(it.id to "${it.tag}: only one Adjust per flowsheet is supported") }
         if (flowsheet.compounds.isEmpty()) add(null to "Add components")
         if (flowsheet.objects.isEmpty()) add(null to "The flowsheet is empty")
     }

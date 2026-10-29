@@ -51,6 +51,7 @@ import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
 import app.flowstead.core.model.displayName
 import app.flowstead.core.model.modelHash
+import app.flowstead.core.model.isLoop
 import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
 import app.flowstead.ui.components.PlotsSection
@@ -130,7 +131,7 @@ private fun StudyEditor(
     onCancel: () -> Unit,
 ) {
     val variable = fs.objects.firstOrNull { it.id == cs.objectId }
-    val candidates = fs.objects.filter { it.specs.isNotEmpty() && it.type != ObjectType.Adjust && it.type != ObjectType.Set }
+    val candidates = fs.objects.filter { it.specs.isNotEmpty() && !it.type.isLoop && it.type != ObjectType.Set }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         NameField(cs) { onSave(cs.copy(name = it)) }
 

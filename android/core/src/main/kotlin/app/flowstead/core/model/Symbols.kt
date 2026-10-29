@@ -33,6 +33,7 @@ object Symbols {
             ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor -> u * 0.9 to u * 1.15
             ObjectType.Cstr -> u to u * 1.15
             ObjectType.Pfr -> u * 1.6 to u * 0.6
+            ObjectType.Controller -> u * 0.75 to u * 0.75 // an ISA instrument bubble
             else -> u to u
         }
     }

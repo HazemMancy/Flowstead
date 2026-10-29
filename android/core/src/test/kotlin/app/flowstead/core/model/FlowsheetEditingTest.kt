@@ -340,8 +340,32 @@ class RemainingUnitOpsSpecificationTest {
             assertIs<SpecStatus.Invalid>(Specification.status(fs, fs.obj(adj.id)!!)).problem)
         fs = FlowsheetEditing.setSpec(fs, h.id, SpecKey.DUTY, Spec(1e5, "kW"))
         assertEquals(SpecStatus.Complete, Specification.status(fs, fs.obj(adj.id)!!))
+        // Several loops are fine (D84), but not two varying one spec.
         val (c, second) = FlowsheetEditing.add(fs, ObjectType.Adjust, 0.0, 0.0); fs = c
-        assertTrue(Specification.problems(fs).any { it.first == second.id && "only one Adjust" in it.second })
+        assertTrue(Specification.blocking(fs).isEmpty())
+        fs = FlowsheetEditing.setRef(fs, second.id, AdjustKeys.MANIPULATED_OBJECT, h.id)
+        fs = FlowsheetEditing.setRef(fs, second.id, AdjustKeys.MANIPULATED_SPEC, SpecKey.DUTY)
+        assertTrue(Specification.blocking(fs).any { it.first == second.id && "already varied by ADJ-1" in it.second })
+    }
+
+    @Test
+    fun aControllerTakesTheIsaLetterOfWhatItMeasures() {
+        var fs = Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"))
+        val (a, v) = FlowsheetEditing.add(fs, ObjectType.Valve, 0.0, 0.0); fs = a
+        val (b, pic) = FlowsheetEditing.add(fs, ObjectType.Controller, 0.0, 0.0); fs = b
+        assertEquals("XIC-100", pic.tag)
+        fs = FlowsheetEditing.setRef(fs, pic.id, AdjustKeys.CONTROLLED_OBJECT, v.id)
+        fs = FlowsheetEditing.setRef(fs, pic.id, AdjustKeys.CONTROLLED_PROPERTY, "pressure")
+        assertEquals("PIC-100", fs.obj(pic.id)!!.tag)
+        fs = FlowsheetEditing.setRef(fs, pic.id, AdjustKeys.CONTROLLED_PROPERTY, "temperature")
+        assertEquals("TIC-100", fs.obj(pic.id)!!.tag)
+        fs = FlowsheetEditing.setRef(fs, pic.id, AdjustKeys.CONTROLLED_PROPERTY, "molarFlow")
+        assertEquals("FIC-100", fs.obj(pic.id)!!.tag)
+        // A tag the user typed stays.
+        fs = FlowsheetEditing.rename(fs, pic.id, "Inlet flow")
+        fs = FlowsheetEditing.setRef(fs, pic.id, AdjustKeys.CONTROLLED_PROPERTY, "pressure")
+        assertEquals("Inlet flow", fs.obj(pic.id)!!.tag)
+        assertEquals(listOf("controlledValue", "target", "output", "manipulatedValue", "iterations"), ResultKeys.forType(ObjectType.Controller))
     }
 
     @Test

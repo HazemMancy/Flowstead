@@ -69,7 +69,7 @@ public sealed class ControllerTests(EngineFixture engine)
         Assert.Equal(ObjectStatus.Solved, r.Objects["pic-100"].Status);
         Assert.Equal(ObjectStatus.Solved, r.Objects["tic-100"].Status);
         // Output as a % of the range: (30 − 10) / (69 − 10) for the pressure loop.
-        Assert.Equal(100 * (30e5 - 10e5) / (69e5 - 10e5), r.Objects["pic-100"].Properties["output"], 0.1);
+        Assert.Equal((30e5 - 10e5) / (69e5 - 10e5), r.Objects["pic-100"].Properties["output"], 0.001);
         // The heater's duty is what the gas needs from the valve outlet's temperature to 30 °C.
         var t2 = r.Objects["2"].Properties["temperature"];
         Assert.True(t2 < 303.15, $"valve outlet {t2} K should be below 30 °C after the let-down");

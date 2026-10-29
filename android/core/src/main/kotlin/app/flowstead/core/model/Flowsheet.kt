@@ -279,7 +279,12 @@ enum class ObjectType(val category: Category, val available: Boolean = true, val
     @SerialName("adjust") Adjust(Category.Logical),
     @SerialName("set") Set(Category.Logical),
     @SerialName("energy_recycle") EnergyRecycle(Category.Logical, available = false),
+    /** A steady-state control loop (D84): an Adjust drawn as an instrument bubble, with setpoint and output. */
+    @SerialName("controller") Controller(Category.Logical),
 }
+
+/** Adjusts and controllers: they vary one spec until a calculated value meets its target (D84). */
+val ObjectType.isLoop: Boolean get() = this == ObjectType.Adjust || this == ObjectType.Controller
 
 /** The one JSON configuration used for flowsheets everywhere (storage, API, export). */
 val FlowsheetJson: Json = Json {

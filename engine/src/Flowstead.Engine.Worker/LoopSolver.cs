@@ -174,12 +174,12 @@ public static class LoopSolver
         }));
     }
 
-    /// <summary>A controller's output as a % of its range, as on a faceplate (0 % at its minimum).</summary>
+    /// <summary>A controller's output as a fraction of its range, as on a faceplate (0 at its minimum, 1 at its maximum).</summary>
     private static ObjectResult WithOutput(SimObject loop, ObjectResult r)
     {
         if (loop.Type != ObjectType.Controller || !r.Properties.TryGetValue("manipulatedValue", out var x)) return r;
         if (loop.Specs.GetValueOrDefault(AdjustKeys.Minimum)?.Si is not { } min || loop.Specs.GetValueOrDefault(AdjustKeys.Maximum)?.Si is not { } max || max <= min) return r;
-        return r with { Properties = new Dictionary<string, double>(r.Properties) { ["output"] = 100 * (x - min) / (max - min) } };
+        return r with { Properties = new Dictionary<string, double>(r.Properties) { ["output"] = (x - min) / (max - min) } };
     }
 
     /// <summary>Gaussian elimination with partial pivoting; null if the matrix is singular.</summary>

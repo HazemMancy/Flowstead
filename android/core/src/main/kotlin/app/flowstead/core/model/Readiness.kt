@@ -46,7 +46,7 @@ data class Readiness(
                 for (o in applied.objects) {
                     val refs = when (o.type) {
                         ObjectType.Set -> listOfNotNull(o.refs[SetKeys.SOURCE_OBJECT], o.refs[SetKeys.TARGET_OBJECT])
-                        ObjectType.Adjust -> listOfNotNull(o.refs[AdjustKeys.MANIPULATED_OBJECT], o.refs[AdjustKeys.CONTROLLED_OBJECT])
+                        ObjectType.Adjust, ObjectType.Controller -> listOfNotNull(o.refs[AdjustKeys.MANIPULATED_OBJECT], o.refs[AdjustKeys.CONTROLLED_OBJECT])
                         else -> emptyList()
                     }
                     refs.firstOrNull { it in reason }?.let { waits(o.id, it) }

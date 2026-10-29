@@ -102,6 +102,7 @@ import app.flowstead.core.model.displayName
 import app.flowstead.core.model.isFeed
 import app.flowstead.core.model.obj
 import app.flowstead.core.model.streamAt
+import app.flowstead.core.model.isLoop
 import app.flowstead.core.units.EngUnit
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitContext
@@ -287,7 +288,7 @@ fun ObjectEditorSheet(
                     MethodChoice(obj, "Pressure taps", ChoiceKey.ORIFICE_TAPS, ChoiceKey.ORIFICE_TAP_OPTIONS, actions)
                     Calculated("ISO 5167 orifice meter. The outlet is at the permanent (recovered) pressure.")
                 }
-                ObjectType.Adjust -> AdjustEditor(fs, obj, unitSet, ctx, actions)
+                ObjectType.Adjust, ObjectType.Controller -> AdjustEditor(fs, obj, unitSet, ctx, actions)
                 // A PSV on the flowsheet is its Safety analysis relief valve (same id): the same fields and result here.
                 ObjectType.ReliefValve -> {
                     Calculated("Pressure safety valve: API 521 relief loads and API 520 sizing from the solved flowsheet, as in Safety analysis. It takes no part in the solve.")
@@ -578,7 +579,9 @@ private fun SetEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: Unit
 /** "Vary <object · spec> until <object · result> = target", with optional tolerance and bounds. */
 @Composable
 private fun AdjustEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
-    val others = fs.objects.filter { it.id != obj.id && it.type != ObjectType.Adjust }
+    val others = fs.objects.filter { it.id != obj.id && !it.type.isLoop && it.type != ObjectType.Set }
+    // A controller reads as a faceplate (D84): what it measures (PV), its setpoint (SP), what it moves and its range.
+    val controller = obj.type == ObjectType.Controller
     val mId = obj.refs[AdjustKeys.MANIPULATED_OBJECT]
     val mKey = obj.refs[AdjustKeys.MANIPULATED_SPEC]
     val cId = obj.refs[AdjustKeys.CONTROLLED_OBJECT]
@@ -586,7 +589,7 @@ private fun AdjustEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: U
     val manipulated = others.firstOrNull { it.id == mId }
     val controlled = others.firstOrNull { it.id == cId }
 
-    SectionLabel("Vary")
+    SectionLabel(if (controller) "Moves (output)" else "Vary")
     Choice("Object", manipulated?.tag, others.filter { it.specs.isNotEmpty() }.map { it.id to "${it.tag} · ${it.type.displayName()}" }) {
         actions.setRef(obj.id, AdjustKeys.MANIPULATED_OBJECT, it)
         actions.setRef(obj.id, AdjustKeys.MANIPULATED_SPEC, null)
@@ -596,7 +599,7 @@ private fun AdjustEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: U
             actions.setRef(obj.id, AdjustKeys.MANIPULATED_SPEC, it)
         }
     }
-    SectionLabel("Until")
+    SectionLabel(if (controller) "Measures (PV)" else "Until")
     Choice("Object", controlled?.tag, others.map { it.id to "${it.tag} · ${it.type.displayName()}" }) {
         actions.setRef(obj.id, AdjustKeys.CONTROLLED_OBJECT, it)
         actions.setRef(obj.id, AdjustKeys.CONTROLLED_PROPERTY, null)
@@ -609,14 +612,19 @@ private fun AdjustEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: U
     }
     if (cKey != null) {
         val q = ResultKeys.quantity(cKey)
-        SpecField(obj, AdjustKeys.TARGET, unitSet, ctx, actions, quantityOverride = q, labelOverride = "Target ${ResultKeys.label(cKey).lowercase()}")
+        SpecField(obj, AdjustKeys.TARGET, unitSet, ctx, actions, quantityOverride = q,
+            labelOverride = if (controller) "Setpoint (SP) ${ResultKeys.label(cKey).lowercase()}" else "Target ${ResultKeys.label(cKey).lowercase()}")
         SpecField(obj, AdjustKeys.TOLERANCE, unitSet, ctx, actions, quantityOverride = differenceOf(q),
             labelOverride = "Tolerance (optional)", optionalHint = "1e-6 relative if empty")
     }
     if (mKey != null) {
         val q = SpecKey.quantity(mKey)
-        SpecField(obj, AdjustKeys.MINIMUM, unitSet, ctx, actions, quantityOverride = q, labelOverride = "Lowest allowed ${SpecKey.label(mKey).lowercase()}", optionalHint = "no limit")
-        SpecField(obj, AdjustKeys.MAXIMUM, unitSet, ctx, actions, quantityOverride = q, labelOverride = "Highest allowed ${SpecKey.label(mKey).lowercase()}", optionalHint = "no limit")
+        val what = SpecKey.label(mKey).lowercase()
+        SpecField(obj, AdjustKeys.MINIMUM, unitSet, ctx, actions, quantityOverride = q,
+            labelOverride = if (controller) "Output 0 %: $what" else "Lowest allowed $what", optionalHint = "no limit")
+        SpecField(obj, AdjustKeys.MAXIMUM, unitSet, ctx, actions, quantityOverride = q,
+            labelOverride = if (controller) "Output 100 %: $what" else "Highest allowed $what", optionalHint = "no limit")
+        if (controller) Calculated("With both ends given, the output shows where the solved value sits in that range, as on a faceplate; at an end, the controller is saturated.")
     }
 }
 
@@ -679,7 +687,7 @@ private fun ResultsSection(
     val stream = obj.type == ObjectType.MaterialStream
     val keys = when {
         stream -> emptyList()
-        obj.type == ObjectType.Adjust -> listOf("manipulatedValue", "controlledValue", "iterations")
+        obj.type.isLoop -> ResultKeys.forType(obj.type)
         else -> ResultKeys.allForObject(fs, obj, results)
     }
     val worksheet = if (stream) emptyList() else UnitStreams.of(fs, obj.id)

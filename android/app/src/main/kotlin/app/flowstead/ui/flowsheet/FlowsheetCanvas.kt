@@ -68,6 +68,7 @@ import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.SpecKey
 import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.displayName
+import app.flowstead.core.model.isLoop
 import app.flowstead.core.units.UnitSet
 import app.flowstead.ui.theme.Inter
 import app.flowstead.ui.theme.valueColors
@@ -328,10 +329,10 @@ fun FlowsheetCanvas(
                         }
                     }
 
-                    // Adjust and Set references: dashed lines to the objects they read and write.
-                    for (adj in fs.objects.filter { it.type == ObjectType.Adjust || it.type == ObjectType.Set }) {
+                    // Adjust, controller and Set references: dashed (signal) lines to the objects they read and write.
+                    for (adj in fs.objects.filter { it.type.isLoop || it.type == ObjectType.Set }) {
                         val from = positionOf(adj)
-                        val keys = if (adj.type == ObjectType.Adjust) listOf(AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.CONTROLLED_OBJECT)
+                        val keys = if (adj.type.isLoop) listOf(AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.CONTROLLED_OBJECT)
                         else listOf(SetKeys.SOURCE_OBJECT, SetKeys.TARGET_OBJECT)
                         for (key in keys) {
                             val target = adj.refs[key]?.let { id -> fs.objects.firstOrNull { it.id == id } } ?: continue
@@ -365,6 +366,17 @@ fun FlowsheetCanvas(
             for (o in fs.objects) {
                 val at = positionOf(o)
                 val b = CanvasGeometry.bounds(o, at)
+                if (o.type == ObjectType.Controller) {
+                    // Inside the bubble, as on a P&ID: function letters above the line, loop number below.
+                    val (letters, number) = o.tag.split('-', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+                    val inside = style.copy(fontSize = (b.height * viewport.zoom * 0.24f / density).coerceIn(6f, 16f).sp, color = colors.onSurface)
+                    val c = viewport.toScreen(b.center, density)
+                    val top = textMeasurer.measure(letters, inside)
+                    val bottom = textMeasurer.measure(number, inside)
+                    drawText(top, topLeft = Offset(c.x - top.size.width / 2f, c.y - top.size.height - 1f))
+                    drawText(bottom, topLeft = Offset(c.x - bottom.size.width / 2f, c.y + 1f))
+                    continue
+                }
                 val anchor = viewport.toScreen(Offset(b.center.x, b.bottom + 4f), density)
                 val layout = textMeasurer.measure(o.tag, style)
                 drawText(layout, topLeft = Offset(anchor.x - layout.size.width / 2f, anchor.y))

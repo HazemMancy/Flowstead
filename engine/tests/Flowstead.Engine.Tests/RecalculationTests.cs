@@ -44,7 +44,8 @@ public sealed class RecalculationTests(EngineFixture engine, ITestOutputHelper o
             Assert.Contains(first["messages"]!.AsArray(), m => m!["text"]!.GetValue<string>().StartsWith("Water above 150 °C"));
             return;
         }
-        Assert.Equal("unchanged", Kind(again));
+        // Adjusts and controllers iterate on every solve (D84), so their last solve is never simply "unchanged".
+        if (model.Objects.All(o => o.Type is not (ObjectType.Adjust or ObjectType.Controller))) Assert.Equal("unchanged", Kind(again));
         Same(name + " unchanged", first, again);
 
         foreach (var (label, changed) in Perturbations(model))
@@ -54,7 +55,8 @@ public sealed class RecalculationTests(EngineFixture engine, ITestOutputHelper o
             await Twice(Unrelated); // evicts the cached flowsheet from both workers (a lone stream would not: it bypasses the cache)
             var fresh = await Solve(client, changed);
             if (fresh["status"]!.GetValue<string>() != "converged") continue; // the change made the case invalid or unsolvable
-            Assert.Equal("built", Kind(fresh));
+            // With loops, a fresh solve builds once and its later iterations reuse that flowsheet.
+            if (model.Objects.All(o => o.Type is not (ObjectType.Adjust or ObjectType.Controller))) Assert.Equal("built", Kind(fresh));
             Assert.Equal("converged", reused["status"]!.GetValue<string>());
             Assert.Contains(Kind(reused), new[] { "downstream", "reused", "built" }); // built: a column or reactor spec changed
             Same($"{name} {label}", fresh, reused);
@@ -81,7 +83,7 @@ public sealed class RecalculationTests(EngineFixture engine, ITestOutputHelper o
         {
             yield return ($"{feed.Tag} T+2 K", With(model, feed, SpecKeys.Temperature, t => t + 2));
         }
-        if (model.Objects.FirstOrDefault(o => o.Type is not (ObjectType.MaterialStream or ObjectType.EnergyStream or ObjectType.Set or ObjectType.Adjust or ObjectType.Recycle)
+        if (model.Objects.FirstOrDefault(o => o.Type is not (ObjectType.MaterialStream or ObjectType.EnergyStream or ObjectType.Set or ObjectType.Adjust or ObjectType.Controller or ObjectType.Recycle)
                 && o.Specs.Any(s => s.Value.Si != 0)) is { } unit)
         {
             var key = unit.Specs.First(s => s.Value.Si != 0).Key;

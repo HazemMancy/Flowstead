@@ -140,7 +140,7 @@
         "recycle",
         "adjust",
         "set",
-        "energy_recycle"
+        "energy_recycle", "controller"
       ]
     },
     "Spec": {

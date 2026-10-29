@@ -106,8 +106,16 @@ object FlowsheetEditing {
     fun setExclusiveSpec(fs: Flowsheet, id: String, key: String, spec: Spec, clears: Collection<String>): Flowsheet =
         update(fs, id) { o -> o.copy(specs = o.specs - clears.filter { it != key }.toSet() + (key to spec)) }
 
-    fun setRef(fs: Flowsheet, id: String, key: String, value: String?): Flowsheet = update(fs, id) {
-        if (value == null) it.copy(refs = it.refs - key) else it.copy(refs = it.refs + (key to value))
+    fun setRef(fs: Flowsheet, id: String, key: String, value: String?): Flowsheet {
+        val set = update(fs, id) {
+            if (value == null) it.copy(refs = it.refs - key) else it.copy(refs = it.refs + (key to value))
+        }
+        // A controller still on its given tag takes the ISA letter of what it measures: PIC-100, TIC-100, FIC-100 (D84).
+        val o = set.obj(id) ?: return set
+        if (o.type != ObjectType.Controller || key != AdjustKeys.CONTROLLED_PROPERTY || value == null) return set
+        val n = ControllerTags.GIVEN.matchEntire(o.tag)?.groupValues?.get(1) ?: return set
+        val tag = "${ControllerTags.letter(value)}IC-$n"
+        return if (tag == o.tag || set.objects.any { it.tag == tag }) set else update(set, id) { it.copy(tag = tag) }
     }
 
     /** Adds [r], or replaces the reaction with its id. */

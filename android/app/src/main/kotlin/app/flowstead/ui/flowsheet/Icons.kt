@@ -234,6 +234,9 @@ private class UnitIconPainter(
             ObjectType.EnergyRecycle -> logical(round = true, dashed = true) { recycleMark(p.energy) }
             ObjectType.Adjust -> logical(round = false) { adjustMark() }
             ObjectType.Set -> logical(round = false) { setMark() }
+            // ISA-5.1 instrument bubble: a circle, the line across it for a control-room (DCS) function. The canvas
+            // writes the tag inside: letters above the line, number below (D84).
+            ObjectType.Controller -> logical(round = true) { line(at(0.06f, 0.5f), at(0.94f, 0.5f), outline(), sw) }
         }
     }
 

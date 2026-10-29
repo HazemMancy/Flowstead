@@ -144,6 +144,7 @@ fun ObjectType.tagPrefix(): String? = when (this) {
     ObjectType.Cstr, ObjectType.Pfr -> "R"
     ObjectType.Set -> "SET"
     ObjectType.EnergyRecycle -> "ERCY"
+    ObjectType.Controller -> "XIC" // retagged from what it measures: PIC, TIC, FIC… (ControllerTags)
 }
 
 /** Display name of each type, as shown in the palette and editor titles. */
@@ -183,4 +184,5 @@ fun ObjectType.displayName(): String = when (this) {
     ObjectType.Pfr -> "PFR"
     ObjectType.Set -> "Set"
     ObjectType.EnergyRecycle -> "Energy recycle"
+    ObjectType.Controller -> "Controller"
 }
