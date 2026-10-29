@@ -77,6 +77,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.flowstead.data.ProjectSummary
 import app.flowstead.ui.components.FlowsteadMark
 import app.flowstead.ui.components.Wordmark
+import app.flowstead.ui.components.readableWidth
 import app.flowstead.ui.theme.NumberStyles
 
 @Composable
@@ -189,7 +190,7 @@ fun ProjectsContent(
             else -> LazyColumn(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(padding).testTag("project_list"),
+                modifier = Modifier.padding(padding).readableWidth().testTag("project_list"),
             ) {
                 items(state.projects, key = { it.id }) { p ->
                     ProjectCard(

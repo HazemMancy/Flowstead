@@ -61,6 +61,7 @@ import app.flowstead.core.units.EngUnit
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitSet
 import app.flowstead.ui.components.BackButton
+import app.flowstead.ui.components.readableWidth
 import app.flowstead.ui.theme.NumberStyles
 import app.flowstead.ui.theme.ThemeMode
 import app.flowstead.ui.theme.valueColors
@@ -83,6 +84,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit = {}, viewModel: 
         Column(
             Modifier
                 .padding(padding)
+                .readableWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

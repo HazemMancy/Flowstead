@@ -57,6 +57,7 @@ import app.flowstead.BuildConfig
 import app.flowstead.core.help.Help
 import app.flowstead.core.help.HelpTopic
 import app.flowstead.ui.components.BackButton
+import app.flowstead.ui.components.readableWidth
 import app.flowstead.ui.theme.NumberStyles
 
 /** Where the help screen is: the home page, a section's list, a page, the examples, what's new or support. */
@@ -140,7 +141,7 @@ fun HelpScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
+        Column(Modifier.padding(padding).readableWidth().fillMaxSize()) {
             if (current == Page.Home || current is Page.Section) {
                 OutlinedTextField(
                     value = query,

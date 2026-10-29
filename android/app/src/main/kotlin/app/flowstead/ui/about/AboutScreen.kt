@@ -47,6 +47,7 @@ import app.flowstead.BuildConfig
 import app.flowstead.ui.components.BackButton
 import app.flowstead.ui.components.FlowsteadMark
 import app.flowstead.ui.components.Wordmark
+import app.flowstead.ui.components.readableWidth
 import app.flowstead.ui.theme.NumberStyles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -92,7 +93,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
-            Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+            Modifier.padding(padding).readableWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -198,12 +199,12 @@ fun LicenseTextScreen(title: String, asset: String, onBack: () -> Unit) {
     ) { padding ->
         SelectionContainer {
             if (asset.endsWith(".md")) {
-                MarkdownText(text, Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp))
+                MarkdownText(text, Modifier.padding(padding).readableWidth().verticalScroll(rememberScrollState()).padding(16.dp))
             } else {
                 Text(
                     text,
                     style = NumberStyles.tag,
-                    modifier = Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+                    modifier = Modifier.padding(padding).readableWidth().verticalScroll(rememberScrollState()).padding(16.dp),
                 )
             }
         }

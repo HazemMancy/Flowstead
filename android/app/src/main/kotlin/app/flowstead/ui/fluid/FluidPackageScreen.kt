@@ -88,6 +88,7 @@ import app.flowstead.data.engine.ON_DEVICE_ENGINE
 import app.flowstead.data.settings.SecretStore
 import app.flowstead.data.settings.SettingsRepository
 import app.flowstead.ui.components.BackButton
+import app.flowstead.ui.components.readableWidth
 import app.flowstead.ui.nav.FluidRoute
 import app.flowstead.ui.theme.NumberStyles
 import app.flowstead.ui.theme.valueColors
@@ -367,7 +368,7 @@ fun FluidPackageContent(
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(padding).testTag("fluid_list"),
+            modifier = Modifier.padding(padding).readableWidth().testTag("fluid_list"),
         ) {
             item { Text("Property package", style = MaterialTheme.typography.titleMedium) }
             items(ui.packages, key = { "pkg_$it" }) { name ->
