@@ -37,6 +37,12 @@ public sealed class RecalculationTests(EngineFixture engine, ITestOutputHelper o
         var first = await Twice(model);
         if (first["status"]!.GetValue<string>() != "converged") return; // nothing is reused after a failed solve
         var again = await Twice(model);
+        if (Kind(again) == "built")
+        {
+            // Hot water falls back from the free-water flash to the standard one by building anew (D28), every time.
+            Assert.Contains(first["messages"]!.AsArray(), m => m!["text"]!.GetValue<string>().StartsWith("Water above 150 °C"));
+            return;
+        }
         Assert.Equal("unchanged", Kind(again));
         Same(name + " unchanged", first, again);
 
