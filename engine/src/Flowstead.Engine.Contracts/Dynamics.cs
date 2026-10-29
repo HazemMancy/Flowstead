@@ -15,6 +15,11 @@ public sealed record DynamicsRequest
     /// <summary>Integration step, s; the engine takes smaller steps inside it where a vessel changes fast.</summary>
     public double Step { get; init; } = 1;
     public List<DynamicEvent> Events { get; init; } = [];
+    /// <summary>
+    /// What only the dynamic run needs, by object id (<see cref="DynamicKeys"/>): vessel sizes, valve Cv and opening,
+    /// controller tuning. Kept apart from the steady specs, so setting them changes no steady result.
+    /// </summary>
+    public Dictionary<string, Dictionary<string, Spec>> Parameters { get; init; } = [];
 }
 
 /// <summary>At [Time] s, [Key] of [ObjectId] becomes [Value] (SI): a spec, a valve's opening, a controller's setpoint or mode.</summary>
@@ -30,6 +35,8 @@ public static class DynamicKeys
     public const string InitialLevel = "initialLevel";
     /// <summary>Valve: opening at the start, fraction (default: the one that passes the steady-state flow).</summary>
     public const string Opening = "opening";
+    /// <summary>Valve: its rated (fully open) Cv, US units; sized to the steady flow when not given.</summary>
+    public const string RatedCv = "ratedCv";
     /// <summary>Controller tuning: gain (% output per % of measurement span), integral and derivative times, s.</summary>
     public const string Gain = "gain";
     public const string IntegralTime = "integralTime";

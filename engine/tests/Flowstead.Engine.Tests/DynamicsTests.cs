@@ -112,6 +112,34 @@ public sealed class DynamicsTests(EngineFixture engine, ITestOutputHelper output
     }
 
     [Fact]
+    public async Task ParametersComeFromTheRunAndAPumpLiftsTheLiquid()
+    {
+        // The vessel's size comes from the run's parameters, not its specs; the liquid is pumped from 20 to 40 bara and
+        // let down to a 30 bara product under level control.
+        var fs = Separator();
+        fs = fs with
+        {
+            Objects = fs.Objects.Select(o => o.Id == "sep" ? o with { Specs = [] } : o.Id == "lv" ? o with { Specs = new() { [SpecKeys.OutletPressure] = new(30e5, "bara") } } : o)
+                .Append(new SimObject { Id = "p", Tag = "P-100", Type = ObjectType.Pump, Specs = new() { [SpecKeys.OutletPressure] = new(40e5, "bara"), [SpecKeys.Efficiency] = new(0.75, "%") } })
+                .Append(new SimObject { Id = "5b", Tag = "5B", Type = ObjectType.MaterialStream })
+                .ToList(),
+            Connections = fs.Connections.Where(c => !(c.FromObject == "5" && c.ToObject == "lv"))
+                .Concat([new Connection("5", 0, "p", 0), new Connection("p", 0, "5b", 0), new Connection("5b", 0, "lv", 0)]).ToList(),
+        };
+        var parameters = new Dictionary<string, Dictionary<string, Spec>> { ["sep"] = new() { [DynamicKeys.Volume] = new(5, "m3"), [DynamicKeys.Height] = new(3, "m") } };
+        var r = await EngineFixture.Json<DynamicsResult>(await engine.Authed().PostAsJsonAsync("/dynamics",
+            new DynamicsRequest { Flowsheet = fs, Duration = 1200, Step = 1, Parameters = parameters, Events = [new DynamicEvent(30, "1", SpecKeys.Pressure, 33e5)] }, Json.Options));
+        foreach (var m in r.Messages) output.WriteLine($"{m.Level}: {m.Text}");
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        var level = T(r, "sep", "liquidLevel");
+        var power = T(r, "p", "power");
+        output.WriteLine($"level {level[0]:F3} → {level.Max():F3} → {level[^1]:F3} m; pump {power[0] / 1000:F2} → {power[^1] / 1000:F2} kW");
+        Assert.InRange(level[0], 1.49, 1.51);
+        Assert.InRange(level[^1], 1.4, 1.6);
+        Assert.True(power[0] > 0 && power[^1] > power[0], "the pump works harder as more liquid passes");
+    }
+
+    [Fact]
     public async Task ASetpointChangeIsFollowed()
     {
         var r = await Run(Separator(), 1200, [new DynamicEvent(10, "pic-100", AdjustKeys.Target, 18e5)]);

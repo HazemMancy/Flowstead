@@ -69,6 +69,14 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
 
     private sealed class Heater(SimObject o) { public SimObject Obj = o; public double? Duty; public double? OutletT; public double Dp; }
 
+    /// <summary>A pump, compressor or expander in a path: its steady pressure rise (pump) or ratio, and its steady work per kg.</summary>
+    private sealed class Machine(SimObject o, bool beforeValve)
+    {
+        public SimObject Obj = o;
+        public bool BeforeValve = beforeValve;
+        public double Rise, Ratio = 1, SpecificWork;
+    }
+
     private sealed class Path
     {
         public required Node From;
@@ -80,6 +88,7 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
         public double Fl = ValveSizing.Fl, Xt = ValveSizing.Xt;
         public double? CriticalPressure;
         public List<Heater> Heaters = [];
+        public List<Machine> Machines = [];
         public List<string> Streams = [];
         // Last flow: kg/s, mol/s of each compound, J/s carried into the downstream node.
         public double W;
@@ -108,6 +117,9 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
         }
     }
 
+    /// <summary>A dynamic parameter of [o]: from the run's parameters, else from its specs.</summary>
+    private Spec? D(SimObject o, string key) => req.Parameters.GetValueOrDefault(o.Id)?.GetValueOrDefault(key) ?? o.Specs.GetValueOrDefault(key);
+
     private ObjectResult R(string id) => steady.Objects.GetValueOrDefault(id) ?? throw new InvalidDataException($"{Tag(id)} has no steady-state result");
     private string Tag(string id) => _byId.GetValueOrDefault(id)?.Tag ?? id;
     private double[] Z(Dictionary<string, double>? c) => _compounds.Select(n => c?.GetValueOrDefault(n) ?? 0).ToArray();
@@ -121,16 +133,18 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
         var into = _fs.Connections.ToLookup(c => c.ToObject);
         var outOf = _fs.Connections.ToLookup(c => c.FromObject);
         foreach (var o in _fs.Objects.Where(o => !o.Type.IsStream() && !IsVessel(o.Type)
-                     && o.Type is not (ObjectType.Valve or ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler or ObjectType.Mixer or ObjectType.Controller or ObjectType.Set)))
+                     && o.Type is not (ObjectType.Valve or ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler or ObjectType.Mixer
+                         or ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander or ObjectType.Controller or ObjectType.Set)))
         {
             if (o.Type == ObjectType.Adjust) { _messages.Add(new(MessageLevel.Info, $"{o.Tag}: an Adjust is a steady-state tool; it holds its last value in a dynamic run.", o.Id)); continue; }
-            throw new InvalidDataException($"{o.Tag}: {o.Type} is not in dynamic runs yet. This version runs separators, valves, heaters, coolers and mixers.");
+            throw new InvalidDataException($"{o.Tag}: {o.Type} is not in dynamic runs yet. This version runs separators, valves, heaters, coolers, mixers, pumps, compressors and expanders.");
         }
 
         foreach (var v in _fs.Objects.Where(o => IsVessel(o.Type)))
         {
-            var volume = v.Specs.GetValueOrDefault(DynamicKeys.Volume)?.Si ?? throw new InvalidDataException($"{v.Tag}: give its volume for a dynamic run.");
-            var height = v.Specs.GetValueOrDefault(DynamicKeys.Height)?.Si ?? Math.Cbrt(4 * volume / Math.PI) * 3 / Math.Cbrt(9.0 / 4); // L/D 3
+            var volume = D(v, DynamicKeys.Volume)?.Si ?? throw new InvalidDataException($"{v.Tag}: give its volume for a dynamic run.");
+            // Without a height: a vertical vessel three diameters tall (V = 3π/4 D³).
+            var height = D(v, DynamicKeys.Height)?.Si ?? 3 * Math.Cbrt(4 * volume / (3 * Math.PI));
             if (!(volume > 0 && height > 0)) throw new InvalidDataException($"{v.Tag}: its volume and height must be positive.");
             _nodes[v.Id] = new Vessel(v.Id, volume, height);
         }
@@ -168,6 +182,9 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
                         path.Heaters.Add(new Heater(unit));
                         break;
                     case ObjectType.Mixer:
+                        break;
+                    case ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander:
+                        path.Machines.Add(new Machine(unit, path.Valve is null));
                         break;
                     default:
                         throw new InvalidDataException($"{unit.Tag}: {unit.Type} is not in dynamic runs yet.");
@@ -209,7 +226,7 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
             var p = rr.Properties["pressure"];
             var t = rr.Properties["temperature"];
             var liquidFlow = liqStream is null ? 0 : R(liqStream).Properties.GetValueOrDefault("massFlow");
-            var level = liquidFlow > 0 ? o.Specs.GetValueOrDefault(DynamicKeys.InitialLevel)?.Si ?? 0.5 : 0;
+            var level = liquidFlow > 0 ? D(o, DynamicKeys.InitialLevel)?.Si ?? 0.5 : 0;
             var vl = Math.Clamp(level, 0, 0.95) * v.Volume;
             var vv = v.Volume - vl;
             var n = new double[_compounds.Length];
@@ -241,21 +258,35 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
             path.CriticalPressure = steady.Objects.GetValueOrDefault(valve.Id)?.Properties.TryGetValue(ValveSizing.CriticalPressureKey, out var pc) == true ? pc : null;
             var w0 = R(path.Streams[^1]).Properties.GetValueOrDefault("massFlow");
             var (draw, _) = DrawOf(path);
-            var unit = Flow(path, draw, 1.0, path.To.P + HeaterDp(path)); // Cv 1, fully open
-            if (valve.Specs.GetValueOrDefault(SpecKeys.RatedCv)?.Si is { } cv && cv > 0)
+            var unit = Flow(path, draw, 1.0, ValveInlet(path), ValveOutlet(path)); // Cv 1, fully open
+            if (D(valve, DynamicKeys.RatedCv)?.Si is { } cv && cv > 0)
             {
                 path.Cv = cv;
-                path.Opening = valve.Specs.GetValueOrDefault(DynamicKeys.Opening)?.Si ?? (unit > 0 ? w0 / (cv * unit) : 0.5);
+                path.Opening = D(valve, DynamicKeys.Opening)?.Si ?? (unit > 0 ? w0 / (cv * unit) : 0.5);
                 if (path.Opening > 1) _messages.Add(new(MessageLevel.Warning, $"{valve.Tag}: rated Cv {cv:0.#} cannot pass the steady flow; it starts fully open and the plant moves off its steady state.", valve.Id));
             }
             else
             {
-                path.Opening = valve.Specs.GetValueOrDefault(DynamicKeys.Opening)?.Si ?? 0.5;
+                path.Opening = D(valve, DynamicKeys.Opening)?.Si ?? 0.5;
                 path.Cv = unit > 0 && path.Opening > 0 ? w0 / (unit * path.Opening) : 1;
                 _messages.Add(new(MessageLevel.Info, $"{valve.Tag}: sized at Cv {path.Cv:0.##} to pass the steady flow {path.Opening * 100:0} % open.", valve.Id));
             }
             path.Opening = Math.Clamp(path.Opening, 0, 1);
         }
+
+        // Pumps keep their pressure rise, compressors and expanders their pressure ratio, all their work per kg (fixed head).
+        foreach (var path in _paths)
+            foreach (var m in path.Machines)
+            {
+                var into = _fs.Connections.First(c => c.ToObject == m.Obj.Id && c.ToPort == 0).FromObject;
+                var outOf = _fs.Connections.First(c => c.FromObject == m.Obj.Id && c.FromPort == 0).ToObject;
+                var pin = R(into).Properties["pressure"];
+                var pout = R(outOf).Properties["pressure"];
+                if (m.Obj.Type == ObjectType.Pump) m.Rise = pout - pin; else m.Ratio = pout / pin;
+                var w = R(into).Properties.GetValueOrDefault("massFlow");
+                var power = R(m.Obj.Id).Properties.GetValueOrDefault("power");
+                m.SpecificWork = w > 0 ? (m.Obj.Type == ObjectType.Expander ? -power : power) / w : 0;
+            }
 
         // Heaters and coolers keep their steady spec: an outlet temperature, or a duty (as solved).
         foreach (var path in _paths)
@@ -275,6 +306,14 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
     private static double Signed(SimObject heater, double duty) => heater.Type == ObjectType.Heater ? duty : -duty;
 
     private double HeaterDp(Path p) => p.Heaters.Sum(h => h.Dp);
+
+    /// <summary>The pressure at the valve's inlet: the upstream node's, raised by pumps and compressors before it.</summary>
+    private static double ValveInlet(Path p) =>
+        p.Machines.Where(m => m.BeforeValve).Aggregate(p.From.P, (x, m) => (x + m.Rise) * m.Ratio);
+
+    /// <summary>The pressure at the valve's outlet: the downstream node's, less what machines after it add, plus heaters' drops.</summary>
+    private double ValveOutlet(Path p) =>
+        p.Machines.Where(m => !m.BeforeValve).Reverse().Aggregate(p.To.P + HeaterDp(p), (x, m) => x / m.Ratio - m.Rise);
 
     // ------------------------------------------------------------------ flows
 
@@ -311,9 +350,10 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
     }
 
     /// <summary>Mass flow, kg/s, through a valve of [cv] (already times its opening) from the drawn phase to [p2], IEC 60534.</summary>
-    private double Flow(Path path, PhaseState ph, double cv, double p2)
+    private double Flow(Path path, PhaseState ph, double cv, double p1, double p2)
     {
-        var p1 = path.From.P;
+        // Gas compressed before the valve is denser in proportion (isothermal estimate).
+        if (p1 != path.From.P && ph.Density < 300) ph = ph with { Density = ph.Density * p1 / path.From.P };
         var dp = p1 - p2;
         if (!(dp > 0) || cv <= 0) return 0; // no reverse flow: valves are taken to have check valves
         var gas = ph.Fraction >= 0.999 && path.Draw != Draw.Liquid && ph.Density < 300;
@@ -343,10 +383,10 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
             var (ph, _) = DrawOf(path);
             path.DrawH = ph.H;
             path.W = path.From is Feed { FixedMassFlow: { } fixedW } ? fixedW
-                : path.Valve is null ? 0 : Flow(path, ph, path.Cv * path.Opening, path.To.P + HeaterDp(path));
+                : path.Valve is null ? 0 : Flow(path, ph, path.Cv * path.Opening, ValveInlet(path), ValveOutlet(path));
             var molar = path.W / (Mw(ph.Z) / 1000.0); // mol/s
             path.Ndot = ph.Z.Select(z => z * molar).ToArray();
-            var hdot = path.W * ph.H;
+            var hdot = path.W * ph.H + path.Machines.Sum(m => path.W * m.SpecificWork);
             foreach (var hx in path.Heaters)
             {
                 if (hx.Duty is { } q) hdot += q;
@@ -447,6 +487,7 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
                 foreach (var s in p.Streams) Add(s, "massFlow", p.W);
                 if (p.Valve is { } valve) { Add(valve.Id, "valveOpening", p.Opening); Add(valve.Id, "massFlow", p.W); }
                 foreach (var hx in p.Heaters) Add(hx.Obj.Id, "duty", Math.Abs(hx.Duty ?? _lastDuty.GetValueOrDefault(hx.Obj.Id)));
+                foreach (var m in p.Machines) Add(m.Obj.Id, "power", Math.Abs(p.W * m.SpecificWork));
             }
             foreach (var pid in _pids)
             {
@@ -612,13 +653,13 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
                 default:
                     throw new InvalidDataException($"{c.Tag}: in a dynamic run a controller moves a valve's opening or a heater's or cooler's duty, not {m.Type}.");
             }
-            pid.Action = c.Specs.GetValueOrDefault(DynamicKeys.Action)?.Si is { } a && a != 0 ? Math.Sign(a) : downstreamOf ? 1 : -1;
+            pid.Action = sim.D(c, DynamicKeys.Action)?.Si is { } a && a != 0 ? Math.Sign(a) : downstreamOf ? 1 : -1;
             var (kc, ti, td) = Defaults(cKey);
-            pid.Kc = c.Specs.GetValueOrDefault(DynamicKeys.Gain)?.Si ?? kc;
-            pid.Ti = c.Specs.GetValueOrDefault(DynamicKeys.IntegralTime)?.Si ?? ti;
-            pid.Td = c.Specs.GetValueOrDefault(DynamicKeys.DerivativeTime)?.Si ?? td;
-            var lo = c.Specs.GetValueOrDefault(DynamicKeys.PvMinimum)?.Si;
-            var hi = c.Specs.GetValueOrDefault(DynamicKeys.PvMaximum)?.Si;
+            pid.Kc = sim.D(c, DynamicKeys.Gain)?.Si ?? kc;
+            pid.Ti = sim.D(c, DynamicKeys.IntegralTime)?.Si ?? ti;
+            pid.Td = sim.D(c, DynamicKeys.DerivativeTime)?.Si ?? td;
+            var lo = sim.D(c, DynamicKeys.PvMinimum)?.Si;
+            var hi = sim.D(c, DynamicKeys.PvMaximum)?.Si;
             pid.Span = lo is { } l && hi is { } h2 && h2 > l ? h2 - l
                 : cKey == "liquidLevel" && sim._nodes.GetValueOrDefault(cId) is Vessel v ? v.Height
                 : cKey == "levelFraction" ? 1
