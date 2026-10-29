@@ -12,7 +12,7 @@ public static class Validator
         ObjectType.MaterialStream, ObjectType.EnergyStream, ObjectType.Valve, ObjectType.Heater,
         ObjectType.Cooler, ObjectType.Separator, ObjectType.ThreePhaseSeparator, ObjectType.Mixer,
         ObjectType.Splitter, ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander,
-        ObjectType.HeatExchanger, ObjectType.Recycle, ObjectType.Adjust,
+        ObjectType.HeatExchanger, ObjectType.Recycle, ObjectType.Adjust, ObjectType.Controller,
         ObjectType.PipeSegment, ObjectType.OrificePlate,
         ObjectType.AirCooler, ObjectType.ComponentSplitter, ObjectType.Tank, ObjectType.Set,
         // Refluxed absorber: not yet. DWSIM reports a condenser duty (RR + 1) times what its own energy balance needs.
@@ -119,9 +119,19 @@ public static class Validator
         {
             ValidateUnitOp(o, Err);
         }
-        var adjusts = fs.Objects.Where(o => o.Type == ObjectType.Adjust).ToList();
-        if (adjusts.Count > 1) Err("Only one Adjust per flowsheet is supported in this version.", adjusts[1].Id);
-        foreach (var a in adjusts) ValidateAdjust(fs, a, Err);
+        // Adjusts and controllers (D84): any number, solved together; each varies its own spec and meets its own target.
+        var loops = fs.Objects.Where(o => o.Type.IsLoop()).ToList();
+        foreach (var a in loops) ValidateAdjust(fs, a, Err);
+        var varied = new Dictionary<(string?, string?), SimObject>();
+        var watched = new Dictionary<(string?, string?), SimObject>();
+        foreach (var a in loops)
+        {
+            var mv = (a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedObject), a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedSpec));
+            var cv = (a.Refs.GetValueOrDefault(AdjustKeys.ControlledObject), a.Refs.GetValueOrDefault(AdjustKeys.ControlledProperty));
+            if (mv.Item1 is null || cv.Item1 is null) continue;
+            if (!varied.TryAdd(mv, a)) Err($"{a.Tag}: {Tag(fs, mv.Item1)} {mv.Item2} is already varied by {varied[mv].Tag}; each loop needs its own variable.", a.Id);
+            if (!watched.TryAdd(cv, a)) Err($"{a.Tag}: {Tag(fs, cv.Item1)} {cv.Item2} is already controlled by {watched[cv].Tag}; two targets for one value have no answer.", a.Id);
+        }
         foreach (var o in fs.Objects.Where(o => o.Type == ObjectType.ComponentSplitter))
             foreach (var k in o.Specs.Keys.Where(k => k.StartsWith(SpecKeys.SplitPrefix, StringComparison.Ordinal)))
                 if (!fs.Compounds.Contains(k[SpecKeys.SplitPrefix.Length..])) Err($"{o.Tag}: '{k[SpecKeys.SplitPrefix.Length..]}' is not in the component list.", o.Id);
@@ -302,7 +312,7 @@ public static class Validator
             if (!source.Specs.ContainsKey(key)) err($"{set.Tag}: {source.Tag} has no {key} specified to copy.", set.Id);
             if (set.Specs.GetValueOrDefault(SetKeys.Multiplier) is { } mul && !double.IsFinite(mul.Si)) err($"{set.Tag}: multiplier is not a number.", set.Id);
             if (!targets.TryAdd((target.Id, key), set)) err($"{set.Tag}: {target.Tag} {key} is already set by {targets[(target.Id, key)].Tag}.", set.Id);
-            if (fs.Objects.Any(a => a.Type == ObjectType.Adjust && a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedObject) == target.Id
+            if (fs.Objects.Any(a => a.Type.IsLoop() && a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedObject) == target.Id
                     && a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedSpec) == key))
                 err($"{set.Tag}: {target.Tag} {key} is varied by an Adjust; a Set can't also drive it.", set.Id);
         }
@@ -321,6 +331,8 @@ public static class Validator
         }
     }
 
+    private static string Tag(Flowsheet fs, string? id) => fs.Objects.FirstOrDefault(o => o.Id == id)?.Tag ?? id ?? "?";
+
     private static void ValidateAdjust(Flowsheet fs, SimObject a, Action<string, string?> err)
     {
         string? Ref(string k) => a.Refs.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) ? v : null;
@@ -331,7 +343,7 @@ public static class Validator
         if (mId is null || mKey is null) { err($"{a.Tag}: choose the variable to vary.", a.Id); return; }
         if (cId is null || cKey is null) { err($"{a.Tag}: choose the result to control.", a.Id); return; }
         var manipulated = fs.Objects.FirstOrDefault(o => o.Id == mId);
-        if (manipulated is null || manipulated.Type == ObjectType.Adjust) { err($"{a.Tag}: the varied object no longer exists.", a.Id); return; }
+        if (manipulated is null || manipulated.Type.IsLoop()) { err($"{a.Tag}: the varied object no longer exists.", a.Id); return; }
         if (!manipulated.Specs.ContainsKey(mKey)) err($"{a.Tag}: {manipulated.Tag} has no {mKey} specified to start from.", a.Id);
         if (fs.Objects.All(o => o.Id != cId)) err($"{a.Tag}: the controlled object no longer exists.", a.Id);
         if (!a.Specs.ContainsKey(AdjustKeys.Target)) err($"{a.Tag}: under-specified — give the target value.", a.Id);

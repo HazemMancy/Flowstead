@@ -152,26 +152,27 @@ public sealed class DwsimEngine
             return Result(SolveStatus.Invalid, messages, [], sw);
         }
 
-        var adjust = model.Objects.FirstOrDefault(o => o.Type == ObjectType.Adjust);
-        if (adjust is null) return CurveSolver.Solve(model, m => SolveCore(m, [.. messages], sw));
+        var loops = model.Objects.Where(o => o.Type.IsLoop()).ToList();
+        if (loops.Count == 0) return CurveSolver.Solve(model, m => SolveCore(m, [.. messages], sw));
 
-        // Adjust: DWSIM never sees the Adjust object; each iteration is a full solve of the rest.
-        var withoutAdjust = model with { Objects = model.Objects.Where(o => o.Id != adjust.Id).ToList() };
-        var outcome = AdjustSolver.Solve(withoutAdjust, adjust, m => CurveSolver.Solve(m, mm => SolveCore(mm, [], Stopwatch.StartNew())));
-        var objects = new Dictionary<string, ObjectResult>(outcome.Result.Objects) { [adjust.Id] = outcome.AdjustResult };
+        // Adjusts and controllers (D84): DWSIM never sees them; each iteration is a full solve of the rest.
+        var withoutLoops = model with { Objects = model.Objects.Where(o => !o.Type.IsLoop()).ToList() };
+        var outcome = LoopSolver.Solve(withoutLoops, loops, m => CurveSolver.Solve(m, mm => SolveCore(mm, [], Stopwatch.StartNew())));
+        var objects = new Dictionary<string, ObjectResult>(outcome.Result.Objects);
+        foreach (var (id, r) in outcome.Loops) objects[id] = r;
         var all = messages.Concat(outcome.Result.Messages).ToList();
-        if (outcome.AdjustResult.Status == ObjectStatus.Error)
+        foreach (var (id, r) in outcome.Loops.Where(l => l.Value.Status == ObjectStatus.Error))
         {
-            all.Add(new SolverMessage(MessageLevel.Error, outcome.AdjustResult.Error!, adjust.Id));
+            all.Add(new SolverMessage(MessageLevel.Error, r.Error!, id));
         }
-        var ok = outcome.Result.Status == SolveStatus.Converged && outcome.AdjustResult.Status == ObjectStatus.Solved;
+        var ok = outcome.Result.Status == SolveStatus.Converged && outcome.Loops.Values.All(r => r.Status == ObjectStatus.Solved);
         return outcome.Result with
         {
             Status = ok ? SolveStatus.Converged : SolveStatus.Failed,
             ElapsedMs = sw.ElapsedMilliseconds,
             Messages = all,
             Objects = objects,
-            Iterations = (int)outcome.AdjustResult.Properties.GetValueOrDefault("iterations"),
+            Iterations = (int)outcome.Loops.Values.Max(r => r.Properties.GetValueOrDefault("iterations")),
         };
     }
 
@@ -417,13 +418,12 @@ public sealed class DwsimEngine
         if (errors.Count > 0) throw new InvalidDataException("The flowsheet can't be exported yet: " + string.Join(" ", errors));
 
         var warnings = new List<string>();
-        var adjusts = model.Objects.Where(o => o.Type == ObjectType.Adjust).ToList();
-        foreach (var a in adjusts)
-            warnings.Add($"{a.Tag}: Adjust is not written to the DWSIM file; the varied specification keeps its value as entered.");
+        foreach (var a in model.Objects.Where(o => o.Type.IsLoop()))
+            warnings.Add($"{a.Tag}: {(a.Type == ObjectType.Controller ? "Controller" : "Adjust")} is not written to the DWSIM file; the varied specification keeps its value as entered.");
         foreach (var set in model.Objects.Where(o => o.Type == ObjectType.Set))
             warnings.Add($"{set.Tag}: Set is not written to the DWSIM file; its target keeps the value it gives now.");
         var applied = SetSolver.Apply(model);
-        var plain = applied with { Objects = applied.Objects.Where(o => o.Type is not (ObjectType.Adjust or ObjectType.Set)).ToList() };
+        var plain = applied with { Objects = applied.Objects.Where(o => !o.Type.IsLoop() && o.Type != ObjectType.Set).ToList() };
 
         if (model.LiquidDensity != LiquidDensityMethods.Costald && LiquidDensity.FixedPackages.Contains(model.PropertyPackage ?? "") && model.Compounds.Count > 1)
             warnings.Add("Liquid densities: desktop DWSIM mixes pure-liquid densities by mole fraction; Flowstead's engine mixes them by mass" +
@@ -1351,6 +1351,9 @@ public sealed class DwsimEngine
 internal static class ObjectTypeExtensions
 {
     public static bool IsStream(this ObjectType t) => t is ObjectType.MaterialStream or ObjectType.EnergyStream;
+
+    /// <summary>Adjusts and controllers: solved by Flowstead around DWSIM solves, never given to DWSIM (D84).</summary>
+    public static bool IsLoop(this ObjectType t) => t is ObjectType.Adjust or ObjectType.Controller;
 
     /// <summary>
     /// The flowsheet without its relief valves: a PSV on the flowsheet only marks what it protects (its sizing is

@@ -184,6 +184,8 @@ public enum ObjectType
     ShortcutColumn, DistillationColumn, Absorber, RefluxedAbsorber, ReboiledAbsorber,
     ConversionReactor, EquilibriumReactor, GibbsReactor, Cstr, Pfr,
     Recycle, Adjust, Set, EnergyRecycle,
+    /// <summary>A steady-state control loop (D84): an Adjust drawn as an instrument, with its output in % of its range.</summary>
+    Controller,
 }
 
 /// <summary>Spec keys understood by the engine. Values are SI.</summary>
