@@ -63,6 +63,9 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<DepressuringResult> DepressuringAsync(DepressuringRequest req, CancellationToken ct) =>
         pool.CallAsync<DepressuringResult>(WorkerMethods.Depressuring, req, TimeSpan.FromSeconds(15 * options.SolveTimeoutSeconds), ct);
 
+    public Task<DynamicsResult> DynamicsAsync(DynamicsRequest req, CancellationToken ct) =>
+        pool.CallAsync<DynamicsResult>(WorkerMethods.Dynamics, req, TimeSpan.FromSeconds(15 * options.SolveTimeoutSeconds), ct);
+
     public Task<List<BinaryParameterInfo>> InteractionParametersAsync(Flowsheet fs, CancellationToken ct) =>
         pool.CallAsync<List<BinaryParameterInfo>>(WorkerMethods.InteractionParameters, fs, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 

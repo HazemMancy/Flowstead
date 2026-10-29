@@ -393,6 +393,7 @@ public static class WorkerMethods
     public const string PvtRegression = "pvtRegression";
     public const string InteractionParameters = "interactionParameters";
     public const string CompoundBasis = "compoundBasis";
+    public const string Dynamics = "dynamics";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

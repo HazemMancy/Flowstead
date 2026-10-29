@@ -152,6 +152,10 @@ api.MapPost("/relief", async (ReliefRequest req, EngineService e, CancellationTo
 api.MapPost("/depressuring", async (DepressuringRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.DepressuringAsync(req, ct), "invalid_depressuring"));
 
+// A dynamic run from the steady state (D86).
+api.MapPost("/dynamics", async (DynamicsRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.DynamicsAsync(req, ct), "invalid_dynamics"));
+
 app.Run();
 return 0;
 

@@ -166,6 +166,11 @@ public static class AdjustKeys
     /// <summary>Optional specs: bounds on the manipulated value (SI).</summary>
     public const string Minimum = "minimum";
     public const string Maximum = "maximum";
+    /// <summary>
+    /// Optional ref on a controller: "off" when it acts in dynamics only (D86), as HYSYS's PID controllers do. A
+    /// controller measuring a value only dynamics has (a liquid level) is off in the steady state anyway.
+    /// </summary>
+    public const string SteadyState = "steadyState";
 }
 
 public sealed record Spec(double Si, string Unit);

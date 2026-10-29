@@ -152,10 +152,11 @@ public sealed class DwsimEngine
             return Result(SolveStatus.Invalid, messages, [], sw);
         }
 
-        var loops = model.Objects.Where(o => o.Type.IsLoop()).ToList();
-        if (loops.Count == 0) return CurveSolver.Solve(model, m => SolveCore(m, [.. messages], sw));
+        // Adjusts and controllers (D84): DWSIM never sees them; each iteration is a full solve of the rest. Controllers
+        // that act in dynamics only (D86) are left out of the steady state.
+        var loops = model.Objects.Where(o => o.Type.IsLoop() && DynamicLoops.InSteadyState(o)).ToList();
+        if (loops.Count == 0) return CurveSolver.Solve(model with { Objects = model.Objects.Where(o => !o.Type.IsLoop()).ToList() }, m => SolveCore(m, [.. messages], sw));
 
-        // Adjusts and controllers (D84): DWSIM never sees them; each iteration is a full solve of the rest.
         var withoutLoops = model with { Objects = model.Objects.Where(o => !o.Type.IsLoop()).ToList() };
         var outcome = LoopSolver.Solve(withoutLoops, loops, m => CurveSolver.Solve(m, mm => SolveCore(mm, [], Stopwatch.StartNew())));
         var objects = new Dictionary<string, ObjectResult>(outcome.Result.Objects);
@@ -425,7 +426,7 @@ public sealed class DwsimEngine
 
         // Adjusts and controllers aren't DWSIM objects here: the file gets each moved spec at the value the loops found
         // (D84), so it opens with the same solution; a loop that did not converge leaves its spec as entered.
-        var loops = model.Objects.Where(o => o.Type.IsLoop()).ToList();
+        var loops = model.Objects.Where(o => o.Type.IsLoop() && DynamicLoops.InSteadyState(o)).ToList();
         if (loops.Count > 0)
         {
             var solved = Solve(model);
@@ -1116,6 +1117,59 @@ public sealed class DwsimEngine
     private static void Connect(IFlowsheet fs, ISimulationObject from, int fromPort, ISimulationObject to, int toPort)
     {
         fs.ConnectObjects(from.GraphicObject, to.GraphicObject, fromPort, toPort);
+    }
+
+    // ------------------------------------------------------------------ dynamics (D86)
+
+    /// <summary>A dynamic run of the flowsheet from its steady state (D86).</summary>
+    public DynamicsResult Dynamics(DynamicsRequest req)
+    {
+        var sw = Stopwatch.StartNew();
+        var steady = Solve(req.Flowsheet);
+        if (steady.Status != SolveStatus.Converged)
+            return new DynamicsResult
+            {
+                Status = steady.Status,
+                Messages = [new SolverMessage(MessageLevel.Error, "A dynamic run starts from the steady state, and the flowsheet does not solve yet."), .. steady.Messages],
+                ElapsedMs = sw.ElapsedMilliseconds,
+            };
+        var model = SetSolver.Apply(req.Flowsheet.WithoutDrawings());
+        var weights = CompoundBasis(model).ToDictionary(c => c.Name, c => c.MolecularWeight);
+        return new DynamicsSim(req with { Flowsheet = model }, steady, LeanFlasher(model), weights).Run() with { ElapsedMs = sw.ElapsedMilliseconds };
+    }
+
+    /// <summary>
+    /// Flashes for a dynamic run, thousands of them: one single-stream DWSIM flowsheet built once; each call sets the
+    /// composition, amount and state and reads back only what the dynamic models use (D86).
+    /// </summary>
+    private Flasher LeanFlasher(Flowsheet model)
+    {
+        var (pp, ms) = SingleStream(model, model.Compounds.ToDictionary(c => c, _ => 1.0));
+        var names = model.Compounds.ToArray();
+        return (z, n, p, h, t) =>
+        {
+            ms.SetOverallComposition(z);
+            ms.SetPressure(p);
+            if (h is { } hm) { ms.SetMassEnthalpy(hm / 1000.0); ms.SpecType = StreamSpec.Pressure_and_Enthalpy; }
+            else { ms.SetTemperature(t!.Value); ms.SpecType = StreamSpec.Temperature_and_Pressure; }
+            ms.SetMolarFlow(Math.Max(n, 1e-12));
+            ms.PropertyPackage = pp;
+            pp.CurrentMaterialStream = ms;
+            ms.Calculate();
+            PhaseState? Phase(int idx)
+            {
+                var ph = ms.Phases[idx];
+                var f = ph.Properties.molarfraction ?? 0;
+                if (f <= 1e-10) return null;
+                var pr = ph.Properties;
+                return new PhaseState(f, names.Select(c => ph.Compounds[c].MoleFraction ?? 0).ToArray(),
+                    (pr.enthalpy ?? 0) * 1000.0, pr.density ?? 0, pr.molecularWeight ?? 0, pr.volumetric_flow ?? 0,
+                    idx == 2 && pr.heatCapacityCv is > 0 ? (pr.heatCapacityCp ?? 0) / pr.heatCapacityCv.Value : 1.3);
+            }
+            var o = ms.Phases[0].Properties;
+            return new FlashState(o.pressure ?? p, o.temperature ?? 0, o.volumetric_flow ?? 0, (o.enthalpy ?? 0) * 1000.0,
+                o.massflow ?? 0, Phase(2), Phase(1));
+        };
     }
 
     // ------------------------------------------------------------------ results

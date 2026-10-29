@@ -120,7 +120,7 @@ public static class Validator
             ValidateUnitOp(o, Err);
         }
         // Adjusts and controllers (D84): any number, solved together; each varies its own spec and meets its own target.
-        var loops = fs.Objects.Where(o => o.Type.IsLoop()).ToList();
+        var loops = fs.Objects.Where(o => o.Type.IsLoop() && DynamicLoops.InSteadyState(o)).ToList();
         foreach (var a in loops) ValidateAdjust(fs, a, Err);
         var varied = new Dictionary<(string?, string?), SimObject>();
         var watched = new Dictionary<(string?, string?), SimObject>();
