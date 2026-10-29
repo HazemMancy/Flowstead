@@ -183,10 +183,13 @@ public sealed class DwsimEngine
         IFlowsheet fs;
         Dictionary<string, ISimulationObject> objects;
         // The last clean solve's DWSIM flowsheet is reused when only specs changed (D82); it is taken out of the cache
-        // for this solve and put back only if this one ends clean, so a failed state is never reused.
-        var key = StructureKey(model, mode);
-        var cached = _cache?.Key == key ? _cache : null;
-        _cache = null;
+        // for this solve and put back only if this one ends clean, so a failed state is never reused. Nothing connected
+        // (a PVT or relief flash cell) has nothing downstream to spare, and a flash restarted from the last one's state
+        // was slower or failed there, so those build anew and leave the cache alone.
+        var reusable = model.Connections.Count > 0;
+        var key = reusable ? StructureKey(model, mode) : "";
+        var cached = reusable && _cache?.Key == key ? _cache : null;
+        if (reusable) _cache = null;
         var phase = Stopwatch.StartNew();
         List<string>? changed = null;
         try
@@ -280,7 +283,7 @@ public sealed class DwsimEngine
         if (MassBalanceWarning(model, results) is { } balance) messages.Add(balance);
 
         var ok = errors.Count == 0 && results.Values.All(r => r.Status == ObjectStatus.Solved);
-        if (ok) _cache = new SolveCache(key, model, fs, objects);
+        if (ok && reusable) _cache = new SolveCache(key, model, fs, objects);
         var recycleIterations = objects.Values.OfType<DWSIM.UnitOperations.SpecialOps.Recycle>().Select(r => r.IterationsTaken).DefaultIfEmpty().Max();
         return Result(ok ? SolveStatus.Converged : SolveStatus.Failed, messages, results, sw) with
         {

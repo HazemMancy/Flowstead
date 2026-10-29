@@ -36,6 +36,7 @@ public sealed class RecalculationTests(EngineFixture engine, ITestOutputHelper o
 
         var first = await Twice(model);
         if (first["status"]!.GetValue<string>() != "converged") return; // nothing is reused after a failed solve
+        if (model.Connections.Count == 0) { Assert.Equal("built", Kind(first)); return; } // a lone stream always builds anew
         var again = await Twice(model);
         if (Kind(again) == "built")
         {
@@ -50,7 +51,7 @@ public sealed class RecalculationTests(EngineFixture engine, ITestOutputHelper o
         {
             await Twice(model);
             var reused = await Twice(changed);
-            await Twice(Unrelated); // evicts the cached flowsheet from both workers
+            await Twice(Unrelated); // evicts the cached flowsheet from both workers (a lone stream would not: it bypasses the cache)
             var fresh = await Solve(client, changed);
             if (fresh["status"]!.GetValue<string>() != "converged") continue; // the change made the case invalid or unsolvable
             Assert.Equal("built", Kind(fresh));
@@ -110,7 +111,10 @@ public sealed class RecalculationTests(EngineFixture engine, ITestOutputHelper o
                     [SpecKeys.Temperature] = new(300, "K"), [SpecKeys.Pressure] = new(1e6, "Pa"), [SpecKeys.MolarFlow] = new(1, "mol/s"),
                 },
             },
+            new SimObject { Id = "v", Tag = "V", Type = ObjectType.Valve, Specs = new() { [SpecKeys.OutletPressure] = new(5e5, "Pa") } },
+            new SimObject { Id = "w", Tag = "W", Type = ObjectType.MaterialStream },
         ],
+        Connections = [new("u", 0, "v", 0), new("v", 0, "w", 0)],
     };
 
     /// <summary>
