@@ -182,25 +182,53 @@ public sealed class DwsimEngine
         var given = messages.Count;
         IFlowsheet fs;
         Dictionary<string, ISimulationObject> objects;
+        // The last clean solve's DWSIM flowsheet is reused when only specs changed (D82); it is taken out of the cache
+        // for this solve and put back only if this one ends clean, so a failed state is never reused.
+        var key = StructureKey(model, mode);
+        var cached = _cache?.Key == key ? _cache : null;
+        _cache = null;
+        var phase = Stopwatch.StartNew();
+        List<string>? changed = null;
         try
         {
-            (fs, objects) = Build(model, mode);
+            if (cached is not null)
+            {
+                (fs, objects) = (cached.Fs, cached.Map);
+                var before = cached.Model.Objects.ToDictionary(o => o.Id, Fingerprint);
+                changed = model.Objects.Where(o => objects.ContainsKey(o.Id) && before.GetValueOrDefault(o.Id) != Fingerprint(o)).Select(o => o.Id).ToList();
+                foreach (var o in model.Objects.Where(o => changed.Contains(o.Id)))
+                {
+                    if (o.Type == ObjectType.MaterialStream) ApplyStream(model, o, (MaterialStream)objects[o.Id]);
+                    else if (!o.Type.IsStream()) ApplyUnitOp(model, o, objects[o.Id]);
+                }
+            }
+            else (fs, objects) = Build(model, mode);
         }
         catch (Exception e)
         {
             messages.Add(new SolverMessage(MessageLevel.Error, "Could not build the flowsheet: " + e.GetBaseException().Message));
             return Result(SolveStatus.Invalid, messages, [], sw);
         }
+        var buildMs = phase.ElapsedMilliseconds;
+        phase.Restart();
 
         List<Exception> errors;
+        string kind;
+        int recalculated;
         try
         {
-            errors = _automation.CalculateFlowsheet4(fs) ?? [];
+            if (changed is null)
+            {
+                (kind, recalculated) = ("built", objects.Count);
+                errors = _automation.CalculateFlowsheet4(fs) ?? [];
+            }
+            else (errors, kind, recalculated) = Recalculate(fs, objects, model, changed);
         }
         catch (Exception e)
         {
-            errors = [e];
+            (errors, kind, recalculated) = ([e], "built", objects.Count);
         }
+        var recalculation = new Recalculation(kind, recalculated, objects.Count, buildMs, phase.ElapsedMilliseconds);
 
         foreach (var e in errors)
         {
@@ -252,11 +280,93 @@ public sealed class DwsimEngine
         if (MassBalanceWarning(model, results) is { } balance) messages.Add(balance);
 
         var ok = errors.Count == 0 && results.Values.All(r => r.Status == ObjectStatus.Solved);
+        if (ok) _cache = new SolveCache(key, model, fs, objects);
         var recycleIterations = objects.Values.OfType<DWSIM.UnitOperations.SpecialOps.Recycle>().Select(r => r.IterationsTaken).DefaultIfEmpty().Max();
         return Result(ok ? SolveStatus.Converged : SolveStatus.Failed, messages, results, sw) with
         {
             Iterations = objects.Values.OfType<DWSIM.UnitOperations.SpecialOps.Recycle>().Any() ? recycleIterations : null,
+            Recalculation = recalculation,
         };
+    }
+
+    // ------------------------------------------------------------------ reuse between solves (D82)
+
+    /// <summary>The DWSIM flowsheet of the last solve that ended clean, with the model it was solved for.</summary>
+    private sealed record SolveCache(string Key, Flowsheet Model, IFlowsheet Fs, Dictionary<string, ISimulationObject> Map);
+
+    private SolveCache? _cache;
+
+    /// <summary>
+    /// Objects whose every spec <see cref="ApplyStream"/> or <see cref="ApplyUnitOp"/> sets again from scratch, so a
+    /// built flowsheet can take their new values. Columns and reactors set up stages and reactions from their specs, so
+    /// any change to one builds the flowsheet anew.
+    /// </summary>
+    private static bool Reapplicable(ObjectType t) => !Columns.IsColumn(t) && !Reactors.IsReactor(t);
+
+    /// <summary>
+    /// Everything that shapes the DWSIM flowsheet: compounds, package and its options, reactions, objects and their
+    /// connections, which specs each object has, the water treatment; not the values of specs that can be applied
+    /// again, nor positions. A spec taken away (not just changed) builds anew, since applying the rest leaves it in DWSIM.
+    /// </summary>
+    private static string StructureKey(Flowsheet model, WaterMode mode) => mode + JsonSerializer.Serialize(model with
+    {
+        Objects = model.Objects.Select(o => Reapplicable(o.Type)
+            ? o with { X = 0, Y = 0, Specs = o.Specs.ToDictionary(p => p.Key, p => p.Value with { Si = 0 }), Composition = o.Composition.ToDictionary(p => p.Key, _ => 0.0) }
+            : o with { X = 0, Y = 0 }).ToList(),
+    }, Json.Options);
+
+    /// <summary>What one object asks of DWSIM: its specs, composition and choices; not its position.</summary>
+    private static string Fingerprint(SimObject o) => JsonSerializer.Serialize(o with { X = 0, Y = 0 }, Json.Options);
+
+    /// <summary>
+    /// Recalculates a reused flowsheet after [changed] objects took new specs. Without a Recycle, DWSIM recalculates
+    /// from each changed object downstream (its own "edited object" mode), the changed objects that no other changed
+    /// object feeds first; what is upstream keeps the last solve's results, which nothing changed. A Recycle closes a
+    /// loop that this mode stops at, so with one the whole flowsheet is recalculated, from the last solve's values.
+    /// </summary>
+    private (List<Exception> Errors, string Kind, int Recalculated) Recalculate(
+        IFlowsheet fs, Dictionary<string, ISimulationObject> map, Flowsheet model, List<string> changed)
+    {
+        if (changed.Count == 0) return ([], "unchanged", 0);
+        if (model.Objects.Any(o => o.Type == ObjectType.Recycle))
+            return (_automation.CalculateFlowsheet4(fs) ?? [], "reused", map.Count);
+
+        var next = model.Connections.GroupBy(c => c.FromObject).ToDictionary(g => g.Key, g => g.Select(c => c.ToObject).ToList());
+        HashSet<string> Downstream(string id)
+        {
+            var seen = new HashSet<string>();
+            var stack = new Stack<string>(next.GetValueOrDefault(id) ?? []);
+            while (stack.Count > 0)
+            {
+                var x = stack.Pop();
+                if (seen.Add(x)) foreach (var y in next.GetValueOrDefault(x) ?? []) stack.Push(y);
+            }
+            return seen;
+        }
+        var reach = changed.ToDictionary(id => id, Downstream);
+        var roots = changed.Where(r => !changed.Any(o => o != r && reach[o].Contains(r))).ToList();
+        var errors = new List<Exception>();
+        DWSIM.GlobalSettings.Settings.CalculatorActivated = true;
+        DWSIM.GlobalSettings.Settings.SolverBreakOnException = true;
+        foreach (var id in roots)
+        {
+            var so = map[id];
+            ((IFlowsheetCalculationQueue)fs).CalculationQueue.Enqueue(new DWSIM.FlowsheetSolver.CalculationArgs
+            {
+                Name = so.Name, Tag = so.GraphicObject.Tag, ObjectType = so.GraphicObject.ObjectType, Sender = "PropertyGrid",
+            });
+            try
+            {
+                errors.AddRange(Task.Run(() => DWSIM.FlowsheetSolver.FlowsheetSolver.SolveFlowsheet(fs, DWSIM.GlobalSettings.Settings.SolverMode, null, frompgrid: true)).GetAwaiter().GetResult() ?? []);
+            }
+            finally
+            {
+                DWSIM.GlobalSettings.Settings.CalculatorBusy = false;
+                DWSIM.GlobalSettings.Settings.CalculatorStopRequested = false;
+            }
+        }
+        var touched = roots.SelectMany(r => reach[r].Append(r)).Where(map.ContainsKey).ToHashSet();
+        return (errors, "downstream", touched.Count);
     }
 
     /// <summary>

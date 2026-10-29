@@ -39,7 +39,17 @@ public sealed record SolveResult
     public string DwsimVersion { get; init; } = "";
     public List<SolverMessage> Messages { get; init; } = [];
     public Dictionary<string, ObjectResult> Objects { get; init; } = [];
+    /// <summary>How the engine got there (D82): a fresh build, or the last solve's flowsheet reused.</summary>
+    public Recalculation? Recalculation { get; init; }
 }
+
+/// <summary>
+/// How a solve was done (D82). <see cref="Kind"/>: "built" (DWSIM flowsheet built and solved from scratch), "reused"
+/// (the last solve's flowsheet with the changed specs, solved in full), "downstream" (only the changed objects and
+/// what is downstream of them recalculated) or "unchanged" (nothing to recalculate). Times in ms; for an Adjust or a
+/// curve, the last of its solves.
+/// </summary>
+public sealed record Recalculation(string Kind, int Recalculated, int Total, long BuildMs, long CalculateMs);
 
 public sealed record ObjectResult
 {
