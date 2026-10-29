@@ -65,11 +65,13 @@ class RoomProjectRepository @Inject constructor(
 
     override fun observeProject(id: String): Flow<Project?> = dao.observe(id).map { e ->
         e?.let {
-            // Results saved before positions left the model hash (1.8.8) stay current.
-            val (flowsheet, solve) = migrateResultHashes(
-                FlowsheetJson.decodeFromString(Flowsheet.serializer(), it.flowsheetJson),
-                it.resultJson?.let { json -> runCatching { FlowsheetJson.decodeFromString(StoredSolve.serializer(), json) }.getOrNull() },
-            )
+            // Results saved before positions left the model hash (1.8.8) stay current. The new stamps are saved at once:
+            // kept only in memory, the first move would change the old hash and the results would look out of date.
+            val stored = FlowsheetJson.decodeFromString(Flowsheet.serializer(), it.flowsheetJson)
+            val storedSolve = it.resultJson?.let { json -> runCatching { FlowsheetJson.decodeFromString(StoredSolve.serializer(), json) }.getOrNull() }
+            val (flowsheet, solve) = migrateResultHashes(stored, storedSolve)
+            if (solve != storedSolve && solve != null) dao.saveResult(it.id, FlowsheetJson.encodeToString(StoredSolve.serializer(), solve), solve.modelHash)
+            if (flowsheet != stored) dao.update(it.copy(flowsheetJson = encode(flowsheet)))
             Project(id = it.id, name = it.name, flowsheet = flowsheet, updatedAt = it.updatedAt, solve = solve)
         }
     }

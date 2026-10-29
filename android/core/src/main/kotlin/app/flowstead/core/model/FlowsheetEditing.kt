@@ -49,7 +49,10 @@ object FlowsheetEditing {
      */
     fun move(fs: Flowsheet, id: String, x: Double, y: Double): Flowsheet {
         if (!x.isFinite() || !y.isFinite()) throw EditRejected("Not a position")
-        return update(fs, id) { it.copy(x = x, y = y) }
+        val o = fs.obj(id) ?: throw EditRejected("That object no longer exists")
+        // Its property table stays where it is on the flowsheet (owner's choice): its offset takes up the move.
+        val moved = update(fs, id) { it.copy(x = x, y = y) }
+        return moved.copy(tables = moved.tables.map { if (it.objectId == id) it.copy(dx = it.dx - (x - o.x), dy = it.dy - (y - o.y)) else it })
     }
 
     fun rename(fs: Flowsheet, id: String, tag: String): Flowsheet {

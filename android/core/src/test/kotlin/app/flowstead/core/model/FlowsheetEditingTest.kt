@@ -50,6 +50,15 @@ class FlowsheetEditingTest {
     }
 
     @Test
+    fun aMovedObjectsTableStaysInPlace() {
+        val (fs, o) = FlowsheetEditing.add(base, ObjectType.MaterialStream, 0.0, 0.0)
+        val withTable = fs.copy(tables = listOf(PropertyTable(o.id, listOf("temperature"), dx = 40.0, dy = -80.0)))
+        val moved = FlowsheetEditing.move(withTable, o.id, 120.0, 60.0)
+        val t = moved.tables.single()
+        assertEquals(o.x + 40.0 to o.y - 80.0, moved.obj(o.id)!!.x + t.dx to moved.obj(o.id)!!.y + t.dy)
+    }
+
+    @Test
     fun newObjectsSnapToGridAndMovesKeepTheCanvasPosition() {
         val (fs, o) = FlowsheetEditing.add(base, ObjectType.Valve, 37.0, 50.0)
         assertEquals(48.0 to 48.0, o.x to o.y)

@@ -58,6 +58,7 @@ import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.PortAlignment
+import app.flowstead.core.model.streamAt
 import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
 import app.flowstead.core.model.PortSide
@@ -189,8 +190,12 @@ fun FlowsheetCanvas(
                                 draggingTable?.let { (id, at) -> act.moveTable(id, at.x.toDouble(), at.y.toDouble()) }
                                 draggingTable = null
                             } else {
-                                val obj = (hit as? Hit.OnObject)?.let { h -> fs.objects.firstOrNull { it.id == h.objectId } }
-                                val port = hit as? Hit.OnPort
+                                // A port already in use can't take another line, so dragging from it moves its unit:
+                                // small symbols (a valve) are mostly ports at finger size.
+                                val portHit = hit as? Hit.OnPort
+                                val port = portHit?.takeIf { p -> fs.streamAt(p.objectId, p.port) == null }
+                                val obj = ((hit as? Hit.OnObject)?.objectId ?: portHit?.takeIf { port == null }?.objectId)
+                                    ?.let { id -> fs.objects.firstOrNull { it.id == id } }
                                 val portStart = port?.let { p ->
                                     fs.objects.firstOrNull { it.id == p.objectId }?.let { CanvasGeometry.portPosition(it, p.port) }
                                 }
@@ -361,7 +366,7 @@ fun FlowsheetCanvas(
                 drawText(layout, topLeft = Offset(anchor.x - layout.size.width / 2f, anchor.y))
             }
 
-            // Property tables, also in screen space; they scale with the zoom and move with their object.
+            // Property tables, also in screen space; they scale with the zoom and stay put when their object moves.
             tableBoxes.clear()
             val tableSize = (9f * viewport.zoom).coerceIn(6f, 14f)
             val cell = TextStyle(fontFamily = Inter, fontFeatureSettings = "tnum", fontSize = tableSize.sp, color = colors.onSurface)
@@ -371,7 +376,8 @@ fun FlowsheetCanvas(
                 val o = fs.objects.firstOrNull { it.id == t.objectId } ?: continue
                 val rows = PropertyTables.rows(fs, t, results, unitSet)
                 val offset = draggingTable?.takeIf { it.first == t.objectId }?.second ?: Offset(t.dx.toFloat(), t.dy.toFloat())
-                val topLeft = viewport.toScreen(positionOf(o) + offset, density)
+                // From where the object is saved, not where it is being dragged: a table stays put when its object moves.
+                val topLeft = viewport.toScreen(CanvasGeometry.center(o) + offset, density)
                 val title = textMeasurer.measure(o.tag, head)
                 val labels = rows.map { textMeasurer.measure(it.label, cell) }
                 val valueTexts = rows.map { textMeasurer.measure(it.value, cell) }

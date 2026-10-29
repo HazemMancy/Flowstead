@@ -10,6 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.SimObject
+import app.flowstead.core.model.legacyModelHash
 import app.flowstead.core.model.modelHash
 import app.flowstead.data.db.AppDatabase
 import kotlinx.coroutines.flow.first
@@ -55,6 +56,27 @@ class RoomProjectRepositoryTest {
         val project = assertNotNull(repo.observeProject(id).first())
         assertEquals(fs, project.flowsheet)
         assertFalse(project.resultsCurrent)
+    }
+
+    @Test
+    fun resultsSolvedBefore188StayCurrentAfterTheFirstMove() = runTest {
+        // Solved by 1.8.7: the result carries the old hash, which counted positions.
+        val fs = Flowsheet(
+            propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"),
+            objects = listOf(SimObject("o1", "V-100", ObjectType.Separator, 1.0, 2.0)),
+        )
+        val id = repo.create("Sep", fs)
+        val old = app.flowstead.core.model.StoredSolve(
+            app.flowstead.core.api.SolveResult(app.flowstead.core.api.SolveStatus.Converged), fs.legacyModelHash(), 1L,
+        )
+        repo.saveSolve(id, old)
+        assertTrue(assertNotNull(repo.observeProject(id).first()).resultsCurrent)
+        // The new stamp was saved when the project opened, so moving a symbol leaves the results current.
+        val moved = fs.copy(objects = fs.objects.map { it.copy(x = 300.0, y = 84.0) })
+        repo.saveFlowsheet(id, moved)
+        val after = assertNotNull(repo.observeProject(id).first())
+        assertEquals(moved, after.flowsheet)
+        assertTrue(after.resultsCurrent)
     }
 
     @Test
