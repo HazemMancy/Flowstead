@@ -262,7 +262,7 @@ private fun EmptyProjects(modifier: Modifier = Modifier, onCreate: () -> Unit) {
         Text("No projects yet", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Steady-state process simulation, in your pocket. Start a flowsheet for a quick flash, a separator check or a compressor train.",
+            "Steady-state and dynamic process simulation, in your pocket. Start a flowsheet for a quick flash, a separator check or a compressor train.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

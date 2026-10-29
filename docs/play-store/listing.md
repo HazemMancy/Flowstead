@@ -2,7 +2,7 @@
 
 **App name** (≤ 30): Flowstead
 
-**Short description** (≤ 80): Steady-state process simulation, in your pocket. Powered by DWSIM.
+**Short description** (≤ 80): Steady-state and dynamic process simulation. Powered by DWSIM.
 
 **Category:** Productivity · **Tags:** engineering, chemical engineering, process simulation
 
@@ -10,7 +10,7 @@
 
 ## Full description (≤ 4000)
 
-Flowstead is a steady-state process simulator for chemical and process engineers, built for the phone.
+Flowstead is a steady-state and dynamic process simulator for chemical and process engineers, built for the phone.
 
 Draw a flowsheet with your finger, specify streams and unit operations, and solve it on your own Flowstead engine, which runs the open-source DWSIM thermodynamics and unit operations on a server you control.
 

@@ -1,6 +1,6 @@
 # What Flowstead is
 
-Flowstead is a steady-state process simulator for Android. Every thermodynamic calculation runs on DWSIM 9.0.5, the open-source process simulator, on your phone or on a server you choose. Flowstead never shows a number the engine did not return: anything missing says why, and results are marked out of date as soon as the flowsheet changes.
+Flowstead is a steady-state and dynamic process simulator for Android. Every thermodynamic calculation runs on DWSIM 9.0.5, the open-source process simulator, on your phone or on a server you choose. Flowstead never shows a number the engine did not return: anything missing says why, and results are marked out of date as soon as the flowsheet changes.
 
 ## What Flowstead adds to the DWSIM engine
 
@@ -44,4 +44,4 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - Hydrates are vdW–Platteeuw with Munck parameters and the inhibitor's activity from DWSIM's NRTL, not HYSYS's own model; salts and inhibitor losses to the gas are not counted.
 - PVT regression tunes the plus fraction's Tc, Pc, ω and its kij with methane (no volume-shift tuning, splitting or lumping).
 - Pipeline pressurization holds one pressure along the whole network (HYSYS's template resolves it along the line).
-- No dynamics: steady state only (depressuring and pressurization are the time-stepping calculations).
+- Dynamics (D86) cover two-phase separators, valves, heaters, coolers, mixers, pumps, compressors and expanders, with PID controllers; columns, reactors, tanks and three-phase separators are not in dynamic runs yet. Valves have linear trim; pumps and compressors keep their steady head rather than following their curves in time.

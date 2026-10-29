@@ -103,7 +103,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenLicense: (title: String, asset: String
                     Text("Version ${BuildConfig.VERSION_NAME}", style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Text("Steady-state process simulation, in your pocket.", style = MaterialTheme.typography.bodyLarge)
+            Text("Steady-state and dynamic process simulation, in your pocket.", style = MaterialTheme.typography.bodyLarge)
             DeveloperLine()
             Column(
                 Modifier

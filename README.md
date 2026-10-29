@@ -3,11 +3,12 @@ _Process engineering workbench._
 
 Developed by Hazem ElMancy.
 
-**Steady-state process simulation, in your pocket.**
+**Steady-state and dynamic process simulation, in your pocket.**
 
 Flowstead is an Android app for building, solving and checking process
 flowsheets on a phone: flashes, separators, compressor and cooler trains, valve
-letdowns, pipelines, recycle loops, columns and reactors. Every calculation runs
+letdowns, pipelines, recycle loops, columns and reactors, in steady state and,
+since 2.0, through time with PID control. Every calculation runs
 on the open-source **DWSIM** 9.0.5 engine, embedded in the app (offline) or on a
 server you host. Flowstead never shows a number the engine did not return.
 
@@ -23,13 +24,19 @@ In short:
   analysis (API 520/521/526 relief sizing, line checks, two-zone depressuring);
   case studies, what-if sliders and plots; corrected densities and phase splits;
   line sizing to ASME B36.10M/B36.19M; data sheets, PFD and H&MB as PDF or Excel.
+- **Dynamics (2.0):** the flowsheet runs through time from its steady state:
+  separators hold liquid and gas, valves pass what the pressures drive (IEC 60534),
+  PID controllers (level, pressure, temperature, flow) move valves and duties,
+  events step feeds, openings and setpoints, and trends show every loop. Steady-state
+  control loops too: ISA instrument controllers solved together with Adjusts.
 - **Like HYSYS:** Hold/Active solver, stream workbook by phase, specification
   status, free-water flash, HYSYS-matching density and viscosity options, editable
   kij matrix, hypotheticals, Adjust/Set, envelope utility with quality lines and
   hydrates, relief scenarios from the flowsheet, blowdown, variable-speed machines.
 - **Still different from HYSYS:** DWSIM's pure-component data and kij databank
   (HYSYS's are proprietary; enter HYSYS's kij to match); typical rather than
-  catalogue valve factors; Flowstead's own hydrate model; no dynamics. Every
+  catalogue valve factors; Flowstead's own hydrate model; dynamics cover separators, valves, heaters, pumps and compressors
+  (not yet columns, reactors, tanks or three-phase separators). Every
   difference is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ```
