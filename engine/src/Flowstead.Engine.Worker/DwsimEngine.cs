@@ -418,12 +418,35 @@ public sealed class DwsimEngine
         if (errors.Count > 0) throw new InvalidDataException("The flowsheet can't be exported yet: " + string.Join(" ", errors));
 
         var warnings = new List<string>();
-        foreach (var a in model.Objects.Where(o => o.Type.IsLoop()))
-            warnings.Add($"{a.Tag}: {(a.Type == ObjectType.Controller ? "Controller" : "Adjust")} is not written to the DWSIM file; the varied specification keeps its value as entered.");
         foreach (var set in model.Objects.Where(o => o.Type == ObjectType.Set))
             warnings.Add($"{set.Tag}: Set is not written to the DWSIM file; its target keeps the value it gives now.");
         var applied = SetSolver.Apply(model);
         var plain = applied with { Objects = applied.Objects.Where(o => !o.Type.IsLoop() && o.Type != ObjectType.Set).ToList() };
+
+        // Adjusts and controllers aren't DWSIM objects here: the file gets each moved spec at the value the loops found
+        // (D84), so it opens with the same solution; a loop that did not converge leaves its spec as entered.
+        var loops = model.Objects.Where(o => o.Type.IsLoop()).ToList();
+        if (loops.Count > 0)
+        {
+            var solved = Solve(model);
+            foreach (var a in loops)
+            {
+                var what = a.Type == ObjectType.Controller ? "Controller" : "Adjust";
+                var mId = a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedObject);
+                var mKey = a.Refs.GetValueOrDefault(AdjustKeys.ManipulatedSpec);
+                if (solved.Objects.GetValueOrDefault(a.Id) is { Status: ObjectStatus.Solved } r && r.Properties.TryGetValue("manipulatedValue", out var x)
+                    && mId is not null && mKey is not null)
+                {
+                    plain = plain with
+                    {
+                        Objects = plain.Objects.Select(o => o.Id == mId && o.Specs.TryGetValue(mKey, out var old)
+                            ? o with { Specs = new Dictionary<string, Spec>(o.Specs) { [mKey] = old with { Si = x } } } : o).ToList(),
+                    };
+                    warnings.Add($"{a.Tag}: {what} is not written to the DWSIM file; the specification it moves is written at the value it found.");
+                }
+                else warnings.Add($"{a.Tag}: {what} is not written to the DWSIM file and did not converge; the specification it moves keeps its value as entered.");
+            }
+        }
 
         if (model.LiquidDensity != LiquidDensityMethods.Costald && LiquidDensity.FixedPackages.Contains(model.PropertyPackage ?? "") && model.Compounds.Count > 1)
             warnings.Add("Liquid densities: desktop DWSIM mixes pure-liquid densities by mole fraction; Flowstead's engine mixes them by mass" +
