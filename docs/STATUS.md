@@ -153,6 +153,7 @@ _Last updated: 2026-10-20_
 - **1.9.0 (D84, D85):** steady-state control loops: controllers drawn as ISA instrument bubbles (PIC, TIC, FIC…) with signal lines, setpoint, measured value and output %; any number of controllers and Adjusts solved together (Newton/Broyden). Dynamic PID control is planned with dynamic simulation. Updates are saved to the phone's Downloads folder, where Downloads and the Files app find them.
 - **2.0.0 (D86):** dynamic simulation: separators with inventory, valves by IEC 60534, PID controllers, events and trends, from the steady state; pumps, compressors, heaters, coolers and mixers in lines. Columns, reactors, tanks and three-phase separators are not in dynamics yet.
 - **2.0.1:** controller and Set signal lines drawn at right angles (canvas and printed PFD).
+- **2.0.2:** light theme by default; status and navigation bar icons follow the app's theme, not the phone's.
 - **D87:** a direct Install button (with the install permission) was tested as a pre-release and blocked by Play Protect, as in D74; releases keep Open Downloads.
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).

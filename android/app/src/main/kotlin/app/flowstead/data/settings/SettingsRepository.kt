@@ -29,7 +29,7 @@ data class AppSettings(
     val engineUrl: String = "",
     val engineMode: EngineMode = if (BuildConfig.LOCAL_ENGINE) EngineMode.OnDevice else EngineMode.Remote,
     val unitSet: UnitSet = UnitSet.SI,
-    val themeMode: ThemeMode = ThemeMode.System,
+    val themeMode: ThemeMode = ThemeMode.Light,
     /** Atmospheric reference for gauge pressures in new projects, Pa (D9). */
     val defaultAtmosphericPressurePa: Double = StandardConditions.DEFAULT_PATM_PA,
 ) {
@@ -61,7 +61,7 @@ class DataStoreSettingsRepository @Inject constructor(
                 ?: AppSettings().engineMode,
             unitSet = p[UNIT_SET]?.let { runCatching { json.decodeFromString(UnitSet.serializer(), it) }.getOrNull() }
                 ?: UnitSet.SI,
-            themeMode = p[THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.System,
+            themeMode = p[THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.Light,
             defaultAtmosphericPressurePa = p[PATM]?.takeIf { it.isFinite() && it > 0 }
                 ?: StandardConditions.DEFAULT_PATM_PA,
         )

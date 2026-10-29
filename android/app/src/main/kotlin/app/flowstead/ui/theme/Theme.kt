@@ -101,13 +101,17 @@ val FlowsteadShapes = Shapes(
 
 enum class ThemeMode { System, Light, Dark }
 
+/** Whether [this] mode draws dark: System follows the phone's setting. */
 @Composable
-fun FlowsteadTheme(mode: ThemeMode = ThemeMode.System, content: @Composable () -> Unit) {
-    val dark = when (mode) {
-        ThemeMode.System -> isSystemInDarkTheme()
-        ThemeMode.Light -> false
-        ThemeMode.Dark -> true
-    }
+fun ThemeMode.isDark(): Boolean = when (this) {
+    ThemeMode.System -> isSystemInDarkTheme()
+    ThemeMode.Light -> false
+    ThemeMode.Dark -> true
+}
+
+@Composable
+fun FlowsteadTheme(mode: ThemeMode = ThemeMode.Light, content: @Composable () -> Unit) {
+    val dark = mode.isDark()
     CompositionLocalProvider(LocalValueColors provides if (dark) DarkValueColors else LightValueColors) {
         MaterialTheme(
             colorScheme = if (dark) FlowsteadDarkColors else FlowsteadLightColors,
