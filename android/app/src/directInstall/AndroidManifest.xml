@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Flowstead — test builds only (-PdirectInstall): the permission and receiver for installing a downloaded update
+  straight from the app's Install button. Releases leave them out (Play Protect blocked 1.8.4 and 1.8.5 with them, D74).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <application>
+        <receiver
+            android:name=".data.update.InstallResultReceiver"
+            android:exported="false" />
+    </application>
+</manifest>

@@ -5,6 +5,7 @@
 package app.flowstead.ui.update
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
@@ -55,6 +56,9 @@ class UpdatePromptViewModel @Inject constructor(
     private val _offer = MutableStateFlow<UpdateCheck.Available?>(null)
     val offer: StateFlow<UpdateCheck.Available?> = _offer
     val install: StateFlow<InstallState> = updater.state
+    /** The version whose finished download the user has dismissed, so its popup doesn't come back. */
+    private val _dismissed = MutableStateFlow<String?>(null)
+    val dismissed: StateFlow<String?> = _dismissed
 
     init {
         if (launchChecked.compareAndSet(false, true)) viewModelScope.launch { checkOnce() }
@@ -76,6 +80,16 @@ class UpdatePromptViewModel @Inject constructor(
         _offer.value = null
     }
 
+    /** Installs the finished download (test builds: Android's installer; releases: downloads again). */
+    fun installNow() = updater.install()
+
+    fun permissionSettings() = updater.permissionSettings()
+
+    fun dismissDownloaded(version: String) {
+        _dismissed.value = version
+        _offer.value = null
+    }
+
     companion object {
         /** Once per process, i.e. per launch of the app. */
         internal val launchChecked = AtomicBoolean(false)
@@ -86,10 +100,73 @@ class UpdatePromptViewModel @Inject constructor(
 fun UpdatePromptHost(viewModel: UpdatePromptViewModel = hiltViewModel()) {
     val offer by viewModel.offer.collectAsStateWithLifecycle()
     val install by viewModel.install.collectAsStateWithLifecycle()
-    val r = offer ?: return
+    val dismissed by viewModel.dismissed.collectAsStateWithLifecycle()
     // Android's own install prompt takes over from here.
     LaunchedEffect(install) { if (install is InstallState.Prompted) viewModel.later() }
+    val done = install as? InstallState.Downloaded
+    // A finished download always pops up (also when the popup was hidden, or the download started in Settings).
+    if (done != null && done.version != dismissed || install == InstallState.NeedsPermission && dismissed != PERMISSION) {
+        val context = LocalContext.current
+        DownloadedDialog(
+            version = done?.version,
+            install = install,
+            onInstall = viewModel::installNow,
+            onPermission = { runCatching { context.startActivity(viewModel.permissionSettings()) } },
+            onDownloads = { done?.let { runCatching { context.startActivity(it.downloads) } } },
+            onLater = { viewModel.dismissDownloaded(done?.version ?: PERMISSION) },
+        )
+        return
+    }
+    val r = offer ?: return
     UpdateDialog(r, install, onUpdate = viewModel::update, onLater = viewModel::later)
+}
+
+/** What dismissing the "allow installs" popup is remembered as. */
+private const val PERMISSION = "permission"
+
+/**
+ * The download is finished and checked. Test builds (BuildConfig.DIRECT_INSTALL) install it from here; releases
+ * can't start an install themselves (no install permission, D74), so Android's "Download complete" notification or
+ * the file in Downloads installs it.
+ */
+@Composable
+internal fun DownloadedDialog(
+    version: String?,
+    install: InstallState,
+    onInstall: () -> Unit,
+    onPermission: () -> Unit,
+    onDownloads: () -> Unit,
+    onLater: () -> Unit,
+) {
+    val canInstall = (install as? InstallState.Downloaded)?.canInstall == true || install == InstallState.NeedsPermission
+    AlertDialog(
+        onDismissRequest = onLater,
+        icon = { FlowsteadMark(40.dp) },
+        title = { Text(if (version != null) "Flowstead $version is downloaded" else "Allow Flowstead to install its update") },
+        text = {
+            Text(
+                when {
+                    install == InstallState.NeedsPermission ->
+                        "Android needs your permission, once, for Flowstead to install its updates. Tap Allow, switch it on, come back and tap Install."
+                    canInstall -> "Downloaded and checked. Tap Install; Android asks you to confirm the update. Your projects are kept."
+                    else -> "Downloaded and checked. Tap Android's \"Flowstead $version\" notification to install it, or open flowstead-v$version.apk in Downloads. Your projects are kept."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+        confirmButton = {
+            when {
+                install == InstallState.NeedsPermission -> Row {
+                    TextButton(onClick = onPermission) { Text("Allow") }
+                    TextButton(onClick = onInstall, modifier = Modifier.testTag("prompt_install")) { Text("Install") }
+                }
+                canInstall -> TextButton(onClick = onInstall, modifier = Modifier.testTag("prompt_install")) { Text("Install") }
+                else -> TextButton(onClick = { onDownloads(); onLater() }, modifier = Modifier.testTag("prompt_downloads")) { Text("Open Downloads") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onLater, modifier = Modifier.testTag("prompt_later")) { Text("Later") } },
+        modifier = Modifier.testTag("update_downloaded"),
+    )
 }
 
 @Composable
@@ -115,14 +192,7 @@ internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpd
                         else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
                     InstallState.Verifying -> Text("Checking the download…", style = MaterialTheme.typography.bodySmall)
-                    InstallState.NeedsPermission -> Text(
-                        "Android needs your permission, once, for Flowstead to install updates: Settings → About → Update.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    is InstallState.Downloaded -> Text(
-                        "Downloaded and checked. Tap the \"Flowstead ${install.version}\" notification to install it (Android asks you to confirm), or open flowstead-v${install.version}.apk in Downloads.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+
                     is InstallState.Failed -> Text("Update failed: ${install.reason}", color = MaterialTheme.valueColors.error, style = MaterialTheme.typography.bodySmall)
                     else -> Unit
                 }

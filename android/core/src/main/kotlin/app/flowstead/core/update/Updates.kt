@@ -62,6 +62,8 @@ object Updates {
             val d = x.getOrElse(i) { 0 }.compareTo(y.getOrElse(i) { 0 })
             if (d != 0) return d
         }
-        return 0
+        // As in semantic versioning, a build with a suffix (2.0.1-direct, a test build) comes before the release itself.
+        fun suffixed(v: String) = v.trim().removePrefix("v").dropWhile { it.isDigit() || it == '.' }.startsWith("-")
+        return (if (suffixed(b)) 1 else 0) - (if (suffixed(a)) 1 else 0)
     }
 }

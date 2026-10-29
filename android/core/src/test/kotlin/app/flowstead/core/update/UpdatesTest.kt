@@ -23,6 +23,10 @@ class UpdatesTest {
         assertTrue(Updates.compare("1.10.0", "1.9.2") > 0)
         assertEquals(0, Updates.compare("v1.0", "1.0.0"))
         assertEquals(0, Updates.compare("1.0.0 (on device)", "1.0.0"))
+        // A test build (2.0.1-direct) is older than the release it was built from, so that release is offered to it.
+        assertTrue(Updates.compare("2.0.1-direct", "2.0.1") < 0)
+        assertTrue(Updates.compare("2.0.1", "2.0.1-direct") > 0)
+        assertTrue(Updates.compare("2.0.1-direct", "2.0.0") > 0)
         assertTrue(Updates.compare("0.2.0", "1.0.0") < 0)
     }
 

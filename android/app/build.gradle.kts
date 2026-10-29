@@ -23,6 +23,7 @@ android {
     sourceSets.getByName("main").assets.srcDir("../../docs/privacy")
     sourceSets.getByName("main").assets.srcDir("../../docs/features")
     sourceSets.getByName("main").assets.srcDir("../../shared/compounds")
+    if (project.hasProperty("directInstall")) sourceSets.getByName("release").manifest.srcFile("src/directInstall/AndroidManifest.xml")
     if (localEngine) {
         sourceSets.getByName("main").assets.srcDir(localEngineDir.resolve("out/assets"))
         sourceSets.getByName("main").jniLibs.srcDir(localEngineDir.resolve("out/jniLibs"))
@@ -37,6 +38,10 @@ android {
         versionName = "2.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "LOCAL_ENGINE", localEngine.toString())
+        // Test builds only (-PdirectInstall): the update popup's Install button installs the download itself, which
+        // needs REQUEST_INSTALL_PACKAGES (the release-only manifest overlay below). Releases leave it out (D74).
+        buildConfigField("boolean", "DIRECT_INSTALL", project.hasProperty("directInstall").toString())
+        if (project.hasProperty("directInstall")) versionNameSuffix = "-direct"
         // The engine's runtime is built for 64-bit ARM (phones) and x86_64 (emulators).
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }

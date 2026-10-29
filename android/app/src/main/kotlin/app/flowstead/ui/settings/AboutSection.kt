@@ -144,8 +144,12 @@ private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: S
                 "Downloaded and checked. Tap the \"Flowstead ${install.version}\" notification to install it over this version (Android asks you to confirm), or open flowstead-v${install.version}.apk in Downloads. Your projects are kept.",
                 style = hint, color = muted, modifier = live,
             )
-            OutlinedButton(onClick = { runCatching { context.startActivity(install.downloads) } }, modifier = Modifier.heightIn(min = 48.dp).testTag("open_downloads")) {
-                Text("Open Downloads")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Test builds hold the install permission and install from here; releases go through Downloads (D74).
+                if (install.canInstall) Button(onClick = vm::retryInstall, modifier = Modifier.heightIn(min = 48.dp).testTag("install_update")) { Text("Install") }
+                OutlinedButton(onClick = { runCatching { context.startActivity(install.downloads) } }, modifier = Modifier.heightIn(min = 48.dp).testTag("open_downloads")) {
+                    Text("Open Downloads")
+                }
             }
         }
         is InstallState.Prompted -> {

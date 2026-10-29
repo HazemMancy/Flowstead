@@ -5,12 +5,17 @@
 package app.flowstead.data.update
 
 import android.app.DownloadManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import androidx.core.content.IntentCompat
+import app.flowstead.BuildConfig
 import app.flowstead.core.update.UpdateCheck
 import app.flowstead.core.update.Updates
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -46,7 +51,7 @@ sealed interface InstallState {
      * Downloaded and checked (D79): Android's "Download complete" notification installs it when tapped; [downloads]
      * opens Android's Downloads list, where the file is too.
      */
-    data class Downloaded(val version: String, val downloads: Intent) : InstallState
+    data class Downloaded(val version: String, val downloads: Intent, val canInstall: Boolean = BuildConfig.DIRECT_INSTALL) : InstallState
     data class Failed(val reason: String) : InstallState
 }
 
@@ -75,10 +80,12 @@ class DownloadUpdater @Inject constructor(
     @ApplicationContext private val context: Context,
     private val http: HttpClient,
 ) : AppUpdater {
-    private val status = MutableStateFlow<InstallState>(InstallState.Idle)
+    private val status get() = installStatus
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var job: Job? = null
     private var last: UpdateCheck.Available? = null
+    /** The DownloadManager id of the checked download, for installing it (test builds only). */
+    private var downloadedId: Long? = null
     override val state: StateFlow<InstallState> = status
 
     private val downloads get() = context.getSystemService(DownloadManager::class.java)
@@ -127,6 +134,7 @@ class DownloadUpdater @Inject constructor(
                     downloads.remove(id)
                     error("The download is damaged (checksum mismatch); try again")
                 }
+                downloadedId = id
                 status.value = InstallState.Downloaded(update.version, Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (e: CancellationException) {
                 throw e
@@ -176,15 +184,77 @@ class DownloadUpdater @Inject constructor(
         status.value = InstallState.Failed(reason)
     }
 
+    /**
+     * Test builds (BuildConfig.DIRECT_INSTALL): hands the checked download to Android's PackageInstaller, which shows
+     * its own "Update this app?" prompt. Releases can't (they hold no install permission): they download again.
+     */
     override fun install() {
-        last?.let(::start)
+        val id = downloadedId
+        if (!BuildConfig.DIRECT_INSTALL || id == null) {
+            last?.let(::start)
+            return
+        }
+        if (!context.packageManager.canRequestPackageInstalls()) {
+            status.value = InstallState.NeedsPermission
+            return
+        }
+        try {
+            val installer = context.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+                .apply { setAppPackageName(context.packageName) }
+            val session = installer.createSession(params)
+            installer.openSession(session).use { s ->
+                downloads.openDownloadedFile(id).use { pfd ->
+                    FileInputStream(pfd.fileDescriptor).use { input ->
+                        s.openWrite("flowstead.apk", 0, pfd.statSize).use { out ->
+                            input.copyTo(out)
+                            s.fsync(out)
+                        }
+                    }
+                }
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+                val callback = PendingIntent.getBroadcast(context, session, Intent(context, InstallResultReceiver::class.java), flags)
+                s.commit(callback.intentSender)
+            }
+            status.value = InstallState.Prompted()
+        } catch (e: Exception) {
+            fail(e.message ?: "Android refused the installation")
+        }
     }
 
     override fun permissionSettings(): Intent =
-        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        (if (BuildConfig.DIRECT_INSTALL) Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+        else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     private companion object {
         const val APK_MIME = "application/vnd.android.package-archive"
         const val USER_AGENT = "Flowstead-updater"
+    }
+}
+
+/** Shared with [InstallResultReceiver], which hears from Android's installer outside any injection scope. */
+internal val installStatus = MutableStateFlow<InstallState>(InstallState.Idle)
+
+/**
+ * Android's installer reports here (test builds only; the receiver is declared by the directInstall manifest): it
+ * needs the user's tap (opens its prompt), succeeded, or failed.
+ */
+class InstallResultReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                val confirm = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java) ?: return
+                confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // Kept too, so the screen can open it if Android blocks a start from the background.
+                installStatus.value = InstallState.Prompted(confirm)
+                runCatching { context.startActivity(confirm) }
+            }
+            PackageInstaller.STATUS_SUCCESS -> installStatus.value = InstallState.Idle
+            PackageInstaller.STATUS_FAILURE_ABORTED -> installStatus.value = InstallState.Failed("Update cancelled")
+            else -> installStatus.value = InstallState.Failed(
+                intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Android could not install the update",
+            )
+        }
     }
 }
