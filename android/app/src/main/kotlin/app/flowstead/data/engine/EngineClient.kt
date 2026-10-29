@@ -81,6 +81,9 @@ interface EngineClient {
     /** A vessel blowdown (D57). */
     suspend fun depressuring(baseUrl: String, apiKey: String?, request: DepressuringRequest): EngineResult<DepressuringResult> =
         EngineResult.Failed("This engine can't simulate depressuring")
+    /** A dynamic run from the steady state (D86). */
+    suspend fun dynamics(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DynamicsRequest): EngineResult<app.flowstead.core.api.DynamicsResult> =
+        EngineResult.Failed("This engine is older than 2.0 and can't run dynamics")
 }
 
 @Singleton
@@ -186,6 +189,16 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
     override suspend fun relief(baseUrl: String, apiKey: String?, request: ReliefRequest): EngineResult<ReliefResult> =
         call {
             http.post("$baseUrl/relief") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+        }
+
+    override suspend fun dynamics(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DynamicsRequest): EngineResult<app.flowstead.core.api.DynamicsResult> =
+        call {
+            http.post("$baseUrl/dynamics") {
+                timeout { requestTimeoutMillis = 20 * 60_000L }
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(request)

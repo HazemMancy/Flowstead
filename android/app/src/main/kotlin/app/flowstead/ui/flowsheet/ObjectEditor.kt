@@ -594,9 +594,32 @@ private fun AdjustEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: U
         actions.setRef(obj.id, AdjustKeys.MANIPULATED_OBJECT, it)
         actions.setRef(obj.id, AdjustKeys.MANIPULATED_SPEC, null)
     }
-    if (manipulated != null) {
+    // D86: a controller can act in dynamic runs only, as HYSYS's PID controllers do; it then moves its valve's opening
+    // (or its heater's duty) and needs no spec to vary. A level controller always does: level exists only dynamically.
+    val levelPv = cKey in app.flowstead.core.model.Dynamics.DYNAMIC_ONLY
+    val dynamicOnly = controller && (levelPv || obj.refs[AdjustKeys.STEADY_STATE] == "off")
+    if (manipulated != null && !dynamicOnly) {
         Choice("Specification", mKey?.let { SpecKey.label(it) }, manipulated.specs.keys.map { it to SpecKey.label(it) }) {
             actions.setRef(obj.id, AdjustKeys.MANIPULATED_SPEC, it)
+        }
+    }
+    if (controller) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Acts in the steady state", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    if (levelPv) "A level exists only in dynamic runs, so this controller acts there only."
+                    else if (dynamicOnly) "Off: it acts in dynamic runs only, moving its valve's opening."
+                    else "On: the steady solve meets its setpoint; in dynamic runs it acts as a PID.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            androidx.compose.material3.Switch(
+                checked = !dynamicOnly,
+                enabled = !levelPv,
+                onCheckedChange = { on -> actions.setRef(obj.id, AdjustKeys.STEADY_STATE, if (on) null else "off") },
+                modifier = Modifier.testTag("controller_steady_state"),
+            )
         }
     }
     SectionLabel(if (controller) "Measures (PV)" else "Until")
@@ -605,7 +628,8 @@ private fun AdjustEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: U
         actions.setRef(obj.id, AdjustKeys.CONTROLLED_PROPERTY, null)
     }
     if (controlled != null) {
-        val keys = if (controlled.type == ObjectType.MaterialStream) ResultKeys.STREAM else ResultKeys.forType(controlled.type)
+        val steadyKeys = if (controlled.type == ObjectType.MaterialStream) ResultKeys.STREAM else ResultKeys.forType(controlled.type)
+        val keys = if (controller) (steadyKeys + app.flowstead.core.model.Dynamics.measurable(controlled)).distinct() else steadyKeys
         Choice("Result", cKey?.let { ResultKeys.label(it) }, keys.map { it to ResultKeys.label(it) }) {
             actions.setRef(obj.id, AdjustKeys.CONTROLLED_PROPERTY, it)
         }
@@ -614,10 +638,11 @@ private fun AdjustEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: U
         val q = ResultKeys.quantity(cKey)
         SpecField(obj, AdjustKeys.TARGET, unitSet, ctx, actions, quantityOverride = q,
             labelOverride = if (controller) "Setpoint (SP) ${ResultKeys.label(cKey).lowercase()}" else "Target ${ResultKeys.label(cKey).lowercase()}")
-        SpecField(obj, AdjustKeys.TOLERANCE, unitSet, ctx, actions, quantityOverride = differenceOf(q),
+        if (!dynamicOnly) SpecField(obj, AdjustKeys.TOLERANCE, unitSet, ctx, actions, quantityOverride = differenceOf(q),
             labelOverride = "Tolerance (optional)", optionalHint = "1e-6 relative if empty")
     }
-    if (mKey != null) {
+    if (controller) Calculated("Tuning (gain, integral and derivative times) is set in Dynamics, from the flowsheet menu.")
+    if (mKey != null && !dynamicOnly) {
         val q = SpecKey.quantity(mKey)
         val what = SpecKey.label(mKey).lowercase()
         SpecField(obj, AdjustKeys.MINIMUM, unitSet, ctx, actions, quantityOverride = q,

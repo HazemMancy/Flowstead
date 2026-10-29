@@ -75,6 +75,8 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val safety: SafetyStudy? = null,
+    /** The dynamic run's setup (D86); not part of the model hash. */
+    val dynamics: DynamicsSetup? = null,
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
     fun hypothetical(name: String): Hypothetical? = hypotheticals.firstOrNull { it.name == name }
@@ -204,6 +206,8 @@ object AdjustKeys {
     const val TOLERANCE = "tolerance"
     const val MINIMUM = "minimum"
     const val MAXIMUM = "maximum"
+    /** Ref on a controller: "off" when it acts in dynamic runs only (D86); level controllers always do. */
+    const val STEADY_STATE = "steadyState"
 }
 
 @Serializable

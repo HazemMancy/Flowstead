@@ -32,6 +32,7 @@ Tolerances follow the brief: ±0.01 K on temperature, ±0.1 % relative elsewhere
 | 17-liquid-densities | PR, pure propane, n-hexane and water liquids; a cold C1/C2/C3 liquid with dissolved methane | NIST and IAPWS densities within 0.5 %; NGL liquid between 470 and 580 kg/m³; std ideal liquid volume flow from GPA 2145 densities at 60 °F within 0.5 % (blocking) |
 | 18-hypothetical-component | PR, a hypothetical built from n-decane's NBP, MW and SG, beside database n-decane | Boils at its given NBP (±1 K); liquid density at 60 °F = SG (±1 %); flash agrees with database n-decane (VF ±0.015, liquid density ±10 kg/m³) (blocking) |
 | 19-letdown-control-loops | PR, gas let down 70 → 30 bara and heated to 30 °C by two interacting controllers (PIC on the valve, TIC on the heater) | Both setpoints met; PIC output = its place in its range; isenthalpic valve; molar flow conserved (blocking) |
+| 20-separator-dynamics | PR, gas and condensate let down into a separator; PIC and LIC act in dynamic runs only (the example for Dynamics) | — (steady values; its dynamics are checked by DynamicsTests) |
 
 To regenerate the provisional values after an intentional engine change:
 

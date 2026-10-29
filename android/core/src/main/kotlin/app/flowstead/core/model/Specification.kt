@@ -268,6 +268,16 @@ object Specification {
         val mKey = a.refs[AdjustKeys.MANIPULATED_SPEC]
         val cId = a.refs[AdjustKeys.CONTROLLED_OBJECT]
         val cKey = a.refs[AdjustKeys.CONTROLLED_PROPERTY]
+        // A controller acting in dynamic runs only moves its valve's opening or its heater's duty: no spec to start from.
+        val dynamicOnly = a.type == ObjectType.Controller && (a.refs[AdjustKeys.STEADY_STATE] == "off" || cKey in Dynamics.DYNAMIC_ONLY)
+        if (dynamicOnly) {
+            if (mId == null) needs += "what it moves"
+            if (cId == null || cKey == null) needs += "what it measures"
+            if (AdjustKeys.TARGET !in a.specs) needs += "setpoint"
+            if (mId != null && fs.obj(mId) == null) return SpecStatus.Invalid("The object it moves no longer exists")
+            if (cId != null && fs.obj(cId) == null) return SpecStatus.Invalid("The measured object no longer exists")
+            return if (needs.isEmpty()) SpecStatus.Complete else SpecStatus.UnderSpecified(needs)
+        }
         if (mId == null || mKey == null) needs += "variable to vary"
         if (cId == null || cKey == null) needs += "result to control"
         if (AdjustKeys.TARGET !in a.specs) needs += "target value"

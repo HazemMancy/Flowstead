@@ -165,6 +165,12 @@ fun FlowsheetScreen(
                                 modifier = Modifier.testTag("menu_case_studies"),
                             )
                             DropdownMenuItem(
+                                text = { Text("Dynamics") },
+                                enabled = ready != null,
+                                onClick = { menu = false; viewModel.openDynamics() },
+                                modifier = Modifier.testTag("menu_dynamics"),
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Help & Resources") },
                                 onClick = { menu = false; onOpenHelp(null) },
                                 modifier = Modifier.testTag("menu_help"),
@@ -367,6 +373,23 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             onRun = vm::runCaseStudy,
             onCancel = vm::cancelCaseStudy,
             onDismiss = vm::closeCaseStudies,
+        )
+    }
+    if (ui.dynamicsOpen) {
+        DynamicsSheet(
+            fs = ui.flowsheet,
+            ui = ui.dynamics,
+            currentKey = vm.dynamicsKey(ui.flowsheet),
+            unitSet = ui.unitSet,
+            ctx = ui.unitContext,
+            actions = object : DynamicsActions {
+                override fun setTiming(duration: Double?, step: Double?) = vm.setDynamicsTiming(duration, step)
+                override fun setParameter(id: String, key: String, spec: app.flowstead.core.model.Spec?) = vm.setDynamicParameter(id, key, spec)
+                override fun addEvent(e: app.flowstead.core.model.DynamicEvent) = vm.addDynamicEvent(e)
+                override fun removeEvent(index: Int) = vm.removeDynamicEvent(index)
+                override fun run() = vm.runDynamics()
+            },
+            onDismiss = vm::closeDynamics,
         )
     }
     if (ui.safetyOpen) {

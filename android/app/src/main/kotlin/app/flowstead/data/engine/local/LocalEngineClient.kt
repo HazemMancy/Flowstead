@@ -99,6 +99,11 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
             engine.call("depressuring", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.DepressuringRequest.serializer(), request))
         }
 
+    override suspend fun dynamics(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DynamicsRequest): EngineResult<app.flowstead.core.api.DynamicsResult> =
+        decode(app.flowstead.core.api.DynamicsResult.serializer()) {
+            engine.call("dynamics", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.DynamicsRequest.serializer(), request))
+        }
+
     private suspend fun <T> decode(serializer: KSerializer<T>, block: suspend () -> kotlinx.serialization.json.JsonElement): EngineResult<T> =
         attempt { FlowsheetJson.decodeFromJsonElement(serializer, block()) }
 

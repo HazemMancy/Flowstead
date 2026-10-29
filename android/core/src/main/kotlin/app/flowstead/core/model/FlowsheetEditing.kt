@@ -106,6 +106,15 @@ object FlowsheetEditing {
     fun setExclusiveSpec(fs: Flowsheet, id: String, key: String, spec: Spec, clears: Collection<String>): Flowsheet =
         update(fs, id) { o -> o.copy(specs = o.specs - clears.filter { it != key }.toSet() + (key to spec)) }
 
+    /** Changes the dynamic run's setup (D86). */
+    fun setDynamics(fs: Flowsheet, change: (DynamicsSetup) -> DynamicsSetup): Flowsheet = fs.copy(dynamics = change(fs.dynamics ?: DynamicsSetup()))
+
+    /** Sets (or clears, with null) one dynamic parameter of object [id]. */
+    fun setDynamicParameter(fs: Flowsheet, id: String, key: String, spec: Spec?): Flowsheet = setDynamics(fs) { s ->
+        val mine = (s.parameters[id].orEmpty() - key).let { if (spec == null) it else it + (key to spec) }
+        s.copy(parameters = if (mine.isEmpty()) s.parameters - id else s.parameters + (id to mine))
+    }
+
     fun setRef(fs: Flowsheet, id: String, key: String, value: String?): Flowsheet {
         val set = update(fs, id) {
             if (value == null) it.copy(refs = it.refs - key) else it.copy(refs = it.refs + (key to value))

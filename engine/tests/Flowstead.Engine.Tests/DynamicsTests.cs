@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Net.Http.Json;
+using System.Text.Json;
 using Flowstead.Engine.Contracts;
 using Xunit;
 using Xunit.Abstractions;
@@ -137,6 +138,30 @@ public sealed class DynamicsTests(EngineFixture engine, ITestOutputHelper output
         Assert.InRange(level[0], 1.49, 1.51);
         Assert.InRange(level[^1], 1.4, 1.6);
         Assert.True(power[0] > 0 && power[^1] > power[0], "the pump works harder as more liquid passes");
+    }
+
+    [Fact]
+    public async Task TheDynamicsExampleRunsAsTheAppSendsIt()
+    {
+        var dir = Path.GetFullPath(EngineFixture.Meta("BenchmarksDir"));
+        var root = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(dir, "20-separator-dynamics", "input.json")))!["flowsheet"]!;
+        var fs = root.Deserialize<Flowsheet>(Json.Options)!;
+        var setup = root["dynamics"]!;
+        var request = new DynamicsRequest
+        {
+            Flowsheet = fs,
+            Duration = setup["duration"]!.GetValue<double>(),
+            Step = setup["step"]!.GetValue<double>(),
+            Events = setup["events"].Deserialize<List<DynamicEvent>>(Json.Options)!,
+            Parameters = setup["parameters"].Deserialize<Dictionary<string, Dictionary<string, Spec>>>(Json.Options)!,
+        };
+        var r = await EngineFixture.Json<DynamicsResult>(await engine.Authed().PostAsJsonAsync("/dynamics", request, Json.Options));
+        foreach (var m in r.Messages) output.WriteLine($"{m.Level}: {m.Text}");
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        var p = T(r, "sep", "pressure");
+        Assert.True(p.Max() > 20.05e5);
+        Assert.InRange(p[^1], 20e5 * 0.995, 20e5 * 1.005);
+        Assert.InRange(T(r, "sep", "liquidLevel")[^1], 1.4, 1.6);
     }
 
     [Fact]

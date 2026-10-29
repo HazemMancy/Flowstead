@@ -134,6 +134,19 @@ data class FlowsheetUi(
     /** How compositions are entered and shown (D78), and the engine's molecular weights and liquid densities for it. */
     val compositionBasis: CompositionBasis = CompositionBasis.MoleFraction,
     val compoundBasis: CompoundBasisUi? = null,
+    val dynamicsOpen: Boolean = false,
+    val dynamics: DynamicsUi? = null,
+)
+
+/**
+ * The last dynamic run (D86), kept in memory: [key] is the flowsheet and setup it ran for, so a change marks it out of
+ * date.
+ */
+data class DynamicsUi(
+    val running: Boolean = false,
+    val result: app.flowstead.core.api.DynamicsResult? = null,
+    val key: String? = null,
+    val error: String? = null,
 )
 
 /** The engine's molecular weights and ideal liquid densities for the fluid [key] (package, compounds, hypotheticals). */
@@ -198,6 +211,8 @@ class FlowsheetViewModel @Inject constructor(
         val safetyRunning: Set<String> = emptySet(),
         val compositionBasis: CompositionBasis = CompositionBasis.MoleFraction,
         val compoundBasis: CompoundBasisUi? = null,
+        val dynamicsOpen: Boolean = false,
+        val dynamics: DynamicsUi? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -248,6 +263,8 @@ class FlowsheetViewModel @Inject constructor(
                 dataSheetFor = l.dataSheetFor?.takeIf { id -> id == ALL_EQUIPMENT || fs.objects.any { it.id == id } },
                 envelope = l.envelope?.copy(stale = l.envelopeHash != null && l.envelopeHash != fs.modelHash()),
                 caseStudiesOpen = l.caseStudiesOpen,
+                dynamicsOpen = l.dynamicsOpen,
+                dynamics = l.dynamics,
                 caseRun = l.caseRun,
                 pvtFor = l.pvtFor?.takeIf { id -> fs.objects.any { it.id == id } },
                 pvt = l.pvt?.copy(stale = l.pvtHash != null && l.pvtHash != fs.modelHash()),
@@ -501,6 +518,40 @@ class FlowsheetViewModel @Inject constructor(
     fun cancelQueuedSolve() = queue.cancel(projectId)
 
     // ---- case studies (D51)
+
+    // ---- dynamics (D86)
+
+    fun openDynamics() = local.update { it.copy(dynamicsOpen = true, editingId = null) }
+    fun closeDynamics() = local.update { it.copy(dynamicsOpen = false) }
+    fun setDynamicsTiming(duration: Double?, step: Double?) = edit(undoable = false) { fs ->
+        FlowsheetEditing.setDynamics(fs) { s -> s.copy(duration = duration ?: s.duration, step = step ?: s.step) }
+    }
+    fun setDynamicParameter(id: String, key: String, spec: app.flowstead.core.model.Spec?) =
+        edit(undoable = false) { FlowsheetEditing.setDynamicParameter(it, id, key, spec) }
+    fun addDynamicEvent(e: app.flowstead.core.model.DynamicEvent) = edit { fs -> FlowsheetEditing.setDynamics(fs) { s -> s.copy(events = (s.events + e).sortedBy { it.time }) } }
+    fun removeDynamicEvent(index: Int) = edit { fs -> FlowsheetEditing.setDynamics(fs) { s -> s.copy(events = s.events.filterIndexed { i, _ -> i != index }) } }
+
+    /** What a dynamic run's result was run for: the model and the dynamic setup. */
+    fun dynamicsKey(fs: Flowsheet): String =
+        fs.modelHash() + ":" + app.flowstead.core.model.FlowsheetJson.encodeToString(app.flowstead.core.model.DynamicsSetup.serializer(), app.flowstead.core.model.Dynamics.setup(fs)).hashCode()
+
+    fun runDynamics() {
+        val fs = current ?: return
+        if (local.value.dynamics?.running == true) return
+        app.flowstead.core.model.Dynamics.problem(fs)?.let { _messages.trySend(it); return }
+        val key = dynamicsKey(fs)
+        local.update { it.copy(dynamics = DynamicsUi(running = true, result = it.dynamics?.result, key = it.dynamics?.key)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val next = if (url.isBlank()) DynamicsUi(error = "Set the engine address in Settings")
+            else when (val r = engine.dynamics(url, secrets.apiKey(), app.flowstead.core.model.Dynamics.request(fs))) {
+                is EngineResult.Ok -> DynamicsUi(result = r.value, key = key,
+                    error = r.value.messages.firstOrNull { it.level == app.flowstead.core.api.MessageLevel.Error }?.text)
+                is EngineResult.Failed -> DynamicsUi(error = "Not run: ${r.reason}")
+            }
+            local.update { it.copy(dynamics = next) }
+        }
+    }
 
     fun openCaseStudies() = local.update { it.copy(caseStudiesOpen = true, editingId = null) }
     fun closeCaseStudies() = local.update { it.copy(caseStudiesOpen = false) }

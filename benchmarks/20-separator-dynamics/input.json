@@ -1,0 +1,57 @@
+{
+  "name": "Separator under pressure and level control (dynamics)",
+  "description": "Gas and condensate at 30 bara, 27 °C let down into a 5 m³, 3 m high separator at 20 bara. PIC-100 holds the separator's pressure on the gas valve, LIC-100 its level on the liquid valve; both act in dynamic runs. Open Dynamics and Run: at 30 s the feed rises to 33 bara and the controllers bring the separator back. PR.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": ["Methane", "Propane", "N-hexane"],
+    "objects": [
+      {
+        "id": "feed", "tag": "1", "type": "material_stream",
+        "specs": {
+          "temperature": { "si": 300.15, "unit": "C" },
+          "pressure": { "si": 3000000.0, "unit": "bara" },
+          "molarFlow": { "si": 20.0, "unit": "kgmol/h" }
+        },
+        "composition": { "Methane": 0.6, "Propane": 0.25, "N-hexane": 0.15 }
+      },
+      { "id": "vlv", "tag": "VLV-100", "type": "valve", "specs": { "outletPressure": { "si": 2000000.0, "unit": "bara" } } },
+      { "id": "s2", "tag": "2", "type": "material_stream" },
+      { "id": "sep", "tag": "V-100", "type": "separator" },
+      { "id": "gas", "tag": "3", "type": "material_stream" },
+      { "id": "pv", "tag": "PV-101", "type": "valve", "specs": { "outletPressure": { "si": 1000000.0, "unit": "bara" } } },
+      { "id": "gasout", "tag": "4", "type": "material_stream" },
+      { "id": "liq", "tag": "5", "type": "material_stream" },
+      { "id": "lv", "tag": "LV-102", "type": "valve", "specs": { "outletPressure": { "si": 500000.0, "unit": "bara" } } },
+      { "id": "liqout", "tag": "6", "type": "material_stream" },
+      {
+        "id": "pic", "tag": "PIC-100", "type": "controller",
+        "refs": { "controlledObject": "sep", "controlledProperty": "pressure", "manipulatedObject": "pv", "steadyState": "off" },
+        "specs": { "target": { "si": 2000000.0, "unit": "bara" } }
+      },
+      {
+        "id": "lic", "tag": "LIC-100", "type": "controller",
+        "refs": { "controlledObject": "sep", "controlledProperty": "liquidLevel", "manipulatedObject": "lv" },
+        "specs": { "target": { "si": 1.5, "unit": "m" } }
+      }
+    ],
+    "connections": [
+      { "fromObject": "feed", "fromPort": 0, "toObject": "vlv", "toPort": 0 },
+      { "fromObject": "vlv", "fromPort": 0, "toObject": "s2", "toPort": 0 },
+      { "fromObject": "s2", "fromPort": 0, "toObject": "sep", "toPort": 0 },
+      { "fromObject": "sep", "fromPort": 0, "toObject": "gas", "toPort": 0 },
+      { "fromObject": "gas", "fromPort": 0, "toObject": "pv", "toPort": 0 },
+      { "fromObject": "pv", "fromPort": 0, "toObject": "gasout", "toPort": 0 },
+      { "fromObject": "sep", "fromPort": 1, "toObject": "liq", "toPort": 0 },
+      { "fromObject": "liq", "fromPort": 0, "toObject": "lv", "toPort": 0 },
+      { "fromObject": "lv", "fromPort": 0, "toObject": "liqout", "toPort": 0 }
+    ],
+    "dynamics": {
+      "duration": 1200.0,
+      "step": 1.0,
+      "parameters": {
+        "sep": { "volume": { "si": 5.0, "unit": "m3" }, "vesselHeight": { "si": 3.0, "unit": "m" } }
+      },
+      "events": [ { "time": 30.0, "objectId": "feed", "key": "pressure", "value": 3300000.0 } ]
+    }
+  }
+}

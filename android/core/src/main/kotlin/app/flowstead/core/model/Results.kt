@@ -109,6 +109,8 @@ object ResultKeys {
         "minimumStages", "actualStages", "optimalFeedStage" -> Quantity.Ratio
         "iterations" -> Quantity.Count
         "output" -> Quantity.Fraction
+        "liquidLevel" -> Quantity.Length
+        "levelFraction" -> Quantity.Fraction
         "adiabaticHead", "polytropicHead", "head", "curveHead", "npshRequired" -> Quantity.Length
         "inletVolumeFlow" -> Quantity.VolumeFlow
         "surgeMargin" -> Quantity.Fraction
@@ -232,6 +234,8 @@ object ResultKeys {
         "controlledValue" -> "Controlled value"
         "target" -> "Setpoint (SP)"
         "output" -> "Output (OP)"
+        "liquidLevel" -> "Liquid level"
+        "levelFraction" -> "Liquid level (fraction of height)"
         else -> key.removePrefix(CONVERSION_PREFIX).takeIf { key.startsWith(CONVERSION_PREFIX) }?.let { "$it conversion" } ?: key
     }
 
@@ -341,7 +345,7 @@ fun Flowsheet.legacyModelHash(): String = hashOf(solvedPart(), positions = true)
 // the safety analysis and where symbols sit change no result. A PSV on the flowsheet is not solved either (the engine
 // leaves it out).
 private fun Flowsheet.solvedPart() = copy(
-    sizingCriteria = null, documentInfo = null, tables = emptyList(), solverActive = false, caseStudies = emptyList(), safety = null,
+    sizingCriteria = null, documentInfo = null, tables = emptyList(), solverActive = false, caseStudies = emptyList(), safety = null, dynamics = null,
     objects = objects.filter { it.type != ObjectType.ReliefValve }.map { if (it.sheet.isEmpty() && it.sizing == null && it.equipmentSizing == null) it else it.copy(sheet = emptyMap(), sizing = null, equipmentSizing = null) },
 )
 

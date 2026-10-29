@@ -44,4 +44,6 @@ class RoutingEngineClient @Inject constructor(
         pick(baseUrl).pvtRegression(baseUrl, apiKey, request)
     override suspend fun depressuring(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DepressuringRequest) =
         pick(baseUrl).depressuring(baseUrl, apiKey, request)
+    override suspend fun dynamics(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DynamicsRequest) =
+        pick(baseUrl).dynamics(baseUrl, apiKey, request)
 }
