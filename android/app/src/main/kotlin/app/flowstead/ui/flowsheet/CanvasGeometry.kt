@@ -91,6 +91,26 @@ object CanvasGeometry {
         }
     }
 
+    /**
+     * A signal line (a controller to what it measures or moves, a Set to its source and target; D84): horizontal and
+     * vertical runs only, like a stream. It leaves [from] square to the side facing [to] and meets [to]'s edge square
+     * on the side facing back (a valve is met from above or below, where its actuator sits), with the same stubs and
+     * bends as a stream's route.
+     */
+    fun signalRoute(from: SimObject, to: SimObject, positionOf: (SimObject) -> Offset): List<Offset> {
+        val a = positionOf(from)
+        val b = positionOf(to)
+        val d = b - a
+        val fb = bounds(from, a)
+        val tb = bounds(to, b)
+        // A valve is met from above or below unless it is level with the controller; anything else along the longer way.
+        val vertical = if (to.type == ObjectType.Valve) abs(d.y) > tb.height / 2 else abs(d.y) > abs(d.x)
+        val da = if (vertical) Offset(0f, if (d.y >= 0) 1f else -1f) else Offset(if (d.x >= 0) 1f else -1f, 0f)
+        val start = a + Offset(da.x * fb.width / 2, da.y * fb.height / 2)
+        val end = b - Offset(da.x * tb.width / 2, da.y * tb.height / 2)
+        return route(start, da, end, da)
+    }
+
     /** Room under a symbol for its tag. */
     private const val LABEL = 20f
 

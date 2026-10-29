@@ -336,9 +336,11 @@ fun FlowsheetCanvas(
                         else listOf(SetKeys.SOURCE_OBJECT, SetKeys.TARGET_OBJECT)
                         for (key in keys) {
                             val target = adj.refs[key]?.let { id -> fs.objects.firstOrNull { it.id == id } } ?: continue
-                            drawLine(
-                                colors.secondary, from, positionOf(target), 1.5f, StrokeCap.Round,
-                                PathEffect.dashPathEffect(floatArrayOf(3f, 4f)),
+                            val pts = CanvasGeometry.signalRoute(adj, target, ::positionOf)
+                            drawPath(
+                                Path().apply { moveTo(pts[0].x, pts[0].y); pts.drop(1).forEach { lineTo(it.x, it.y) } },
+                                colors.secondary,
+                                style = Stroke(width = 1.5f, cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 4f))),
                             )
                         }
                     }

@@ -31,6 +31,22 @@ class CanvasGeometryTest {
     }
 
     @Test
+    fun signalLinesRunOnlyAcrossAndDownAndMeetTheirTargetsSquare() {
+        val at = { o: SimObject -> CanvasGeometry.center(o) }
+        // A controller up and to the right of a valve, one far above it, one level with it, one below.
+        for ((x, y) in listOf(420.0 to 80.0, 300.0 to 20.0, 440.0 to 200.0, 330.0 to 330.0, 210.0 to 120.0)) {
+            val lic = SimObject("c", "LIC-100", ObjectType.Controller, x = x, y = y)
+            val pts = CanvasGeometry.signalRoute(lic, valve, at)
+            pts.zipWithNext().forEach { (p, q) -> assertTrue(abs(p.x - q.x) < 1e-3f || abs(p.y - q.y) < 1e-3f, "diagonal run $p → $q for ($x, $y)") }
+            val box = CanvasGeometry.bounds(valve)
+            val end = pts.last()
+            val onEdge = (abs(end.x - box.left) < 1e-3f || abs(end.x - box.right) < 1e-3f) && end.y in box.top..box.bottom ||
+                (abs(end.y - box.top) < 1e-3f || abs(end.y - box.bottom) < 1e-3f) && end.x in box.left..box.right
+            assertTrue(onEdge, "ends off the valve's edge: $end for ($x, $y)")
+        }
+    }
+
+    @Test
     fun linesRunOnlyAcrossAndDownAndLeavePortsSquare() {
         // A feed well above the valve's inlet: out of the arrow's head, across, down, and into the inlet from the left.
         val high = fs.copy(objects = listOf(feed.copy(y = 80.0), valve))

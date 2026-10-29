@@ -176,7 +176,11 @@ object PfdPdf {
                 val keys = if (l.type.isLoop) listOf(AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.CONTROLLED_OBJECT) else listOf(SetKeys.SOURCE_OBJECT, SetKeys.TARGET_OBJECT)
                 for (k in keys) {
                     val target = l.refs[k]?.let { id -> fs.objects.firstOrNull { it.id == id } } ?: continue
-                    drawLine(palette.accent, CanvasGeometry.center(l), CanvasGeometry.center(target), 0.9f, StrokeCap.Round, PathEffect.dashPathEffect(floatArrayOf(3f, 3f)))
+                    val pts = CanvasGeometry.signalRoute(l, target) { CanvasGeometry.center(it) }
+                    drawPath(
+                        Path().apply { moveTo(pts[0].x, pts[0].y); pts.drop(1).forEach { lineTo(it.x, it.y) } },
+                        palette.accent, style = Stroke(width = 0.9f, cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 3f))),
+                    )
                 }
             }
             for (o in fs.objects) {
