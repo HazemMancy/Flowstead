@@ -141,7 +141,7 @@ private fun InstallUpdate(r: UpdateCheck.Available, install: InstallState, vm: S
         }
         is InstallState.Downloaded -> {
             Text(
-                "Downloaded and checked. Tap the \"Flowstead ${install.version}\" notification to install it over this version, or open Downloads. Your projects are kept.",
+                "Downloaded and checked. Tap the \"Flowstead ${install.version}\" notification to install it over this version (Android asks you to confirm), or open flowstead-v${install.version}.apk in Downloads. Your projects are kept.",
                 style = hint, color = muted, modifier = live,
             )
             OutlinedButton(onClick = { runCatching { context.startActivity(install.downloads) } }, modifier = Modifier.heightIn(min = 48.dp).testTag("open_downloads")) {

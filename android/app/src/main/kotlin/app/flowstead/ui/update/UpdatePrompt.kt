@@ -120,7 +120,7 @@ internal fun UpdateDialog(r: UpdateCheck.Available, install: InstallState, onUpd
                         style = MaterialTheme.typography.bodySmall,
                     )
                     is InstallState.Downloaded -> Text(
-                        "Downloaded and checked. Tap the \"Flowstead ${install.version}\" notification to install it, or find it in Downloads.",
+                        "Downloaded and checked. Tap the \"Flowstead ${install.version}\" notification to install it (Android asks you to confirm), or open flowstead-v${install.version}.apk in Downloads.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     is InstallState.Failed -> Text("Update failed: ${install.reason}", color = MaterialTheme.valueColors.error, style = MaterialTheme.typography.bodySmall)

@@ -1,6 +1,6 @@
 # Flowstead privacy policy
 
-_Last updated: 2026-10-28_
+_Last updated: 2026-10-29_
 
 Flowstead is an Android app for steady-state process simulation. This policy explains what the app does with your data. In short: your data stays on your phone and on the engine server you choose. The Flowstead project does not receive it.
 
@@ -21,7 +21,7 @@ The app talks only to the **engine address you enter in Settings**. Over HTTPS, 
 - compound searches;
 - your API key, in the request header.
 
-The one other address is **GitHub**: when the app opens (unless you turn off **Settings → Check for updates when Flowstead opens**) and when you tap **Settings → Check for updates**, the app asks api.github.com for the latest Flowstead release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. If you tap **Update**, Android's download service downloads the release's APK and its checksum file from GitHub, and the app checks the file against the checksum. You install it by tapping Android's "Download complete" notification; Android asks you to confirm. The app itself installs nothing. You can also download the update in your browser instead.
+The one other address is **GitHub**: when the app opens (unless you turn off **Settings → Check for updates when Flowstead opens**) and when you tap **Settings → Check for updates**, the app asks api.github.com for the latest Flowstead release. The request carries nothing about you or your projects; GitHub sees your IP address, as any website does. If you tap **Update**, Android's download service downloads the release's APK and its checksum file from GitHub into your phone's Downloads folder (on Android 10 and later; the app's own folder on older versions), and the app checks the file against the checksum. Flowstead removes the update files it downloaded before, and nothing else. You install it by tapping Android's "Download complete" notification; Android asks you to confirm. The app itself installs nothing. You can also download the update in your browser instead.
 
 The engine is run by you or your organisation. Its operator can see what you send it. The engine keeps an API-key hash and, if you use stored flowsheets, those flowsheets and results. It does not keep the files you import or export.
 

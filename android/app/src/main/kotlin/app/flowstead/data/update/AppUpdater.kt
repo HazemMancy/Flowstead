@@ -8,6 +8,7 @@ import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import app.flowstead.core.update.UpdateCheck
@@ -64,8 +65,10 @@ interface AppUpdater {
  * fallback). Android's DownloadManager downloads the release APK with progress shown here and in a notification; its
  * SHA-256 is checked against the release's published `.apk.sha256`. Tapping Android's "Download complete" notification
  * then opens the installer: Android's download service hands it the file, so Flowstead needs no "install other apps"
- * permission, the pattern Play Protect blocked in 1.8.4 and 1.8.5 (D74). Android still asks the user to confirm, and
- * refuses an APK signed with any key but the installed app's.
+ * permission, the pattern Play Protect blocked in 1.8.4 and 1.8.5 (D74). Without that permission Android lets no app
+ * start an install itself, so the tap stays the user's. The file goes to the phone's Downloads folder (D85), where
+ * Downloads and the Files app show it. Android still asks the user to confirm, and refuses an APK signed with any key
+ * but the installed app's.
  */
 @Singleton
 class DownloadUpdater @Inject constructor(
@@ -92,14 +95,22 @@ class DownloadUpdater @Inject constructor(
                 val expected = Updates.parseSha256(http.get(shaUrl) { header("User-Agent", USER_AGENT) }.bodyAsText())
                     ?: error("The release's checksum file is unreadable")
                 val name = "flowstead-v${update.version}.apk"
-                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.let { File(it, name).delete() }
+                removeEarlierDownloads()
                 val request = DownloadManager.Request(Uri.parse(apkUrl))
                     .setTitle("Flowstead ${update.version}")
-                    .setDescription("Tap when finished to install the update")
+                    .setDescription("Tap to install the update")
                     .setMimeType(APK_MIME)
                     .addRequestHeader("User-Agent", USER_AGENT)
                     .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                    .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, name)
+                    .apply {
+                        // The phone's own Downloads folder, so the file is in Downloads (1.9.0); Android 9 and older
+                        // would need the storage permission for it, so there it stays in the app's folder.
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+                        else {
+                            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.let { File(it, name).delete() }
+                            setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, name)
+                        }
+                    }
                 id = downloads.enqueue(request)
                 while (true) {
                     val (state, done, total) = query(id) ?: error("The download was cancelled")
@@ -123,6 +134,20 @@ class DownloadUpdater @Inject constructor(
                 fail(e.message ?: "Download failed")
             }
         }
+    }
+
+    /** Earlier Flowstead updates this app downloaded, with their files, so the new one keeps its plain name. */
+    private fun removeEarlierDownloads() {
+        val ids = downloads.query(DownloadManager.Query()).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    if (c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TITLE))?.startsWith("Flowstead ") == true) {
+                        add(c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_ID)))
+                    }
+                }
+            }
+        }
+        if (ids.isNotEmpty()) downloads.remove(*ids.toLongArray())
     }
 
     /** (status, bytes so far, total bytes) of download [id], or null if it is gone. */
