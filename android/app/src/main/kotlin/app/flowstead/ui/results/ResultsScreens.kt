@@ -47,11 +47,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import app.flowstead.core.api.MessageLevel
+import app.flowstead.core.api.ObjectStatus
 import app.flowstead.core.api.Phases
 import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.Readiness
 import app.flowstead.core.model.ResultKeys
 import app.flowstead.core.model.StreamLayout
 import app.flowstead.core.model.ResultView
@@ -84,6 +86,8 @@ data class ResultsUi(
     val results: ResultView,
     val unitSet: UnitSet,
     val ctx: UnitContext,
+    /** Objects the solver leaves out, with why (D83). */
+    val notReady: Map<String, String> = emptyMap(),
 )
 
 /** Shared by the results table and the solver log. */
@@ -104,6 +108,7 @@ class ResultsViewModel @Inject constructor(
                 results = ResultView(it.solve, it.flowsheet.modelHash()),
                 unitSet = s.unitSet,
                 ctx = UnitContext(it.flowsheet.atmosphericPressurePa),
+                notReady = Readiness.of(it.flowsheet).notReady,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -131,6 +136,7 @@ fun StaleBanner(ui: ResultsUi) {
         ui.solve == null -> "Not solved yet. Solve from the flowsheet." to v.underSpecifiedText
         ui.results.stale -> "Out of date: the flowsheet changed after this solve. Re-solve before using these numbers." to v.underSpecifiedText
         ui.results.status != SolveStatus.Converged -> "Last solve ${ui.results.status?.name?.lowercase()}. See the solver log." to v.error
+        ui.notReady.isNotEmpty() -> "Solved what is ready. ${ui.notReady.size} not ready, in red: they need input or wait for something that does." to v.error
         else -> "Converged · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(ui.solve.solvedAtMillis))}" to v.convergedText
     }
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
@@ -172,7 +178,21 @@ fun ResultsContent(u: ResultsUi, modifier: Modifier = Modifier) {
             item {
                 TableRow(scroll, label = "", labelUnit = null) {
                     streams.forEach { s ->
-                        Text(s.tag, style = MaterialTheme.typography.titleSmall, modifier = Modifier.width(CELL_WIDTH).padding(end = 8.dp))
+                        Text(s.tag, style = MaterialTheme.typography.titleSmall, color = readyColor(u, s.id), modifier = Modifier.width(CELL_WIDTH).padding(end = 8.dp))
+                    }
+                }
+            }
+            // D83: each stream's state, red when the solver left it out, green when it is solved.
+            item {
+                TableRow(scroll, label = "Status", labelUnit = null) {
+                    streams.forEach { s ->
+                        Text(
+                            readyText(u, s.id),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = readyColor(u, s.id),
+                            maxLines = 3,
+                            modifier = Modifier.width(CELL_WIDTH).padding(end = 8.dp).testTag("status_${s.id}"),
+                        )
                     }
                 }
             }
@@ -227,6 +247,22 @@ fun ResultsContent(u: ResultsUi, modifier: Modifier = Modifier) {
     }
 }
 
+/** Not ready (left out by the solver) in red, solved and current in green, anything else plain (D83). */
+@Composable
+private fun readyColor(u: ResultsUi, id: String) = when {
+    id in u.notReady -> MaterialTheme.valueColors.error
+    u.results.objectStatus(id) == ObjectStatus.Error -> MaterialTheme.valueColors.error
+    u.results.objectStatus(id) == ObjectStatus.Solved && !u.results.stale -> MaterialTheme.valueColors.convergedText
+    else -> MaterialTheme.colorScheme.onSurface
+}
+
+private fun readyText(u: ResultsUi, id: String): String = u.notReady[id]?.let { "Not ready: ${it.replaceFirstChar { c -> c.lowercase() }}" } ?: when {
+    u.results.objectStatus(id) == ObjectStatus.Error -> "Calculation error"
+    u.results.objectStatus(id) == ObjectStatus.Solved && !u.results.stale -> "Ready · solved"
+    u.results.objectStatus(id) == ObjectStatus.Solved -> "Ready · results out of date"
+    else -> "Ready · not solved yet"
+}
+
 @Composable
 private fun SectionHeader(text: String) {
     Text(
@@ -262,7 +298,8 @@ private fun TableRow(
 @Composable
 private fun UnitOpCard(op: SimObject, u: ResultsUi) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("${op.tag} · ${op.type.displayName()}", style = MaterialTheme.typography.titleSmall)
+        Text("${op.tag} · ${op.type.displayName()}", style = MaterialTheme.typography.titleSmall, color = readyColor(u, op.id))
+        Text(readyText(u, op.id), style = MaterialTheme.typography.bodySmall, color = readyColor(u, op.id), modifier = Modifier.testTag("status_${op.id}"))
         u.results.warnings(op.id).forEach {
             Text("⚠ ${it.text}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.underSpecifiedText)
         }

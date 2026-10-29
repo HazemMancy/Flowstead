@@ -296,6 +296,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             FlowsheetCanvas(
                 flowsheet = ui.flowsheet,
                 status = ui.status,
+                notReady = ui.notReady,
                 selectedId = ui.selectedId,
                 results = ui.results,
                 viewport = viewport,
@@ -341,6 +342,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 fs = ui.flowsheet,
                 obj = obj,
                 status = ui.status[id],
+                notReady = ui.notReady[id],
                 results = ui.results,
                 unitSet = ui.unitSet,
                 ctx = ui.unitContext,
@@ -473,12 +475,18 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             Column(
                 Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 24.dp),
             ) {
-                Text("Before solving", style = MaterialTheme.typography.titleLarge)
-                ui.problems.forEach { (id, text) ->
+                Text("Not ready", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "The solver calculates everything else; these stay red until they are complete.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val items = ui.blocking + ui.notReady.map { (id, why) -> id to "${ui.flowsheet.obj(id)?.tag ?: id}: $why" }
+                items.forEach { (id, text) ->
                     Text(
                         text,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.valueColors.underSpecifiedText,
+                        color = MaterialTheme.valueColors.error,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
@@ -523,13 +531,19 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onSolverActive: (Bool
     val v = MaterialTheme.valueColors
     val solving = ui.solveState == SolveState.Solving
     val (text, color) = when {
-        ui.problems.isNotEmpty() ->
-            (if (ui.problems.size == 1) "1 thing to fix before solving" else "${ui.problems.size} things to fix before solving") to v.underSpecifiedText
+        ui.blocking.isNotEmpty() ->
+            (if (ui.blocking.size == 1) "1 thing to fix before solving" else "${ui.blocking.size} things to fix before solving") to v.error
         solving -> "Solving…" to MaterialTheme.colorScheme.onSurfaceVariant
+        ui.notReady.size == ui.flowsheet.objects.count { it.type != ObjectType.ReliefValve } ->
+            "Nothing ready to solve yet — tap to see what's missing" to v.error
         ui.solveState == SolveState.Queued -> "Queued — solves when the engine is reachable" to MaterialTheme.colorScheme.onSurfaceVariant
+        ui.results.status == null && ui.engineConfigured && ui.notReady.isNotEmpty() ->
+            "Ready to solve what is complete · ${ui.notReady.size} not ready" to v.error
         ui.results.status == null -> (if (ui.engineConfigured) "Ready to solve" else "Set the engine in Settings to solve") to MaterialTheme.colorScheme.onSurfaceVariant
         ui.results.stale && ui.flowsheet.solverActive -> "Changed — solving shortly" to MaterialTheme.colorScheme.onSurfaceVariant
         ui.results.stale -> "Results out of date — solve again" to v.underSpecifiedText
+        ui.results.status == SolveStatus.Converged && ui.notReady.isNotEmpty() ->
+            "✓ Solved what is ready · ${ui.notReady.size} not ready (red)" to v.error
         ui.results.status == SolveStatus.Converged -> "✓ Converged" to v.convergedText
         else -> "Last solve ${ui.results.status?.name?.lowercase()} — see log" to v.error
     }
@@ -543,7 +557,7 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onSolverActive: (Bool
                 maxLines = 2,
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = ui.problems.isNotEmpty(), role = Role.Button, onClickLabel = "Show issues", onClick = onIssues)
+                    .clickable(enabled = ui.problems.isNotEmpty() || ui.notReady.isNotEmpty(), role = Role.Button, onClickLabel = "Show what is not ready", onClick = onIssues)
                     .semantics { liveRegion = LiveRegionMode.Polite },
             )
             if (ui.solveState == SolveState.Queued) {

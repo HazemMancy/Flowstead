@@ -521,13 +521,21 @@ object Specification {
         else -> emptyList()
     }
 
-    /** Flowsheet-level problems that block a solve, with the object they belong to (null = flowsheet). */
+    /** Problems that stop any solve: nothing can be calculated until they are fixed (null = flowsheet). */
+    fun blocking(flowsheet: Flowsheet): List<Pair<String?, String>> = buildList {
+        if (flowsheet.propertyPackage.isNullOrBlank()) add(null to "Choose a property package")
+        flowsheet.objects.filter { it.type == ObjectType.Adjust }.drop(1).forEach { add(it.id to "${it.tag}: only one Adjust per flowsheet is supported") }
+        if (flowsheet.compounds.isEmpty()) add(null to "Add components")
+        if (flowsheet.objects.isEmpty()) add(null to "The flowsheet is empty")
+    }
+
+    /**
+     * Everything left to give, with the object it belongs to (null = flowsheet): [blocking] problems, then each object's
+     * own. Only the blocking ones stop a solve; objects with their own problems are left out of it (D83, [Readiness]).
+     */
     fun problems(flowsheet: Flowsheet): List<Pair<String?, String>> = buildList {
         val fs = withSets(flowsheet)
-        if (fs.propertyPackage.isNullOrBlank()) add(null to "Choose a property package")
-        fs.objects.filter { it.type == ObjectType.Adjust }.drop(1).forEach { add(it.id to "${it.tag}: only one Adjust per flowsheet is supported") }
-        if (fs.compounds.isEmpty()) add(null to "Add components")
-        if (fs.objects.isEmpty()) add(null to "The flowsheet is empty")
+        addAll(blocking(flowsheet))
         for (o in fs.objects.filter { it.type != ObjectType.ReliefValve }) {
             when (val st = statusOf(fs, o)) {
                 SpecStatus.Complete -> Unit

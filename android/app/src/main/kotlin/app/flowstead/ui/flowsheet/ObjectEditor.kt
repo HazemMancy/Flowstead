@@ -171,6 +171,8 @@ fun ObjectEditorSheet(
     safetyRunning: Set<String> = emptySet(),
     compositionBasis: CompositionBasis = CompositionBasis.MoleFraction,
     compoundBasis: CompoundBasisUi? = null,
+    /** Why the solver leaves this object out (D83), or null when it is ready. */
+    notReady: String? = null,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
@@ -184,7 +186,7 @@ fun ObjectEditorSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Header(obj, actions)
-            StatusChip(status)
+            StatusChip(status, notReady, results.objectStatus(obj.id) == ObjectStatus.Solved && !results.stale)
             HorizontalDivider()
             when (obj.type) {
                 ObjectType.MaterialStream ->
@@ -774,19 +776,18 @@ private fun Header(obj: SimObject, actions: EditorActions) {
 }
 
 @Composable
-private fun StatusChip(status: SpecStatus?) {
+private fun StatusChip(status: SpecStatus?, notReady: String?, solved: Boolean) {
     val v = MaterialTheme.valueColors
-    val (text, color) = when (status) {
-        null, SpecStatus.Complete -> "Fully specified" to v.convergedText
-        is SpecStatus.UnderSpecified -> "Needs ${status.needs.joinToString("; ")}" to v.underSpecifiedText
-        is SpecStatus.OverSpecified -> status.problem to v.error
-        is SpecStatus.Invalid -> status.problem to v.error
+    // D83: red when the solver leaves it out (what it needs, or what it waits for), green when it is ready.
+    val (text, color) = when {
+        notReady != null -> "Not ready: ${notReady.replaceFirstChar { it.lowercase() }}" to v.error
+        status is SpecStatus.UnderSpecified -> "Needs ${status.needs.joinToString("; ")}" to v.error
+        status is SpecStatus.OverSpecified -> status.problem to v.error
+        status is SpecStatus.Invalid -> status.problem to v.error
+        solved -> "Ready · solved" to v.convergedText
+        else -> "Ready · fully specified" to v.convergedText
     }
-    val swatch = when (status) {
-        null, SpecStatus.Complete -> v.converged
-        is SpecStatus.UnderSpecified -> v.underSpecified
-        else -> v.error
-    }
+    val swatch = if (color == v.error) v.error else v.converged
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("dof_status"),

@@ -15,6 +15,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import app.flowstead.core.model.Readiness
 import app.flowstead.core.model.Specification
 import app.flowstead.core.model.StoredSolve
 import app.flowstead.core.model.modelHash
@@ -86,10 +87,12 @@ class QueuedSolver @Inject constructor(
         val project = repository.observeProject(projectId).first() ?: return QueuedOutcome.Dropped
         val fs = project.flowsheet
         // Edited into an unsolvable state while waiting, or the engine address removed: nothing to send.
-        if (Specification.problems(fs).isNotEmpty()) return QueuedOutcome.Dropped
+        if (Specification.blocking(fs).isNotEmpty()) return QueuedOutcome.Dropped
+        val readiness = Readiness.of(fs)
+        if (!readiness.anyReady) return QueuedOutcome.Dropped
         val url = settings.settings.first().engineTarget
         if (url.isBlank()) return QueuedOutcome.Dropped
-        return when (val r = engine.solve(url, secrets.apiKey(), fs)) {
+        return when (val r = engine.solve(url, secrets.apiKey(), readiness.solvable)) {
             is EngineResult.Ok -> {
                 repository.saveSolve(projectId, StoredSolve(r.value, fs.modelHash(), clock.now()))
                 QueuedOutcome.Solved

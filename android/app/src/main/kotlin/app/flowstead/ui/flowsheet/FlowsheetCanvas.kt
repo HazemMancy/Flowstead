@@ -100,6 +100,8 @@ fun FlowsheetCanvas(
     actions: CanvasActions,
     modifier: Modifier = Modifier,
     unitSet: UnitSet = UnitSet.SI,
+    /** Objects the solver leaves out, with why (D83): their badge is red. */
+    notReady: Map<String, String> = emptyMap(),
 ) {
     val density = LocalDensity.current.density
     val colors = MaterialTheme.colorScheme
@@ -303,10 +305,12 @@ fun FlowsheetCanvas(
                             }
                         }
 
-                        // Status badge: amber = needs input or solved with warnings, red = invalid or failed, green = solved and current.
-                        val badge = when (status[o.id]) {
-                            is SpecStatus.UnderSpecified -> values.underSpecified
-                            is SpecStatus.OverSpecified, is SpecStatus.Invalid -> values.error
+                        // Status badge (D83): red = not ready (missing something, or waiting for something that is) or failed,
+                        // green = solved and current, amber = solved with warnings.
+                        val badge = when {
+                            o.id in notReady -> values.error
+                            status[o.id] is SpecStatus.OverSpecified || status[o.id] is SpecStatus.Invalid -> values.error
+                            status[o.id] is SpecStatus.UnderSpecified -> values.error
                             else -> when (results.objectStatus(o.id)) {
                                 ObjectStatus.Error -> values.error
                                 ObjectStatus.Solved -> when {
@@ -409,7 +413,7 @@ fun FlowsheetCanvas(
         for (o in flowsheet.objects) {
             val b = CanvasGeometry.bounds(o)
             val topLeft = viewport.toScreen(b.topLeft, density)
-            val description = describe(o, status[o.id], results)
+            val description = notReady[o.id]?.let { "${o.tag}: not ready, ${it.replaceFirstChar { c -> c.lowercase() }}" } ?: describe(o, status[o.id], results)
             Box(
                 Modifier
                     .offset { IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()) }

@@ -127,14 +127,33 @@ class FlowsheetViewModelTest {
     }
 
     @Test
-    fun solveRefusesWhileThereAreLocalIssues() = runTest {
+    fun solveRefusesWhenNothingIsReady() = runTest {
         val vm = vm()
         vm.ui()
         vm.add(ObjectType.MaterialStream, 0.0, 0.0)
         vm.ui { it.flowsheet.objects.size == 1 }
         vm.solve()
-        assertTrue(vm.messages.first().startsWith("Fix 1 issue(s) first"))
+        assertTrue(vm.messages.first().startsWith("Nothing is ready to solve yet"))
         assertTrue(engine.solved.isEmpty())
+    }
+
+    @Test
+    fun solveSendsWhatIsReadyAndMarksTheRest() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        engine.solveResult = app.flowstead.data.engine.EngineResult.Ok(
+            app.flowstead.core.api.SolveResult(
+                app.flowstead.core.api.SolveStatus.Converged, elapsedMs = 1200,
+                objects = mapOf("f" to app.flowstead.core.api.ObjectResult(app.flowstead.core.api.ObjectStatus.Solved)),
+            ),
+        )
+        val fs = completeFeed().let { it.copy(objects = it.objects + app.flowstead.core.model.SimObject("e", "EMPTY", ObjectType.MaterialStream)) }
+        val vm = vm(fs)
+        val ui = vm.ui()
+        assertEquals(setOf("e"), ui.notReady.keys)
+        vm.solve()
+        assertEquals("Converged in 1.2 s · 1 not ready", vm.messages.first())
+        assertEquals(completeFeed(), engine.solved.single()) // the empty stream is not sent
+        assertFalse(vm.ui { it.results.status != null }.results.stale)
     }
 
     @Test

@@ -149,6 +149,7 @@ _Last updated: 2026-10-20_
 - **1.8.8 (D77–D80):** duplicate a stream and copy chosen data from another; compositions by mole, mass or liquid volume, as fractions or percent (engine `compoundBasis`); moving symbols no longer re-solves or makes results stale; updates downloaded in the app with Android's download service and installed from its notification, without the install permission.
 - **1.8.9 (D81):** no solve on the first move after opening an older project (re-stamped results saved on open); property tables stay put when their object moves; a drag from a used port moves the unit.
 - **1.8.10 (D82):** the engine keeps the last solve's flowsheet and, after a spec change, recalculates only what is downstream of it; recycles and Adjusts start from the last solve's values; each result says how it was reached (`recalculation`).
+- **1.8.11 (D83):** the solver calculates whatever is ready; objects that need input, and what waits for them, are left out and shown in red with the reason; solved objects are green.
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
 

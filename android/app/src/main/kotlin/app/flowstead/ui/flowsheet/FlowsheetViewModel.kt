@@ -34,6 +34,7 @@ import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.obj
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecStatus
+import app.flowstead.core.model.Readiness
 import app.flowstead.core.model.Specification
 import app.flowstead.core.units.UnitContext
 import app.flowstead.core.units.UnitSet
@@ -103,6 +104,10 @@ data class FlowsheetUi(
     val flowsheet: Flowsheet,
     val status: Map<String, SpecStatus>,
     val problems: List<Pair<String?, String>>,
+    /** Problems that stop any solve (no package, no components…); the rest only leave their objects out (D83). */
+    val blocking: List<Pair<String?, String>> = emptyList(),
+    /** Objects the solver leaves out, with why: shown in red (D83). */
+    val notReady: Map<String, String> = emptyMap(),
     val selectedId: String?,
     val editingId: String?,
     val canUndo: Boolean,
@@ -224,6 +229,8 @@ class FlowsheetViewModel @Inject constructor(
                 flowsheet = fs,
                 status = fs.objects.associate { it.id to Specification.status(fs, it) },
                 problems = Specification.problems(fs),
+                blocking = Specification.blocking(fs),
+                notReady = Readiness.of(fs).notReady,
                 selectedId = l.selectedId?.takeIf { id -> fs.objects.any { it.id == id } },
                 editingId = l.editingId?.takeIf { id -> fs.objects.any { it.id == id } },
                 canUndo = l.undo.isNotEmpty(),
@@ -411,8 +418,8 @@ class FlowsheetViewModel @Inject constructor(
     }
 
     /**
-     * Sends the flowsheet as it is now to the engine and keeps the result with the project.
-     * Local degrees-of-freedom problems are reported first, so the engine only sees complete input.
+     * Sends what is ready of the flowsheet as it is now to the engine and keeps the result with the project (D83):
+     * objects that are missing something, and what depends on them, are left out and shown in red.
      */
     fun solve() = solve(auto = false)
 
@@ -426,9 +433,14 @@ class FlowsheetViewModel @Inject constructor(
             if (auto) solveAgain = true
             return
         }
-        val problems = Specification.problems(fs)
-        if (problems.isNotEmpty()) {
-            if (!auto) _messages.trySend("Fix ${problems.size} issue(s) first: ${problems.first().second}")
+        val blocking = Specification.blocking(fs)
+        if (blocking.isNotEmpty()) {
+            if (!auto) _messages.trySend("Fix ${blocking.size} issue(s) first: ${blocking.first().second}")
+            return
+        }
+        val readiness = Readiness.of(fs)
+        if (!readiness.anyReady) {
+            if (!auto) _messages.trySend("Nothing is ready to solve yet: ${Specification.problems(fs).firstOrNull()?.second ?: "complete a feed stream"}")
             return
         }
         if (auto && currentSolve?.modelHash == fs.modelHash()) return
@@ -440,7 +452,7 @@ class FlowsheetViewModel @Inject constructor(
                     _messages.send("Set the engine address in Settings to solve")
                     return@launch
                 }
-                when (val r = engine.solve(url, secrets.apiKey(), fs)) {
+                when (val r = engine.solve(url, secrets.apiKey(), readiness.solvable)) {
                     is EngineResult.Failed -> if (r.unreachable && !auto) {
                         queue.enqueue(projectId)
                         _messages.send("Engine unreachable. Queued: it will solve when the phone is back online")
@@ -450,7 +462,10 @@ class FlowsheetViewModel @Inject constructor(
                     is EngineResult.Ok -> {
                         queue.cancel(projectId)
                         repository.saveSolve(projectId, StoredSolve(r.value, fs.modelHash(), clock.now()))
-                        if (!auto || r.value.status != SolveStatus.Converged) _messages.send(summary(r.value))
+                        if (!auto || r.value.status != SolveStatus.Converged) {
+                            val left = readiness.notReady.size
+                            _messages.send(summary(r.value) + if (left == 0) "" else " · $left not ready")
+                        }
                     }
                 }
             } finally {
