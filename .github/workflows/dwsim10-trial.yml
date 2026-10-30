@@ -46,7 +46,13 @@ jobs:
           DWSIM_HOME: ${{ github.workspace }}/dwsim10-bin
         run: |
           dotnet test engine/Flowstead.Engine.sln -c Release --no-build -p:DwsimBin="$PWD/dwsim10-bin" \
-            --blame-hang-timeout 10m --logger "console;verbosity=normal" 2>&1 | tee test.log | grep -E "^\s+(Passed|Failed|Skipped) |Total tests|Passed!|Failed!|Error Message" | head -400
+            --blame-hang-timeout 10m --logger "console;verbosity=normal" > test.log 2>&1 || true
+          echo "== summary"; grep -E "Total tests|Passed:|Failed:|Skipped:|Passed!|Failed!" test.log | head
+          echo "== passed"; grep -E "^\s+Passed " test.log | sed -E 's/ \[.*//' | sort | head -200
+          echo "== failures (first lines of each message)"
+          awk '/^  Failed /{n=$2; c=0; next} /Error Message:/{c=4; next} c>0 && NF{print n " | " $0; c--}' test.log | cut -c1-400 | head -300
+          echo "== distinct messages"
+          awk '/Error Message:/{getline; print}' test.log | sed -E 's/[0-9]+(\.[0-9]+)?/N/g' | sort | uniq -c | sort -rn | head -40
       - uses: actions/upload-artifact@v4
         if: always()
         with:
