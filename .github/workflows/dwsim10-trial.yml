@@ -53,7 +53,7 @@ jobs:
           echo "== summary"; grep -E "Total tests|Passed:|Failed:|Skipped:|Passed!|Failed!" test.log | head
           echo "== passed"; grep -E "^\s+Passed " test.log | sed -E 's/ \[.*//' | sort | head -200
           echo "== failures (first lines of each message)"
-          awk '/^  Failed /{n=$2; c=0; next} /Error Message:/{c=4; next} c>0 && NF{print n " | " $0; c--}' test.log | cut -c1-400 | head -300
+          awk '/^  Failed /{n=$0; sub(/^  Failed /,"",n); sub(/ \[[^]]*\]$/,"",n); m=0; next} /Error Message:/{m=1; c=0; next} /Stack Trace:/{m=0; next} m && NF && c<80 {print n " | " $0; c++}' test.log | cut -c1-300 | head -1500
           echo "== distinct messages"
           awk '/Error Message:/{getline; print}' test.log | sed -E 's/[0-9]+(\.[0-9]+)?/N/g' | sort | uniq -c | sort -rn | head -40
       - uses: actions/upload-artifact@v4
