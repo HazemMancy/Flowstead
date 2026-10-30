@@ -1,0 +1,61 @@
+<!doctype html>
+<!-- LinkedIn feed post image, 4:5 (1200×1500): "a process simulator in your pocket". The phones show the app's own
+     symbol sheet, rendered by CI (StoreScreenshots), light and dark; no results, so no number appears that the engine
+     didn't return. Render: node src/render.js -->
+<html><head><meta charset="utf-8"><script src="mark.js"></script><style>
+@font-face{font-family:Inter;font-weight:700;src:url(../../../android/app/src/main/res/font/inter_bold.ttf)}
+@font-face{font-family:Inter;font-weight:600;src:url(../../../android/app/src/main/res/font/inter_semibold.ttf)}
+@font-face{font-family:Inter;font-weight:500;src:url(../../../android/app/src/main/res/font/inter_medium.ttf)}
+html,body{margin:0;width:1200px;height:1500px;overflow:hidden;background:#02172C}
+.wrap{position:relative;width:1200px;height:1500px;overflow:hidden;
+  background:radial-gradient(ellipse 80% 55% at 50% 66%,#0A3466 0%,#04224A 45%,#02142A 85%)}
+.grid{position:absolute;inset:0;background-image:radial-gradient(#5A9FF2 1px,transparent 1.2px);background-size:28px 28px;opacity:.10}
+.pfd{position:absolute;left:0;top:560px;width:1200px;height:760px;opacity:.28}
+.lock{position:absolute;left:80px;top:80px;display:flex;align-items:center;gap:20px}
+.name{font:700 60px/1 Inter;color:#fff;letter-spacing:-1.4px}
+.name span{color:#14D3CF}
+.sub{margin-top:9px;font:500 13px/1 Inter;color:#C9D6E2;letter-spacing:4.4px}
+h1{position:absolute;left:80px;top:215px;margin:0;width:1040px;font:700 70px/1.08 Inter;color:#fff;letter-spacing:-1.8px}
+h1 span{color:#14D3CF}
+.lead{position:absolute;left:80px;top:480px;width:980px;font:500 26px/1.45 Inter;color:#C9D6E2}
+.phone{position:absolute;width:330px;height:680px;border-radius:50px;background:#0B0F16;padding:13px;box-sizing:border-box;
+  box-shadow:0 40px 80px rgba(0,0,0,.6),0 0 0 2px #2A3546 inset}
+.phone .scr{width:100%;height:100%;border-radius:38px;overflow:hidden;position:relative;background:#F3F6FA}
+.phone img{width:100%;display:block}
+.phone .notch{position:absolute;top:13px;left:50%;transform:translateX(-50%);width:15px;height:15px;border-radius:50%;background:#0B0F16;z-index:2}
+.p1{left:255px;top:625px;transform:rotate(-6deg)}
+.p2{left:615px;top:600px;transform:rotate(5deg)}
+.p2 .scr{background:#0B1930}
+.chips{position:absolute;left:80px;top:1330px;width:1040px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+.chip{font:600 19px/1 Inter;color:#E8F4FA;padding:12px 18px;border-radius:999px;background:rgba(20,211,207,.12);border:1px solid rgba(20,211,207,.4)}
+.foot{position:absolute;left:0;right:0;bottom:34px;text-align:center;font:500 16px/1 Inter;color:#8FA6BF;letter-spacing:.3px}
+</style></head><body><div class="wrap">
+<div class="grid"></div>
+<svg class="pfd" viewBox="0 0 1200 760" fill="none" stroke="#5A9FF2" stroke-width="3" stroke-linejoin="round">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5A9FF2" stroke="none"/></marker></defs>
+  <path d="M0 150H130V330H230" marker-end="url(#a)"/>
+  <path d="M0 520H90V420H230" marker-end="url(#a)"/>
+  <rect x="40" y="610" width="120" height="60" rx="30"/>
+  <path d="M160 640H260" marker-end="url(#a)"/>
+  <path d="M970 260H1080V120H1200" marker-end="url(#a)"/>
+  <path d="M970 470H1110V620H1200" marker-end="url(#a)"/>
+  <rect x="1060" y="300" width="70" height="130" rx="35"/>
+  <path d="M1095 300V230M1095 430V470" />
+  <circle cx="1020" cy="690" r="26"/><path d="M1020 664V716M994 690H1046"/>
+</svg>
+<div class="lock">
+  <svg width="96" height="73" viewBox="10 9.5 151 114" id="mk"></svg>
+  <div><div class="name">Flow<span>stead</span></div><div class="sub">PROCESS ENGINEERING WORKBENCH</div></div>
+</div>
+<h1>Ever thought of having a process simulator <span>in your pocket?</span></h1>
+<div class="lead">Draw a flowsheet with your finger, solve it on the phone with the DWSIM engine, then size, check and document it. Steady state and dynamics.</div>
+<div class="phone p1"><div class="notch"></div><div class="scr"><img src="screen-symbols-light.png"></div></div>
+<div class="phone p2"><div class="notch"></div><div class="scr"><img src="screen-symbols-dark.png"></div></div>
+<div class="chips">
+  <div class="chip">Steady state &amp; dynamics</div><div class="chip">PID control loops</div><div class="chip">Columns &amp; reactors</div>
+  <div class="chip">API 520 / 521 relief</div><div class="chip">Equipment sizing</div><div class="chip">PFD &amp; H&amp;MB export</div>
+</div>
+<div class="foot">Free &amp; open source (GPL-3.0) · Powered by DWSIM · github.com/HazemMancy/Flowstead</div>
+</div>
+<script>document.getElementById('mk').innerHTML = flowsteadMark(BLUE_OUTLET);</script>
+</body></html>
