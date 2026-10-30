@@ -32,7 +32,9 @@ jobs:
           ls dwsim10-bin | grep -iE "^DWSIM\.|CapeOpen|\.so$" | head -60
       - name: Build Flowstead engine against DWSIM 10
         run: |
-          dotnet build engine/Flowstead.Engine.sln -c Release -p:TargetFramework=net10.0 -p:DwsimBin="$PWD/dwsim10-bin" 2>&1 \
+          # .NET 10 for the trial only: retarget the engine projects in this checkout.
+          sed -i 's/net8\.0/net10.0/g' engine/Directory.Build.props engine/tests/Flowstead.Engine.Tests/Flowstead.Engine.Tests.csproj engine/tools/footprint/footprint.csproj
+          dotnet build engine/Flowstead.Engine.sln -c Release -p:DwsimBin="$PWD/dwsim10-bin" 2>&1 \
             | grep -E "error|Warn.*CS0618|Build succeeded|FAILED" | sort -u | head -80
           test -f engine/src/Flowstead.Engine.Worker/bin/Release/net10.0/linux-x64/Flowstead.Engine.Worker.dll
       - name: Engine spike (headless solve)
@@ -43,7 +45,7 @@ jobs:
         env:
           DWSIM_HOME: ${{ github.workspace }}/dwsim10-bin
         run: |
-          dotnet test engine/Flowstead.Engine.sln -c Release --no-build -p:TargetFramework=net10.0 -p:DwsimBin="$PWD/dwsim10-bin" \
+          dotnet test engine/Flowstead.Engine.sln -c Release --no-build -p:DwsimBin="$PWD/dwsim10-bin" \
             --blame-hang-timeout 10m --logger "console;verbosity=normal" 2>&1 | tee test.log | grep -E "^\s+(Passed|Failed|Skipped) |Total tests|Passed!|Failed!|Error Message" | head -400
       - uses: actions/upload-artifact@v4
         if: always()
