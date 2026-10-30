@@ -1,17 +1,17 @@
-# DWSIM 10 trial (owner's request after DWSIM 10.2.12): build DWSIM 10.2.12 from its GPL source, build Flowstead's
-# engine against it (.NET 10, as DWSIM 10 targets net10.0) and run the engine tests and benchmarks. Nothing ships
-# from here; Flowstead stays on 9.0.5 until this passes. Runs on pushes to the trial branch that touch it.
+# DWSIM 10 trial (D88): build DWSIM 10 from its GPL source (DanWBR/dwsim10), run Flowstead's engine tests and the
+# on-device benchmarks on an Android emulator against it. Nothing ships from here; releases stay on DWSIM 9.0.5
+# until this passes. Runs on pushes to the trial branch that touch it, or by hand.
 name: dwsim10-trial
 on:
   push:
     branches: [claude/new-session-c28egw]
     paths: [.github/workflows/dwsim10-trial.yml, engine/trial/**]
   workflow_dispatch:
+env:
+  DWSIM_TAG: v10.2.12
 jobs:
-  trial:
+  server:
     runs-on: ubuntu-24.04
-    env:
-      DWSIM_TAG: v10.2.12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -19,45 +19,90 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
-      - name: DWSIM source
-        run: |
-          git clone -q --depth 1 --branch "$DWSIM_TAG" --recurse-submodules --shallow-submodules https://github.com/DanWBR/dwsim10 dwsim10
-          git -C dwsim10 rev-parse HEAD
-          head -3 dwsim10/LICENSE
-      - name: Build DWSIM engine assemblies (headless, linux-x64)
-        run: |
-          dotnet publish dwsim10/engine/DWSIM.Automation/DWSIM.Automation.csproj -c Release -r linux-x64 --self-contained false \
-            -p:CoolPropRid=linux-x64 -o "$PWD/dwsim10-bin" 2>&1 | tail -40
-          ls dwsim10-bin | wc -l; du -sh dwsim10-bin
-          ls dwsim10-bin | grep -iE "^DWSIM\.|CapeOpen|\.so$" | head -60
-      - name: Build Flowstead engine against DWSIM 10
-        run: |
-          # .NET 10 for the trial only: retarget the engine projects in this checkout.
-          sed -i 's/net8\.0/net10.0/g' engine/Directory.Build.props engine/tests/Flowstead.Engine.Tests/Flowstead.Engine.Tests.csproj engine/tools/footprint/footprint.csproj
-          # ASP.NET Core packages to match the .NET 10 runtime (the 8.0 test server lacks PipeWriter.UnflushedBytes).
-          sed -i 's/"Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11"/"Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14"/' engine/tests/Flowstead.Engine.Tests/Flowstead.Engine.Tests.csproj
-          sed -i 's/"Microsoft.Data.Sqlite" Version="8.0.11"/"Microsoft.Data.Sqlite" Version="10.0.14"/' engine/src/Flowstead.Engine.Api/Flowstead.Engine.Api.csproj
-          dotnet build engine/Flowstead.Engine.sln -c Release -p:DwsimBin="$PWD/dwsim10-bin" 2>&1 \
-            | grep -E "error|Warn.*CS0618|Build succeeded|FAILED" | sort -u | head -80
-          test -f engine/src/Flowstead.Engine.Worker/bin/Release/net10.0/linux-x64/Flowstead.Engine.Worker.dll
+      - name: DWSIM 10 from source, engine on .NET 10
+        run: engine/trial/build-dwsim10.sh
+      - name: Build the engine
+        run: dotnet build engine/Flowstead.Engine.sln -c Release -v quiet -nologo
       - name: Engine spike (headless solve)
         env:
-          DWSIM_HOME: ${{ github.workspace }}/dwsim10-bin
+          DWSIM_HOME: ${{ github.workspace }}/engine/dwsim-bin
         run: dotnet engine/src/Flowstead.Engine.Spike/bin/Release/net10.0/linux-x64/Flowstead.Engine.Spike.dll
       - name: Tests + benchmarks
         env:
-          DWSIM_HOME: ${{ github.workspace }}/dwsim10-bin
+          DWSIM_HOME: ${{ github.workspace }}/engine/dwsim-bin
         run: |
-          dotnet test engine/Flowstead.Engine.sln -c Release --no-build -p:DwsimBin="$PWD/dwsim10-bin" \
-            --blame-hang-timeout 10m --logger "console;verbosity=normal" > test.log 2>&1 || true
-          echo "== summary"; grep -E "Total tests|Passed:|Failed:|Skipped:|Passed!|Failed!" test.log | head
-          echo "== passed"; grep -E "^\s+Passed " test.log | sed -E 's/ \[.*//' | sort | head -200
-          echo "== failures (first lines of each message)"
+          dotnet test engine/Flowstead.Engine.sln -c Release --no-build --blame-hang-timeout 10m \
+            --logger "console;verbosity=normal" > test.log 2>&1 || true
+          echo "== summary"; grep -E "Total tests|Passed:|Failed:|Skipped:" test.log | head
+          echo "== failures"
           awk '/^  Failed /{n=$0; sub(/^  Failed /,"",n); sub(/ \[[^]]*\]$/,"",n); m=0; next} /Error Message:/{m=1; c=0; next} /Stack Trace:/{m=0; next} m && NF && c<80 {print n " | " $0; c++}' test.log | cut -c1-300 | head -1500
-          echo "== distinct messages"
-          awk '/Error Message:/{getline; print}' test.log | sed -E 's/[0-9]+(\.[0-9]+)?/N/g' | sort | uniq -c | sort -rn | head -40
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dwsim10-trial
+          name: dwsim10-server
           path: test.log
+
+  device:
+    # The step-1 question: does DWSIM 10 run inside the app on Android (Mono 10.0.13, as the app already uses)?
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: DWSIM 10 from source, engine on .NET 10
+        run: engine/trial/build-dwsim10.sh
+      - name: Build the worker
+        run: dotnet build engine/src/Flowstead.Engine.Worker -c Release -v quiet -nologo
+      - name: On-device engine with DWSIM 10
+        run: engine/trial/prepare-android-dwsim10.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: On-device benchmarks on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          ram-size: 4096M
+          disk-size: 8G
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            adb logcat -c
+            (adb logcat -v time FlowsteadOnDevice:I FlowsteadEngine:V mono:V monodroid:W DOTNET:W '*:E' > logcat.txt &)
+            cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.flowstead.OnDeviceBenchmarkTest || true
+      - name: Results
+        if: always()
+        run: |
+          echo "== device test results"
+          python3 - <<'PY'
+          import glob, html, re
+          for f in glob.glob('android/app/build/outputs/androidTest-results/**/TEST-*.xml', recursive=True):
+              s = open(f, encoding='utf-8').read()
+              print(f, re.search(r'tests="\d+" failures="\d+" errors="\d+" skipped="\d+"', s) and re.search(r'tests="\d+" failures="\d+" errors="\d+" skipped="\d+"', s).group(0))
+              for m in re.finditer(r'<failure message="([^"]*)"', s):
+                  print(html.unescape(m.group(1))[:20000])
+          PY
+          echo "== device log"
+          grep -E "FlowsteadOnDevice|FlowsteadEngine|mono|DOTNET|FATAL|flowstead| F/|AndroidRuntime" logcat.txt \
+            | sed -E 's/^[0-9-]+ [0-9:.]+ //' | uniq -c | sed -E 's/^ +1 //' | tail -300 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dwsim10-device
+          path: |
+            android/app/build/outputs/androidTest-results/
+            logcat.txt
+            engine/embedded/android/out/MANIFEST.txt

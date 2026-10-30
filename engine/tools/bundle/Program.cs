@@ -64,6 +64,7 @@ var appOut = Directory.CreateDirectory(Path.Combine(outDir, "app")).FullName;
 foreach (var (_, path) in selected) File.Copy(path, Path.Combine(dwsimOut, Path.GetFileName(path)));
 foreach (var dir in new[] { "addcomps", "data" })
 {
+    if (!Directory.Exists(Path.Combine(dwsim, dir))) continue; // DWSIM 10 keeps its data tables as embedded resources
     foreach (var f in Directory.EnumerateFiles(Path.Combine(dwsim, dir), "*", SearchOption.AllDirectories))
     {
         var dest = Path.Combine(dwsimOut, Path.GetRelativePath(dwsim, f));

@@ -1,5 +1,6 @@
 # Engine
 engine/dwsim-bin/
+engine/.dwsim10-src/
 engine/**/bin/
 engine/**/obj/
 engine/.dl/*
