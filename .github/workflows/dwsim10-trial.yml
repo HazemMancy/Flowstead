@@ -1,0 +1,52 @@
+# DWSIM 10 trial (owner's request after DWSIM 10.2.12): build DWSIM 10.2.12 from its GPL source, build Flowstead's
+# engine against it (.NET 10, as DWSIM 10 targets net10.0) and run the engine tests and benchmarks. Nothing ships
+# from here; Flowstead stays on 9.0.5 until this passes. Runs on pushes to the trial branch that touch it.
+name: dwsim10-trial
+on:
+  push:
+    branches: [claude/new-session-c28egw]
+    paths: [.github/workflows/dwsim10-trial.yml, engine/trial/**]
+  workflow_dispatch:
+jobs:
+  trial:
+    runs-on: ubuntu-24.04
+    env:
+      DWSIM_TAG: v10.2.12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: DWSIM source
+        run: |
+          git clone -q --depth 1 --branch "$DWSIM_TAG" --recurse-submodules --shallow-submodules https://github.com/DanWBR/dwsim10 dwsim10
+          git -C dwsim10 rev-parse HEAD
+          head -3 dwsim10/LICENSE
+      - name: Build DWSIM engine assemblies (headless, linux-x64)
+        run: |
+          dotnet publish dwsim10/engine/DWSIM.Automation/DWSIM.Automation.csproj -c Release -r linux-x64 --self-contained false \
+            -p:CoolPropRid=linux-x64 -o "$PWD/dwsim10-bin" 2>&1 | tail -40
+          ls dwsim10-bin | wc -l; du -sh dwsim10-bin
+          ls dwsim10-bin | grep -iE "^DWSIM\.|CapeOpen|\.so$" | head -60
+      - name: Build Flowstead engine against DWSIM 10
+        run: |
+          dotnet build engine/Flowstead.Engine.sln -c Release -p:TargetFramework=net10.0 -p:DwsimBin="$PWD/dwsim10-bin" 2>&1 \
+            | grep -E "error|Warn.*CS0618|Build succeeded|FAILED" | sort -u | head -80
+          test -f engine/src/Flowstead.Engine.Worker/bin/Release/net10.0/linux-x64/Flowstead.Engine.Worker.dll
+      - name: Engine spike (headless solve)
+        env:
+          DWSIM_HOME: ${{ github.workspace }}/dwsim10-bin
+        run: dotnet engine/src/Flowstead.Engine.Spike/bin/Release/net10.0/linux-x64/Flowstead.Engine.Spike.dll
+      - name: Tests + benchmarks
+        env:
+          DWSIM_HOME: ${{ github.workspace }}/dwsim10-bin
+        run: |
+          dotnet test engine/Flowstead.Engine.sln -c Release --no-build -p:TargetFramework=net10.0 -p:DwsimBin="$PWD/dwsim10-bin" \
+            --blame-hang-timeout 10m --logger "console;verbosity=normal" 2>&1 | tee test.log | grep -E "^\s+(Passed|Failed|Skipped) |Total tests|Passed!|Failed!|Error Message" | head -400
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dwsim10-trial
+          path: test.log
