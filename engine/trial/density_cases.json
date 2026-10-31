@@ -1,0 +1,21 @@
+{
+  "note": "Single-phase liquid states for the DWSIM 10 density comparison (D88 step 3). T in K, P in Pa, mole fractions. coolprop: the reference fluid string.",
+  "cases": [
+    {"id": "water-40C-20bar", "T": 313.15, "P": 2.0e6, "z": {"Water": 1}, "coolprop": "Water"},
+    {"id": "water-80C-5bar", "T": 353.15, "P": 5.0e5, "z": {"Water": 1}, "coolprop": "Water"},
+    {"id": "water-150C-10bar", "T": 423.15, "P": 1.0e6, "z": {"Water": 1}, "coolprop": "Water"},
+    {"id": "propane-20C-15bar", "T": 293.15, "P": 1.5e6, "z": {"Propane": 1}, "coolprop": "Propane"},
+    {"id": "propane-60C-30bar", "T": 333.15, "P": 3.0e6, "z": {"Propane": 1}, "coolprop": "Propane"},
+    {"id": "nbutane-20C-5bar", "T": 293.15, "P": 5.0e5, "z": {"N-butane": 1}, "coolprop": "n-Butane"},
+    {"id": "npentane-25C-2bar", "T": 298.15, "P": 2.0e5, "z": {"N-pentane": 1}, "coolprop": "n-Pentane"},
+    {"id": "nhexane-25C-2bar", "T": 298.15, "P": 2.0e5, "z": {"N-hexane": 1}, "coolprop": "n-Hexane"},
+    {"id": "ndecane-25C-2bar", "T": 298.15, "P": 2.0e5, "z": {"N-decane": 1}, "coolprop": "n-Decane"},
+    {"id": "ethane-0C-50bar", "T": 273.15, "P": 5.0e6, "z": {"Ethane": 1}, "coolprop": "Ethane"},
+    {"id": "c3-nc4-20C-20bar", "T": 293.15, "P": 2.0e6, "z": {"Propane": 0.5, "N-butane": 0.5}, "coolprop": "Propane&n-Butane"},
+    {"id": "ngl-20C-40bar", "T": 293.15, "P": 4.0e6, "z": {"Ethane": 0.05, "Propane": 0.40, "Isobutane": 0.10, "N-butane": 0.20, "Isopentane": 0.10, "N-pentane": 0.10, "N-hexane": 0.05}, "coolprop": "Ethane&Propane&IsoButane&n-Butane&Isopentane&n-Pentane&n-Hexane"},
+    {"id": "ngl-ethane-rich-0C-50bar", "T": 273.15, "P": 5.0e6, "z": {"Ethane": 0.30, "Propane": 0.40, "N-butane": 0.20, "N-pentane": 0.10}, "coolprop": "Ethane&Propane&n-Butane&n-Pentane"},
+    {"id": "lng-minus160C-3bar", "T": 113.15, "P": 3.0e5, "z": {"Methane": 0.90, "Ethane": 0.06, "Propane": 0.03, "N-butane": 0.01}, "coolprop": "Methane&Ethane&Propane&n-Butane"},
+    {"id": "condensate-40C-10bar", "T": 313.15, "P": 1.0e6, "z": {"Propane": 0.05, "N-pentane": 0.30, "N-hexane": 0.35, "N-decane": 0.30}, "coolprop": "Propane&n-Pentane&n-Hexane&n-Decane"},
+    {"id": "live-oil-30C-80bar", "T": 303.15, "P": 8.0e6, "z": {"Methane": 0.15, "Propane": 0.15, "N-pentane": 0.30, "N-decane": 0.40}, "coolprop": "Methane&Propane&n-Pentane&n-Decane"}
+  ]
+}
