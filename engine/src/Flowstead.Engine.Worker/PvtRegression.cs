@@ -55,15 +55,17 @@ public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, Pvt
         var r = Residuals(before);
         var cost = r.Sum(v => v * v);
         double lambda = 1e-2;
+        // Forward-difference Jacobian, 1 % steps; when no damped step improves, the steps are refined (0.1 %, 0.01 %) before
+        // giving up: near the optimum a 1 % difference can point the wrong way (DWSIM 10 stopped at 0.06 % after 3 iterations).
+        var dx = 0.01;
         var iterations = 0;
         for (; iterations < req.MaxIterations && cost > 1e-10; iterations++)
         {
-            // Forward-difference Jacobian, 1 % steps.
             var jac = new double[r.Length, x.Length];
             for (var j = 0; j < x.Length; j++)
             {
                 var xp = (double[])x.Clone();
-                var h = xp[j] + 0.01 > 1 + req.MaxChange ? -0.01 : 0.01; // backwards at the upper limit
+                var h = xp[j] + dx > 1 + req.MaxChange ? -dx : dx; // backwards at the upper limit
                 xp[j] += h;
                 var rp = Residuals(Evaluate(parameters, xp));
                 for (var i = 0; i < r.Length; i++) jac[i, j] = double.IsFinite(rp[i]) ? (rp[i] - r[i]) / h : 0;
@@ -78,7 +80,10 @@ public sealed class PvtRegression(PvtRegressionRequest req, Func<PvtRequest, Pvt
                 if (cn < cost) { (x, r, cost, improved) = (xn, rn, cn, true); lambda = Math.Max(lambda / 3, 1e-6); }
                 else lambda *= 4;
             }
-            if (!improved) break;
+            if (improved) continue;
+            if (dx <= 1e-4) break;
+            dx /= 10;
+            lambda = 1e-2;
         }
         var after = Evaluate(parameters, x);
         if (x.Any(v => Math.Abs(Math.Abs(v - 1) - req.MaxChange) < 1e-9))

@@ -121,7 +121,7 @@ public sealed class PvtTests(EngineFixture engine, ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task RegressionRecoversTheCriticalConstantsThatMadeTheLabData()
+    public async Task RegressionPredictsTheFluidThatMadeTheLabData()
     {
         // "Lab data" from the same fluid with its plus fraction's Tc 4 % higher, Pc 7 % lower and its kij with methane
         // 0.03 above DWSIM's; the regression, starting from the Riazi–Daubert estimates and DWSIM's kij, should find a
@@ -158,9 +158,28 @@ public sealed class PvtTests(EngineFixture engine, ITestOutputHelper output)
         Assert.True(r.ErrorBefore > 0.003);
         Assert.True(r.ErrorAfter < r.ErrorBefore / 20);
         Assert.Equal(kij0 + 0.03, Assert.Single(r.InteractionParameters).Kij, 0.015);
-        // The tuned constants are written out for the flowsheet; they are near the ones that made the data.
-        var tuned = Assert.Single(r.Tuned);
-        Assert.Equal(estimated.CriticalTemperature * 1.04, tuned.CriticalTemperature!.Value, estimated.CriticalTemperature * 0.01);
-        Assert.Equal(estimated.CriticalPressure * 0.93, tuned.CriticalPressure!.Value, estimated.CriticalPressure * 0.02);
+        // Four observations do not pin down Tc, Pc, ω and kij one by one: DWSIM 9 landed on the constants that made the data,
+        // DWSIM 10 on Tc 4 % lower with the same fit (D93). What a tuning is for is predicting what was not measured, so the
+        // tuned fluid must match the true one away from the data: saturation 40 K colder, the oil compressed to twice its
+        // saturation pressure and expanded to a fifth of it, each far closer than the untuned fluid.
+        var tuned = Fluid(Assert.Single(r.Tuned)) with { InteractionParameters = r.InteractionParameters };
+        async Task<PvtResult> Run(Flowsheet f, string exp, double t, List<double>? p = null) =>
+            await EngineFixture.Json<PvtResult>(await engine.Authed().PostAsJsonAsync("/pvt", new PvtRequest(f, x, exp, t, p), Json.Options));
+        async Task<(double Truth, double Tuned, double Untuned)> Predict(Func<Flowsheet, Task<double>> f) => (await f(truth), await f(tuned), await f(Fluid(plus)));
+        var away = new List<double> { Math.Round(sat * 2), Math.Round(sat * 0.2) };
+        double Cell(PvtResult c, string key, double p) => c.Table[key][c.Table[PvtKeys.Pressure].FindIndex(v => Math.Abs(v!.Value - p) < 1)]!.Value;
+        var checks = new (string Label, Func<Flowsheet, Task<double>> Value)[]
+        {
+            ("saturation pressure 40 K colder", async f => (await Run(f, PvtExperiments.Saturation, Reservoir - 40)).SaturationPressure!.Value),
+            ("density at 2 × psat", async f => Cell(await Run(f, PvtExperiments.Cce, Reservoir, away), PvtKeys.Density, away[0])),
+            ("relative volume at psat / 5", async f => Cell(await Run(f, PvtExperiments.Cce, Reservoir, away), PvtKeys.RelativeVolume, away[1])),
+        };
+        foreach (var (label, value) in checks)
+        {
+            var (t, tu, un) = await Predict(value);
+            output.WriteLine($"  {label}: truth {t:G6}, tuned {tu:G6} ({(tu - t) / t:P3}), untuned {un:G6} ({(un - t) / t:P3})");
+            Assert.True(Math.Abs(tu - t) <= 0.005 * Math.Abs(t), $"{label}: tuned {tu} vs truth {t}");
+            Assert.True(Math.Abs(tu - t) < Math.Abs(un - t) / 3, $"{label}: tuning did not help ({tu} vs untuned {un}, truth {t})");
+        }
     }
 }
