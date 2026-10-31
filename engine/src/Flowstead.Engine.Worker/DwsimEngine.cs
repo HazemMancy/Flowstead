@@ -1408,7 +1408,7 @@ public sealed class DwsimEngine
             pp.CurrentMaterialStream = ms;
             var z = ms.GetOverallComposition();
             // The state at (T, P): 0 one liquid-like phase, 1 one vapour, 2 two phases (null if the flash fails).
-            int? State(double tt, double pp2)
+            (int State, double V)? Flash(double tt, double pp2)
             {
                 try
                 {
@@ -1416,24 +1416,33 @@ public sealed class DwsimEngine
                     var v = Convert.ToDouble(r[1]);
                     var l2 = r.Length > 5 ? Convert.ToDouble(r[5]) : 0;
                     if (!double.IsFinite(v)) return null;
-                    return v > 1e-7 && v < 1 - 1e-7 || l2 > 1e-7 && v > 1e-7 ? 2 : v >= 0.5 ? 1 : 0;
+                    return (v > 1e-7 && v < 1 - 1e-7 || l2 > 1e-7 && v > 1e-7 ? 2 : v >= 0.5 ? 1 : 0, v);
                 }
                 catch
                 {
                     return null;
                 }
             }
-            int? StateAt(bool fixedP, double x) => fixedP ? State(x, p) : State(t, x);
+            (int State, double V)? FlashAt(bool fixedP, double x) => fixedP ? Flash(x, p) : Flash(t, x);
+            int? StateAt(bool fixedP, double x) => FlashAt(fixedP, x)?.State;
             // A saturation point divides two phases from one (or, for a pure compound, liquid from vapour). DWSIM 10's PV
             // and TV flashes can return a point that meets the vapour fraction without being on the boundary (a
             // condensate's "bubble point" at methane's critical temperature, an oil's "dew point" at 1378 bar, D95), so
             // each one is checked 0.1 % either side: a mixture's has two phases on one side (the single phase's own label
             // is not required: near the critical point it can be called either); a pure compound's, liquid and vapour.
             var pure = z.Count(x => x > 1e-9) == 1;
-            bool Divides(bool fixedP, double x)
+            // Near a mixture's critical point DWSIM's PT flash flickers between states (a C1–C4 liquid at −20 °C read a
+            // "dew point" at 80 bar on one solve and 4.9 bar on the next), so each side must also hold 1 % away.
+            // Which boundary it is shows in the two-phase side's vapour fraction, whatever the single phase is called:
+            // almost all vapour just inside a dew point, almost all liquid just inside a bubble point (a liquid's "dew
+            // point" at 94 bar was its bubble point).
+            bool Divides(bool fixedP, double x, double q)
             {
-                if (StateAt(fixedP, x * 0.999) is not { } lo || StateAt(fixedP, x * 1.001) is not { } hi || lo == hi) return false;
-                return pure ? lo + hi == 1 : lo == 2 || hi == 2;
+                if (FlashAt(fixedP, x * 0.999) is not { } lo || FlashAt(fixedP, x * 1.001) is not { } hi || lo.State == hi.State) return false;
+                if (StateAt(fixedP, x * 0.99) != lo.State || StateAt(fixedP, x * 1.01) != hi.State) return false;
+                if (pure) return lo.State + hi.State == 1;
+                var inside = lo.State == 2 ? lo : hi.State == 2 ? hi : ((int State, double V)?)null;
+                return inside is { } two && (q < 0.5 ? two.V < 0.5 : two.V > 0.5);
             }
             double? At(bool fixedP, double q)
             {
@@ -1448,7 +1457,7 @@ public sealed class DwsimEngine
                 catch
                 {
                 }
-                if (found is { } f && Divides(fixedP, f)) return f;
+                if (found is { } f && Divides(fixedP, f, q)) return f;
                 return Search(fixedP, q);
             }
             // When DWSIM's flash misses: the boundary from PT flashes, on a grid (T 80–900 K, P 0.05–700 bar) and then
@@ -1475,6 +1484,7 @@ public sealed class DwsimEngine
                         if (StateAt(fixedP, m) == a) lo = m; else hi = m;
                     }
                     var x = (lo + hi) / 2;
+                    if (!Divides(fixedP, x, q)) continue;
                     if (best is not { } bb || Math.Abs(Math.Log(x / own)) < Math.Abs(Math.Log(bb / own))) best = x;
                 }
                 return best;
