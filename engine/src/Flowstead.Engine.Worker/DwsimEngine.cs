@@ -1393,8 +1393,8 @@ public sealed class DwsimEngine
     }
 
     /// <summary>
-    /// The stream's bubble and dew points: temperatures at its pressure, pressures at its temperature. A flash that
-    /// throws or does not land on the asked vapour fraction gives null (above the cricondentherm there is no dew point).
+    /// The stream's bubble and dew points: temperatures at its pressure, pressures at its temperature, each checked to
+    /// lie on the phase boundary (D95). Null when there is no such point (above the cricondentherm there is no dew point).
     /// </summary>
     private static (double? BubbleT, double? DewT, double? BubbleP, double? DewP) SaturationPoints(MaterialStream ms)
     {
@@ -1407,19 +1407,77 @@ public sealed class DwsimEngine
         {
             pp.CurrentMaterialStream = ms;
             var z = ms.GetOverallComposition();
-            double? At(bool fixedP, double q)
+            // The state at (T, P): 0 one liquid-like phase, 1 one vapour, 2 two phases (null if the flash fails).
+            int? State(double tt, double pp2)
             {
                 try
                 {
-                    var r = fixedP ? (object[])pp.FlashBase.Flash_PV(z, p, q, t, pp) : (object[])pp.FlashBase.Flash_TV(z, t, q, p, pp);
-                    var x = Convert.ToDouble(r[4]);
+                    var r = (object[])pp.FlashBase.Flash_PT(z, pp2, tt, pp);
                     var v = Convert.ToDouble(r[1]);
-                    return double.IsFinite(x) && x > 0 && Math.Abs(v - q) < 1e-3 ? x : null;
+                    var l2 = r.Length > 5 ? Convert.ToDouble(r[5]) : 0;
+                    if (!double.IsFinite(v)) return null;
+                    return v > 1e-7 && v < 1 - 1e-7 || l2 > 1e-7 && v > 1e-7 ? 2 : v >= 0.5 ? 1 : 0;
                 }
                 catch
                 {
                     return null;
                 }
+            }
+            int? StateAt(bool fixedP, double x) => fixedP ? State(x, p) : State(t, x);
+            // A saturation point divides two phases from one (or, for a pure compound, liquid from vapour). DWSIM 10's PV
+            // and TV flashes can return a point that meets the vapour fraction without being on the boundary (a
+            // condensate's "bubble point" at methane's critical temperature, an oil's "dew point" at 1378 bar, D95), so
+            // each one is checked 0.1 % either side: a mixture's has two phases on one side (the single phase's own label
+            // is not required: near the critical point it can be called either); a pure compound's, liquid and vapour.
+            var pure = z.Count(x => x > 1e-9) == 1;
+            bool Divides(bool fixedP, double x)
+            {
+                if (StateAt(fixedP, x * 0.999) is not { } lo || StateAt(fixedP, x * 1.001) is not { } hi || lo == hi) return false;
+                return pure ? lo + hi == 1 : lo == 2 || hi == 2;
+            }
+            double? At(bool fixedP, double q)
+            {
+                double? found = null;
+                try
+                {
+                    var r = fixedP ? (object[])pp.FlashBase.Flash_PV(z, p, q, t, pp) : (object[])pp.FlashBase.Flash_TV(z, t, q, p, pp);
+                    var x = Convert.ToDouble(r[4]);
+                    var v = Convert.ToDouble(r[1]);
+                    if (double.IsFinite(x) && x > 0 && Math.Abs(v - q) < 1e-3) found = x;
+                }
+                catch
+                {
+                }
+                if (found is { } f && Divides(fixedP, f)) return f;
+                return Search(fixedP, q);
+            }
+            // When DWSIM's flash misses: the boundary from PT flashes, on a grid (T 80–900 K, P 0.05–700 bar) and then
+            // bisected; a bubble point where the single phase is liquid, a dew point where it is vapour; of several, the
+            // one nearest the stream's own state. Null when there is none.
+            double? Search(bool fixedP, double q)
+            {
+                var grid = fixedP
+                    ? Enumerable.Range(0, 42).Select(i => 80.0 + i * 20.0).ToList()
+                    : Enumerable.Range(0, 41).Select(i => 5e3 * Math.Pow(7e7 / 5e3, i / 40.0)).ToList();
+                var states = grid.Select(x => StateAt(fixedP, x)).ToList();
+                var own = fixedP ? t : p;
+                double? best = null;
+                for (var i = 0; i + 1 < grid.Count; i++)
+                {
+                    if (states[i] is not { } a || states[i + 1] is not { } b || a == b) continue;
+                    var single = a == 2 ? b : b == 2 ? a : -1;
+                    var match = pure ? a + b == 1 : single == (q < 0.5 ? 0 : 1);
+                    if (!match) continue;
+                    double lo = grid[i], hi = grid[i + 1];
+                    for (var k = 0; k < 30 && hi / lo - 1 > 1e-6; k++)
+                    {
+                        var m = fixedP ? (lo + hi) / 2 : Math.Sqrt(lo * hi);
+                        if (StateAt(fixedP, m) == a) lo = m; else hi = m;
+                    }
+                    var x = (lo + hi) / 2;
+                    if (best is not { } bb || Math.Abs(Math.Log(x / own)) < Math.Abs(Math.Log(bb / own))) best = x;
+                }
+                return best;
             }
             return (At(true, 0), At(true, 1), At(false, 0), At(false, 1));
         }
