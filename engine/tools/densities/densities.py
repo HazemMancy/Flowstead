@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# DWSIM 10 trial step 3 (D88): liquid density of each state in density_cases.json, solved by Flowstead's engine worker
+# Liquid density (D91) of each state in density_cases.json, solved by Flowstead's engine worker
 # with every property package and liquid-density option in VARIANTS. Prints one JSON object per line.
-# Usage: python3 -I engine/trial/densities.py <path to Flowstead.Engine.Worker.dll>
+# Usage: python3 -I engine/tools/densities/densities.py <path to Flowstead.Engine.Worker.dll>
 # SPDX-License-Identifier: GPL-3.0-or-later
 import json, os, subprocess, sys
 

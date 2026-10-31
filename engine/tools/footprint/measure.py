@@ -5,7 +5,7 @@
 # See docs/on-device-spike.md.
 import json, os, subprocess, sys, time, glob
 root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-worker = f"{root}/engine/src/Flowstead.Engine.Worker/bin/Release/net8.0/linux-x64/Flowstead.Engine.Worker.dll"
+worker = f"{root}/engine/src/Flowstead.Engine.Worker/bin/Release/net10.0/linux-x64/Flowstead.Engine.Worker.dll"
 t0 = time.time()
 p = subprocess.Popen(["dotnet", worker], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
 ready = json.loads(p.stdout.readline()); t_ready = time.time() - t0

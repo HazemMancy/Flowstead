@@ -124,7 +124,7 @@ public static class Curves
 
 /// <summary>
 /// Pumps and compressors with a curve run on it, as in HYSYS: the head (and efficiency) at the machine's actual inlet
-/// flow sets its outlet pressure. DWSIM 9.0.5's own curve modes don't serve: its pump reports zero power on a curve
+/// flow sets its outlet pressure. DWSIM 9.0.5's own curve modes didn't serve (when this was written): its pump reports zero power on a curve
 /// (no work enters the outlet enthalpy) and its compressor's ideal-gas head estimate departs from the head entered.
 /// So each machine runs on a pressure spec that Flowstead adjusts between whole-flowsheet solves until the
 /// rigorous head equals the curve's at the solved flow: a pump's rise is ρ g H; a compressor's pressure ratio is

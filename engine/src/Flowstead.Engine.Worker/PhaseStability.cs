@@ -45,18 +45,44 @@ public static class PhaseStability
     }
 
     /// <summary>
-    /// A "vapour" that is a liquid: DWSIM's PT flash called a subcooled propane–pentane–hexane–decane liquid at 40 °C and
-    /// 10 bar (bubble point 151 °C, Z 0.056, 658 kg/m³) a vapour. When even the equation of state's vapour root is below
-    /// the mixture's critical Z there is no vapour-like root at all, so the one phase is a liquid; returns false (not
-    /// vapour) then, else null. Only this direction: a liquid also has a vapour root when the cubic has three, so the
-    /// same test cannot tell a mislabelled liquid from a real one (LNG at −160 °C has a vapour root at Z 0.95).
+    /// A one-phase result with the wrong label (D90). A "vapour" whose equation-of-state vapour root is below the
+    /// mixture's critical Z has no vapour-like root at all: it is a liquid (DWSIM 9 called a subcooled propane–pentane–
+    /// hexane–decane liquid at 40 °C and 10 bar, Z 0.056, a vapour). A "liquid" whose liquid root is above the critical
+    /// Z, and that is above its pseudo-critical temperature (Li's rule), is a vapour (DWSIM 10 called a C1–C5 gas at
+    /// 321 bar and 35 °C, Z 0.889, a liquid). Z alone cannot tell: a live oil at 150 bar has a liquid Z above the critical
+    /// Z only because the pressure is high, but it is 250 K below its pseudo-critical temperature. Each test uses the
+    /// root of the phase being questioned, because a cubic with three roots gives a real liquid a vapour root too (LNG at
+    /// −160 °C: Z 0.95). Returns the right label, or null when the label stands.
     /// </summary>
     internal static bool? MislabelledOnePhase(PropertyPackage pp, object[] r, int l2Index, int sIndex, double[] z, double t, double p)
     {
         double l = Convert.ToDouble(r[0]), v = Convert.ToDouble(r[1]);
         if (Convert.ToDouble(r[l2Index]) != 0 || Convert.ToDouble(r[sIndex]) != 0 || z.Count(x => x > 0) < 2) return null;
-        if (!(v == 1 && l == 0)) return null;
-        return IsVapourLike(pp, z, t, p) ? null : false;
+        if (v == 1 && l == 0) return IsVapourLike(pp, z, t, p) ? null : false;
+        if (l == 1 && v == 0) return t > PseudoCriticalTemperature(pp, z) && LiquidRootIsVapourLike(pp, z, t, p) ? true : null;
+        return null;
+    }
+
+    /// <summary>Li's pseudo-critical temperature: Σ φᵢ Tcᵢ with φᵢ = zᵢ Vcᵢ / Σ zⱼ Vcⱼ.</summary>
+    internal static double PseudoCriticalTemperature(PropertyPackage pp, double[] z)
+    {
+        var tc = pp.RET_VTC();
+        var vc = pp.RET_VVC();
+        double num = 0, den = 0;
+        for (var i = 0; i < z.Length; i++)
+        {
+            var w = z[i] * Convert.ToDouble(vc.GetValue(i));
+            num += w * Convert.ToDouble(tc.GetValue(i));
+            den += w;
+        }
+        return den > 0 ? num / den : double.NaN;
+    }
+
+    private static bool LiquidRootIsVapourLike(PropertyPackage pp, double[] z, double t, double p)
+    {
+        var zc = pp.RET_VZC();
+        var zcm = z.Select((zi, i) => zi * Convert.ToDouble(zc.GetValue(i))).Sum();
+        return pp.AUX_Z(z, t, p, DWSIM.Interfaces.Enums.PhaseName.Liquid) > zcm;
     }
 
     /// <summary>DWSIM's universal flash as <see cref="StableFlash"/>; any other algorithm (single compound, forced phase, Gibbs) unchanged.</summary>

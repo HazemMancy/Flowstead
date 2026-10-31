@@ -62,7 +62,7 @@ const val FEATURES_ASSET = "flowstead-features.md"
 object Credits {
     const val DEVELOPER = "Developed by Hazem ElMancy, process engineer."
     const val LINKEDIN_URL = "https://www.linkedin.com/in/hazemmancy/"
-    const val ENGINE = "Built on the DWSIM engine: every calculation runs on DWSIM 9.0.5, the open-source chemical " +
+    const val ENGINE = "Built on the DWSIM engine: every calculation runs on DWSIM 10.2.12, the open-source chemical " +
         "process simulator (© Daniel Wagner and contributors, GPL-3.0)."
 }
 

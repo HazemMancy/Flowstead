@@ -1,10 +1,9 @@
 # Engine
 engine/dwsim-bin/
-engine/.dwsim10-src/
+
+engine/.dwsim-src/
 engine/**/bin/
 engine/**/obj/
-engine/.dl/*
-!engine/.dl/.keep
 *.user
 
 # Android / Gradle

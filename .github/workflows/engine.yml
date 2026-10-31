@@ -13,20 +13,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
-      - name: Cache DWSIM package
+          dotnet-version: "10.0.x"
+      - name: Cache the DWSIM build
         uses: actions/cache@v4
         with:
-          path: engine/.dl
-          key: dwsim-9.0.5-52c041b1
-      - name: Install tools
-        run: sudo apt-get update && sudo apt-get install -y zstd binutils
-      - name: Fetch pinned DWSIM binaries
+          path: engine/dwsim-bin
+          key: dwsim-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/native/ipopt_stub.c') }}
+      - name: Build the pinned DWSIM from source
         run: engine/scripts/fetch-dwsim.sh
       - name: Build
         run: dotnet build engine/Flowstead.Engine.sln -c Release
       - name: Engine spike (headless solve)
-        run: dotnet engine/src/Flowstead.Engine.Spike/bin/Release/net8.0/linux-x64/Flowstead.Engine.Spike.dll
+        run: dotnet engine/src/Flowstead.Engine.Spike/bin/Release/net10.0/linux-x64/Flowstead.Engine.Spike.dll
       - name: Tests + benchmark harness
         run: dotnet test engine/Flowstead.Engine.sln -c Release --no-build --logger "console;verbosity=normal"
 
@@ -35,10 +33,6 @@ jobs:
     needs: build-test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: engine/.dl
-          key: dwsim-9.0.5-52c041b1
       - name: Build image
         run: docker build -t flowstead-engine engine/
       - name: Spike in container

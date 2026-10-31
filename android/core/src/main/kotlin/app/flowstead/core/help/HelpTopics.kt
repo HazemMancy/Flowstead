@@ -35,7 +35,7 @@ internal object HelpTopics {
         HelpTopic(
             "start", START, "Welcome to Flowstead",
             """
-            Flowstead is a steady-state process simulator and engineering workbench. Every number it shows is computed by DWSIM 9.0.5's thermodynamics, on the phone or on your own engine server; Flowstead never invents a value.
+            Flowstead is a steady-state process simulator and engineering workbench. Every number it shows is computed by DWSIM 10.2.12's thermodynamics, on the phone or on your own engine server; Flowstead never invents a value.
             ## Where things are
             - **Projects**: each project is one flowsheet with its fluid package, results and studies.
             - **Fluid package**: components, property package, hypotheticals and binary interaction parameters.
@@ -93,7 +93,7 @@ internal object HelpTopics {
             = P = RT/(v − b) − a(T)/(v(v + b) + b(v − b))
             = a(T) = 0.45724 R²Tc²/Pc · [1 + κ(1 − √(T/Tc))]²,  b = 0.07780 RTc/Pc
             = κ = 0.37464 + 1.54226ω − 0.26992ω²
-            Liquid densities: DWSIM's Peneloux volume shift by default (option: none, as HYSYS's plain PR) or COSTALD.
+            Liquid densities: COSTALD for liquid mixtures and experimental data for pure and water-rich liquids by default (option: COSTALD for every liquid, or the equation of state with or without DWSIM's Peneloux volume shift).
             ## Soave–Redlich–Kwong (SRK)
             = P = RT/(v − b) − a(T)/(v(v + b))
             Similar range to PR; PR usually gives better liquid densities.

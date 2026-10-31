@@ -549,12 +549,12 @@ private data class DensityOption(val method: String?, val label: String, val det
 
 private val LIQUID_DENSITY_OPTIONS = listOf(
     DensityOption(
-        null, "DWSIM default",
-        "Pure-component liquid densities (experimental data, else Rackett), mixed by mass. Cubic packages use COSTALD when dissolved gas is above its critical temperature.",
+        null, "Flowstead default",
+        "Cubic packages: COSTALD for liquid mixtures, experimental data for pure liquids and water-rich liquids (0.5 % mean against reference equations of state). Activity packages: experimental data, mixed by volume.",
     ),
     DensityOption(
         LiquidDensityMethods.COSTALD, "COSTALD (as HYSYS)",
-        "COSTALD for every liquid, as HYSYS does for hydrocarbons. About 1 % high for water.",
+        "COSTALD for every liquid, as HYSYS does for hydrocarbons. 1–2 % low for water above 80 °C.",
     ),
     DensityOption(
         LiquidDensityMethods.EOS, "Equation of state",

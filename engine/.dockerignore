@@ -1,3 +1,5 @@
 dwsim-bin/
+.dwsim-src/
+.dwsim10-src/
 **/bin/
 **/obj/

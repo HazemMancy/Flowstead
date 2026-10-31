@@ -50,7 +50,7 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
     {
         var h = await EngineFixture.Json<EngineHealth>(await engine.Authed().GetAsync("/health"));
         Assert.Equal("ok", h.Status);
-        Assert.Equal("9.0.5", h.DwsimVersion);
+        Assert.Equal("10.2.12", h.DwsimVersion);
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task CostaldIsOptInAndChangesLiquidDensity()
+    public async Task LiquidDensityIsCostaldForMixturesAndExperimentalForWater()
     {
         static Flowsheet Liquid(double tK, double pPa, Dictionary<string, double> x) => new()
         {
@@ -242,14 +242,19 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
         // Pure n-hexane at 25 °C (measured about 655 kg/m³): both methods agree.
         var hexane = Liquid(298.15, 1e5, new() { ["N-hexane"] = 1.0 });
         Assert.Equal(await Density(hexane), await Density(hexane with { LiquidDensity = LiquidDensityMethods.Costald }), 0);
-        // Propane/n-decane 40/60 mol at 25 °C, 20 bar. DWSIM's own default mixes pure-liquid densities by mole fraction
-        // and read 614 kg/m³; Flowstead mixes them by mass (D39): about 675, ideal mixing. COSTALD a little more.
+        // A liquid mixture takes COSTALD by default (D91): propane/n-decane 40/60 mol at 25 °C, 20 bar, GERG-2008 686.2 kg/m³.
         var mixture = Liquid(298.15, 2e6, new() { ["Propane"] = 0.4, ["N-decane"] = 0.6 });
         var standard = await Density(mixture);
         var costald = await Density(mixture with { LiquidDensity = LiquidDensityMethods.Costald });
-        output.WriteLine($"C3/nC10: default {standard:F1}, COSTALD {costald:F1} kg/m³");
-        Assert.InRange(standard, 665, 685);
-        Assert.InRange(costald, 675, 710);
+        output.WriteLine($"C3/nC10: default {standard:F1}, COSTALD {costald:F1} kg/m³ (GERG-2008 686.2)");
+        Assert.Equal(costald, standard, 1e-9);
+        Assert.Equal(686.2, standard, 686.2 * 0.015);
+        // Water keeps DWSIM's experimental data (IAPWS-95 at 80 °C, 5 bar: 972.0); COSTALD, opted into, is about 1 % low.
+        var water = Liquid(353.15, 5e5, new() { ["Water"] = 1.0 });
+        var hot = await Density(water);
+        output.WriteLine($"Water 80 °C: default {hot:F1}, COSTALD {await Density(water with { LiquidDensity = LiquidDensityMethods.Costald }):F1} kg/m³ (IAPWS 972.0)");
+        Assert.Equal(972.0, hot, 972.0 * 0.002);
+        Assert.True(await Density(water with { LiquidDensity = LiquidDensityMethods.Costald }) < hot - 5);
 
         var bad = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", hexane with { LiquidDensity = "rackett" }, Json.Options));
         Assert.Equal(SolveStatus.Invalid, bad.Status);

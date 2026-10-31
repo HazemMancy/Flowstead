@@ -3,14 +3,13 @@
 # Run:    see deploy/docker-compose.yml (Caddy terminates HTTPS in front of this container)
 # Keys:   docker exec <container> dotnet /app/Flowstead.Engine.Api.dll keys add <device>
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-RUN apt-get update && apt-get install -y --no-install-recommends binutils zstd curl ca-certificates gcc libc6-dev \
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY scripts/ scripts/
 COPY native/ native/
-# Reuse a pre-downloaded package if the build context has one (CI cache), else download.
-COPY .dl/ .dl/
+# DWSIM built from its GPL source at the pinned commit (ENGINE_VERSION.md).
 RUN scripts/fetch-dwsim.sh /opt/dwsim
 COPY Directory.Build.props ./
 COPY src/ src/
@@ -18,7 +17,7 @@ RUN dotnet publish src/Flowstead.Engine.Worker -c Release -o /app/worker -p:Dwsi
  && dotnet publish src/Flowstead.Engine.Api -c Release -o /app \
  && dotnet publish src/Flowstead.Engine.Spike -c Release -o /app/spike -p:DwsimBin=/opt/dwsim
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --home /var/lib/flowstead flowstead \

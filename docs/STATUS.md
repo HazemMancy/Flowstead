@@ -154,6 +154,7 @@ _Last updated: 2026-10-20_
 - **2.0.0 (D86):** dynamic simulation: separators with inventory, valves by IEC 60534, PID controllers, events and trends, from the steady state; pumps, compressors, heaters, coolers and mixers in lines. Columns, reactors, tanks and three-phase separators are not in dynamics yet.
 - **2.0.1:** controller and Set signal lines drawn at right angles (canvas and printed PFD).
 - **2.0.2:** light theme by default; status and navigation bar icons follow the app's theme, not the phone's; lists and forms capped at 840 dp wide and centred on tablets (the canvas keeps the full width).
+- **3.0.0 (D94, D91–D93):** DWSIM 10.2.12 built from source on .NET 10, server, Docker and phone; liquid density COSTALD for mixtures, experimental data for pure and water-rich liquids (0.50 % mean against reference EOS, was 0.87 %); PVT about 100× faster; PVT regression refines its steps. Benchmarks re-based on DWSIM 10 with every independent reference holding.
 - **DWSIM 10 trial (D88):** 10.2.12 builds from source and Flowstead's engine runs on it (.NET 10); 140/159 engine tests pass. Liquid densities, two reactors, CSTR/PFR enthalpies and column file round trips differ. Step 1 passed: on an Android emulator DWSIM 10 starts in 5 s and all 20 benchmarks converge. Step 2 done (2.0.3: empty streams, NRTL/UNIQUAC enthalpy, column files; 144/159 on DWSIM 10). Step 3: densities compared on 29 states against reference equations of state (`docs/dwsim10-trial.md`); with DWSIM 10, COSTALD for hydrocarbon mixtures (D91). Left: step 4 (PVT regression, kij test), step 5 (switch, 3.0). Releases stay on 9.0.5.
 - **2.0.3 (D89, from the DWSIM 10 trial, on DWSIM 9):** NRTL and UNIQUAC liquid enthalpies from experimental heat capacities (liquid water Cp was 28 % high, duties with it); empty streams show temperature, pressure and zero flow only; DWSIM 10 column files import with their feed trays; one-phase results labelled by the fluid (D90: a subcooled condensate was called vapour).
 - **D87:** a direct Install button (with the install permission) was tested as a pre-release and blocked by Play Protect, as in D74; releases keep Open Downloads.
@@ -183,7 +184,7 @@ _Last updated: 2026-10-20_
 
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).
 - The engine Docker image is verified in CI only (no Docker daemon in the sandbox).
-- The engine DLLs come from the official 9.0.5 package, not yet rebuilt from the pinned source (D1).
+- The engine is built from the pinned DWSIM 10.2.12 source (D94); upstream updates are taken deliberately (ENGINE_VERSION.md).
 - DWSIM's rigorous PR VLLE flash did not find the water phase in benchmark 04; Flowstead uses DWSIM's free-water flash instead (D17). Glycol/amine systems still use rigorous VLLE and need checking case by case.
 - DWSIM absolute enthalpy uses a different reference state from HYSYS. Compare duties and ΔH, not absolute H (`docs/engine-spike.md`).
 - The brief's amber/green value colours fail 4.5:1 as text. Darker text variants are used (D14).

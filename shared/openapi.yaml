@@ -4,7 +4,7 @@ info:
   title: Flowstead engine
   version: 0.1.0
   description: |
-    Steady-state solves on DWSIM 9.0.5. All numbers are SI: K, Pa, mol/s, kg/s, m³/s, W, J/kg,
+    Steady-state solves on DWSIM 10.2.12. All numbers are SI: K, Pa, mol/s, kg/s, m³/s, W, J/kg,
     J/mol, J/(kg·K), kg/m³, Pa·s, kg/kmol, mole fractions. Unit conversion is the client's job.
     A value the engine could not compute is omitted from the result, never sent as 0 or NaN.
 servers:

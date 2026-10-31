@@ -50,7 +50,7 @@ class ResultsScreenTest {
         SolveStatus.Converged,
         elapsedMs = 650,
         engineVersion = "0.1.0",
-        dwsimVersion = "9.0.5",
+        dwsimVersion = "10.2.12",
         messages = listOf(SolverMessage(MessageLevel.Warning, "Recycle tolerance relaxed", "b")),
         objects = mapOf(
             "a" to ObjectResult(
@@ -95,6 +95,6 @@ class ResultsScreenTest {
         compose.setContent { FlowsteadTheme { SolverLogContent(ui()) } }
         compose.onNodeWithText("Recycle tolerance relaxed").assertIsDisplayed()
         compose.onNodeWithText("Warning · LP").assertIsDisplayed()
-        compose.onNodeWithText("Flowstead 0.1.0 · DWSIM 9.0.5").assertIsDisplayed()
+        compose.onNodeWithText("Flowstead 0.1.0 · DWSIM 10.2.12").assertIsDisplayed()
     }
 }

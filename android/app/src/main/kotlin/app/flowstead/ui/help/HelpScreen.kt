@@ -271,7 +271,7 @@ private fun WhatsNew() {
 private fun Support() {
     val uri = LocalUriHandler.current
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Flowstead ${BuildConfig.VERSION_NAME}, with DWSIM 9.0.5", style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Flowstead ${BuildConfig.VERSION_NAME}, with DWSIM 10.2.12", style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row1("Report a problem or ask for a feature", "GitHub issues: include the project (Export DWSIM file) and what you expected") { uri.openUri(Help.ISSUES) }
         Row1("Source code and releases", Help.REPOSITORY) { uri.openUri(Help.REPOSITORY) }
         Row1("DWSIM documentation", "The thermodynamics engine behind every number") { uri.openUri(Help.DWSIM) }

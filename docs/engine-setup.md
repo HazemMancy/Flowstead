@@ -1,6 +1,6 @@
 # Running the Flowstead engine
 
-The engine is a Docker container: an ASP.NET Core API in front of a pool of DWSIM 9.0.5 worker processes. The phone only talks HTTPS. Caddy, in `deploy/`, terminates TLS.
+The engine is a Docker container: an ASP.NET Core API in front of a pool of DWSIM 10.2.12 worker processes. The phone only talks HTTPS. Caddy, in `deploy/`, terminates TLS.
 
 ## VPS with a domain name
 

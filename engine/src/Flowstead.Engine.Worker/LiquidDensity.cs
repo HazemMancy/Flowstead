@@ -7,18 +7,17 @@ using Flowstead.Engine.Contracts;
 namespace Flowstead.Engine.Worker;
 
 /// <summary>
-/// DWSIM's default liquid density for PR, SRK and PR/LK ("Rackett and experimental data") mixes pure-component
-/// liquid densities, and gives a component above its critical temperature a density of 10²⁰ kg/m³: dissolved
-/// methane in a cold NGL then has mass but no volume (742 kg/m³ for a C1/C2/C3 liquid at −40 °C, where COSTALD
-/// gives 483). When more than <see cref="SupercriticalLimit"/> of the liquid (molar) is above its critical
-/// temperature, Flowstead uses COSTALD instead, as HYSYS does for hydrocarbon liquids. Otherwise DWSIM's
-/// default stays: it matches NIST within 0.3 % for pure hydrocarbons and IAPWS within 0.1 % for water,
-/// where COSTALD is 1 % high.
+/// Liquid density for the cubic packages on DWSIM 10 (D91): a liquid mixture that is not mostly water takes COSTALD, the
+/// HYSYS method for hydrocarbon liquids; a pure liquid or a water-rich one keeps DWSIM's default (experimental
+/// correlations, mixed by volume). Against reference equations of state over 29 liquids (docs/dwsim10-trial.md):
+/// mean 0.50 %, worst 1.9 %. DWSIM 10's default alone: 0.54 %, worst 2.3 % (an ethane-rich NGL); COSTALD alone is 1–2 %
+/// low for water above 80 °C. DWSIM 10 already mixes by volume and keeps dissolved light compounds in the sum, so
+/// DWSIM 9's corrections (mass fractions in, COSTALD only when a component was supercritical: D32, D39) are gone.
 /// </summary>
 public static class LiquidDensity
 {
-    /// <summary>Mole fraction of supercritical components above which COSTALD is used.</summary>
-    public const double SupercriticalLimit = 0.01;
+    /// <summary>Water mole fraction at or above which a liquid is "mostly water" and keeps DWSIM's default density.</summary>
+    public const double WaterRich = 0.5;
 
     /// <summary>Packages whose liquid density Flowstead corrects (mass-fraction mixing, D39).</summary>
     public static readonly IReadOnlySet<string> FixedPackages = new HashSet<string>
@@ -54,23 +53,25 @@ public static class LiquidDensity
         return pp;
     }
 
-    internal static bool UseCostald(PropertyPackage pp, double t, Array vx, bool forceEos)
+    /// <summary>A liquid of two or more compounds that is not mostly water (D91).</summary>
+    internal static bool UseCostald(PropertyPackage pp, Array vx, bool forceEos)
     {
         if (forceEos || pp.LiquidDensityCalculationMode_Subcritical != PropertyPackage.LiquidDensityCalcMode.Rackett_and_ExpData)
             return false;
-        var tc = pp.RET_VTC();
-        var supercritical = 0.0;
-        for (var i = 0; i < Math.Min(vx.Length, tc.Length); i++)
-            if (t > Convert.ToDouble(tc.GetValue(i))) supercritical += Convert.ToDouble(vx.GetValue(i));
-        return supercritical > SupercriticalLimit;
+        var names = pp.RET_VNAMES();
+        double present = 0, water = 0;
+        for (var i = 0; i < vx.Length; i++)
+        {
+            var x = Convert.ToDouble(vx.GetValue(i));
+            if (x > 1e-6) present++;
+            if (i < names.Length && names[i] == "Water") water = x;
+        }
+        return present >= 2 && water < WaterRich;
     }
 
     /// <summary>
-    /// Flowstead's liquid density for a package in DWSIM's default mode (D32, D39). DWSIM mixes the pure-liquid
-    /// densities as 1/Σ(xᵢ/ρᵢ) with mole fractions, which is right only when the molecular weights are equal
-    /// (propane/n-decane 40/60 mol read 614 kg/m³ against 675 for ideal mixing). Its sum uses the fractions
-    /// nowhere else, so handing it mass fractions gives the volume-additive 1/Σ(wᵢ/ρᵢ). Cubic packages also
-    /// switch to COSTALD for liquids carrying supercritical components (D32).
+    /// Flowstead's liquid density for a package in DWSIM's default mode (D91): COSTALD for a cubic package's liquid
+    /// mixtures that are not mostly water, DWSIM's own density otherwise.
     /// </summary>
     internal static double Density(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density, Func<Array, double>? eosDensity = null)
     {
@@ -81,15 +82,8 @@ public static class LiquidDensity
         return eosDensity != null && !forceEos && !(double.IsFinite(rho) && rho > 0) ? eosDensity(vx) : rho;
     }
 
-    private static double Correlation(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density)
-    {
-        if (forceEos || pp.LiquidDensityCalculationMode_Subcritical != PropertyPackage.LiquidDensityCalcMode.Rackett_and_ExpData)
-            return density(vx);
-        if (cubic && UseCostald(pp, t, vx, forceEos)) return WithCostald(pp, () => density(vx));
-        var x = new double[vx.Length];
-        for (var i = 0; i < x.Length; i++) x[i] = Convert.ToDouble(vx.GetValue(i));
-        return density(pp.AUX_CONVERT_MOL_TO_MASS(x));
-    }
+    private static double Correlation(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density) =>
+        cubic && UseCostald(pp, vx, forceEos) ? WithCostald(pp, () => density(vx)) : density(vx);
 
     /// <summary>DWSIM's density with COSTALD for this call only.</summary>
     internal static double WithCostald(PropertyPackage pp, Func<double> density) =>

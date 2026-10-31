@@ -5,7 +5,7 @@
 #   engine/scripts/fetch-dwsim.sh && dotnet build engine/src/Flowstead.Engine.Worker -c Release
 #   engine/embedded/android/prepare.sh
 #
-# out/jniLibs/<abi>/        Mono runtime + its native helpers + libSkiaSharp (DWSIM's 1.68.2.1)
+# out/jniLibs/<abi>/        Mono runtime + its native helpers + libSkiaSharp (DWSIM's 2.88.9)
 # out/include/              Mono embedding headers (for the JNI bridge)
 # out/assets/engine/        dwsim.zip (DWSIM selection + Flowstead engine), framework-<abi>.zip, VERSION
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -18,11 +18,11 @@ dl="$here/.dl"
 mkdir -p "$dl"
 
 MONO_VERSION=10.0.13
-SKIA_VERSION=1.68.2.1   # must match DWSIM's SkiaSharp.dll
+SKIA_VERSION=2.88.9   # must match DWSIM's SkiaSharp.dll
 declare -A SHA=(
   [microsoft.netcore.app.runtime.mono.android-arm64]=4ca1847947d3146cce5901eea0c3ff8835a25660706d40492ee86029f3ed1113
   [microsoft.netcore.app.runtime.mono.android-x64]=65c096c46bf63666dfd3c0cd7bdbb5b6c2b1e151dad9303cbd569dc03083eaa5
-  [skiasharp]=81412a8c06b4a4ce49a0d0eb03dced856d84fdce0a923566f17e6b88ab999bfb
+  [skiasharp.nativeassets.android]=f08c92976a11c5d2dff4ad92d2106609bb763a528a92f3ac0f4df5eaae7ce06f
 )
 
 fetch() { # id version -> path
@@ -32,25 +32,18 @@ fetch() { # id version -> path
   echo "$f"
 }
 
-worker_bin="$root/engine/src/Flowstead.Engine.Worker/bin/Release/net8.0/linux-x64"
+worker_bin="$root/engine/src/Flowstead.Engine.Worker/bin/Release/net10.0/linux-x64"
 [ -f "$worker_bin/Flowstead.Engine.Worker.dll" ] || { echo "Build the worker first (dotnet build engine/src/Flowstead.Engine.Worker -c Release)" >&2; exit 2; }
-[ -f "$root/engine/dwsim-bin/DWSIM.Thermodynamics.dll" ] || { echo "Run engine/scripts/fetch-dwsim.sh first" >&2; exit 2; }
+[ -f "$root/engine/dwsim-bin/DWSIM.Thermodynamics.dll" ] || { echo "Run engine/scripts/fetch-dwsim.sh first (builds DWSIM from source)" >&2; exit 2; }
 
 rm -rf "$out"
 mkdir -p "$out/assets/engine" "$out/include"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-# SkiaSharp 1.68 ships its Android natives inside the monoandroid assembly as an embedded zip.
-skia=$(fetch skiasharp "$SKIA_VERSION")
-unzip -qo "$skia" lib/monoandroid1.0/SkiaSharp.dll -d "$tmp/skia"
-python3 - "$tmp/skia/lib/monoandroid1.0/SkiaSharp.dll" "$tmp/skia/natives" <<'PY'
-import io, sys, zipfile
-d = open(sys.argv[1], "rb").read()
-start = d.find(b"PK\x03\x04"); eocd = d.find(b"PK\x05\x06")
-end = eocd + 22 + int.from_bytes(d[eocd + 20:eocd + 22], "little")
-zipfile.ZipFile(io.BytesIO(d[start:end])).extractall(sys.argv[2])
-PY
+# SkiaSharp 2.88 (DWSIM 10's) ships its Android natives as plain libraries in SkiaSharp.NativeAssets.Android.
+skia=$(fetch skiasharp.nativeassets.android "$SKIA_VERSION")
+unzip -qo "$skia" "runtimes/*" -d "$tmp/skia"
 
 for pair in "arm64-v8a:android-arm64" "x86_64:android-x64"; do
   abi=${pair%%:*}; rid=${pair##*:}
@@ -61,7 +54,7 @@ for pair in "arm64-v8a:android-arm64" "x86_64:android-x64"; do
   for so in libmonosgen-2.0.so libSystem.Native.so libSystem.IO.Compression.Native.so libSystem.Globalization.Native.so libmono-component-marshal-ilgen.so; do
     cp "$native/$so" "$out/jniLibs/$abi/"
   done
-  cp "$tmp/skia/natives/native_library_imports/$abi/libSkiaSharp.so" "$out/jniLibs/$abi/"
+  cp "$tmp/skia/runtimes/$rid/native/libSkiaSharp.so" "$out/jniLibs/$abi/"
   [ -d "$out/include/mono-2.0" ] || cp -r "$native/include/mono-2.0" "$out/include/"
   # Base class library for this ABI (IL differs per architecture in these packs).
   mkdir -p "$tmp/fw-$abi"

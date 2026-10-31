@@ -2,7 +2,7 @@
  "status": "converged",
  "elapsedMs": 652,
  "engineVersion": "0.1.0",
- "dwsimVersion": "9.0.5",
+ "dwsimVersion": "10.2.12",
  "messages": [],
  "objects": {
   "suc": {

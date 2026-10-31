@@ -6,7 +6,7 @@ Each case folder holds:
 |---|---|
 | `input.json` | Flowstead flowsheet (`shared/schema/flowsheet.schema.json`) plus a name and description |
 | `expected.json` | `checks`: values with tolerances. `source` says where they came from. `reference`: independent values (IAPWS, NIST, HYSYS, desktop DWSIM). `blocking: true` makes a reference fail CI. |
-| `case.dwxmz` | The same case, built, solved and saved by the engine (headless DWSIM 9.0.5, `tools/export_dwxmz.sh`). It opens in desktop DWSIM with its results, for cross-checking there. It is not an independent reference: it was not built by hand in desktop DWSIM. |
+| `case.dwxmz` | The same case, built, solved and saved by the engine (headless DWSIM 10.2.12, `tools/export_dwxmz.sh`). It opens in desktop DWSIM with its results, for cross-checking there. It is not an independent reference: it was not built by hand in desktop DWSIM. |
 
 `engine/tests/Flowstead.Engine.Tests/BenchmarkTests.cs` solves every case through the HTTP API and fails on any deviation. CI runs it on every engine change.
 

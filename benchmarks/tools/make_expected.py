@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-WORKER = os.path.join(ROOT, "engine/src/Flowstead.Engine.Worker/bin/Release/net8.0/linux-x64/Flowstead.Engine.Worker.dll")
+WORKER = os.path.join(ROOT, "engine/src/Flowstead.Engine.Worker/bin/Release/net10.0/linux-x64/Flowstead.Engine.Worker.dll")
 
 # Tolerances from the brief: ±0.01 °C on temperature, ±0.1 % relative elsewhere.
 TOL = {

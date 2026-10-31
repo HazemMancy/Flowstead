@@ -25,7 +25,7 @@ class ResultViewTest {
     @Test
     fun decodesARealEngineResponse() {
         assertEquals(SolveStatus.Converged, fixture.status)
-        assertEquals("9.0.5", fixture.dwsimVersion)
+        assertEquals("10.2.12", fixture.dwsimVersion)
         val lp = fixture.objects.getValue("lp")
         assertEquals(ObjectStatus.Solved, lp.status)
         assertEquals(1.5e6, lp.properties.getValue("pressure"), 1e-6)

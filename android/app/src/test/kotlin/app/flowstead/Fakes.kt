@@ -93,7 +93,7 @@ class FakeSecretStore : SecretStore {
     override suspend fun clearApiKey() { key.value = null }
 }
 
-class FakeEngineClient(var result: EngineResult<EngineHealth> = EngineResult.Ok(EngineHealth("ok", "0.1.0", "9.0.5"))) : EngineClient {
+class FakeEngineClient(var result: EngineResult<EngineHealth> = EngineResult.Ok(EngineHealth("ok", "0.1.0", "10.2.12"))) : EngineClient {
     val calls = mutableListOf<Pair<String, String?>>()
     var compoundResult: EngineResult<List<CompoundInfo>> = EngineResult.Ok(listOf(CompoundInfo("Methane")))
     var packageResult: EngineResult<List<PropertyPackageInfo>> = EngineResult.Ok(listOf(PropertyPackageInfo("Peng-Robinson (PR)", true)))

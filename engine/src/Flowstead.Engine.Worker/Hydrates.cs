@@ -7,8 +7,8 @@ using DWSIM.Thermodynamics.PropertyPackages;
 namespace Flowstead.Engine.Worker;
 
 /// <summary>
-/// Hydrate formation temperature of a gas in contact with free water (D52). DWSIM 9.0.5 has no hydrate model in its
-/// engine build, so this is Flowstead's, the textbook one: van der Waals–Platteeuw cage occupancy with Langmuir
+/// Hydrate formation temperature of a gas in contact with free water (D52). DWSIM 9.0.5 had no hydrate model in its
+/// engine build (DWSIM 10's hydrate utilities are not used yet), so this is Flowstead's, the textbook one: van der Waals–Platteeuw cage occupancy with Langmuir
 /// constants C = (A/T)·exp(B/T) and the water reference properties of Munck, Skjold-Jørgensen and Rasmussen, Chem.
 /// Eng. Sci. 43 (1988) 2661 (as tabulated in Sloan and Koh, Clathrate Hydrates of Natural Gases). The guest
 /// fugacities are DWSIM's: the property package's fugacity coefficients of the hydrocarbon vapour at (T, P).

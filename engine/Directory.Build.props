@@ -1,13 +1,13 @@
 <Project>
   <!-- Flowstead engine — shared build settings. SPDX-License-Identifier: GPL-3.0-or-later -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
-    <!-- DWSIM assemblies target .NET Framework 4.6.2; .NET 8 loads them through its compat layer. -->
+    <!-- DWSIM 10 targets net10.0 (built from source by scripts/fetch-dwsim.sh). -->
     <NoWarn>$(NoWarn);NU1701;MSB3277</NoWarn>
     <DwsimBin Condition="'$(DwsimBin)' == ''">$(MSBuildThisFileDirectory)dwsim-bin</DwsimBin>
   </PropertyGroup>

@@ -77,7 +77,7 @@ class SettingsViewModelTest {
         vm.saveApiKey("  secret-key ")
         assertTrue(loaded().hasApiKey)
         vm.testConnection().join()
-        assertEquals(ConnectionState.Connected("Engine 0.1.0 · DWSIM 9.0.5"), loaded().connection)
+        assertEquals(ConnectionState.Connected("Engine 0.1.0 · DWSIM 10.2.12"), loaded().connection)
         assertEquals("https://engine.example.com" to "secret-key", engine.calls.single())
     }
 

@@ -38,9 +38,9 @@ class EngineClientTest {
     @Test
     fun healthParsesAndSendsBearerKey() = runTest {
         val auth = mutableListOf<String?>()
-        val c = client(HttpStatusCode.OK, """{"status":"ok","engineVersion":"0.1.0","dwsimVersion":"9.0.5","extra":1}""", auth)
+        val c = client(HttpStatusCode.OK, """{"status":"ok","engineVersion":"0.1.0","dwsimVersion":"10.2.12","extra":1}""", auth)
         val r = c.health("https://e.example", "k123")
-        assertEquals(EngineResult.Ok(EngineHealth("ok", "0.1.0", "9.0.5")), r)
+        assertEquals(EngineResult.Ok(EngineHealth("ok", "0.1.0", "10.2.12")), r)
         assertEquals(listOf<String?>("Bearer k123"), auth)
     }
 

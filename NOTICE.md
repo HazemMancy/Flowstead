@@ -21,7 +21,7 @@ the DWSIM authors and does not use the DWSIM name or logo as its branding.
 
 | Component | Licence | Used in |
 |---|---|---|
-| DWSIM 9.0.5 and its bundled libraries | GPL-3.0 (and the licences listed in its distribution) | engine |
+| DWSIM 10.2.12 (built from source, `DanWBR/dwsim10`) and the libraries it references | GPL-3.0 (and the licences of those libraries, e.g. SkiaSharp MIT) | engine, Android app |
 | Manrope (Mikhail Sharanda) | SIL Open Font License 1.1 | Android app |
 | IBM Plex Mono (IBM Corp.) | SIL Open Font License 1.1 | Android app |
 | AndroidX, Jetpack Compose, Material Components | Apache-2.0 | Android app |
