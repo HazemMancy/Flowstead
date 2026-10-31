@@ -5,7 +5,7 @@ name: dwsim10-trial
 on:
   push:
     branches: [claude/new-session-c28egw]
-    paths: [.github/workflows/dwsim10-trial.yml, engine/trial/**]
+    paths: [.github/workflows/dwsim10-trial.yml, engine/trial/**, engine/src/**, benchmarks/**]
   workflow_dispatch:
 env:
   DWSIM_TAG: v10.2.12
