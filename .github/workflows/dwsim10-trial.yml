@@ -40,6 +40,10 @@ jobs:
           echo "== summary"; grep -E "Total tests|Passed:|Failed:|Skipped:" test.log | head
           echo "== failures"
           awk '/^  Failed /{n=$0; sub(/^  Failed /,"",n); sub(/ \[[^]]*\]$/,"",n); m=0; next} /Error Message:/{m=1; c=0; next} /Stack Trace:/{m=0; next} m && NF && c<80 {print n " | " $0; c++}' test.log | cut -c1-300 | head -1500
+      - name: Full output of the PVT and kij tests (step 4)
+        if: always()
+        run: |
+          awk '/^  (Failed|Passed) /{show = ($0 ~ /PvtTests|InteractionParameterTests/)} show' test.log | cut -c1-400 | head -300
       - uses: actions/upload-artifact@v4
         if: always()
         with:

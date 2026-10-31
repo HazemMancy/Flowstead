@@ -23,9 +23,12 @@ public sealed class InteractionParameterTests(EngineFixture engine, ITestOutputH
         return await EngineFixture.Json<List<BinaryParameterInfo>>(r);
     }
 
-    private async Task<double> Bubble(Flowsheet fs) =>
-        (await EngineFixture.Json<PvtResult>(await engine.Authed().PostAsJsonAsync("/pvt",
-            new PvtRequest(fs, Oil, PvtExperiments.Saturation, 350), Json.Options))).SaturationPressure!.Value;
+    private async Task<double> Bubble(Flowsheet fs)
+    {
+        var r = await engine.Authed().PostAsJsonAsync("/pvt", new PvtRequest(fs, Oil, PvtExperiments.Saturation, 350), Json.Options);
+        Assert.True(r.IsSuccessStatusCode, await r.Content.ReadAsStringAsync());
+        return (await EngineFixture.Json<PvtResult>(r)).SaturationPressure!.Value;
+    }
 
     [Fact]
     public async Task UserKijReplacesTheDatabankValueForThatFlowsheetOnly()
