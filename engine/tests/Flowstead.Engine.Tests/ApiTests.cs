@@ -286,6 +286,22 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
         Assert.Equal(0.0, c.Properties["vapourFraction"]);
         Assert.Equal(["liquid1", "overall"], c.Phases!.Keys.Order().ToArray());
         Assert.Equal(660.1, c.Phases["liquid1"].Properties["density"], 660.1 * 0.01); // GERG-2008 (CoolProp): 660.1 kg/m³
+
+        // The check goes one way only: LNG at −160 °C is a liquid whose cubic also has a vapour root (Z 0.95), and stays liquid.
+        var lng = new Dictionary<string, double> { ["Methane"] = 0.90, ["Ethane"] = 0.06, ["Propane"] = 0.03, ["N-butane"] = 0.01 };
+        var cold = fs with
+        {
+            Compounds = lng.Keys.ToList(),
+            Objects = [fs.Objects[0] with
+            {
+                Composition = lng,
+                Specs = new(fs.Objects[0].Specs) { [SpecKeys.Temperature] = new Spec(113.15, "C"), [SpecKeys.Pressure] = new Spec(3e5, "bara") },
+            }],
+        };
+        r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", cold, Json.Options));
+        var l = r.Objects["c"];
+        Assert.Equal(0.0, l.Properties["vapourFraction"]);
+        Assert.Equal(459.5, l.Phases!["liquid1"].Properties["density"], 459.5 * 0.02); // GERG-2008 (CoolProp): 459.5 kg/m³
     }
 
     [Fact]

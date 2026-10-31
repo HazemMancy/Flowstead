@@ -45,17 +45,18 @@ public static class PhaseStability
     }
 
     /// <summary>
-    /// A one-phase result labelled with the wrong phase: DWSIM's PT flash called a subcooled propane–pentane–hexane–decane
-    /// liquid at 40 °C and 10 bar (bubble point 151 °C, Z 0.056, 658 kg/m³) a vapour. Null when the result is not one
-    /// phase or its label is right; otherwise whether it is vapour, by the same rule as for same-fluid splits.
+    /// A "vapour" that is a liquid: DWSIM's PT flash called a subcooled propane–pentane–hexane–decane liquid at 40 °C and
+    /// 10 bar (bubble point 151 °C, Z 0.056, 658 kg/m³) a vapour. When even the equation of state's vapour root is below
+    /// the mixture's critical Z there is no vapour-like root at all, so the one phase is a liquid; returns false (not
+    /// vapour) then, else null. Only this direction: a liquid also has a vapour root when the cubic has three, so the
+    /// same test cannot tell a mislabelled liquid from a real one (LNG at −160 °C has a vapour root at Z 0.95).
     /// </summary>
     internal static bool? MislabelledOnePhase(PropertyPackage pp, object[] r, int l2Index, int sIndex, double[] z, double t, double p)
     {
         double l = Convert.ToDouble(r[0]), v = Convert.ToDouble(r[1]);
         if (Convert.ToDouble(r[l2Index]) != 0 || Convert.ToDouble(r[sIndex]) != 0 || z.Count(x => x > 0) < 2) return null;
-        if (!(l == 1 && v == 0) && !(v == 1 && l == 0)) return null;
-        var vapour = IsVapourLike(pp, z, t, p);
-        return vapour == (v == 1) ? null : vapour;
+        if (!(v == 1 && l == 0)) return null;
+        return IsVapourLike(pp, z, t, p) ? null : false;
     }
 
     /// <summary>DWSIM's universal flash as <see cref="StableFlash"/>; any other algorithm (single compound, forced phase, Gibbs) unchanged.</summary>
