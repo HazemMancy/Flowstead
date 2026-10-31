@@ -121,7 +121,8 @@ public sealed class PvtLab(
                 (PvtKeys.RelativeVolume, vrel),
                 (PvtKeys.LiquidDropout, single ? (kind == "dew" ? 0 : null) : c is null || vsat is null ? null : c.LiquidVolume / vsat),
                 (PvtKeys.VapourFraction, single ? null : c?.VapourFraction),
-                (PvtKeys.GasZ, two ? c!.GasZ : c?.SingleZ ?? c?.GasZ),
+                // Above a dew point the cell is a gas (whatever DWSIM calls it); above a bubble point it is an oil, with no gas Z (D97).
+                (PvtKeys.GasZ, two ? c!.GasZ : single && kind == "dew" ? c?.SingleZ : c?.GasZ),
                 (PvtKeys.Density, two ? (kind == "dew" ? c!.GasDensity : c!.LiquidDensity) : c?.SingleDensity),
                 (PvtKeys.YFunction, kind == "bubble" && psat is { } pb && p < pb && vrel is { } vr && vr > 1 ? (pb - p) / (p * (vr - 1)) : null));
         }
@@ -264,7 +265,9 @@ public sealed class PvtLab(
         return new Cell(
             n, volume, liquids.Sum(V), V("vapour"), N("vapour"), liquidMoles,
             ph.GetValueOrDefault("vapour")?.Composition ?? [], liquid,
-            P("vapour", "compressibilityFactor"), single is null ? null : P(single, "compressibilityFactor"),
+            // One phase: DWSIM's Z when it calls the phase vapour; otherwise (the engine reports no liquid Z, D97) the
+            // cell's PV/nRT, which the experiments use only where the fluid is a gas (a condensate above its dew point).
+            P("vapour", "compressibilityFactor"), single is null ? null : single == "vapour" ? P("vapour", "compressibilityFactor") : p * volume / (n * R * t),
             P("vapour", "density"), liquids.Count == 1 ? P(liquids[0], "density") : liquidMoles > 0 ? liquids.Sum(k => P(k, "density") * V(k)) / liquids.Sum(V) : null,
             single is null ? null : P(single, "density"), P("vapour", "molecularWeight"),
             r.Objects["cell"].Properties.GetValueOrDefault("vapourFraction"));

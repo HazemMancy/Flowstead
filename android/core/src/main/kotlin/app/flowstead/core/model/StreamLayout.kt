@@ -31,7 +31,7 @@ object StreamLayout {
         add(Row("$name phase mass density", "density", phase))
         add(Row("$name phase viscosity", "viscosity", phase))
         add(Row("$name phase kinematic viscosity", "kinematicViscosity", phase))
-        add(Row("$name phase Z factor", "compressibilityFactor", phase))
+        if (vapour) add(Row("$name phase Z factor", "compressibilityFactor", phase)) // Z = PV/nRT: a gas property (D97)
         add(Row("$name phase mass Cp", "massHeatCapacity", phase))
         add(Row("$name phase Cp/Cv", "heatCapacityRatio", phase))
         add(Row("$name phase thermal conductivity", "thermalConductivity", phase))
@@ -59,7 +59,7 @@ object StreamLayout {
                 Row("Mass Cp", "massHeatCapacity", Phases.OVERALL),
                 // Single-phase streams only: these come from the one phase present.
                 Row("Viscosity", "viscosity", null),
-                Row("Z factor", "compressibilityFactor", null),
+                Row("Z factor", "compressibilityFactor", null), // vapour-only streams (D97)
                 Row("Thermal conductivity", "thermalConductivity", null),
                 // Bubble and dew points: temperatures at the stream's pressure, pressures at its temperature.
                 Row("Bubble point temperature", "bubblePointTemperature", null),

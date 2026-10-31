@@ -1346,7 +1346,7 @@ public sealed class DwsimEngine
                     ("density", p.density),
                     ("molecularWeight", p.molecularWeight),
                     ("viscosity", idx == 0 ? null : p.viscosity),
-                    ("compressibilityFactor", idx == 0 ? null : p.compressibilityFactor),
+                    ("compressibilityFactor", idx == 2 ? p.compressibilityFactor : null), // Z = PV/nRT: the vapour phase only (D97)
                     // HYSYS stream property pages: per phase only (meaningless for a two-phase mixture).
                     ("massHeatCapacityCv", idx == 0 ? null : p.heatCapacityCv * 1000.0), // DWSIM kJ/kg·K
                     ("heatCapacityRatio", idx == 0 ? null : p.heatCapacityCp / p.heatCapacityCv),

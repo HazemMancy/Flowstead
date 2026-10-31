@@ -23,7 +23,20 @@ public static class Hypotheticals
 {
     public const string Database = "Hypothetical (Flowstead)";
 
+    // A hypothetical's constants depend on its definition only, and the fits below take a few hundred milliseconds,
+    // so each definition is characterised once per engine process (D97). DWSIM reads the constants and never changes
+    // them, as it does for the database compounds every flowsheet shares; PVT tuning makes a new definition instead.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Hypothetical, ConstantProperties> Cache = new();
+
     public static ConstantProperties Characterise(Hypothetical h)
+    {
+        if (Cache.TryGetValue(h, out var cached)) return cached;
+        var c = CharacteriseNew(h);
+        if (Cache.Count > 500) Cache.Clear();
+        return Cache.GetOrAdd(h, c);
+    }
+
+    private static ConstantProperties CharacteriseNew(Hypothetical h)
     {
         double nbp, mw, sg;
         switch (h.NormalBoilingPoint, h.MolecularWeight, h.SpecificGravity)

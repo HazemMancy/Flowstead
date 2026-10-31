@@ -273,7 +273,17 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
      * reports per phase (density, volume flow, molecular weight, entropy, Cp…) come from the overall phase,
      * and viscosity and Z, which exist only per phase, from the stream's single phase when it has one.
      */
-    fun value(objectId: String, key: String): DisplayValue = lookup(objectId) { r ->
+    fun value(objectId: String, key: String): DisplayValue {
+        // Z = PV/nRT describes a gas: shown for a vapour-only stream, never from a liquid (D97; results saved by
+        // 3.0.1 and earlier still carry a liquid Z).
+        if (key == "compressibilityFactor") {
+            val phases = presentPhases(objectId).filter { it != Phases.OVERALL }
+            if (phases.isNotEmpty() && phases != listOf(Phases.VAPOUR)) return DisplayValue.Missing("Z factor is for a vapour phase only")
+        }
+        return valueOf(objectId, key)
+    }
+
+    private fun valueOf(objectId: String, key: String): DisplayValue = lookup(objectId) { r ->
         r.properties[key] ?: r.phases?.let { phases ->
             phases[Phases.OVERALL]?.properties?.get(key)
                 ?: phases.filterKeys { it != Phases.OVERALL }.values.singleOrNull()?.properties?.get(key)
@@ -282,7 +292,8 @@ class ResultView(private val solve: StoredSolve?, currentHash: String) {
 
     /** Value of a phase property, e.g. ("s1", "vapour", "density"). */
     fun phaseValue(objectId: String, phase: String, key: String): DisplayValue =
-        lookup(objectId, absentReason = "${Phases.label(phase)} phase not present") { it.phases?.get(phase)?.properties?.get(key) }
+        if (key == "compressibilityFactor" && phase != Phases.VAPOUR) DisplayValue.Missing("Z factor is for a vapour phase only")
+        else lookup(objectId, absentReason = "${Phases.label(phase)} phase not present") { it.phases?.get(phase)?.properties?.get(key) }
 
     fun composition(objectId: String, phase: String = Phases.OVERALL, compound: String): DisplayValue =
         lookup(objectId, absentReason = "${Phases.label(phase)} phase not present") { it.phases?.get(phase)?.composition?.get(compound) }
