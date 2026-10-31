@@ -514,7 +514,9 @@ public sealed class DwsimEngine
         if (!(req.Temperature > 0)) throw new InvalidDataException("Give the reservoir temperature");
         // PVT volumes must all come from one model: the equation of state for vapour and liquid alike (D53).
         var model = req.Flowsheet with { Objects = [], Connections = [], Reactions = [], LiquidDensity = LiquidDensityMethods.Eos };
-        return new PvtLab(req with { Flowsheet = model }, Solve, req.SaturationGuess).Run();
+        // Each experiment flashes one cell dozens of times: one DWSIM stream reused, without the stream's own bubble and
+        // dew points (four more flashes each, unused here; a bubble point took 149 s with them).
+        return new PvtLab(req with { Flowsheet = model }, StreamFlasher(saturationPoints: false), req.SaturationGuess).Run();
     }
 
     /// <summary>The kij table of the flowsheet's package for every pair of its compounds (D58).</summary>
@@ -583,7 +585,7 @@ public sealed class DwsimEngine
             if (req.Flowsheet.Hypotheticals.FirstOrDefault(h => h.Name == name) is { } hypo) return Hypotheticals.Characterise(hypo).Critical_Pressure;
             return _automation.AvailableCompounds.TryGetValue(name, out var c) && double.IsFinite(c.Critical_Pressure) && c.Critical_Pressure > 0 ? c.Critical_Pressure : null;
         }
-        return new DepressuringCalc(req, StreamFlasher(), Pc).Run();
+        return new DepressuringCalc(req, StreamFlasher(saturationPoints: false), Pc).Run();
     }
 
     /// <summary>
@@ -1183,7 +1185,7 @@ public sealed class DwsimEngine
     /// flowsheet is built once and each call only resets the stream's state and composition and recalculates it,
     /// read back the same way as a solve. Anything other than a lone material stream goes to <see cref="Solve"/>.
     /// </summary>
-    private Func<Flowsheet, SolveResult> StreamFlasher()
+    private Func<Flowsheet, SolveResult> StreamFlasher(bool saturationPoints = true)
     {
         string? key = null;
         MaterialStream? ms = null;
@@ -1208,12 +1210,12 @@ public sealed class DwsimEngine
                 ms = null; // rebuild on the next call
                 return new SolveResult { Status = SolveStatus.Failed, Messages = [new SolverMessage(MessageLevel.Error, Plain(e), o.Id)] };
             }
-            var r = Extract(o, ms);
+            var r = Extract(o, ms, saturationPoints);
             return new SolveResult { Status = r.Status == ObjectStatus.Solved ? SolveStatus.Converged : SolveStatus.Failed, Objects = new() { [o.Id] = r } };
         };
     }
 
-    private static ObjectResult Extract(SimObject o, ISimulationObject so)
+    private static ObjectResult Extract(SimObject o, ISimulationObject so, bool saturationPoints = true)
     {
         var error = so.ErrorMessage;
         if (!string.IsNullOrWhiteSpace(error))
@@ -1227,7 +1229,7 @@ public sealed class DwsimEngine
 
         return so switch
         {
-            MaterialStream ms => StreamResult(ms),
+            MaterialStream ms => StreamResult(ms, saturationPoints),
             EnergyStream es => new ObjectResult
             {
                 Status = ObjectStatus.Solved,
@@ -1303,7 +1305,7 @@ public sealed class DwsimEngine
     private static readonly (int Index, string Key)[] PhaseIndices =
         [(0, "overall"), (2, "vapour"), (3, "liquid1"), (4, "liquid2")];
 
-    private static ObjectResult StreamResult(MaterialStream ms)
+    private static ObjectResult StreamResult(MaterialStream ms, bool saturationPoints = true)
     {
         // An empty stream (a reactor's liquid outlet when everything leaves as vapour) has a temperature and pressure
         // but no composition or phase properties: DWSIM 9 filled those with zeros, DWSIM 10 with the other outlet's.
@@ -1370,7 +1372,7 @@ public sealed class DwsimEngine
         }
 
         var overall = ms.Phases[0].Properties;
-        var (bubbleT, dewT, bubbleP, dewP) = SaturationPoints(ms);
+        var (bubbleT, dewT, bubbleP, dewP) = saturationPoints ? SaturationPoints(ms) : default;
         return new ObjectResult
         {
             Status = ObjectStatus.Solved,
