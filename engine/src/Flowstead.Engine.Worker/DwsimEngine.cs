@@ -1301,6 +1301,20 @@ public sealed class DwsimEngine
 
     private static ObjectResult StreamResult(MaterialStream ms)
     {
+        // An empty stream (a reactor's liquid outlet when everything leaves as vapour) has a temperature and pressure
+        // but no composition or phase properties: DWSIM 9 filled those with zeros, DWSIM 10 with the other outlet's.
+        if (ms.Phases[0].Properties.molarflow is { } flow && flow == 0)
+        {
+            var o = ms.Phases[0].Properties;
+            var empty = Props(("temperature", o.temperature), ("pressure", o.pressure), ("molarFlow", 0.0), ("massFlow", 0.0));
+            return new ObjectResult
+            {
+                Status = ObjectStatus.Solved,
+                Properties = empty,
+                Phases = new() { ["overall"] = new PhaseResult { Properties = new(empty) } },
+            };
+        }
+
         var phases = new Dictionary<string, PhaseResult>();
         foreach (var (idx, key) in PhaseIndices)
         {
