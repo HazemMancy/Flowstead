@@ -449,10 +449,9 @@ public sealed class DwsimEngine
             }
         }
 
-        if (model.LiquidDensity != LiquidDensityMethods.Costald && LiquidDensity.FixedPackages.Contains(model.PropertyPackage ?? "") && model.Compounds.Count > 1)
-            warnings.Add("Liquid densities: desktop DWSIM mixes pure-liquid densities by mole fraction; Flowstead's engine mixes them by mass" +
-                (LiquidDensity.CubicPackages.Contains(model.PropertyPackage ?? "") ? " and uses COSTALD for liquids that carry more than 1 mol % of components above their critical temperature" : "") +
-                ", so liquid densities and two-phase pipe ΔP can differ for mixtures.");
+        if (model.LiquidDensity is null && LiquidDensity.CubicPackages.Contains(model.PropertyPackage ?? "") && model.Compounds.Count > 1)
+            warnings.Add("Liquid densities: Flowstead's engine uses COSTALD for liquid mixtures that are not mostly water (D91); the file keeps " +
+                "DWSIM's default method, so desktop DWSIM's liquid densities, liquid volumes and two-phase pipe ΔP can differ for mixtures.");
         if (model.VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin)
             warnings.Add("Vapour viscosity: Lee–Gonzalez–Eakin is a Flowstead option; desktop DWSIM uses its own method, so gas viscosities can differ.");
         var (fs, _) = Build(plain, forExport: true);
@@ -710,7 +709,7 @@ public sealed class DwsimEngine
         }
         foreach (var c in model.Compounds) fs.AddCompound(c);
         var ppName = MvpPackages.FirstOrDefault(p => p.Name == model.PropertyPackage).Dwsim ?? model.PropertyPackage!;
-        // Cubic packages solve with Flowstead's liquid-density rule (D32). A .dwxmz keeps DWSIM's own class,
+        // Cubic packages solve with Flowstead's liquid-density rule (D91). A .dwxmz keeps DWSIM's own class,
         // which desktop DWSIM can load.
         // The COSTALD option (D39) sets the package's own COSTALD mode, in the engine and in a .dwxmz alike.
         var costald = model.LiquidDensity == LiquidDensityMethods.Costald;

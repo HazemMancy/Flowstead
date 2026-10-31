@@ -89,6 +89,29 @@ public sealed class DwsimFileTests(EngineFixture engine, ITestOutputHelper outpu
         Assert.True((await r.Content.ReadAsByteArrayAsync()) is [0x50, 0x4B, ..]);
     }
 
+    /// <summary>
+    /// Every benchmark's case.dwxmz was saved by Flowstead 2.x on DWSIM 9.0.5; Flowstead 3.0 (DWSIM 10) opens each one,
+    /// finds every stream of the case and solves it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public async Task FilesSavedOnDwsim9OpenAndSolve(string name)
+    {
+        var path = Path.Combine(Dir, name, "case.dwxmz");
+        if (!File.Exists(path)) return;
+        using var client = engine.Authed();
+        var import = await Post<ImportResult>(client, "/import", new DwsimFile(Convert.ToBase64String(File.ReadAllBytes(path))));
+        foreach (var w in import.Warnings) output.WriteLine("import: " + w);
+        var original = Load(name);
+        Assert.Equal(original.PropertyPackage, import.Flowsheet.PropertyPackage);
+        var tags = import.Flowsheet.Objects.Select(o => o.Tag).ToHashSet();
+        foreach (var o in original.Objects.Where(o => o.Type == ObjectType.MaterialStream))
+            Assert.True(tags.Contains(o.Tag), $"{name}: stream {o.Tag} missing from the DWSIM 9 file");
+        var solved = await Post<SolveResult>(client, "/solve", import.Flowsheet);
+        Assert.True(solved.Status == SolveStatus.Converged || original.Objects.Any(o => o.Type == ObjectType.Adjust),
+            $"{name}: {solved.Status}: {string.Join("; ", solved.Messages.Select(m => m.Text))}");
+    }
+
     /// <summary>shared/fixtures/with-script.dwxmz: FEED → VLV-100 → LP → SCRIPT-1 (a Python script unit op) → END, saved by DWSIM 9.0.5.</summary>
     [Fact]
     public async Task UnsupportedObjectsAreLeftOutWithAWarning()

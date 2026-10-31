@@ -111,7 +111,7 @@ internal object HelpTopics {
             With a cubic equation of state, water and hydrocarbons are flashed as an immiscible free-water phase, as HYSYS does, unless the rigorous three-phase flash is needed.
             """.trimIndent(),
             keywords = listOf("PR", "SRK", "NRTL", "UNIQUAC", "IAPWS", "GERG", "CoolProp", "equation of state", "Lee-Kesler", "Peneloux", "COSTALD"),
-            methods = listOf("D3", "D17", "D28", "D32", "D39", "D41", "D44"),
+            methods = listOf("D3", "D17", "D28", "D39", "D41", "D44", "D90", "D91"),
         ),
         HelpTopic(
             "kij", THERMO, "Binary interaction parameters and hypotheticals",

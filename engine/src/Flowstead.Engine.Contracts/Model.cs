@@ -19,7 +19,7 @@ public sealed record Flowsheet
     public List<Reaction> Reactions { get; init; } = [];
     /// <summary>User-defined pseudo-components; each name also appears in <see cref="Compounds"/>.</summary>
     public List<Hypothetical> Hypotheticals { get; init; } = [];
-    /// <summary>Liquid density method: null for DWSIM's default (with Flowstead's rule, D32); "costald" for COSTALD, as HYSYS (D39).</summary>
+    /// <summary>Liquid density method: null for Flowstead's default (COSTALD for cubic-package liquid mixtures, D91); "costald" for COSTALD, as HYSYS (D39).</summary>
     public string? LiquidDensity { get; init; }
     /// <summary>Cubic EOS volume shift: null for DWSIM's Peneloux shift on vapour and liquid; "none" for the plain EOS, as HYSYS's PR (D41).</summary>
     public string? VolumeShift { get; init; }

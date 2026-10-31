@@ -1,4 +1,4 @@
-// Flowstead engine worker — liquid density for the cubic and activity packages (decisions D32, D39).
+// Flowstead engine worker — liquid density for the cubic and activity packages (decisions D91, D39).
 // Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
 
 using DWSIM.Thermodynamics.PropertyPackages;
@@ -18,12 +18,6 @@ public static class LiquidDensity
 {
     /// <summary>Water mole fraction at or above which a liquid is "mostly water" and keeps DWSIM's default density.</summary>
     public const double WaterRich = 0.5;
-
-    /// <summary>Packages whose liquid density Flowstead corrects (mass-fraction mixing, D39).</summary>
-    public static readonly IReadOnlySet<string> FixedPackages = new HashSet<string>
-    {
-        "Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "Peng-Robinson / Lee-Kesler (PR/LK)", "NRTL", "UNIQUAC",
-    };
 
     public static readonly IReadOnlySet<string> CubicPackages = new HashSet<string>
     {
