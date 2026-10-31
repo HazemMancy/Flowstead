@@ -247,7 +247,7 @@ object PfdPdf {
         c.drawText(sub, tx + (titleW - small.measureText(sub)) / 2, y + 64f, small)
         val note = when {
             !h.solved -> "Not solved: tables show no values."
-            h.stale -> "Results out of date: the flowsheet changed after the last solve."
+            h.stale -> "Results out of date: the flowsheet or the engine changed after the last solve."
             else -> null
         }
         note?.let { c.drawText(it, tx + (titleW - small.measureText(it)) / 2, y + 78f, paint(6f, color = Color.rgb(0xC8, 0x37, 0x2D))) }

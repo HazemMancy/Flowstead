@@ -257,8 +257,13 @@ object ResultKeys {
  * Turns a stored solve into on-screen values. A number only ever comes from the engine's result;
  * anything missing is [DisplayValue.Missing] or [DisplayValue.Error] with the reason (brief §4).
  */
+/** The DWSIM generation this Flowstead runs (D94): results from an earlier one are out of date. */
+const val CURRENT_DWSIM_MAJOR = 10
+
 class ResultView(private val solve: StoredSolve?, currentHash: String) {
-    val stale: Boolean = solve != null && solve.modelHash != currentHash
+    /** Solved on an earlier DWSIM generation (a project solved by Flowstead 2.x on DWSIM 9): the engine has changed (D94). */
+    val olderEngine: Boolean = solve?.result?.dwsimVersion?.substringBefore('.')?.toIntOrNull()?.let { it < CURRENT_DWSIM_MAJOR } == true
+    val stale: Boolean = solve != null && (solve.modelHash != currentHash || olderEngine)
     val status: SolveStatus? = solve?.result?.status
 
     fun objectStatus(id: String): ObjectStatus? = solve?.result?.objects?.get(id)?.status

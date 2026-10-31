@@ -87,7 +87,7 @@ internal fun SeparatorSizingSection(fs: Flowsheet, obj: SimObject, results: Resu
         val length = unitSet.unitFor(Quantity.Length)
         val velocity = unitSet.unitFor(Quantity.Velocity)
         val volume = unitSet.unitFor(Quantity.Volume)
-        if (results.stale) Calculated("The flowsheet changed since the solve: solve again to size on the current flows.")
+        if (results.stale) Calculated("The flowsheet or the engine changed since the solve: solve again to size on the current flows.")
         SectionLabel("Vessel")
         Line("Inside diameter", ValueFormat.si(r.diameter, length, ctx))
         Line(if (r.horizontal) "Length (T/T)" else "Height (T/T)", ValueFormat.si(r.length, length, ctx))

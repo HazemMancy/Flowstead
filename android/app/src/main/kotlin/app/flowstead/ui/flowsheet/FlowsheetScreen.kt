@@ -563,6 +563,7 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onSolverActive: (Bool
         ui.results.status == null && ui.engineConfigured && ui.notReady.isNotEmpty() ->
             "Ready to solve what is complete · ${ui.notReady.size} not ready" to v.error
         ui.results.status == null -> (if (ui.engineConfigured) "Ready to solve" else "Set the engine in Settings to solve") to MaterialTheme.colorScheme.onSurfaceVariant
+        ui.results.olderEngine -> "Solved with DWSIM 9 — solve again for DWSIM 10 results" to v.underSpecifiedText
         ui.results.stale && ui.flowsheet.solverActive -> "Changed — solving shortly" to MaterialTheme.colorScheme.onSurfaceVariant
         ui.results.stale -> "Results out of date — solve again" to v.underSpecifiedText
         ui.results.status == SolveStatus.Converged && ui.notReady.isNotEmpty() ->

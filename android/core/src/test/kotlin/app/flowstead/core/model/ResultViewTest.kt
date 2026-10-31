@@ -34,6 +34,18 @@ class ResultViewTest {
     }
 
     @Test
+    fun resultsFromDwsim9AreOutOfDate() {
+        val old = ResultView(StoredSolve(fixture.copy(dwsimVersion = "9.0.5"), "h", 0), "h")
+        assertTrue(old.olderEngine)
+        assertTrue(old.stale)
+        assertIs<DisplayValue.Calculated>(old.value("lp", "temperature")).also { assertEquals(true, it.stale) }
+        val current = ResultView(StoredSolve(fixture, "h", 0), "h")
+        assertEquals(false, current.olderEngine)
+        assertEquals(false, current.stale)
+        assertEquals(false, ResultView(StoredSolve(fixture.copy(dwsimVersion = ""), "h", 0), "h").stale) // version not recorded
+    }
+
+    @Test
     fun valuesComeOnlyFromTheEngine() {
         val view = ResultView(StoredSolve(fixture, "h", 0), "h")
         assertIs<DisplayValue.Calculated>(view.value("lp", "temperature")).also { assertEquals(false, it.stale) }
