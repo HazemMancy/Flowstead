@@ -155,6 +155,7 @@ _Last updated: 2026-10-20_
 - **2.0.1:** controller and Set signal lines drawn at right angles (canvas and printed PFD).
 - **2.0.2:** light theme by default; status and navigation bar icons follow the app's theme, not the phone's; lists and forms capped at 840 dp wide and centred on tablets (the canvas keeps the full width).
 - **DWSIM 10 trial (D88):** 10.2.12 builds from source and Flowstead's engine runs on it (.NET 10); 140/159 engine tests pass. Liquid densities, two reactors, CSTR/PFR enthalpies and column file round trips differ. Step 1 passed: on an Android emulator DWSIM 10 starts in 5 s and all 20 benchmarks converge. Releases stay on 9.0.5.
+- **Unreleased (D89, from the DWSIM 10 trial, on DWSIM 9):** NRTL and UNIQUAC liquid enthalpies from experimental heat capacities (liquid water Cp was 28 % high, duties with it); empty streams show temperature, pressure and zero flow only.
 - **D87:** a direct Install button (with the install permission) was tested as a pre-release and blocked by Play Protect, as in D74; releases keep Open Downloads.
 
 - **On-device engine:** verified on the CI emulator: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).

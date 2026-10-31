@@ -723,6 +723,10 @@ public sealed class DwsimEngine
         if (model.LiquidDensity == LiquidDensityMethods.Eos) pp.LiquidDensityCalculationMode_Subcritical = PropertyPackage.LiquidDensityCalcMode.EOS;
         // Without the volume shift (D41) PR and SRK densities and Z are the plain EOS values, as HYSYS reports them.
         if (model.VolumeShift == VolumeShiftMethods.None) pp.LiquidDensity_UsePenelouxVolumeTranslation = false;
+        // Activity models (NRTL, UNIQUAC) take liquid enthalpy from experimental liquid heat capacities, DWSIM 10's
+        // default (D89). DWSIM 9's Lee–Kesler gave liquid water a Cp of 5.35 kJ/kg·K instead of 4.18. Set in a
+        // .dwxmz too, so desktop DWSIM reproduces the numbers.
+        if (pp is ActivityCoefficientPropertyPackage) pp.EnthalpyEntropyCpCvCalculationMode = PropertyPackage.EnthalpyEntropyCpCvCalcMode.ExpData;
         // Lee–Gonzalez–Eakin vapour viscosity (D44) lives in Flowstead's package classes only.
         if (pp is IFlowsteadPackage fp) fp.VapourViscosity = model.VapourViscosity;
         // The user's kij (D58), over DWSIM's databank values for those pairs.

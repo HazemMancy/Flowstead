@@ -4,7 +4,7 @@
   "generatedWith": {
     "engine": "0.2.0",
     "dwsim": "9.0.5",
-    "date": "2026-10-22"
+    "date": "2026-10-31"
   },
   "status": "converged",
   "checks": [
@@ -48,7 +48,7 @@
     },
     {
       "path": "objects.f.properties.massEnthalpy",
-      "expected": -1986346.1710130128,
+      "expected": 113239.5433575515,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -79,7 +79,7 @@
     },
     {
       "path": "objects.f.phases.overall.properties.massEnthalpy",
-      "expected": -1986346.1710130128,
+      "expected": 113239.5433575515,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -131,7 +131,7 @@
     },
     {
       "path": "objects.f.phases.liquid1.properties.massEnthalpy",
-      "expected": -1986346.1710130128,
+      "expected": 113239.5433575515,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -160,7 +160,7 @@
     },
     {
       "path": "objects.c.properties.duty",
-      "expected": -62668.6468143028,
+      "expected": -57880.56236837211,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -214,7 +214,7 @@
     },
     {
       "path": "objects.o.properties.massEnthalpy",
-      "expected": -2011025.0856262858,
+      "expected": 111782.33003044434,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -245,7 +245,7 @@
     },
     {
       "path": "objects.o.phases.overall.properties.massEnthalpy",
-      "expected": -2011025.0856262858,
+      "expected": 111782.33003044434,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -297,7 +297,7 @@
     },
     {
       "path": "objects.o.phases.liquid1.properties.massEnthalpy",
-      "expected": -2011025.0856262858,
+      "expected": 111782.33003044434,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -364,7 +364,7 @@
     },
     {
       "path": "objects.f2.properties.massEnthalpy",
-      "expected": -1986346.1710130128,
+      "expected": 113239.5433575515,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -395,7 +395,7 @@
     },
     {
       "path": "objects.f2.phases.overall.properties.massEnthalpy",
-      "expected": -1986346.1710130128,
+      "expected": 113239.5433575515,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -447,7 +447,7 @@
     },
     {
       "path": "objects.f2.phases.liquid1.properties.massEnthalpy",
-      "expected": -1986346.1710130128,
+      "expected": 113239.5433575515,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -476,7 +476,7 @@
     },
     {
       "path": "objects.p.properties.duty",
-      "expected": -80832.93335136796,
+      "expected": -74529.4163554913,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -530,7 +530,7 @@
     },
     {
       "path": "objects.o2.properties.massEnthalpy",
-      "expected": -2018793.9276473154,
+      "expected": 111363.17494256672,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -561,7 +561,7 @@
     },
     {
       "path": "objects.o2.phases.overall.properties.massEnthalpy",
-      "expected": -2018793.9276473154,
+      "expected": 111363.17494256672,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -613,7 +613,7 @@
     },
     {
       "path": "objects.o2.phases.liquid1.properties.massEnthalpy",
-      "expected": -2018793.9276473154,
+      "expected": 111363.17494256672,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -671,6 +671,16 @@
       "expected": 0.0,
       "tol": {
         "abs": 1e-06
+      }
+    },
+    {
+      "label": "Isothermal CSTR duty = −X·F(EO)·ΔHr: 0.58903 × 1 mol/s × 96.4 kJ/mol, with ΔHr = ΔHf(EG, l) − ΔHf(EO, l) − ΔHf(H2O, l) = −460.0 + 77.8 + 285.8 kJ/mol (NIST, 298 K): −56.78 kW",
+      "source": "heats of formation (NIST WebBook), hand calculation",
+      "blocking": true,
+      "path": "objects.c.properties.duty",
+      "expected": -56784.5,
+      "tol": {
+        "rel": 0.03
       }
     }
   ]
