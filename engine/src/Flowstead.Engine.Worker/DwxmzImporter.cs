@@ -160,7 +160,13 @@ public static class DwxmzImporter
             return;
         }
         var column = (Column)so;
-        var stageIndex = column.Stages.Select((st, i) => (st.Name, i)).ToDictionary(x => x.Name, x => x.i);
+        // A feed's stage is stored by name (DWSIM 9) or by the stage's ID (DWSIM 10): accept either.
+        var stageIndex = new Dictionary<string, int>();
+        for (var i = 0; i < column.Stages.Count; i++)
+        {
+            if (column.Stages[i].ID is { Length: > 0 } id) stageIndex.TryAdd(id, i);
+            if (column.Stages[i].Name is { Length: > 0 } name) stageIndex.TryAdd(name, i);
+        }
         var offset = Columns.HasCondenser(col.Type) ? 1 : 0;
         var feedPort = 0;
         var feeds = column.MaterialStreams.Values.Where(m => m.StreamBehavior == StreamInformation.Behavior.Feed)
