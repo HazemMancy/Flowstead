@@ -11,6 +11,7 @@ const path = require('path');
     ['featured.html', 'featured-1200x627.png', 1200, 627, 1],
     ['featured.html', 'featured-2400x1254.png', 1200, 627, 2],
     ['post-pocket.html', 'post-pocket-1200x1500.png', 1200, 1500, 1],
+    ['post-dwsim10.html', 'post-dwsim10-1200x1500.png', 1200, 1500, 1],
   ]) {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale });
     await page.goto('file://' + path.join(__dirname, src));

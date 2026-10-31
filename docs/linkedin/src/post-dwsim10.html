@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- LinkedIn feed post image, 4:5 (1200×1500): Flowstead 3.0 on DWSIM 10. Every figure is from docs/dwsim10-trial.md and
+     DECISIONS D88–D96. The phones show the app's own symbol sheet (StoreScreenshots). Render: node src/render.js -->
+<html><head><meta charset="utf-8"><script src="mark.js"></script><style>
+@font-face{font-family:Inter;font-weight:700;src:url(../../../android/app/src/main/res/font/inter_bold.ttf)}
+@font-face{font-family:Inter;font-weight:600;src:url(../../../android/app/src/main/res/font/inter_semibold.ttf)}
+@font-face{font-family:Inter;font-weight:500;src:url(../../../android/app/src/main/res/font/inter_medium.ttf)}
+html,body{margin:0;width:1200px;height:1500px;overflow:hidden;background:#02172C}
+.wrap{position:relative;width:1200px;height:1500px;overflow:hidden;
+  background:radial-gradient(ellipse 80% 55% at 70% 72%,#0A3466 0%,#04224A 45%,#02142A 85%)}
+.grid{position:absolute;inset:0;background-image:radial-gradient(#5A9FF2 1px,transparent 1.2px);background-size:28px 28px;opacity:.10}
+.lock{position:absolute;left:80px;top:80px;display:flex;align-items:center;gap:20px}
+.name{font:700 60px/1 Inter;color:#fff;letter-spacing:-1.4px}
+.name span{color:#14D3CF}
+.sub{margin-top:9px;font:500 13px/1 Inter;color:#C9D6E2;letter-spacing:4.4px}
+.badge{position:absolute;right:80px;top:92px;font:700 22px/1 Inter;color:#02172C;background:#14D3CF;border-radius:999px;padding:14px 22px}
+h1{position:absolute;left:80px;top:220px;margin:0;width:1040px;font:700 84px/1.04 Inter;color:#fff;letter-spacing:-2px}
+h1 span{color:#14D3CF}
+.lead{position:absolute;left:80px;top:345px;width:1000px;font:500 26px/1.45 Inter;color:#C9D6E2}
+.stats{position:absolute;left:80px;top:490px;width:610px;display:flex;flex-direction:column;gap:22px}
+.stat{border:1px solid rgba(20,211,207,.35);background:rgba(20,211,207,.08);border-radius:22px;padding:24px 28px}
+.stat .v{font:700 46px/1 Inter;color:#fff;letter-spacing:-1px}
+.stat .v small{font:600 24px/1 Inter;color:#14D3CF;margin-left:8px;letter-spacing:0}
+.stat .l{margin-top:10px;font:500 20px/1.35 Inter;color:#C9D6E2}
+.phone{position:absolute;width:310px;height:700px;border-radius:46px;background:#0B0F16;padding:12px;box-sizing:border-box;
+  box-shadow:0 40px 80px rgba(0,0,0,.6),0 0 0 2px #2A3546 inset}
+.phone .scr{width:100%;height:100%;border-radius:35px;overflow:hidden;position:relative;background:#F3F6FA}
+.phone img{width:100%;display:block}
+.phone .notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:#0B0F16;z-index:2}
+.p1{left:770px;top:560px;transform:rotate(5deg)}
+.foot{position:absolute;left:80px;right:80px;bottom:44px;font:500 17px/1.5 Inter;color:#8FA6BF}
+</style></head><body><div class="wrap">
+<div class="grid"></div>
+<div class="lock">
+  <svg width="96" height="73" viewBox="10 9.5 151 114" id="mk"></svg>
+  <div><div class="name">Flow<span>stead</span></div><div class="sub">PROCESS ENGINEERING WORKBENCH</div></div>
+</div>
+<div class="badge">Version 3.0</div>
+<h1>Now running on <span>DWSIM 10</span></h1>
+<div class="lead">The latest open-source DWSIM engine, built from source and running on your phone, offline. Every change checked against reference data before release.</div>
+<div class="stats">
+  <div class="stat"><div class="v">0.50 %<small>was 0.87 %</small></div><div class="l">mean liquid-density error, 29 liquids vs reference equations of state (IAPWS-95, GERG-2008)</div></div>
+  <div class="stat"><div class="v">≤ 0.5 %<small>was 4 % low</small></div><div class="l">depropanizer liquids against GERG-2008</div></div>
+  <div class="stat"><div class="v">1–3 %<small>was 13–21 % low</small></div><div class="l">gas thermal conductivity at pressure against reference data</div></div>
+  <div class="stat"><div class="v">~100×<small>faster</small></div><div class="l">PVT laboratory: a saturation pressure in about a second</div></div>
+</div>
+<div class="phone p1"><div class="notch"></div><div class="scr"><img src="screen-symbols-light.png"></div></div>
+<div class="foot">Free &amp; open source (GPL-3.0) · Powered by DWSIM 10.2.12 · Android · github.com/HazemMancy/Flowstead</div>
+</div>
+<script>document.getElementById('mk').innerHTML = flowsteadMark(BLUE_OUTLET);</script>
+</body></html>
