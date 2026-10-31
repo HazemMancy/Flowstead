@@ -44,6 +44,20 @@ public static class PhaseStability
         return pp.AUX_Z(z, t, p, DWSIM.Interfaces.Enums.PhaseName.Vapor) > zcm;
     }
 
+    /// <summary>
+    /// A one-phase result labelled with the wrong phase: DWSIM's PT flash called a subcooled propane–pentane–hexane–decane
+    /// liquid at 40 °C and 10 bar (bubble point 151 °C, Z 0.056, 658 kg/m³) a vapour. Null when the result is not one
+    /// phase or its label is right; otherwise whether it is vapour, by the same rule as for same-fluid splits.
+    /// </summary>
+    internal static bool? MislabelledOnePhase(PropertyPackage pp, object[] r, int l2Index, int sIndex, double[] z, double t, double p)
+    {
+        double l = Convert.ToDouble(r[0]), v = Convert.ToDouble(r[1]);
+        if (Convert.ToDouble(r[l2Index]) != 0 || Convert.ToDouble(r[sIndex]) != 0 || z.Count(x => x > 0) < 2) return null;
+        if (!(l == 1 && v == 0) && !(v == 1 && l == 0)) return null;
+        var vapour = IsVapourLike(pp, z, t, p);
+        return vapour == (v == 1) ? null : vapour;
+    }
+
     /// <summary>DWSIM's universal flash as <see cref="StableFlash"/>; any other algorithm (single compound, forced phase, Gibbs) unchanged.</summary>
     public static FlashAlgorithm Wrap(FlashAlgorithm flash) =>
         flash.GetType() == typeof(UniversalFlash) ? new StableFlash { FlashSettings = flash.FlashSettings } : flash;
@@ -56,8 +70,9 @@ public sealed class StableFlash : UniversalFlash
     public override object Flash_PT(double[] Vz, double P, double T, PropertyPackage PP, bool ReuseKI = false, double[]? PrevKi = null)
     {
         var r = (object[])base.Flash_PT(Vz, P, T, PP, ReuseKI, PrevKi);
-        if (r.Length < 9 || !PhaseStability.IsSameFluidSplit(PP, r, 5, 7, T, P)) return r;
-        OnePhase(r, Vz, PhaseStability.IsVapourLike(PP, Vz, T, P));
+        if (r.Length < 9) return r;
+        if (PhaseStability.IsSameFluidSplit(PP, r, 5, 7, T, P)) OnePhase(r, Vz, PhaseStability.IsVapourLike(PP, Vz, T, P));
+        else if (PhaseStability.MislabelledOnePhase(PP, r, 5, 7, Vz, T, P) is { } vapour) OnePhase(r, Vz, vapour);
         return r;
     }
 
@@ -75,13 +90,15 @@ public sealed class StableFlash : UniversalFlash
         r[3] = (double[])z.Clone();
     }
 
-    /// <summary>A same-fluid PH or PS split: one phase, with T re-solved so that phase meets the specified H or S.</summary>
+    /// <summary>A same-fluid PH or PS split, or a mislabelled one phase: one phase, with T re-solved so that phase meets the specified H or S.</summary>
     private static object[] OnePhaseIfSameFluid(object[] r, double[] z, double p, double target, PropertyPackage pp, bool entropy)
     {
         if (r.Length < 11) return r;
         var t0 = Convert.ToDouble(r[4]);
-        if (!PhaseStability.IsSameFluidSplit(pp, r, 7, 9, t0, p)) return r;
-        var vapour = PhaseStability.IsVapourLike(pp, z, t0, p);
+        bool vapour;
+        if (PhaseStability.IsSameFluidSplit(pp, r, 7, 9, t0, p)) vapour = PhaseStability.IsVapourLike(pp, z, t0, p);
+        else if (PhaseStability.MislabelledOnePhase(pp, r, 7, 9, z, t0, p) is { } v) vapour = v;
+        else return r;
         var state = vapour ? State.Vapor : State.Liquid;
         double F(double t) => (entropy ? pp.DW_CalcEntropy(z, t, p, state) : pp.DW_CalcEnthalpy(z, t, p, state)) - target;
 

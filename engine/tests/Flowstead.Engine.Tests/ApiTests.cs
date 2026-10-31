@@ -256,6 +256,39 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task SubcooledLiquidMixtureIsLiquid()
+    {
+        // Propane, pentane, hexane and decane at 40 °C and 10 bar: bubble point 151 °C, Z 0.056. DWSIM's PT flash called
+        // it a vapour; Flowstead labels a one-phase result by DWSIM's own Z-versus-critical-Z rule (D90).
+        var z = new Dictionary<string, double> { ["Propane"] = 0.05, ["N-pentane"] = 0.30, ["N-hexane"] = 0.35, ["N-decane"] = 0.30 };
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Peng-Robinson (PR)",
+            Compounds = z.Keys.ToList(),
+            Objects =
+            [
+                new SimObject
+                {
+                    Id = "c", Tag = "COND", Type = ObjectType.MaterialStream,
+                    Specs = new()
+                    {
+                        [SpecKeys.Temperature] = new Spec(313.15, "C"),
+                        [SpecKeys.Pressure] = new Spec(10e5, "bara"),
+                        [SpecKeys.MolarFlow] = new Spec(1.0, "kgmol/h"),
+                    },
+                    Composition = z,
+                },
+            ],
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        var c = r.Objects["c"];
+        Assert.Equal(0.0, c.Properties["vapourFraction"]);
+        Assert.Equal(["liquid1", "overall"], c.Phases!.Keys.Order().ToArray());
+        Assert.Equal(660.1, c.Phases["liquid1"].Properties["density"], 660.1 * 0.01); // GERG-2008 (CoolProp): 660.1 kg/m³
+    }
+
+    [Fact]
     public async Task DenseGasIsOnePhaseAsInHysys()
     {
         // The owner's winter gas (mol %) at 320 barg and 35 °C. HYSYS (PR): one vapour phase, MW 24.12. DWSIM's PR
