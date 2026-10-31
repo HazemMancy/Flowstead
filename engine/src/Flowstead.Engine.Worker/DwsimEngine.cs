@@ -1394,7 +1394,8 @@ public sealed class DwsimEngine
 
     /// <summary>
     /// The stream's bubble and dew points: temperatures at its pressure, pressures at its temperature, each checked to
-    /// lie on the phase boundary (D95). Null when there is no such point (above the cricondentherm there is no dew point).
+    /// lie on the phase boundary for a mixture (D95, D96). Null when there is no such point (above the cricondentherm there
+    /// is no dew point) or DWSIM's does not check out.
     /// </summary>
     private static (double? BubbleT, double? DewT, double? BubbleP, double? DewP) SaturationPoints(MaterialStream ms)
     {
@@ -1402,6 +1403,26 @@ public sealed class DwsimEngine
         var t = ms.Phases[0].Properties.temperature ?? double.NaN;
         var p = ms.Phases[0].Properties.pressure ?? double.NaN;
         if (!double.IsFinite(t) || !double.IsFinite(p) || t <= 0 || p <= 0) return default;
+        // Each point is a DWSIM flash of 10–900 ms (D96). A reused flowsheet (D82) keeps its property package, so a
+        // stream whose state and composition did not change since the last solve takes the points it had.
+        var key = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{t:R}|{p:R}|{string.Join(",", ms.GetOverallComposition().Select(x => x.ToString("R", System.Globalization.CultureInfo.InvariantCulture)))}");
+        var cache = SaturationCache.GetOrCreateValue(pp);
+        lock (cache)
+            if (cache.TryGetValue(key, out var hit)) return hit;
+        var computed = ComputeSaturationPoints(ms, pp, t, p);
+        lock (cache)
+        {
+            if (cache.Count > 2000) cache.Clear();
+            cache[key] = computed;
+        }
+        return computed;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<PropertyPackage, Dictionary<string, (double?, double?, double?, double?)>> SaturationCache = new();
+
+    private static (double? BubbleT, double? DewT, double? BubbleP, double? DewP) ComputeSaturationPoints(MaterialStream ms, PropertyPackage pp, double t, double p)
+    {
         var previous = pp.CurrentMaterialStream;
         try
         {
@@ -1457,37 +1478,11 @@ public sealed class DwsimEngine
                 catch
                 {
                 }
-                if (found is { } f && Divides(fixedP, f, q)) return f;
-                return Search(fixedP, q);
-            }
-            // When DWSIM's flash misses: the boundary from PT flashes, on a grid (T 80–900 K, P 0.05–700 bar) and then
-            // bisected; a bubble point where the single phase is liquid, a dew point where it is vapour; of several, the
-            // one nearest the stream's own state. Null when there is none.
-            double? Search(bool fixedP, double q)
-            {
-                var grid = fixedP
-                    ? Enumerable.Range(0, 42).Select(i => 80.0 + i * 20.0).ToList()
-                    : Enumerable.Range(0, 41).Select(i => 5e3 * Math.Pow(7e7 / 5e3, i / 40.0)).ToList();
-                var states = grid.Select(x => StateAt(fixedP, x)).ToList();
-                var own = fixedP ? t : p;
-                double? best = null;
-                for (var i = 0; i + 1 < grid.Count; i++)
-                {
-                    if (states[i] is not { } a || states[i + 1] is not { } b || a == b) continue;
-                    var single = a == 2 ? b : b == 2 ? a : -1;
-                    var match = pure ? a + b == 1 : single == (q < 0.5 ? 0 : 1);
-                    if (!match) continue;
-                    double lo = grid[i], hi = grid[i + 1];
-                    for (var k = 0; k < 30 && hi / lo - 1 > 1e-6; k++)
-                    {
-                        var m = fixedP ? (lo + hi) / 2 : Math.Sqrt(lo * hi);
-                        if (StateAt(fixedP, m) == a) lo = m; else hi = m;
-                    }
-                    var x = (lo + hi) / 2;
-                    if (!Divides(fixedP, x, q)) continue;
-                    if (best is not { } bb || Math.Abs(Math.Log(x / own)) < Math.Abs(Math.Log(bb / own))) best = x;
-                }
-                return best;
+                // A pure compound's saturation point is its vapour-pressure curve, which DWSIM gets right; a mixture's is
+                // shown only when it checks out. No search for another: it cost about 80 flashes per point and made a
+                // stream's solve take seconds on a phone (D96).
+                if (found is not { } f) return null;
+                return pure || Divides(fixedP, f, q) ? f : null;
             }
             return (At(true, 0), At(true, 1), At(false, 0), At(false, 1));
         }
