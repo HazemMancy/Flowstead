@@ -1,21 +1,330 @@
 {
   "note": "Single-phase liquid states for the DWSIM 10 density comparison (D88 step 3). T in K, P in Pa, mole fractions. coolprop: the reference fluid string.",
   "cases": [
-    {"id": "water-40C-20bar", "T": 313.15, "P": 2.0e6, "z": {"Water": 1}, "coolprop": "Water"},
-    {"id": "water-80C-5bar", "T": 353.15, "P": 5.0e5, "z": {"Water": 1}, "coolprop": "Water"},
-    {"id": "water-150C-10bar", "T": 423.15, "P": 1.0e6, "z": {"Water": 1}, "coolprop": "Water"},
-    {"id": "propane-20C-15bar", "T": 293.15, "P": 1.5e6, "z": {"Propane": 1}, "coolprop": "Propane"},
-    {"id": "propane-60C-30bar", "T": 333.15, "P": 3.0e6, "z": {"Propane": 1}, "coolprop": "Propane"},
-    {"id": "nbutane-20C-5bar", "T": 293.15, "P": 5.0e5, "z": {"N-butane": 1}, "coolprop": "n-Butane"},
-    {"id": "npentane-25C-2bar", "T": 298.15, "P": 2.0e5, "z": {"N-pentane": 1}, "coolprop": "n-Pentane"},
-    {"id": "nhexane-25C-2bar", "T": 298.15, "P": 2.0e5, "z": {"N-hexane": 1}, "coolprop": "n-Hexane"},
-    {"id": "ndecane-25C-2bar", "T": 298.15, "P": 2.0e5, "z": {"N-decane": 1}, "coolprop": "n-Decane"},
-    {"id": "ethane-0C-50bar", "T": 273.15, "P": 5.0e6, "z": {"Ethane": 1}, "coolprop": "Ethane"},
-    {"id": "c3-nc4-20C-20bar", "T": 293.15, "P": 2.0e6, "z": {"Propane": 0.5, "N-butane": 0.5}, "coolprop": "Propane&n-Butane"},
-    {"id": "ngl-20C-40bar", "T": 293.15, "P": 4.0e6, "z": {"Ethane": 0.05, "Propane": 0.40, "Isobutane": 0.10, "N-butane": 0.20, "Isopentane": 0.10, "N-pentane": 0.10, "N-hexane": 0.05}, "coolprop": "Ethane&Propane&IsoButane&n-Butane&Isopentane&n-Pentane&n-Hexane"},
-    {"id": "ngl-ethane-rich-0C-50bar", "T": 273.15, "P": 5.0e6, "z": {"Ethane": 0.30, "Propane": 0.40, "N-butane": 0.20, "N-pentane": 0.10}, "coolprop": "Ethane&Propane&n-Butane&n-Pentane"},
-    {"id": "lng-minus160C-3bar", "T": 113.15, "P": 3.0e5, "z": {"Methane": 0.90, "Ethane": 0.06, "Propane": 0.03, "N-butane": 0.01}, "coolprop": "Methane&Ethane&Propane&n-Butane"},
-    {"id": "condensate-40C-10bar", "T": 313.15, "P": 1.0e6, "z": {"Propane": 0.05, "N-pentane": 0.30, "N-hexane": 0.35, "N-decane": 0.30}, "coolprop": "Propane&n-Pentane&n-Hexane&n-Decane"},
-    {"id": "live-oil-30C-80bar", "T": 303.15, "P": 8.0e6, "z": {"Methane": 0.15, "Propane": 0.15, "N-pentane": 0.30, "N-decane": 0.40}, "coolprop": "Methane&Propane&n-Pentane&n-Decane"}
+    {
+      "id": "water-40C-20bar",
+      "T": 313.15,
+      "P": 2000000.0,
+      "z": {
+        "Water": 1
+      },
+      "coolprop": "Water"
+    },
+    {
+      "id": "water-80C-5bar",
+      "T": 353.15,
+      "P": 500000.0,
+      "z": {
+        "Water": 1
+      },
+      "coolprop": "Water"
+    },
+    {
+      "id": "water-150C-10bar",
+      "T": 423.15,
+      "P": 1000000.0,
+      "z": {
+        "Water": 1
+      },
+      "coolprop": "Water"
+    },
+    {
+      "id": "propane-20C-15bar",
+      "T": 293.15,
+      "P": 1500000.0,
+      "z": {
+        "Propane": 1
+      },
+      "coolprop": "Propane"
+    },
+    {
+      "id": "propane-60C-30bar",
+      "T": 333.15,
+      "P": 3000000.0,
+      "z": {
+        "Propane": 1
+      },
+      "coolprop": "Propane"
+    },
+    {
+      "id": "nbutane-20C-5bar",
+      "T": 293.15,
+      "P": 500000.0,
+      "z": {
+        "N-butane": 1
+      },
+      "coolprop": "n-Butane"
+    },
+    {
+      "id": "npentane-25C-2bar",
+      "T": 298.15,
+      "P": 200000.0,
+      "z": {
+        "N-pentane": 1
+      },
+      "coolprop": "n-Pentane"
+    },
+    {
+      "id": "nhexane-25C-2bar",
+      "T": 298.15,
+      "P": 200000.0,
+      "z": {
+        "N-hexane": 1
+      },
+      "coolprop": "n-Hexane"
+    },
+    {
+      "id": "ndecane-25C-2bar",
+      "T": 298.15,
+      "P": 200000.0,
+      "z": {
+        "N-decane": 1
+      },
+      "coolprop": "n-Decane"
+    },
+    {
+      "id": "ethane-0C-50bar",
+      "T": 273.15,
+      "P": 5000000.0,
+      "z": {
+        "Ethane": 1
+      },
+      "coolprop": "Ethane"
+    },
+    {
+      "id": "c3-nc4-20C-20bar",
+      "T": 293.15,
+      "P": 2000000.0,
+      "z": {
+        "Propane": 0.5,
+        "N-butane": 0.5
+      },
+      "coolprop": "Propane&n-Butane"
+    },
+    {
+      "id": "ngl-20C-40bar",
+      "T": 293.15,
+      "P": 4000000.0,
+      "z": {
+        "Ethane": 0.05,
+        "Propane": 0.4,
+        "Isobutane": 0.1,
+        "N-butane": 0.2,
+        "Isopentane": 0.1,
+        "N-pentane": 0.1,
+        "N-hexane": 0.05
+      },
+      "coolprop": "Ethane&Propane&IsoButane&n-Butane&Isopentane&n-Pentane&n-Hexane"
+    },
+    {
+      "id": "ngl-ethane-rich-0C-50bar",
+      "T": 273.15,
+      "P": 5000000.0,
+      "z": {
+        "Ethane": 0.3,
+        "Propane": 0.4,
+        "N-butane": 0.2,
+        "N-pentane": 0.1
+      },
+      "coolprop": "Ethane&Propane&n-Butane&n-Pentane"
+    },
+    {
+      "id": "lng-minus160C-3bar",
+      "T": 113.15,
+      "P": 300000.0,
+      "z": {
+        "Methane": 0.9,
+        "Ethane": 0.06,
+        "Propane": 0.03,
+        "N-butane": 0.01
+      },
+      "coolprop": "Methane&Ethane&Propane&n-Butane"
+    },
+    {
+      "id": "condensate-40C-10bar",
+      "T": 313.15,
+      "P": 1000000.0,
+      "z": {
+        "Propane": 0.05,
+        "N-pentane": 0.3,
+        "N-hexane": 0.35,
+        "N-decane": 0.3
+      },
+      "coolprop": "Propane&n-Pentane&n-Hexane&n-Decane"
+    },
+    {
+      "id": "live-oil-30C-80bar",
+      "T": 303.15,
+      "P": 8000000.0,
+      "z": {
+        "Methane": 0.15,
+        "Propane": 0.15,
+        "N-pentane": 0.3,
+        "N-decane": 0.4
+      },
+      "coolprop": "Methane&Propane&n-Pentane&n-Decane"
+    },
+    {
+      "id": "ngl-0C-30bar",
+      "T": 273.15,
+      "P": 3000000.0,
+      "z": {
+        "Ethane": 0.05,
+        "Propane": 0.4,
+        "Isobutane": 0.1,
+        "N-butane": 0.2,
+        "Isopentane": 0.1,
+        "N-pentane": 0.1,
+        "N-hexane": 0.05
+      },
+      "coolprop": "Ethane&Propane&IsoButane&n-Butane&Isopentane&n-Pentane&n-Hexane"
+    },
+    {
+      "id": "ngl-50C-40bar",
+      "T": 323.15,
+      "P": 4000000.0,
+      "z": {
+        "Ethane": 0.05,
+        "Propane": 0.4,
+        "Isobutane": 0.1,
+        "N-butane": 0.2,
+        "Isopentane": 0.1,
+        "N-pentane": 0.1,
+        "N-hexane": 0.05
+      },
+      "coolprop": "Ethane&Propane&IsoButane&n-Butane&Isopentane&n-Pentane&n-Hexane"
+    },
+    {
+      "id": "ngl-20C-100bar",
+      "T": 293.15,
+      "P": 10000000.0,
+      "z": {
+        "Ethane": 0.05,
+        "Propane": 0.4,
+        "Isobutane": 0.1,
+        "N-butane": 0.2,
+        "Isopentane": 0.1,
+        "N-pentane": 0.1,
+        "N-hexane": 0.05
+      },
+      "coolprop": "Ethane&Propane&IsoButane&n-Butane&Isopentane&n-Pentane&n-Hexane"
+    },
+    {
+      "id": "lng--150C-5bar",
+      "T": 123.15,
+      "P": 500000.0,
+      "z": {
+        "Methane": 0.9,
+        "Ethane": 0.06,
+        "Propane": 0.03,
+        "N-butane": 0.01
+      },
+      "coolprop": "Methane&Ethane&Propane&n-Butane"
+    },
+    {
+      "id": "lng--165C-2bar",
+      "T": 108.15,
+      "P": 200000.0,
+      "z": {
+        "Methane": 0.9,
+        "Ethane": 0.06,
+        "Propane": 0.03,
+        "N-butane": 0.01
+      },
+      "coolprop": "Methane&Ethane&Propane&n-Butane"
+    },
+    {
+      "id": "condensate-20C-5bar",
+      "T": 293.15,
+      "P": 500000.0,
+      "z": {
+        "Propane": 0.05,
+        "N-pentane": 0.3,
+        "N-hexane": 0.35,
+        "N-decane": 0.3
+      },
+      "coolprop": "Propane&n-Pentane&n-Hexane&n-Decane"
+    },
+    {
+      "id": "condensate-80C-20bar",
+      "T": 353.15,
+      "P": 2000000.0,
+      "z": {
+        "Propane": 0.05,
+        "N-pentane": 0.3,
+        "N-hexane": 0.35,
+        "N-decane": 0.3
+      },
+      "coolprop": "Propane&n-Pentane&n-Hexane&n-Decane"
+    },
+    {
+      "id": "lng-n2-minus162C-2bar",
+      "T": 111.15,
+      "P": 200000.0,
+      "z": {
+        "Nitrogen": 0.01,
+        "Methane": 0.89,
+        "Ethane": 0.06,
+        "Propane": 0.03,
+        "N-butane": 0.01
+      },
+      "coolprop": "Nitrogen&Methane&Ethane&Propane&n-Butane"
+    },
+    {
+      "id": "ngl-co2-10C-50bar",
+      "T": 283.15,
+      "P": 5000000.0,
+      "z": {
+        "Carbon dioxide": 0.03,
+        "Ethane": 0.15,
+        "Propane": 0.45,
+        "N-butane": 0.25,
+        "N-pentane": 0.12
+      },
+      "coolprop": "CarbonDioxide&Ethane&Propane&n-Butane&n-Pentane"
+    },
+    {
+      "id": "c3-ic4-0C-10bar",
+      "T": 273.15,
+      "P": 1000000.0,
+      "z": {
+        "Propane": 0.7,
+        "Isobutane": 0.3
+      },
+      "coolprop": "Propane&IsoButane"
+    },
+    {
+      "id": "c5-c8-60C-5bar",
+      "T": 333.15,
+      "P": 500000.0,
+      "z": {
+        "N-pentane": 0.4,
+        "N-heptane": 0.3,
+        "N-octane": 0.3
+      },
+      "coolprop": "n-Pentane&n-Heptane&n-Octane"
+    },
+    {
+      "id": "ethane-propane-minus20C-30bar",
+      "T": 253.15,
+      "P": 3000000.0,
+      "z": {
+        "Ethane": 0.6,
+        "Propane": 0.4
+      },
+      "coolprop": "Ethane&Propane"
+    },
+    {
+      "id": "live-oil-60C-150bar",
+      "T": 333.15,
+      "P": 15000000.0,
+      "z": {
+        "Methane": 0.15,
+        "Propane": 0.15,
+        "N-pentane": 0.3,
+        "N-decane": 0.4
+      },
+      "coolprop": "Methane&Propane&n-Pentane&n-Decane"
+    }
   ]
 }
