@@ -19,6 +19,9 @@ Read `docs/STATUS.md` and `docs/DECISIONS.md` first. Every change gets a D-entry
 - **Geometry: count every surface.** Count every head and shell part (API 521 exposed or wetted area, volume)
   and test it against the closed-form formula.
 - **HYSYS parity.** When the owner reports a HYSYS value, reproduce the case as a permanent test that asserts it.
+- **Same input, same numbers (D103).** DWSIM calculates phases on several threads with one package: never switch a
+  package setting for one call without a lock. A test that flips between two values is a bug to find, not a
+  flake to re-run.
 - **Units and phases.** Only report properties where they mean something (for example, Z for a vapour only, D97).
 
 ## Releases

@@ -1,0 +1,50 @@
+diff --git a/engine/DWSIM.UnitOperations/UnitOperations/Vessel.vb b/engine/DWSIM.UnitOperations/UnitOperations/Vessel.vb
+index 07dae33..12428a1 100644
+--- a/engine/DWSIM.UnitOperations/UnitOperations/Vessel.vb
++++ b/engine/DWSIM.UnitOperations/UnitOperations/Vessel.vb
+@@ -1779,6 +1779,36 @@ Namespace UnitOperations
+                     If MixedStream.Phases(2).Properties.massflow.GetValueOrDefault <= 0.0 Then SetEmptyOutlet(ms, T, P)
+                 End If
+ 
++                'Flowstead (D103): with no second-liquid outlet, both liquids leave by the liquid outlet, as in a HYSYS
++                'two-phase separator, instead of an error. The stream is flashed downstream (PH), so it keeps both phases.
++                If Not Me.GraphicObject.OutputConnectors(2).IsAttached AndAlso Me.GraphicObject.OutputConnectors(1).IsAttached AndAlso W2 > 0.0# Then
++                    ms = FlowSheet.SimulationObjects(Me.GraphicObject.OutputConnectors(1).AttachedConnector.AttachedTo.Name)
++                    Dim WT As Double = W1 + W2
++                    Dim nL(n - 1) As Double
++                    Dim nT As Double = 0.0#
++                    For Each cname As String In Vids
++                        Dim k As Integer = Vids.IndexOf(cname)
++                        nL(k) = (W1 * VmL1(k) + W2 * VmL2(k)) / MixedStream.Phases(0).Compounds(cname).ConstantProperties.Molar_Weight
++                        nT += nL(k)
++                    Next
++                    With ms
++                        .Clear()
++                        .ClearAllProps()
++                        .SpecType = Interfaces.Enums.StreamSpec.Pressure_and_Enthalpy
++                        .SetTemperature(T)
++                        .SetPressure(P)
++                        .SetMassFlow(WT)
++                        .SetMassEnthalpy((W1 * HL1 + W2 * HL2) / WT)
++                        For Each comp As BaseClasses.Compound In .Phases(0).Compounds.Values
++                            Dim k As Integer = Vids.IndexOf(comp.Name)
++                            comp.MoleFraction = nL(k) / nT
++                            comp.MassFraction = (W1 * VmL1(k) + W2 * VmL2(k)) / WT
++                        Next
++                        .AtEquilibrium = False
++                    End With
++                    GoTo FlowsteadLiquidsDone
++                End If
++
+                 'calculate liquid densities.
+ 
+                 PropertyPackage.CurrentMaterialStream = MixedStream
+@@ -1929,6 +1959,8 @@ Namespace UnitOperations
+ 
+             End If
+ 
++FlowsteadLiquidsDone:
++
+             'SIZING
+ 
+             Me.rhol = MixedStream.Phases(1).Properties.density.GetValueOrDefault

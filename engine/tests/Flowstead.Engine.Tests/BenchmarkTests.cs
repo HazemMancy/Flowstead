@@ -23,6 +23,23 @@ public sealed class BenchmarkTests(EngineFixture engine, ITestOutputHelper outpu
             .Select(d => new object[] { Path.GetFileName(d) })
             .OrderBy(c => (string)c[0]);
 
+    [Fact]
+    public async Task RepeatedSolvesGiveTheSameNumbers()
+    {
+        // D103: Flowstead's COSTALD switch raced DWSIM's parallel phase calculations, and the free water of case 04
+        // came out at 994.2 or 990.6 kg/m³ from one solve to the next.
+        var input = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(Dir, "04-three-phase-flash", "input.json")))!;
+        var flowsheet = input["flowsheet"].Deserialize<Flowsheet>(Json.Options)!;
+        using var client = engine.Authed();
+        var densities = new HashSet<double>();
+        for (var i = 0; i < 10; i++)
+        {
+            var r = await EngineFixture.Json<SolveResult>(await client.PostAsJsonAsync("/solve", flowsheet, Json.Options));
+            densities.Add(Math.Round(r.Objects["feed"].Phases!["liquid2"].Properties["density"], 6));
+        }
+        Assert.Single(densities);
+    }
+
     [Theory]
     [MemberData(nameof(Cases))]
     public async Task Case(string name)

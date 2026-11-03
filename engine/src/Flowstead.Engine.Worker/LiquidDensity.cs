@@ -69,6 +69,15 @@ public static class LiquidDensity
     /// </summary>
     internal static double Density(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density, Func<Array, double>? eosDensity = null)
     {
+        // DWSIM calculates phases on several threads with one package, and COSTALD is chosen by switching the package's
+        // mode for one call: unlocked, another phase's density on another thread could take the switched mode (free
+        // water came out as 994.2 or 990.6 kg/m³ at random, D103). One density at a time per package; the lock is
+        // re-entrant for the nested calls on the same thread.
+        lock (pp) return Locked(pp, t, vx, forceEos, cubic, density, eosDensity);
+    }
+
+    private static double Locked(PropertyPackage pp, double t, Array vx, bool forceEos, bool cubic, Func<Array, double> density, Func<Array, double>? eosDensity)
+    {
         var rho = Correlation(pp, t, vx, forceEos, cubic, density);
         // Above the liquid's pseudo-critical temperature (a near-critical liquid, e.g. a rich gas split at 320 bar)
         // Rackett and COSTALD have no value, and DWSIM then reported the stream density as 0. Cubic packages fall
@@ -86,10 +95,13 @@ public static class LiquidDensity
     /// <summary>DWSIM's density in another liquid-density mode for this call only.</summary>
     internal static double WithMode(PropertyPackage pp, PropertyPackage.LiquidDensityCalcMode mode, Func<double> density)
     {
-        var saved = pp.LiquidDensityCalculationMode_Subcritical;
-        pp.LiquidDensityCalculationMode_Subcritical = mode;
-        try { return density(); }
-        finally { pp.LiquidDensityCalculationMode_Subcritical = saved; }
+        lock (pp)
+        {
+            var saved = pp.LiquidDensityCalculationMode_Subcritical;
+            pp.LiquidDensityCalculationMode_Subcritical = mode;
+            try { return density(); }
+            finally { pp.LiquidDensityCalculationMode_Subcritical = saved; }
+        }
     }
 }
 

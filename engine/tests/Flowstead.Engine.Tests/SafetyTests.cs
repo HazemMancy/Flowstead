@@ -1,6 +1,7 @@
 // Flowstead engine tests — relief valve loads and sizing (decisions D54–D56).
 // Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
 
+using System.Text.Json;
 using System.Net.Http.Json;
 using Flowstead.Engine.Contracts;
 using Xunit;
@@ -159,6 +160,40 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.Equal(water < 0.007, s.Details.ContainsKey("dewPoint"));
         Assert.Equal("D", r.Orifice);
         Assert.Equal("1D2", r.ValveSize);
+    }
+
+    [Fact]
+    public async Task InstrumentAirExampleSizesItsReceiverPsvAsHysys()
+    {
+        // Example 21 as the app sizes it: the receiver's contents are its solved feed (S-1), the valve and scenarios
+        // the example's PSV-100. HYSYS gives 1D2 for this receiver (owner's report, D102).
+        var dir = Path.Combine(Path.GetFullPath(EngineFixture.Meta("BenchmarksDir")), "21-instrument-air-receiver", "input.json");
+        var input = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(dir))!["flowsheet"]!;
+        var fs = input.Deserialize<Flowsheet>(Json.Options)!;
+        var solved = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
+        Assert.True(solved.Status == SolveStatus.Converged, string.Join(" / ", solved.Messages.Select(m => $"{m.ObjectId}: {m.Text}")));
+        var feed = solved.Objects["wet"];
+        Assert.True(feed.Phases!.ContainsKey("liquid1") || feed.Phases.ContainsKey("liquid2"), "the saturator is meant to leave condensate");
+        var psv = input["safety"]!["devices"]![0]!;
+        var d = new ReliefDevice
+        {
+            Id = "psv100", Tag = "PSV-100", SetPressure = psv["setPressure"]!.GetValue<double>(),
+            Composition = feed.Phases["overall"].Composition.Where(c => c.Value > 0).ToDictionary(),
+            OperatingTemperature = feed.Properties["temperature"], OperatingPressure = feed.Properties["pressure"],
+            Vessel = psv["vessel"].Deserialize<VesselGeometry>(Json.Options),
+            InletLine = psv["inletLine"].Deserialize<ReliefLine>(Json.Options), OutletLine = psv["outletLine"].Deserialize<ReliefLine>(Json.Options),
+            Scenarios =
+            [
+                new ReliefScenario { Kind = ReliefScenarioKinds.Fire, Name = "Fire" },
+                new ReliefScenario { Kind = ReliefScenarioKinds.BlockedOutlet, Name = "Blocked outlet", MassFlow = feed.Properties["massFlow"], Temperature = feed.Properties["temperature"] },
+            ],
+        };
+        var r = await Relief(d, fs.Compounds.ToArray());
+        var fire = r.Scenarios.Single(x => x.Name == "Fire");
+        Assert.Null(fire.Error);
+        Assert.InRange(fire.Details["latentHeat"], 1.85e6, 2.15e6); // water at 13.1 bara: 1958 kJ/kg (IAPWS-IF97)
+        Assert.Equal("D", ReliefMath.SelectOrifice(fire.RequiredArea!.Value).Letter);
+        Assert.All(r.Scenarios, x => Assert.Null(x.Error));
     }
 
     [Fact]

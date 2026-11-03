@@ -33,6 +33,7 @@ Tolerances follow the brief: ±0.01 K on temperature, ±0.1 % relative elsewhere
 | 18-hypothetical-component | PR, a hypothetical built from n-decane's NBP, MW and SG, beside database n-decane | Boils at its given NBP (±1 K); liquid density at 60 °F = SG (±1 %); flash agrees with database n-decane (VF ±0.015, liquid density ±10 kg/m³) (blocking) |
 | 19-letdown-control-loops | PR, gas let down 70 → 30 bara and heated to 30 °C by two interacting controllers (PIC on the valve, TIC on the heater) | Both setpoints met; PIC output = its place in its range; isenthalpic valve; molar flow conserved (blocking) |
 | 20-separator-dynamics | PR, gas and condensate let down into a separator; PIC and LIC act in dynamic runs only (the example for Dynamics) | — (steady values; its dynamics are checked by DynamicsTests) |
+| 21-instrument-air-receiver | PR, dry air saturated with excess water in a mixer, into a vertical wet air receiver; carries PSV-100 (fire, blocked outlet) for Safety | Fire on the receiver sizes 1D2 as HYSYS, and water's latent heat matches IAPWS-IF97 within 10 % (`SafetyTests`, blocking) |
 
 To regenerate the provisional values after an intentional engine change:
 

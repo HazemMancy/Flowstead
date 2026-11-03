@@ -45,9 +45,18 @@ class HelpTest {
     }
 
     @Test
+    fun instrumentAirExampleCarriesItsPsv() {
+        val fs = assertNotNull(Help.example("21-instrument-air-receiver"))
+        val psv = assertNotNull(fs.safety).devices.single()
+        assertEquals("v100", psv.protectedId)
+        assertEquals(listOf("fire", "blockedOutlet"), psv.scenarios.map { it.kind })
+        assertEquals(0.3, assertNotNull(psv.vessel).liquidLevel)
+    }
+
+    @Test
     fun releasesAreNewestFirst() {
         val versions = Help.releases.map { it.version }
-        assertTrue("3.0.2" in versions && "3.1.0" in versions && "3.1.1" in versions)
-        assertEquals("3.1.1", versions.first())
+        assertTrue("3.0.2" in versions && "3.1.0" in versions && "3.1.1" in versions && "3.1.2" in versions)
+        assertEquals("3.1.2", versions.first())
     }
 }

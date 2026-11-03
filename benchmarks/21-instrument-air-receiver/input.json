@@ -1,0 +1,56 @@
+{
+  "name": "Instrument air: saturator and wet air receiver with its PSV",
+  "description": "Dry compressed air (500 Nm³/h at 40 °C, 9 barg) is saturated with water in MX-100, more than it can hold, and settles in the wet air receiver V-100 (1.29 m × 1.84 m T/T, vertical, 0.3 m of condensate). Wet air leaves at the top (3) and condensate at the bottom (4). Open Safety: PSV-100, set at 10 barg, covers fire and a blocked outlet. The fire boils the receiver's water (API 521 wetted fire) and needs a 1D2 valve, as HYSYS gives. The blocked outlet relieves the whole feed, about 650 kg/h of wet air, and governs with a 1E2 valve. PR.",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": ["Nitrogen", "Oxygen", "Argon", "Water"],
+    "objects": [
+      {
+        "id": "air", "tag": "1", "type": "material_stream",
+        "specs": {
+          "temperature": { "si": 313.15, "unit": "C" },
+          "pressure": { "si": 1001325.0, "unit": "barg" },
+          "molarFlow": { "si": 6.1967, "unit": "kgmol/h" }
+        },
+        "composition": { "Nitrogen": 0.7812, "Oxygen": 0.2095, "Argon": 0.0093 }
+      },
+      {
+        "id": "water", "tag": "2", "type": "material_stream",
+        "specs": {
+          "temperature": { "si": 313.15, "unit": "C" },
+          "pressure": { "si": 1001325.0, "unit": "barg" },
+          "molarFlow": { "si": 0.0694, "unit": "kgmol/h" }
+        },
+        "composition": { "Water": 1.0 }
+      },
+      { "id": "mix", "tag": "MX-100", "type": "mixer" },
+      { "id": "wet", "tag": "S-1", "type": "material_stream" },
+      { "id": "v100", "tag": "V-100", "type": "separator" },
+      { "id": "gas", "tag": "3", "type": "material_stream" },
+      { "id": "cond", "tag": "4", "type": "material_stream" }
+    ],
+    "connections": [
+      { "fromObject": "air", "fromPort": 0, "toObject": "mix", "toPort": 0 },
+      { "fromObject": "water", "fromPort": 0, "toObject": "mix", "toPort": 1 },
+      { "fromObject": "mix", "fromPort": 0, "toObject": "wet", "toPort": 0 },
+      { "fromObject": "wet", "fromPort": 0, "toObject": "v100", "toPort": 0 },
+      { "fromObject": "v100", "fromPort": 0, "toObject": "gas", "toPort": 0 },
+      { "fromObject": "v100", "fromPort": 1, "toObject": "cond", "toPort": 0 }
+    ],
+    "safety": {
+      "devices": [
+        {
+          "id": "psv100", "tag": "PSV-100", "protectedId": "v100",
+          "setPressure": 1101325.0, "backPressure": 101325.0, "design": "conventional",
+          "vessel": { "diameter": 1.29, "length": 1.84, "horizontal": false, "liquidLevel": 0.3, "elevation": 0.0 },
+          "scenarios": [
+            { "kind": "fire", "name": "Fire" },
+            { "kind": "blockedOutlet", "name": "Blocked outlet" }
+          ],
+          "inletLine": { "insideDiameter": 0.04089, "length": 3.0 },
+          "outletLine": { "insideDiameter": 0.05250, "length": 3.0 }
+        }
+      ]
+    }
+  }
+}
