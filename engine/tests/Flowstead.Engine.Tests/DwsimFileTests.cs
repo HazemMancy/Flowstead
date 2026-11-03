@@ -42,16 +42,29 @@ public sealed class DwsimFileTests(EngineFixture engine, ITestOutputHelper outpu
         Assert.Equal(original.Compounds, back.Compounds);
 
         var resolved = await Post<SolveResult>(client, "/solve", back);
-        var hasAdjust = original.Objects.Any(o => o.Type == ObjectType.Adjust);
-        Assert.True(resolved.Status == SolveStatus.Converged || hasAdjust,
+        Assert.True(resolved.Status == SolveStatus.Converged,
             $"{name}: re-solve {resolved.Status}: {string.Join("; ", resolved.Messages.Select(m => m.Text))}");
+
+        // Adjusts, Sets and steady-state controllers come back as Flowstead logic on the same objects (D98); a controller
+        // comes back as an Adjust (the file has no tuning), one acting in dynamics only is not written.
+        var logic = original.Objects.Where(o => o.Type is ObjectType.Adjust or ObjectType.Set || (o.Type == ObjectType.Controller && DynamicLoops.InSteadyState(o))).ToList();
+        foreach (var l in logic)
+        {
+            var b2 = back.Objects.SingleOrDefault(o => o.Tag == l.Tag);
+            Assert.True(b2 is not null, $"{name}: {l.Tag} lost on import");
+            Assert.Equal(l.Type == ObjectType.Controller ? ObjectType.Adjust : l.Type, b2!.Type);
+            string TagOf(Flowsheet fs, string? id) => fs.Objects.FirstOrDefault(o => o.Id == id)?.Tag ?? "?";
+            foreach (var (k, v) in l.Refs.Where(r => r.Key is not AdjustKeys.SteadyState))
+                Assert.Equal(k.EndsWith("Object") ? TagOf(original, v) : v, k.EndsWith("Object") ? TagOf(back, b2.Refs.GetValueOrDefault(k)) : b2.Refs.GetValueOrDefault(k));
+            foreach (var (k, v) in l.Specs)
+                Assert.True(b2.Specs.TryGetValue(k, out var w) && Math.Abs(w.Si - v.Si) <= 1e-9 * Math.Max(1, Math.Abs(v.Si)), $"{name}/{l.Tag}: {k} {v.Si} → {w?.Si}");
+        }
 
         // Same tag → same numbers (the import gives new ids).
         var byTag = back.Objects.ToDictionary(o => o.Tag, o => o.Id);
         foreach (var o in original.Objects.Where(o => o.Type == ObjectType.MaterialStream))
         {
             Assert.True(byTag.ContainsKey(o.Tag), $"{name}: stream {o.Tag} lost on import");
-            if (hasAdjust) continue; // the Adjust is not in the file, so the varied spec is at its starting value
             var a = direct.Objects[o.Id].Properties;
             var b = resolved.Objects[byTag[o.Tag]].Properties;
             foreach (var key in new[] { "temperature", "pressure", "massFlow", "vapourFraction" })
@@ -61,21 +74,10 @@ public sealed class DwsimFileTests(EngineFixture engine, ITestOutputHelper outpu
                 Assert.True(Math.Abs(x - y) <= 1e-6 * Math.Max(1, Math.Abs(x)), $"{name}/{o.Tag}: {key} {x} → {y}");
             }
         }
-        Assert.Equal(original.Connections.Count + HiddenEnergyStreams(original), back.Connections.Count);
+        // The engine's own energy streams (a heater drawn without one) are recognised and left out again (D98).
+        Assert.Equal(original.Connections.Count, back.Connections.Count);
+        Assert.Equal(original.Objects.Count(o => o.Type == ObjectType.EnergyStream), back.Objects.Count(o => o.Type == ObjectType.EnergyStream));
     }
-
-    /// <summary>The engine adds an energy stream to each heater, cooler, air cooler, pump, compressor, expander, reactor or column duty drawn without one; it is real in the file.</summary>
-    private static int HiddenEnergyStreams(Flowsheet fs) =>
-        fs.Objects.Count(o => o.Type is ObjectType.Heater or ObjectType.Cooler or ObjectType.AirCooler or ObjectType.Pump or ObjectType.Compressor or ObjectType.Expander
-                              && !fs.Connections.Any(c => (c.ToObject == o.Id && c.ToPort == 1) || (c.FromObject == o.Id && c.FromPort == 1)))
-        // Reactors: heat in on port 1 (their out port 1 is the liquid product).
-        + fs.Objects.Count(o => o.Type is ObjectType.ConversionReactor or ObjectType.EquilibriumReactor or ObjectType.GibbsReactor or ObjectType.Cstr or ObjectType.Pfr
-                                && !fs.Connections.Any(c => c.ToObject == o.Id && c.ToPort == 1))
-        // Columns: condenser (port 3) and reboiler (port 4) duties.
-        + fs.Objects.Count(o => o.Type is ObjectType.DistillationColumn or ObjectType.ShortcutColumn or ObjectType.RefluxedAbsorber
-                                && !fs.Connections.Any(c => c.FromObject == o.Id && c.FromPort == 3))
-        + fs.Objects.Count(o => o.Type is ObjectType.DistillationColumn or ObjectType.ShortcutColumn or ObjectType.ReboiledAbsorber
-                                && !fs.Connections.Any(c => c.ToObject == o.Id && c.ToPort == 4));
 
     [Fact]
     public async Task StoredFlowsheetDownloadsAsAFile()

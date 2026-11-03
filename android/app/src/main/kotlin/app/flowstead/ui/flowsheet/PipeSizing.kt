@@ -65,14 +65,19 @@ private const val AUTO = "__auto"
  */
 @Composable
 internal fun PipeEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions) {
-    SpecField(obj, SpecKey.LENGTH, unitSet, ctx, actions)
+    // With sections (D98), the runs carry the length, rise and increments.
+    val sections = !obj.pipeSections.isNullOrEmpty()
+    if (!sections) SpecField(obj, SpecKey.LENGTH, unitSet, ctx, actions)
 
     SectionLabel("Pipe size")
     PipeSizeChoice(obj, unitSet, ctx, actions)
 
-    SpecField(obj, SpecKey.ELEVATION_CHANGE, unitSet, ctx, actions, optionalHint = "0 (horizontal) if empty")
+    if (!sections) SpecField(obj, SpecKey.ELEVATION_CHANGE, unitSet, ctx, actions, optionalHint = "0 (horizontal) if empty")
     SpecField(obj, SpecKey.ROUGHNESS, unitSet, ctx, actions, optionalHint = "0.0457 mm (commercial steel) if empty")
-    SpecField(obj, SpecKey.INCREMENTS, unitSet, ctx, actions, optionalHint = "10 if empty; 20–50 for long gas lines")
+    if (!sections) SpecField(obj, SpecKey.INCREMENTS, unitSet, ctx, actions, optionalHint = "10 if empty; 20–50 for long gas lines")
+
+    SectionLabel("Sections and fittings")
+    PipeSectionsSection(obj, unitSet, ctx, actions)
 
     SectionLabel("Flow model")
     Calculated(
@@ -134,7 +139,7 @@ internal fun PipeSizeChoice(obj: SimObject, unitSet: UnitSet, ctx: UnitContext, 
     }
 }
 
-private fun smallLength(unitSet: UnitSet) = if (unitSet.unitFor(Quantity.Length) == Units.ft) Units.inch else Units.mm
+internal fun smallLength(unitSet: UnitSet) = if (unitSet.unitFor(Quantity.Length) == Units.ft) Units.inch else Units.mm
 
 private fun wall(m: Double, unitSet: UnitSet, ctx: UnitContext) = ValueFormat.si(m, smallLength(unitSet), ctx)
 

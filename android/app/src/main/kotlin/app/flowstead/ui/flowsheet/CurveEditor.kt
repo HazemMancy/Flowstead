@@ -177,7 +177,7 @@ private fun PointRows(points: List<CurvePoint>, pump: Boolean, flowUnit: EngUnit
 
 /** One number in a curve row, in [unit] (null: shown as typed, e.g. a percentage); blank commits null. */
 @Composable
-private fun CurveCell(label: String, si: Double?, unit: EngUnit?, ctx: UnitContext, tag: String, modifier: Modifier, onCommit: (Double?) -> Unit) {
+internal fun CurveCell(label: String, si: Double?, unit: EngUnit?, ctx: UnitContext, tag: String, modifier: Modifier, onCommit: (Double?) -> Unit) {
     val shown = si?.let { v -> unit?.let { ValueFormat.number(it.fromSi(v, ctx), it.decimals + 1).replace(",", "") } ?: ValueFormat.number(v, 1) } ?: ""
     var text by remember(tag, si, unit) { mutableStateOf(shown) }
     var error by remember(tag) { mutableStateOf(false) }

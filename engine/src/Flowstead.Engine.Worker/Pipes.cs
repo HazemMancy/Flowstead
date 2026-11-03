@@ -61,7 +61,7 @@ public static class Pipes
 
     /// <summary>
     /// Pressure, temperature, holdup and velocity at each increment boundary, against distance from the inlet.
-    /// A record is kept only when DWSIM gave both its pressure and temperature; holdup and velocity are those
+    /// A fitting has no length, so its pressure drop is a vertical step. A record is kept only when DWSIM gave both its pressure and temperature; holdup and velocity are those
     /// of the same records (a section's last record is the next one's first, so it is taken once).
     /// </summary>
     private static Dictionary<string, List<double>>? Profile(Pipe pipe)
@@ -76,8 +76,9 @@ public static class Pipes
             {
                 var r = s.Results[k];
                 var at = start + (n > 1 ? length * k / (n - 1) : 0);
-                if (x.Count > 0 && Math.Abs(at - x[^1]) < 1e-9) continue;
                 if (r.Pressure_Initial is not { } pk || r.Temperature_Initial is not { } tk || !double.IsFinite(pk) || !double.IsFinite(tk)) continue;
+                // A section's last record is the next one's first; a fitting (no length, D98) is a step at one distance.
+                if (x.Count > 0 && Math.Abs(at - x[^1]) < 1e-9 && Math.Abs(pk - p[^1]) <= 1e-6 * Math.Max(1, pk)) continue;
                 x.Add(at);
                 p.Add(pk);
                 t.Add(tk);

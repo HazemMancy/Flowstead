@@ -409,6 +409,37 @@ public static class Validator
             case ObjectType.HeatExchanger:
                 OneOf("duty or one outlet temperature", SpecKeys.Duty, SpecKeys.HotOutletTemperature, SpecKeys.ColdOutletTemperature);
                 break;
+            case ObjectType.PipeSegment when o.PipeSections is { Count: > 0 } sections:
+                // Sections (D98) replace the pipe's length, elevation change and increments.
+                Positive(SpecKeys.InnerDiameter, "inside diameter");
+                if (s.GetValueOrDefault(SpecKeys.Roughness) is { } r0 && r0.Si < 0) err($"{o.Tag}: roughness can't be negative.", o.Id);
+                for (var i = 0; i < sections.Count; i++)
+                {
+                    var x = sections[i];
+                    var what = $"{o.Tag}, section {i + 1}";
+                    if (x.Count < 1) err($"{what}: the count must be at least 1.", o.Id);
+                    if (x.InnerDiameter is { } d && !(d > 0)) err($"{what}: the inside diameter must be positive.", o.Id);
+                    if (x.OuterDiameter is { } dd && !(dd > (x.InnerDiameter ?? s.GetValueOrDefault(SpecKeys.InnerDiameter)?.Si ?? 0)))
+                        err($"{what}: the outside diameter must be larger than the inside diameter.", o.Id);
+                    if (x.Roughness is { } r && r < 0) err($"{what}: roughness can't be negative.", o.Id);
+                    if (x.Fitting is { } f)
+                    {
+                        if (!PipeFittings.All.ContainsKey(f)) err($"{what}: unknown fitting '{f}'.", o.Id);
+                        continue;
+                    }
+                    if (!(x.Length > 0)) err($"{what}: give a positive length.", o.Id);
+                    else if (x.ElevationChange is { } sdz && Math.Abs(sdz) >= x.Length) err($"{what}: the elevation change must be smaller than the length.", o.Id);
+                    if (x.Increments is { } sinc && sinc is < 1 or > 500) err($"{what}: increments must be from 1 to 500.", o.Id);
+                }
+                if (sections.All(x => x.Fitting is not null)) err($"{o.Tag}: add at least one straight section.", o.Id);
+                if (sections.Sum(x => x.Fitting is null ? (x.Increments ?? 10) * x.Count : x.Count) > 2000)
+                    err($"{o.Tag}: more than 2000 increments in all; use fewer increments or sections.", o.Id);
+                if (s.ContainsKey(SpecKeys.HeatTransferCoefficient) != s.ContainsKey(SpecKeys.AmbientTemperature))
+                    err($"{o.Tag}: give both the heat transfer coefficient and the ambient temperature, or neither (adiabatic).", o.Id);
+                if (s.GetValueOrDefault(SpecKeys.HeatTransferCoefficient) is { } u0 && u0.Si < 0) err($"{o.Tag}: heat transfer coefficient can't be negative.", o.Id);
+                if (o.Refs.GetValueOrDefault(ChoiceKeys.PipeCorrelation) is { } c0 && !PipeCorrelations.ContainsKey(c0))
+                    err($"{o.Tag}: unknown flow correlation '{c0}'.", o.Id);
+                break;
             case ObjectType.PipeSegment:
                 Positive(SpecKeys.Length, "length");
                 Positive(SpecKeys.InnerDiameter, "inside diameter");

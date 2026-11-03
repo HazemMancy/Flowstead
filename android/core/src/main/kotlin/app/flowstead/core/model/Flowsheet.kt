@@ -125,6 +125,13 @@ data class SimObject(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val curve: PerformanceCurve? = null,
+    /**
+     * Pipe segment: its straight runs and fittings in flow order (D98). When given they replace the pipe's length,
+     * elevation change and increments; its inner and outer diameter and roughness are each section's default.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val pipeSections: List<PipeSegmentSection>? = null,
     /** Separator sizing basis (D61); not part of the solved model. Written only when set. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -163,6 +170,67 @@ data class PerformanceCurve(
 
 object CurveFits {
     const val POLYNOMIAL = "polynomial"
+}
+
+/** One straight run ([fitting] null) or a fitting of a pipe segment (D98). Lengths in m. Same shape as the engine's. */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class PipeSegmentSection(
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val fitting: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val length: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val elevationChange: Double? = null,
+    val count: Int = 1,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val innerDiameter: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val outerDiameter: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val roughness: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val increments: Int? = null,
+) {
+    val isFitting: Boolean get() = fitting != null
+}
+
+/**
+ * DWSIM's pipe fittings (D98), as the engine's PipeFittings: [value] is an equivalent length L/D or, when not
+ * [lOverD], a resistance coefficient K on the velocity head.
+ */
+object PipeFittings {
+    data class Kind(val id: String, val name: String, val value: Double, val lOverD: Boolean)
+
+    val ALL: List<Kind> = listOf(
+        Kind("elbow_90", "Standard elbow 90°", 14.0, true),
+        Kind("elbow_45", "Standard elbow 45°", 16.0, true),
+        Kind("return_bend", "Return bend 180°", 50.0, true),
+        Kind("mitre_elbow_90", "Mitre elbow 90°", 60.0, true),
+        Kind("threaded_elbow_90", "Threaded elbow 90°", 30.0, true),
+        Kind("tee_run", "Tee, flow through run", 20.0, true),
+        Kind("tee_branch", "Tee, flow through branch", 60.0, true),
+        Kind("gate_valve", "Gate valve (open)", 8.0, true),
+        Kind("ball_valve", "Ball valve", 3.0, true),
+        Kind("globe_valve", "Globe valve", 340.0, true),
+        Kind("angle_valve", "Angle valve", 55.0, true),
+        Kind("butterfly_valve", "Butterfly valve (2–14 in)", 40.0, true),
+        Kind("swing_check_valve", "Swing check valve", 100.0, true),
+        Kind("lift_check_valve", "Lift check valve", 600.0, true),
+        Kind("stop_check_valve", "Stop-check valve (globe)", 400.0, true),
+        Kind("foot_valve", "Foot valve (poppet disc)", 420.0, true),
+        Kind("entrance_normal", "Entrance, normal", 0.78, false),
+        Kind("entrance_borda", "Entrance, Borda", 0.25, false),
+        Kind("exit_normal", "Exit, normal", 1.0, false),
+        Kind("exit_borda", "Exit, Borda", 1.0, false),
+        Kind("contraction_3_4", "Sudden contraction d/D = 3/4", 1.11, false),
+        Kind("contraction_1_2", "Sudden contraction d/D = 1/2", 9.6, false),
+        Kind("contraction_1_4", "Sudden contraction d/D = 1/4", 96.0, false),
+        Kind("expansion_3_4", "Sudden expansion d/D = 3/4", 0.6, false),
+        Kind("expansion_1_2", "Sudden expansion d/D = 1/2", 9.0, false),
+        Kind("expansion_1_4", "Sudden expansion d/D = 1/4", 225.0, false),
+        Kind("reducer_4_3", "Reducer 4:3", 0.65, false),
+        Kind("reducer_2_1", "Reducer 2:1", 5.67, false),
+    )
+    private val byId = ALL.associateBy { it.id }
+    fun get(id: String?): Kind? = id?.let { byId[it] }
+
+    /** "L/D 340" or "K 5.67". */
+    fun describe(k: Kind): String = if (k.lOverD) "L/D ${fmt(k.value)}" else "K ${fmt(k.value)}"
+    private fun fmt(v: Double) = if (v == kotlin.math.floor(v)) v.toLong().toString() else v.toString()
 }
 
 /** kij between compounds [a] and [b] (symmetric). Same as the engine's BinaryParameter. */

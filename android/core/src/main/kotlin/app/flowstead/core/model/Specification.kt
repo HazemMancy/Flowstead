@@ -453,6 +453,7 @@ object Specification {
     /** Mirrors the engine validator's pipe rules; adds what is missing to [needs]. */
     private fun pipe(o: SimObject, needs: MutableList<String>): SpecStatus? {
         val s = o.specs
+        o.pipeSections?.takeIf { it.isNotEmpty() }?.let { sections -> return pipeSections(o, sections, needs) }
         for (k in listOf(SpecKey.LENGTH, SpecKey.INNER_DIAMETER)) {
             val v = s[k]
             if (v == null) needs += SpecKey.label(k).lowercase()
@@ -468,6 +469,41 @@ object Specification {
         s[SpecKey.INCREMENTS]?.let {
             if (it.si < 1 || it.si > 500 || it.si != kotlin.math.floor(it.si)) return SpecStatus.Invalid("Increments must be a whole number from 1 to 500")
         }
+        if ((SpecKey.HEAT_TRANSFER_COEFFICIENT in s) != (SpecKey.AMBIENT_TEMPERATURE in s)) {
+            needs += if (SpecKey.HEAT_TRANSFER_COEFFICIENT in s) "ambient temperature" else "heat transfer coefficient"
+        }
+        s[SpecKey.HEAT_TRANSFER_COEFFICIENT]?.let { if (it.si < 0) return SpecStatus.Invalid("Heat transfer coefficient can't be negative") }
+        s[SpecKey.AMBIENT_TEMPERATURE]?.let { if (it.si <= 0) return SpecStatus.Invalid("Ambient temperature must be above absolute zero") }
+        return null
+    }
+
+    /** A pipe made of sections (D98): they replace its length, elevation change and increments. Mirrors the engine. */
+    private fun pipeSections(o: SimObject, sections: List<PipeSegmentSection>, needs: MutableList<String>): SpecStatus? {
+        val s = o.specs
+        val d0 = s[SpecKey.INNER_DIAMETER]
+        if (d0 == null) needs += SpecKey.label(SpecKey.INNER_DIAMETER).lowercase()
+        else if (d0.si <= 0) return SpecStatus.Invalid("${SpecKey.label(SpecKey.INNER_DIAMETER)} must be positive")
+        s[SpecKey.OUTER_DIAMETER]?.let { od ->
+            if (od.si <= (d0?.si ?: 0.0)) return SpecStatus.Invalid("The outside diameter must be larger than the inside diameter")
+        }
+        s[SpecKey.ROUGHNESS]?.let { if (it.si < 0) return SpecStatus.Invalid("Roughness can't be negative") }
+        sections.forEachIndexed { i, x ->
+            val what = "Section ${i + 1}"
+            if (x.count < 1) return SpecStatus.Invalid("$what: the count must be at least 1")
+            x.innerDiameter?.let { if (it <= 0) return SpecStatus.Invalid("$what: the inside diameter must be positive") }
+            x.outerDiameter?.let { if (it <= (x.innerDiameter ?: d0?.si ?: 0.0)) return SpecStatus.Invalid("$what: the outside diameter must be larger than the inside diameter") }
+            x.roughness?.let { if (it < 0) return SpecStatus.Invalid("$what: roughness can't be negative") }
+            if (x.fitting != null) {
+                if (PipeFittings.get(x.fitting) == null) return SpecStatus.Invalid("$what: unknown fitting '${x.fitting}'")
+                return@forEachIndexed
+            }
+            val len = x.length
+            if (len == null) needs += "section ${i + 1} length"
+            else if (len <= 0) return SpecStatus.Invalid("$what: the length must be positive")
+            else if (x.elevationChange != null && kotlin.math.abs(x.elevationChange) >= len) return SpecStatus.Invalid("$what: the elevation change must be smaller than the length")
+            x.increments?.let { if (it !in 1..500) return SpecStatus.Invalid("$what: increments must be from 1 to 500") }
+        }
+        if (sections.all { it.isFitting }) return SpecStatus.Invalid("Add at least one straight section")
         if ((SpecKey.HEAT_TRANSFER_COEFFICIENT in s) != (SpecKey.AMBIENT_TEMPERATURE in s)) {
             needs += if (SpecKey.HEAT_TRANSFER_COEFFICIENT in s) "ambient temperature" else "heat transfer coefficient"
         }

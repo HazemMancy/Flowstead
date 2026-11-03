@@ -223,6 +223,25 @@ object FlowsheetEditing {
     fun setCaseResults(fs: Flowsheet, id: String, results: CaseResults): Flowsheet =
         fs.copy(caseStudies = fs.caseStudies.map { if (it.id == id) it.copy(results = results) else it })
 
+    /**
+     * Sets or clears a pipe's sections (D98). Sections replace the pipe's own length, elevation change and increments;
+     * clearing them turns the first straight run back into those specs, so nothing typed is lost.
+     */
+    fun setPipeSections(fs: Flowsheet, id: String, sections: List<PipeSegmentSection>?): Flowsheet = update(fs, id) { o ->
+        if (!sections.isNullOrEmpty()) {
+            o.copy(pipeSections = sections, specs = o.specs - setOf(SpecKey.LENGTH, SpecKey.ELEVATION_CHANGE, SpecKey.INCREMENTS))
+        } else {
+            val first = o.pipeSections?.firstOrNull { !it.isFitting }
+            val restored = buildMap {
+                putAll(o.specs)
+                first?.length?.let { put(SpecKey.LENGTH, Spec(it, "m")) }
+                first?.elevationChange?.let { put(SpecKey.ELEVATION_CHANGE, Spec(it, "m")) }
+                first?.increments?.let { put(SpecKey.INCREMENTS, Spec(it.toDouble(), "")) }
+            }
+            o.copy(pipeSections = null, specs = restored)
+        }
+    }
+
     /** Sets or clears a pump or compressor curve (D48). Running on a curve replaces the outlet pressure spec. */
     /** Sets or clears a separator's sizing basis (D61); it changes no result. */
     fun setSizing(fs: Flowsheet, id: String, sizing: SeparatorSizingInput?): Flowsheet = update(fs, id) { it.copy(sizing = sizing) }

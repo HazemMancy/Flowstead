@@ -159,6 +159,7 @@ _Last updated: 2026-10-20_
 - **3.0.0 (D94, D90–D93):** DWSIM 10.2.12 built from source on .NET 10 for the server, Docker and the phone; liquid density COSTALD for liquid mixtures, experimental data for pure and water-rich liquids (0.50 % mean against reference equations of state over 29 liquids, was 0.87 %; depropanizer liquids within 0.5 % of GERG-2008, were 4 % low); one-phase labels both ways (a 321-bar gas called liquid by DWSIM 10 is vapour); PVT about 100× faster; PVT regression refines its steps. Benchmarks re-based on DWSIM 10, every independent reference holding; the DWSIM 9 benchmark files open and solve.
 - **3.0.1 (D96):** solves fast again: the D95 boundary search removed (13.6 s for two streams on the phone in 3.0.0); stream bubble and dew points remembered between solves.
 - **3.0.2 (D97):** Z factor only for a vapour phase and vapour-only streams (none for liquids, also in older saved results and the PVT tables); hypothetical components characterised once per definition instead of on every solve.
+- **DWSIM file compatibility (D98):** pipe segments made of runs and fittings (DWSIM's 28 fittings, a section editor, the profile and data sheet); Adjusts, controllers and Sets written to and read from DWSIM files as DWSIM Adjusts, PID controllers and Specs; pressure–entropy streams; the engine's own energy streams no longer appear after a round trip. Loop solver fix: a flowsheet already on target returns its solution, not a probe.
 - **D87:** a direct Install button (with the install permission) was tested as a pre-release and blocked by Play Protect, as in D74; releases keep Open Downloads.
 
 - **On-device engine:** since 3.0 DWSIM 10.2.12 (Mono 10.0.13, SkiaSharp 2.88.9): all 20 benchmarks on the CI emulator, debug and minified release builds. First verified with DWSIM 9.0.5: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
@@ -180,9 +181,8 @@ _Last updated: 2026-10-20_
 ## Known limitations
 
 - Benchmarks 01 and 03 have only engine-provisional expected values (D6). They need desktop-DWSIM `.dwxmz` files and HYSYS numbers.
-- Pipe segments are one straight section: imported DWSIM pipes with several sections are left out with a warning. HYSYS Pipe Segment's fittings and multiple segments are not available yet.
-- Import supports the placeable unit ops only. Columns, reactors and other DWSIM objects are left out with a warning. The streams they fed need specifying again.
-- Exported `.dwxmz` files don't contain Adjusts, and the engine's hidden energy streams become visible after a round trip.
+- DWSIM file import leaves out objects Flowstead doesn't have (DWSIM's Tank, custom or CAPE-OPEN units, Plus units) with a warning, and a pipe's fixed-ΔP fitting. A DWSIM PID controller imports without its tuning (D98).
+- Exported Adjusts and Specs (D98) were checked by re-importing them; they have not been opened in desktop DWSIM.
 
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).
 - The engine Docker image is verified in CI only (no Docker daemon in the sandbox).

@@ -410,6 +410,7 @@ class FlowsheetViewModel @Inject constructor(
     fun setPipeSize(id: String, nps: String?, schedule: String?) = edit { FlowsheetEditing.setPipeSize(it, id, nps, schedule) }
 
     fun setCurve(id: String, curve: PerformanceCurve?) = edit { FlowsheetEditing.setCurve(it, id, curve) }
+    fun setPipeSections(id: String, sections: List<app.flowstead.core.model.PipeSegmentSection>?) = edit { FlowsheetEditing.setPipeSections(it, id, sections) }
     fun setSizing(id: String, sizing: app.flowstead.core.model.SeparatorSizingInput?) = edit { FlowsheetEditing.setSizing(it, id, sizing) }
     fun setEquipmentSizing(id: String, sizing: app.flowstead.core.model.EquipmentSizingInput?) = edit { FlowsheetEditing.setEquipmentSizing(it, id, sizing) }
 

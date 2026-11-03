@@ -79,6 +79,8 @@ public static class LoopSolver
         var h = x.Select(v => Math.Abs(v) > 1e-12 ? 0.02 * Math.Abs(v) : 1.0).ToArray();
         var f = Evaluate(x);
         if (f is null) return Fail("the flowsheet does not solve at the starting values");
+        // The solve at x: the result returned, not the last evaluation (a Jacobian probe or a rejected step).
+        var atX = last!;
 
         double[,]? J = null;
         bool Measure()
@@ -94,7 +96,8 @@ public static class LoopSolver
             }
             return true;
         }
-        if (!Measure()) return Fail("the flowsheet does not solve near the starting values");
+        // Already on target (a file that was saved solved, D98): no probes, so nothing moves.
+        if (Norm(f) > 1 && !Measure()) return Fail("the flowsheet does not solve near the starting values");
 
         var fresh = true;
         while (Norm(f) > 1 && evaluations < MaxEvaluations)
@@ -115,7 +118,7 @@ public static class LoopSolver
                 xn = x.Select((v, i) => Math.Clamp(v + lambda * dx[i], ls[i].Min, ls[i].Max)).ToArray();
                 if (xn.SequenceEqual(x)) break;
                 fn = Evaluate(xn);
-                if (fn is not null && Norm(fn) < Norm(f)) break;
+                if (fn is not null && Norm(fn) < Norm(f)) { atX = last!; break; }
                 fn = null;
                 if (evaluations >= MaxEvaluations) break;
             }
@@ -164,7 +167,7 @@ public static class LoopSolver
                         : $"not converged after {evaluations} solves of the flowsheet."),
                 });
         }
-        return new Outcome(last!, results);
+        return new Outcome(atX, results);
 
         Outcome Fail(string why) => new(last!, loops.ToDictionary(a => a.Id, a => new ObjectResult
         {

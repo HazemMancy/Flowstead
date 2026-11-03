@@ -110,6 +110,83 @@ public sealed record SimObject
     public Dictionary<string, string> Refs { get; init; } = [];
     /// <summary>Pump or compressor performance curve; when given, the machine runs on it (D48).</summary>
     public PerformanceCurve? Curve { get; init; }
+    /// <summary>
+    /// Pipe segment: its sections and fittings in flow order, as HYSYS's Pipe Segment and DWSIM's pipe profile (D98).
+    /// When given they replace the pipe's length, elevation change and increments; the pipe's inner and outer diameter
+    /// and roughness are the default for every section.
+    /// </summary>
+    public List<PipeSection>? PipeSections { get; init; }
+}
+
+/// <summary>One straight run of pipe, or a fitting (<see cref="Fitting"/> set), in a pipe segment.</summary>
+public sealed record PipeSection
+{
+    /// <summary>A fitting id from <see cref="PipeFittings"/>; null for a straight run.</summary>
+    public string? Fitting { get; init; }
+    /// <summary>Straight run: length along the pipe, m.</summary>
+    public double? Length { get; init; }
+    /// <summary>Straight run: outlet minus inlet elevation, m.</summary>
+    public double? ElevationChange { get; init; }
+    /// <summary>How many times the section repeats (identical fittings, or a run repeated), at least 1.</summary>
+    public int Count { get; init; } = 1;
+    /// <summary>Optional overrides of the pipe's own values: m, m, m.</summary>
+    public double? InnerDiameter { get; init; }
+    public double? OuterDiameter { get; init; }
+    public double? Roughness { get; init; }
+    /// <summary>Straight run: calculation increments (default 10).</summary>
+    public int? Increments { get; init; }
+}
+
+/// <summary>
+/// DWSIM's pipe fittings (Pipe.vb Kfit), by Flowstead id: DWSIM's index, an English name, and the loss DWSIM applies,
+/// either an equivalent length L/D or a resistance coefficient K on the velocity head.
+/// </summary>
+public static class PipeFittings
+{
+    public sealed record Kind(int DwsimIndex, string Name, double Value, bool IsLOverD);
+
+    public static readonly IReadOnlyDictionary<string, Kind> All = new Dictionary<string, Kind>
+    {
+        ["elbow_90"] = new(0, "Standard elbow 90°", 14, true),
+        ["elbow_45"] = new(1, "Standard elbow 45°", 16, true),
+        ["return_bend"] = new(2, "Return bend 180°", 50, true),
+        ["angle_valve"] = new(3, "Angle valve", 55, true),
+        ["butterfly_valve"] = new(4, "Butterfly valve (2–14 in)", 40, true),
+        ["ball_valve"] = new(5, "Ball valve", 3, true),
+        ["gate_valve"] = new(6, "Gate valve (open)", 8, true),
+        ["globe_valve"] = new(7, "Globe valve", 340, true),
+        ["lift_check_valve"] = new(8, "Lift check valve", 600, true),
+        ["foot_valve"] = new(9, "Foot valve (poppet disc)", 420, true),
+        ["swing_check_valve"] = new(10, "Swing check valve", 100, true),
+        ["stop_check_valve"] = new(11, "Stop-check valve (globe)", 400, true),
+        ["tee_run"] = new(12, "Tee, flow through run", 20, true),
+        ["tee_branch"] = new(13, "Tee, flow through branch", 60, true),
+        ["contraction_1_2"] = new(14, "Sudden contraction d/D = 1/2", 9.6, false),
+        ["contraction_1_4"] = new(15, "Sudden contraction d/D = 1/4", 96, false),
+        ["contraction_3_4"] = new(16, "Sudden contraction d/D = 3/4", 1.11, false),
+        ["entrance_borda"] = new(17, "Entrance, Borda", 0.25, false),
+        ["entrance_normal"] = new(18, "Entrance, normal", 0.78, false),
+        ["expansion_1_2"] = new(19, "Sudden expansion d/D = 1/2", 9, false),
+        ["expansion_1_4"] = new(20, "Sudden expansion d/D = 1/4", 225, false),
+        ["expansion_3_4"] = new(21, "Sudden expansion d/D = 3/4", 0.6, false),
+        ["mitre_elbow_90"] = new(22, "Mitre elbow 90°", 60, true),
+        ["reducer_2_1"] = new(23, "Reducer 2:1", 5.67, false),
+        ["reducer_4_3"] = new(24, "Reducer 4:3", 0.65, false),
+        ["exit_borda"] = new(25, "Exit, Borda", 1, false),
+        ["exit_normal"] = new(26, "Exit, normal", 1, false),
+        ["threaded_elbow_90"] = new(28, "Threaded elbow 90°", 30, true),
+    };
+
+    /// <summary>DWSIM's section type for a fitting: the name ends with the index in brackets, which is what DWSIM reads.</summary>
+    public static string DwsimType(string id) => $"{All[id].Name} [{All[id].DwsimIndex}]";
+
+    /// <summary>The Flowstead id of a DWSIM fitting section type, or null.</summary>
+    public static string? FromDwsim(string type)
+    {
+        var open = type.LastIndexOf('[');
+        if (open < 0 || !type.EndsWith(']') || !int.TryParse(type[(open + 1)..^1], out var index)) return null;
+        return All.FirstOrDefault(kv => kv.Value.DwsimIndex == index).Key;
+    }
 }
 
 /// <summary>
@@ -339,5 +416,58 @@ public static class Json
         o.DefaultIgnoreCondition = Options.DefaultIgnoreCondition;
         o.NumberHandling = Options.NumberHandling;
         o.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
+    }
+}
+
+/// <summary>DWSIM Spec expressions (D98): a Flowstead Set is target = a × source + b.</summary>
+public static class SpecExpressions
+{
+    /// <summary>a and b of an expression a·X + b (forms: X, X*a, a*X, X+b, a*X+b, X*a-b …); null for anything else.</summary>
+    public static (double A, double B)? Linear(string? expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression)) return null;
+        var e = expression.Replace(" ", "");
+        // Evaluate at X = 0 and X = 1 with a tiny parser of numbers, X, + − * /, and check linearity at X = 2.
+        double? Eval(double x)
+        {
+            var pos = 0;
+            double? Expr()
+            {
+                var v = Term(); if (v is null) return null;
+                while (pos < e.Length && e[pos] is '+' or '-')
+                {
+                    var op = e[pos++]; var r = Term(); if (r is null) return null;
+                    v = op == '+' ? v + r : v - r;
+                }
+                return v;
+            }
+            double? Term()
+            {
+                var v = Factor(); if (v is null) return null;
+                while (pos < e.Length && e[pos] is '*' or '/')
+                {
+                    var op = e[pos++]; var r = Factor(); if (r is null) return null;
+                    v = op == '*' ? v * r : v / r;
+                }
+                return v;
+            }
+            double? Factor()
+            {
+                if (pos >= e.Length) return null;
+                if (e[pos] == '-') { pos++; return -Factor(); }
+                if (e[pos] == '+') { pos++; return Factor(); }
+                if (e[pos] == '(') { pos++; var v = Expr(); if (pos >= e.Length || e[pos] != ')') return null; pos++; return v; }
+                if (e[pos] is 'X' or 'x') { pos++; return x; }
+                var start = pos;
+                while (pos < e.Length && (char.IsDigit(e[pos]) || e[pos] is '.' or 'E' or 'e' || (pos > start && e[pos - 1] is 'E' or 'e' && e[pos] is '-' or '+'))) pos++;
+                return double.TryParse(e[start..pos], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : null;
+            }
+            var result = Expr();
+            return pos == e.Length ? result : null;
+        }
+        if (Eval(0) is not { } b || Eval(1) is not { } y1 || Eval(2) is not { } y2) return null;
+        var a = y1 - b;
+        if (!double.IsFinite(a) || !double.IsFinite(b) || Math.Abs(y2 - (2 * a + b)) > 1e-9 * Math.Max(1, Math.Abs(y2))) return null;
+        return (a, b);
     }
 }

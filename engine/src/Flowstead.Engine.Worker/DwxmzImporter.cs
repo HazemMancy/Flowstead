@@ -55,10 +55,16 @@ public static class DwxmzImporter
                 connectedInto.Add(c.AttachedConnector.AttachedTo.Name);
         }
 
+        // The energy stream Flowstead's engine adds to a unit drawn without one ("E-100-Q", D98): attached to that unit
+        // only. It is left out, and the engine adds it again, so a round trip gives back what was drawn.
+        var hidden = fs.SimulationObjects.Values.Where(so => so is EnergyStream && IsEngineEnergyStream(so)).Select(so => so.Name).ToHashSet();
+
         foreach (var so in fs.SimulationObjects.Values.OrderBy(s => s.GraphicObject.Tag, StringComparer.Ordinal))
         {
             var g = so.GraphicObject;
+            if (hidden.Contains(so.Name)) continue;
             var type = TypeOf(so);
+            if (g.ObjectType is DwsimObjectType.OT_Adjust or DwsimObjectType.OT_Spec or DwsimObjectType.Controller_PID) continue; // DwsimLogic, below
             if (type is null)
             {
                 warnings.Add($"{g.Tag}: {g.ObjectType} is not supported by Flowstead and was left out, with its connections.");
@@ -69,13 +75,14 @@ public static class DwxmzImporter
             var specs = new Dictionary<string, Spec>();
             var composition = new Dictionary<string, double>();
             var refs = new Dictionary<string, string>();
+            List<PipeSection>? pipeSections = null;
             switch (so)
             {
                 case MaterialStream ms when !connectedInto.Contains(so.Name):
                     StreamSpecs(ms, specs, composition, warnings);
                     break;
                 default:
-                    UnitSpecs(so, specs, refs, warnings);
+                    UnitSpecs(so, specs, refs, warnings, out pipeSections);
                     break;
             }
             objects.Add(new SimObject
@@ -88,6 +95,7 @@ public static class DwxmzImporter
                 Specs = specs,
                 Composition = composition,
                 Refs = refs,
+                PipeSections = pipeSections,
             });
         }
 
@@ -124,6 +132,8 @@ public static class DwxmzImporter
                 connections.Add(new Connection(fromId, 1, eId, 0));
             }
         }
+
+        objects.AddRange(DwsimLogic.Import(fs, objects, idOf, warnings));
 
         var model = new Flowsheet
         {
@@ -204,6 +214,15 @@ public static class DwxmzImporter
             if (e.StreamBehavior == StreamInformation.Behavior.Distillate) Link(so.Name, Columns.CondenserPort, e.StreamID, 0);
             else if (e.StreamBehavior == StreamInformation.Behavior.BottomsLiquid) Link(e.StreamID, 0, so.Name, Columns.ReboilerPort);
         }
+    }
+
+    private static bool IsEngineEnergyStream(ISimulationObject es)
+    {
+        var g = es.GraphicObject;
+        var ends = g.InputConnectors.Where(c => c.IsAttached).Select(c => c.AttachedConnector.AttachedFrom)
+            .Concat(g.OutputConnectors.Where(c => c.IsAttached).Select(c => c.AttachedConnector.AttachedTo)).ToList();
+        if (g.EnergyConnector is { IsAttached: true } e) ends.Add(e.AttachedConnector.AttachedTo);
+        return ends.Count == 1 && (g.Tag == ends[0].Tag + "-Q" || g.Tag == ends[0].Tag + "-QC" || g.Tag == ends[0].Tag + "-QR"); // Columns.cs names its duties -QC and -QR
     }
 
     private static string? Name(IPropertyPackage? pp) => (pp as CapeOpen.ICapeIdentification)?.ComponentName;
@@ -358,6 +377,8 @@ public static class DwxmzImporter
                 Put(SpecKeys.Temperature, p.temperature, "C"); Put(SpecKeys.VapourFraction, vf, "frac"); break;
             case StreamSpec.Pressure_and_Enthalpy:
                 Put(SpecKeys.Pressure, p.pressure, "kPa"); Put(SpecKeys.MassEnthalpy, p.enthalpy * 1000.0, "kJ/kg"); break; // DWSIM kJ/kg
+            case StreamSpec.Pressure_and_Entropy:
+                Put(SpecKeys.Pressure, p.pressure, "kPa"); Put(SpecKeys.MassEntropy, p.entropy * 1000.0, "kJ/kg.K"); break; // DWSIM kJ/kg·K
             default:
                 warnings.Add($"{ms.GraphicObject.Tag}: specification '{ms.SpecType}' is not supported; imported as temperature + pressure.");
                 Put(SpecKeys.Temperature, p.temperature, "C"); Put(SpecKeys.Pressure, p.pressure, "kPa"); break;
@@ -374,8 +395,10 @@ public static class DwxmzImporter
         }
     }
 
-    private static void UnitSpecs(ISimulationObject so, Dictionary<string, Spec> specs, Dictionary<string, string> refs, List<string> warnings)
+    private static void UnitSpecs(ISimulationObject so, Dictionary<string, Spec> specs, Dictionary<string, string> refs, List<string> warnings,
+        out List<PipeSection>? pipeSections)
     {
+        pipeSections = null;
         void Put(string key, double? v, string unit)
         {
             if (v is { } x && double.IsFinite(x)) specs[key] = new Spec(x, unit);
@@ -475,16 +498,49 @@ public static class DwxmzImporter
             {
                 var sections = pipe.Profile.Sections.Values.ToList();
                 if (sections.Count == 0) { Unsupported("no pipe profile"); break; }
-                if (sections.Count > 1 || sections.Any(x => x.TipoSegmento is not ("Straight Tube Section" or "Straight Tube" or "Tubulaosimples" or "")))
-                    warnings.Add($"{so.GraphicObject.Tag}: a pipe with {sections.Count} sections or fittings is imported as one straight section of the total length; check its pressure drop.");
-                var first = sections[0];
-                Put(SpecKeys.Length, sections.Sum(x => x.Comprimento * x.Quantidade), "m");
+                static bool Straight(DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeSection x) =>
+                    x.TipoSegmento is "Straight Tube Section" or "Straight Tube" or "Tubulaosimples" or "Tubulação Simples" or "";
+                // The pipe's own diameters and roughness are its first straight section's; sections that differ keep theirs (D98).
+                var first = sections.FirstOrDefault(Straight) ?? sections[0];
+                var roughness = pipe.GetRugosity(first.Material, first);
                 Put(SpecKeys.InnerDiameter, first.DI * 0.0254, "mm");                     // DWSIM inches
                 // Flowstead writes 1.15 × ID when no outside diameter was given; don't turn that placeholder into a spec.
-                if (first.DE > first.DI && Math.Abs(first.DE - first.DI * 1.15) > 1e-6) Put(SpecKeys.OuterDiameter, first.DE * 0.0254, "mm");
-                Put(SpecKeys.ElevationChange, sections.Sum(x => x.Elevacao * x.Quantidade), "m");
-                Put(SpecKeys.Roughness, pipe.GetRugosity(first.Material, first), "mm");
-                Put(SpecKeys.Increments, sections.Sum(x => x.Incrementos * x.Quantidade), "count");
+                bool RealOd(DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeSection x) => x.DE > x.DI && Math.Abs(x.DE - x.DI * 1.15) > 1e-6;
+                if (RealOd(first)) Put(SpecKeys.OuterDiameter, first.DE * 0.0254, "mm");
+                Put(SpecKeys.Roughness, roughness, "mm");
+                if (sections.Count == 1 && Straight(first) && first.Quantidade == 1)
+                {
+                    Put(SpecKeys.Length, first.Comprimento, "m");
+                    Put(SpecKeys.ElevationChange, first.Elevacao, "m");
+                    Put(SpecKeys.Increments, first.Incrementos, "count");
+                }
+                else
+                {
+                    var list = new List<PipeSection>();
+                    foreach (var x in sections)
+                    {
+                        var fitting = Straight(x) ? null : PipeFittings.FromDwsim(x.TipoSegmento);
+                        if (!Straight(x) && fitting is null)
+                        {
+                            warnings.Add($"{so.GraphicObject.Tag}: section {x.Indice} ({x.TipoSegmento}) is not a fitting Flowstead knows; it was left out, so check the pressure drop.");
+                            continue;
+                        }
+                        double? Differs(double v, double pipeValue) => Math.Abs(v - pipeValue) > 1e-9 * Math.Max(1, Math.Abs(pipeValue)) ? v : null;
+                        var r = pipe.GetRugosity(x.Material, x);
+                        list.Add(new PipeSection
+                        {
+                            Fitting = fitting,
+                            Length = fitting is null ? x.Comprimento : null,
+                            ElevationChange = fitting is null && x.Elevacao != 0 ? x.Elevacao : null,
+                            Count = Math.Max(1, x.Quantidade),
+                            InnerDiameter = Differs(x.DI * 0.0254, first.DI * 0.0254),
+                            OuterDiameter = RealOd(x) && Math.Abs(x.DE - first.DE) > 1e-9 ? x.DE * 0.0254 : null,
+                            Roughness = Differs(r, roughness),
+                            Increments = fitting is null && x.Incrementos != 10 ? x.Incrementos : null,
+                        });
+                    }
+                    pipeSections = list;
+                }
                 if (pipe.ThermalProfile.TipoPerfil == DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.ThermalEditorDefinitions.ThermalProfileType.Definir_CGTC)
                 {
                     Put(SpecKeys.HeatTransferCoefficient, pipe.ThermalProfile.CGTC_Definido, "W/m2.K");
@@ -493,7 +549,8 @@ public static class DwxmzImporter
                 else if (pipe.ThermalProfile.Calor_trocado != 0)
                     warnings.Add($"{so.GraphicObject.Tag}: a specified pipe heat duty isn't supported; imported as adiabatic.");
                 if (pipe.Specification != Pipe.Specmode.Length) Unsupported(pipe.Specification.ToString());
-                refs[ChoiceKeys.PipeCorrelation] = Validator.PipeCorrelations.First(c => c.Value == pipe.SelectedFlowPackage.ToString()).Key;
+                refs[ChoiceKeys.PipeCorrelation] = Validator.PipeCorrelations.FirstOrDefault(c => c.Value == pipe.SelectedFlowPackage.ToString()).Key
+                    ?? Warn($"{so.GraphicObject.Tag}: flow correlation {pipe.SelectedFlowPackage} is not available; imported as Beggs & Brill.", "beggs_brill");
                 break;
             }
             case OrificePlate op:

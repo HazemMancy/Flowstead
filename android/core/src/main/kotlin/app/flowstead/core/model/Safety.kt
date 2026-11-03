@@ -116,8 +116,17 @@ object Safety {
     fun pipeGeometry(o: SimObject): Pair<VesselGeometry, Double?>? {
         if (o.type != ObjectType.PipeSegment) return null
         val id = o.specs[SpecKey.INNER_DIAMETER]?.si ?: return null
+        val od = o.specs[SpecKey.OUTER_DIAMETER]?.si
+        // Sections (D98): the straight runs, each at its own size, as one pipe of the same volume and surface.
+        o.pipeSections?.filter { !it.isFitting }?.takeIf { it.isNotEmpty() }?.let { runs ->
+            return network(runs.map { r ->
+                val d = r.innerDiameter ?: id
+                val wall = (r.outerDiameter ?: od.takeIf { r.innerDiameter == null })?.let { (it - d) / 2 }?.takeIf { it > 0 }
+                PipeSection(d, (r.length ?: 0.0) * r.count, wall)
+            })
+        }
         val length = o.specs[SpecKey.LENGTH]?.si ?: return null
-        val wall = o.specs[SpecKey.OUTER_DIAMETER]?.si?.let { (it - id) / 2 }?.takeIf { it > 0 }
+        val wall = od?.let { (it - id) / 2 }?.takeIf { it > 0 }
         return VesselGeometry(id, length, pipe = true) to wall
     }
 

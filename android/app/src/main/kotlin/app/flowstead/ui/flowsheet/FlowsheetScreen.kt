@@ -275,6 +275,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun deleteReaction(id: String) = vm.deleteReaction(id)
             override fun setPipeSize(id: String, nps: String?, schedule: String?) = vm.setPipeSize(id, nps, schedule)
             override fun setCurve(id: String, curve: PerformanceCurve?) = vm.setCurve(id, curve)
+            override fun setPipeSections(id: String, sections: List<app.flowstead.core.model.PipeSegmentSection>?) = vm.setPipeSections(id, sections)
             override fun openHelp(type: app.flowstead.core.model.ObjectType) = onOpenHelp(app.flowstead.core.help.Help.forType(type)?.id)
             override fun setSizing(id: String, sizing: app.flowstead.core.model.SeparatorSizingInput?) = vm.setSizing(id, sizing)
             override fun setEquipmentSizing(id: String, sizing: app.flowstead.core.model.EquipmentSizingInput?) = vm.setEquipmentSizing(id, sizing)

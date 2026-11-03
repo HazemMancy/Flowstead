@@ -209,6 +209,18 @@ object DataSheets {
                     val label = if (key.startsWith(SpecKey.SPLIT_PREFIX)) "Split to overhead: ${key.removePrefix(SpecKey.SPLIT_PREFIX)}" else SpecKey.label(key)
                     add(DataSheet.Line(label, symbol(u), listOf(num(spec.si, u))))
                 }
+                // Sections and fittings (D98), in flow order.
+                obj.pipeSections?.forEachIndexed { i, x ->
+                    val kind = app.flowstead.core.model.PipeFittings.get(x.fitting)
+                    if (kind != null) {
+                        add(DataSheet.Line("Section ${i + 1}: ${kind.name} (${app.flowstead.core.model.PipeFittings.describe(kind)})", "", listOf("× ${x.count}")))
+                    } else {
+                        val u = unit(Quantity.Length)
+                        add(DataSheet.Line("Section ${i + 1}: straight run" + (if (x.count > 1) " × ${x.count}" else ""), symbol(u), listOf(x.length?.let { num(it, u) } ?: "—")))
+                        x.elevationChange?.let { add(DataSheet.Line("Section ${i + 1}: elevation change", symbol(u), listOf(num(it, u)))) }
+                        x.innerDiameter?.let { add(DataSheet.Line("Section ${i + 1}: inside diameter", symbol(small()), listOf(num(it, small())))) }
+                    }
+                }
                 for ((key, label, options) in choices()) {
                     val chosen = obj.refs[key] ?: options.firstOrNull()?.first ?: continue
                     add(DataSheet.Line(label, "", listOf(options.firstOrNull { it.first == chosen }?.second ?: chosen)))

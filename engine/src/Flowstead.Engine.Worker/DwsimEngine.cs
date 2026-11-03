@@ -409,7 +409,7 @@ public sealed class DwsimEngine
 
     /// <summary>
     /// Builds and solves the flowsheet in DWSIM and saves it as a .dwxmz that opens in desktop DWSIM
-    /// with its results. Adjusts are not written (they are solved by Flowstead, not DWSIM).
+    /// with its results. Adjusts, controllers and Sets are written as DWSIM Adjusts and Specs (D98).
     /// </summary>
     public ExportResult ExportDwsim(Flowsheet model)
     {
@@ -419,13 +419,11 @@ public sealed class DwsimEngine
         if (errors.Count > 0) throw new InvalidDataException("The flowsheet can't be exported yet: " + string.Join(" ", errors));
 
         var warnings = new List<string>();
-        foreach (var set in model.Objects.Where(o => o.Type == ObjectType.Set))
-            warnings.Add($"{set.Tag}: Set is not written to the DWSIM file; its target keeps the value it gives now.");
         var applied = SetSolver.Apply(model);
         var plain = applied with { Objects = applied.Objects.Where(o => !o.Type.IsLoop() && o.Type != ObjectType.Set).ToList() };
 
-        // Adjusts and controllers aren't DWSIM objects here: the file gets each moved spec at the value the loops found
-        // (D84), so it opens with the same solution; a loop that did not converge leaves its spec as entered.
+        // Flowstead solves Adjusts and controllers itself (D84): the file gets each moved spec at the value the loops
+        // found, so it opens with the same solution, and the loops as DWSIM Adjusts (D98) added after DWSIM's solve.
         var loops = model.Objects.Where(o => o.Type.IsLoop() && DynamicLoops.InSteadyState(o)).ToList();
         if (loops.Count > 0)
         {
@@ -443,9 +441,8 @@ public sealed class DwsimEngine
                         Objects = plain.Objects.Select(o => o.Id == mId && o.Specs.TryGetValue(mKey, out var old)
                             ? o with { Specs = new Dictionary<string, Spec>(o.Specs) { [mKey] = old with { Si = x } } } : o).ToList(),
                     };
-                    warnings.Add($"{a.Tag}: {what} is not written to the DWSIM file; the specification it moves is written at the value it found.");
                 }
-                else warnings.Add($"{a.Tag}: {what} is not written to the DWSIM file and did not converge; the specification it moves keeps its value as entered.");
+                else warnings.Add($"{a.Tag}: the {what} did not converge; the specification it moves keeps its value as entered.");
             }
         }
 
@@ -454,10 +451,11 @@ public sealed class DwsimEngine
                 "DWSIM's default method, so desktop DWSIM's liquid densities, liquid volumes and two-phase pipe ΔP can differ for mixtures.");
         if (model.VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin)
             warnings.Add("Vapour viscosity: Lee–Gonzalez–Eakin is a Flowstead option; desktop DWSIM uses its own method, so gas viscosities can differ.");
-        var (fs, _) = Build(plain, forExport: true);
+        var (fs, map) = Build(plain, forExport: true);
         var solveErrors = _automation.CalculateFlowsheet4(fs) ?? [];
         var status = solveErrors.Count == 0 ? SolveStatus.Converged : SolveStatus.Failed;
         if (status != SolveStatus.Converged) warnings.Add("The flowsheet did not solve cleanly; the file is saved with partial results.");
+        DwsimLogic.Export(fs, model, map, warnings);
 
         var path = Path.Combine(Path.GetTempPath(), $"flowstead-{Guid.NewGuid():N}.dwxmz");
         try
@@ -997,17 +995,27 @@ public sealed class DwsimEngine
             }
             case Pipe pipe:
             {
-                // One straight section; DWSIM keeps diameters in inches and the heat model in its thermal profile.
+                // DWSIM keeps diameters in inches and the heat model in its thermal profile. Without sections (D98) the
+                // pipe is one straight section.
                 var di = V(SpecKeys.InnerDiameter)!.Value;
-                var section = new DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeSection(
-                    1, "Straight Tube Section", 1, (int)(V(SpecKeys.Increments) ?? 10), "User",
-                    V(SpecKeys.Length)!.Value, V(SpecKeys.ElevationChange) ?? 0.0,
-                    (V(SpecKeys.OuterDiameter) ?? di * 1.15) / 0.0254, di / 0.0254)  // DWSIM inches; OD only sets the heat-transfer area
-                {
-                    PipeWallRugosity = V(SpecKeys.Roughness) ?? DefaultRoughness,
-                };
+                var od = V(SpecKeys.OuterDiameter);
+                var roughness = V(SpecKeys.Roughness) ?? DefaultRoughness;
+                var sections = o.PipeSections is { Count: > 0 } list ? list
+                    : [new PipeSection { Length = V(SpecKeys.Length)!.Value, ElevationChange = V(SpecKeys.ElevationChange) ?? 0.0, Increments = (int?)V(SpecKeys.Increments) }];
                 pipe.Profile.Sections.Clear();
-                pipe.Profile.Sections.Add(1, section);
+                for (var i = 0; i < sections.Count; i++)
+                {
+                    var x = sections[i];
+                    var d = x.InnerDiameter ?? di;
+                    var fitting = x.Fitting is { } f;
+                    pipe.Profile.Sections.Add(i + 1, new DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeSection(
+                        i + 1, fitting ? PipeFittings.DwsimType(x.Fitting!) : "Straight Tube Section", x.Count,
+                        fitting ? 1 : x.Increments ?? 10, "User", fitting ? 0.0 : x.Length!.Value, fitting ? 0.0 : x.ElevationChange ?? 0.0,
+                        (x.OuterDiameter ?? (x.InnerDiameter is null ? od : null) ?? d * 1.15) / 0.0254, d / 0.0254) // DWSIM inches; OD only sets the heat-transfer area
+                    {
+                        PipeWallRugosity = x.Roughness ?? roughness,
+                    });
+                }
                 pipe.Profile.Status = DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeEditorStatus.OK;
                 pipe.Specification = Pipe.Specmode.Length;
                 pipe.SelectedFlowPackage = Enum.Parse<FlowPackage>(
