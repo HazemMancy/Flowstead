@@ -33,7 +33,7 @@ jobs:
           path: |
             engine/dwsim-bin
             engine/embedded/android/.dl
-          key: on-device-engine-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/native/ipopt_stub.c', 'engine/embedded/android/prepare.sh') }}
+          key: on-device-engine-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/patches/**', 'engine/native/ipopt_stub.c', 'engine/embedded/android/prepare.sh') }}
       - name: Prepare the on-device engine (DWSIM + .NET runtime for Android)
         working-directory: .
         run: engine/embedded/android/ci-prepare.sh

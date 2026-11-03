@@ -40,6 +40,34 @@ public static class Validator
         _ => [],
     };
 
+    /// <summary>Black oils (D101): only with the Black Oil package, and that package only with black oils.</summary>
+    private static void ValidateBlackOils(Flowsheet fs, IReadOnlySet<string> database, Action<string> err)
+    {
+        var bo = fs.PropertyPackage == "Black Oil";
+        if (fs.BlackOils.Count > 0 && !bo) err("Black oils need the Black Oil fluid package.");
+        if (bo)
+        {
+            var oils = fs.BlackOils.Select(b => b.Name).ToHashSet();
+            foreach (var c in fs.Compounds.Where(c => !oils.Contains(c))) err($"The Black Oil package takes black oils only; {c} is not one.");
+            if (fs.BlackOils.Count == 0) err("Define a black oil (oil and gas gravities, GOR, water cut).");
+        }
+        foreach (var dup in fs.BlackOils.GroupBy(b => b.Name).Where(g => g.Count() > 1)) err($"Black oil '{dup.Key}' is defined twice.");
+        foreach (var b in fs.BlackOils)
+        {
+            var n = b.Name;
+            if (string.IsNullOrWhiteSpace(n)) { err("A black oil needs a name."); continue; }
+            if (database.Contains(n)) err($"Black oil '{n}': a database compound has that name; choose another.");
+            if (!fs.Compounds.Contains(n)) err($"Black oil '{n}' is not in the component list.");
+            if (!(b.OilSpecificGravity is > 0.6 and < 1.07)) err($"Black oil '{n}': the oil specific gravity must be between 0.6 and 1.07 (API 104 to 2).");
+            if (!(b.GasSpecificGravity is > 0.55 and < 2)) err($"Black oil '{n}': the gas specific gravity must be between 0.55 and 2.");
+            if (!(b.GasOilRatio is >= 0 and < 2000)) err($"Black oil '{n}': the GOR must be from 0 to 2000 Sm³/m³.");
+            if (!(b.WaterCut is >= 0 and < 1)) err($"Black oil '{n}': the water cut is a fraction from 0 to below 1.");
+            if ((b.Viscosity1 is null) != (b.ViscosityTemperature1 is null) || (b.Viscosity2 is null) != (b.ViscosityTemperature2 is null)
+                || (b.Viscosity1 is null) != (b.Viscosity2 is null))
+                err($"Black oil '{n}': give both dead-oil viscosities with their temperatures, or neither (Beggs–Robinson).");
+        }
+    }
+
     /// <summary>Hypotheticals: unique names that are not database compounds, listed as compounds, inputs in range.</summary>
     private static void ValidateHypotheticals(Flowsheet fs, IReadOnlySet<string> database, Action<string> err)
     {
@@ -93,7 +121,9 @@ public static class Validator
         if (fs.Compounds.Count == 0) Err("Add at least one compound.");
         var known = knownCompounds.ToHashSet(StringComparer.Ordinal);
         ValidateHypotheticals(fs, known, t => Err(t));
+        ValidateBlackOils(fs, known, t => Err(t));
         known.UnionWith(fs.Hypotheticals.Select(h => h.Name));
+        known.UnionWith(fs.BlackOils.Select(b => b.Name));
         foreach (var c in fs.Compounds.Where(c => !known.Contains(c))) Err($"Unknown compound '{c}'.");
         foreach (var dup in fs.Compounds.GroupBy(c => c).Where(g => g.Count() > 1)) Err($"Compound '{dup.Key}' is listed twice.");
 

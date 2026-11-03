@@ -32,6 +32,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val hypotheticals: List<Hypothetical> = emptyList(),
+    /** Black oils for the Black Oil package (D101); each name is also in [compounds]. Written only when there are some. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val blackOils: List<BlackOil> = emptyList(),
     /** Liquid density method: null for the engine default, [LiquidDensityMethods.COSTALD] or [LiquidDensityMethods.EOS]. Written only when set. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -80,6 +84,7 @@ data class Flowsheet(
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
     fun hypothetical(name: String): Hypothetical? = hypotheticals.firstOrNull { it.name == name }
+    fun blackOil(name: String): BlackOil? = blackOils.firstOrNull { it.name == name }
 
     companion object {
         const val SCHEMA_VERSION = 1

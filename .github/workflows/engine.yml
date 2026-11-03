@@ -18,7 +18,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: engine/dwsim-bin
-          key: dwsim-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/native/ipopt_stub.c') }}
+          key: dwsim-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/patches/**', 'engine/native/ipopt_stub.c') }}
       - name: Build the pinned DWSIM from source
         run: engine/scripts/fetch-dwsim.sh
       - name: Build

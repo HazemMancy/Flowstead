@@ -1,0 +1,496 @@
+diff --git a/engine/DWSIM.Thermodynamics/HelperClasses/BlackOilCompoundBuilder.vb b/engine/DWSIM.Thermodynamics/HelperClasses/BlackOilCompoundBuilder.vb
+index bf7dc7a..a584d0d 100644
+--- a/engine/DWSIM.Thermodynamics/HelperClasses/BlackOilCompoundBuilder.vb
++++ b/engine/DWSIM.Thermodynamics/HelperClasses/BlackOilCompoundBuilder.vb
+@@ -83,8 +83,8 @@ Namespace Utilities.BlackOil
+             ' pre-set MW equals the value the PP would otherwise derive at flash time (consistent results).
+             Dim gasTerm As Double = gor * sgg
+             Dim liqTerm As Double = sgo * 1000.0 * (100.0 - bsw) / 100.0 + 1000.0 * bsw / 100.0
+-            Dim mw As Double = (gasTerm * bop.VaporMolecularWeight(sgg) + liqTerm * bop.LiquidMolecularWeight(sgo, bsw)) /
+-                               (gasTerm + liqTerm)
++            ' Flowstead patch (D101): total mass over total moles, as the package's phase split uses.
++            Dim mw As Double = bop.OverallMolecularWeight(sgo, sgg, gor, bsw)
+             Dim nbp As Double = bop.LiquidNormalBoilingPoint(sgo, bsw)
+             Dim deadMw As Double = bop.LiquidMolecularWeight(sgo, 0.0)
+             Dim deadNbp As Double = 1080 - Exp(6.97996 - 0.01964 * deadMw ^ (2.0 / 3.0))
+diff --git a/engine/DWSIM.Thermodynamics/PropertyPackages/BlackOil.vb b/engine/DWSIM.Thermodynamics/PropertyPackages/BlackOil.vb
+index d155704..fe0d79a 100644
+--- a/engine/DWSIM.Thermodynamics/PropertyPackages/BlackOil.vb
++++ b/engine/DWSIM.Thermodynamics/PropertyPackages/BlackOil.vb
+@@ -77,9 +77,8 @@ Namespace PropertyPackages
+             Dim i As Integer = 0
+             For Each c In constprops
+                 If c.Molar_Weight = 0.0# Then
+-                    c.Molar_Weight = (c.BO_GOR * c.BO_SGG) * bop.VaporMolecularWeight(c.BO_SGG) +
+-                                     (c.BO_SGO * 1000 * (100 - c.BO_BSW) / 100 + 1000 * c.BO_BSW / 100) * bop.LiquidMolecularWeight(c.BO_SGO, c.BO_BSW)
+-                    c.Molar_Weight /= (c.BO_GOR * c.BO_SGG) + (c.BO_SGO * 1000 * (100 - c.BO_BSW) / 100 + 1000 * c.BO_BSW / 100)
++                    ' Flowstead patch (D101): total mass over total moles
++                    c.Molar_Weight = bop.OverallMolecularWeight(c.BO_SGO, c.BO_SGG, c.BO_GOR, c.BO_BSW)
+                 End If
+                 With bof
+                     .SGO += Vxw(i) * c.BO_SGO
+@@ -103,6 +102,15 @@ Namespace PropertyPackages
+             Return bof
+         End Function
+ 
++        ''' <summary>Flowstead patch (D101): the liquid's molecular weight with its dissolved gas, at (T, P).</summary>
++        Private Function LiveLiquidMW(bof As BlackOilFluid, T As Double, P As Double) As Double
++            Return bop.LiveLiquidMolecularWeight(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult)
++        End Function
++
++        Private Function StreamTP() As Double()
++            Return New Double() {Me.CurrentMaterialStream.Phases(0).Properties.temperature.GetValueOrDefault, Me.CurrentMaterialStream.Phases(0).Properties.pressure.GetValueOrDefault}
++        End Function
++
+         Public Overrides Function AUX_VAPDENS(ByVal T As Double, ByVal P As Double) As Double
+ 
+             Dim bof As BlackOilFluid = CalcBOFluid(RET_VMOL(Phase.Vapor), DW_GetConstantProperties())
+@@ -216,7 +224,7 @@ Namespace PropertyPackages
+                         Case "isothermalcompressibility", "bulkmodulus", "joulethomsoncoefficient", "speedofsound"
+                             CalcAdditionalPhaseProperties(phaseID)
+                         Case "compressibilityfactor"
+-                            result = 1 / (bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult) * 1000 / bop.LiquidMolecularWeight(bof.SGO, bof.BSW)) / 8.314 / T * P
++                            result = 1 / (bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult, bof.PbMult) * 1000 / LiveLiquidMW(bof, T, P)) / 8.314 / T * P
+                             Me.CurrentMaterialStream.Phases(phaseID).Properties.compressibilityFactor = result
+                         Case "heatcapacity", "heatcapacitycp"
+                             result = bop.LiquidCp(T, P, bof.SGG, bof.SGO, bof.BSW)
+@@ -253,7 +261,7 @@ Namespace PropertyPackages
+                         Case "fugacity", "fugacitycoefficient", "logfugacitycoefficient", "activity", "activitycoefficient"
+                             Me.DW_CalcCompFugCoeff(phase)
+                         Case "volume", "density"
+-                            result = bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult)
++                            result = bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult, bof.PbMult)
+                             Me.CurrentMaterialStream.Phases(phaseID).Properties.density = result
+                         Case "surfacetension"
+                             Me.CurrentMaterialStream.Phases(0).Properties.surfaceTension = Me.DW_CalcTensaoSuperficial_ISOL(Phase.Liquid1, T, P)
+@@ -350,9 +358,9 @@ Namespace PropertyPackages
+ 
+                 Dim bof As BlackOilFluid = CalcBOFluid(RET_VMOL(Phase.Liquid1), DW_GetConstantProperties())
+ 
+-                Me.CurrentMaterialStream.Phases(phaseID).Properties.molecularWeight = bop.LiquidMolecularWeight(bof.SGO, bof.BSW)
++                Me.CurrentMaterialStream.Phases(phaseID).Properties.molecularWeight = LiveLiquidMW(bof, T, P)
+ 
+-                result = 1 / (bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult) * 1000 / Me.CurrentMaterialStream.Phases(phaseID).Properties.molecularWeight) / 8.314 / T * P
++                result = 1 / (bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult, bof.PbMult) * 1000 / Me.CurrentMaterialStream.Phases(phaseID).Properties.molecularWeight) / 8.314 / T * P
+                 Me.CurrentMaterialStream.Phases(phaseID).Properties.compressibilityFactor = result
+                 result = bop.LiquidCp(T, P, bof.SGG, bof.SGO, bof.BSW)
+                 Me.CurrentMaterialStream.Phases(phaseID).Properties.heatCapacityCp = result
+@@ -376,7 +384,7 @@ Namespace PropertyPackages
+                 Me.CurrentMaterialStream.Phases(phaseID).Properties.viscosity = result
+                 result = bop.LiquidThermalConductivity(T, P, bof.SGO, bof.BSW)
+                 Me.CurrentMaterialStream.Phases(phaseID).Properties.thermalConductivity = result
+-                result = bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult)
++                result = bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult, bof.PbMult)
+                 Me.CurrentMaterialStream.Phases(phaseID).Properties.density = result
+                 Me.CurrentMaterialStream.Phases(phaseID).Properties.kinematic_viscosity = Me.CurrentMaterialStream.Phases(phaseID).Properties.viscosity / Me.CurrentMaterialStream.Phases(phaseID).Properties.density.Value
+ 
+@@ -420,7 +428,7 @@ Namespace PropertyPackages
+         Public Overrides Function DW_CalcMassaEspecifica_ISOL(ByVal Phase1 As PropertyPackages.Phase, ByVal T As Double, ByVal P As Double, Optional ByVal pvp As Double = 0) As Double
+             Dim bof As BlackOilFluid = CalcBOFluid(RET_VMOL(Phase1), DW_GetConstantProperties())
+             If Phase1 = Phase.Liquid Then
+-                Return bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult)
++                Return bop.LiquidDensity(T, P, bof.SGO, bof.SGG, bof.GOR, bof.BSW, bof.RsMult, bof.BoMult, bof.PbMult)
+             ElseIf Phase1 = Phase.Vapor Then
+                 Return bop.VaporDensity(T, P, bof.SGG)
+             End If
+@@ -466,7 +474,7 @@ Namespace PropertyPackages
+         Public Overrides Function DW_CalcMM_ISOL(ByVal Phase1 As PropertyPackages.Phase, ByVal T As Double, ByVal P As Double) As Double
+             Dim bof As BlackOilFluid = CalcBOFluid(RET_VMOL(Phase1), DW_GetConstantProperties())
+             If Phase1 = Phase.Liquid Then
+-                Return bop.LiquidMolecularWeight(bof.SGO, bof.BSW)
++                Return LiveLiquidMW(bof, T, P)
+             ElseIf Phase1 = Phase.Vapor Then
+                 Return bop.VaporMolecularWeight(bof.SGG)
+             End If
+@@ -601,131 +609,11 @@ Namespace PropertyPackages
+ 
+         Public Function DW_CalcXY(T As Double, P As Double) As Double()
+ 
+-            Dim cprops = DW_GetConstantProperties()
++            ' Flowstead patch (D101): each black oil's free gas at (T, P) as a mole fraction, from Standing's Rs capped at
++            ' its GOR, on the same mass and mole basis as its overall and liquid molecular weights.
+             Dim Xv As New List(Of Double)
+-
+-            For Each cprop In cprops
+-
+-                Dim API, WOR, GORss As Double
+-
+-                Dim Tf, Trank, Ppsia As Double
+-
+-                Tf = (T - 273.15) * 9 / 5 + 32
+-                Trank = Tf + 459.67
+-                Ppsia = P * 0.000145038
+-
+-                API = 141.5 / cprop.BO_SGO - 131.5
+-
+-                WOR = cprop.BO_BSW / (100 - cprop.BO_BSW)
+-
+-                GORss = cprop.BO_GOR * 5.6738
+-
+-                Dim SGdg, Rs, Pb As Double
+-
+-                SGdg = cprop.BO_SGG
+-
+-                Rs = SGdg * (((Ppsia) / 18.2 + 1.4) * 10 ^ (0.0125 * API - 0.00091 * Tf)) ^ 1.2048
+-
+-                Pb = 18.2 * ((GORss / SGdg) ^ (1 / 1.2048) * 10 ^ (0.00091 * Tf - 0.0125 * API) - 1.4)
+-
+-                Dim Bo, Bos, Boss, C, SGfg100 As Double
+-
+-                Bos = 0.9759 + 0.00012 * (Rs * (SGdg / cprop.BO_SGO) ^ 0.5 + 1.25 * Tf) ^ 1.2
+-
+-                ' lab-PVT calibration (Bos above uses the raw Rs so each multiplier stays independent)
+-                Rs = Rs * cprop.BO_RsMult
+-                Pb = Pb * cprop.BO_PbMult
+-
+-                Dim Tsep, Psep As Double
+-
+-                Tsep = Tf
+-                Psep = Ppsia
+-
+-                SGfg100 = cprop.BO_SGG * (1 + 0.00005912 * API * Tsep * Math.Log(Psep / 114.7) / Math.Log(10))
+-
+-                C = 0.0001 * (2.81 * cprop.BO_GOR + 3.1 * Tf + 171 / SGfg100 - 118 * SGfg100 - 1102)
+-
+-                Boss = Bos * (Pb / Ppsia) ^ C
+-
+-                If Ppsia < Pb Then Bo = Bos Else Bo = Boss
+-
+-                Bo = Bo * cprop.BO_BoMult   ' lab-PVT oil FVF calibration
+-
+-                Dim Z, Zant, Tpc, Ppc, rhopr, Ppr, Tpr As Double
+-
+-                Ppc = 677 + 15 * cprop.BO_SGG - 37.5 * cprop.BO_SGG ^ 2
+-                Tpc = 168 + 325 * cprop.BO_SGG - 12.5 * cprop.BO_SGG ^ 2
+-
+-                Dim A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, C1, C2, C3 As Double
+-
+-                A1 = 0.3265
+-                A2 = -1.07
+-                A3 = -0.5339
+-                A4 = 0.01569
+-                A5 = -0.05165
+-                A6 = 0.5475
+-                A7 = -0.7361
+-                A8 = 0.1844
+-                A9 = 0.1056
+-                A10 = 0.6134
+-                A11 = 0.721
+-
+-                Ppr = Ppsia / Ppc
+-                Tpr = Trank / Tpc
+-
+-                Z = 1
+-
+-                Dim cnt As Integer = 0
+-
+-                Do
+-
+-                    rhopr = 0.27 * Ppr / (Z * Tpr)
+-
+-                    C1 = A1 + A2 / Tpr + A3 / Tpr ^ 3 + A4 / Tpr ^ 4 + A5 / Tpr ^ 5
+-                    C2 = A6 + A7 / Tpr + A8 / Tpr ^ 2
+-                    C3 = A7 / Tpr + A8 / Tpr ^ 2
+-
+-                    Zant = Z
+-                    Z = 1 + C1 * rhopr + C2 * rhopr ^ 2 - A9 * C3 * rhopr ^ 5 + A10 * (1 + A11 * rhopr ^ 2) * (rhopr ^ 2 / Tpr ^ 3) * Math.Exp(-A11 * rhopr ^ 2)
+-
+-                    cnt += 1
+-
+-                Loop Until Math.Abs(Z - Zant) < 0.0001 Or cnt > 1000
+-
+-                Dim Bg As Double
+-
+-                Bg = 0.02827 * Z * Trank / Ppsia
+-
+-                Dim rhoo, rhog, rhoa, rhoo0, rhog0, rhoa0 As Double
+-
+-                rhoa0 = 997
+-                rhog0 = cprop.BO_SGG * 1.22
+-                rhoo0 = cprop.BO_SGO * 997
+-
+-                rhoo = (rhoo0 + rhog0 * Rs / 5.6738) / Bo
+-
+-                rhog = rhog0 / Bg
+-
+-                Dim Bw As Double
+-
+-                A1 = 0.9911 + 0.0000635 * Tf + 0.00000085 * Tf ^ 2
+-                A2 = -0.000001093 - 0.000000003497 * Tf + 0.00000000000457 * Tf ^ 2
+-                A3 = -0.00000000005 + 0.0000000000006429 * Tf - 0.00000000000000143 * Tf ^ 2
+-
+-                Bw = A1 + A2 * Ppsia + A3 * Ppsia ^ 2
+-
+-                rhoa = rhoa0 / Bw
+-
+-                Dim denom, xg, xo, xw As Double
+-
+-                denom = rhog0 * cprop.BO_GOR + rhoo0 + rhoa0 * WOR
+-                xg = (rhog * Bg * (GORss - Rs) / 5.6738) / denom
+-                xw = rhoa * Bw * WOR / denom
+-                xo = 1 - xg - xw
+-                If xo < 0.0# Then xo = 0.0#
+-
+-                Xv.Add(xg)
+-
++            For Each cprop In DW_GetConstantProperties()
++                Xv.Add(bop.FreeGasMoleFraction(T, P, cprop.BO_SGO, cprop.BO_SGG, cprop.BO_GOR, cprop.BO_BSW, If(cprop.BO_RsMult = 0, 1.0, cprop.BO_RsMult)))
+             Next
+ 
+             Return Xv.ToArray
+@@ -737,7 +625,8 @@ Namespace PropertyPackages
+             Dim bof As BlackOilFluid = CalcBOFluid(Vz, DW_GetConstantProperties())
+ 
+             If state = "L" Then
+-                Return bop.LiquidMolecularWeight(bof.SGO, bof.BSW)
++                Dim tp = StreamTP()
++                Return LiveLiquidMW(bof, tp(0), tp(1))
+             Else
+                 Return bop.VaporMolecularWeight(bof.SGG)
+             End If
+@@ -752,7 +641,8 @@ Namespace PropertyPackages
+                 Case PropertyPackages.Phase.Vapor
+                     Return bop.VaporMolecularWeight(bof.SGG)
+                 Case PropertyPackages.Phase.Liquid, PropertyPackages.Phase.Liquid1, PropertyPackages.Phase.Liquid2, PropertyPackages.Phase.Liquid3
+-                    Return bop.LiquidMolecularWeight(bof.SGO, bof.BSW)
++                    Dim tp = StreamTP()
++                    Return LiveLiquidMW(bof, tp(0), tp(1))
+                 Case PropertyPackages.Phase.Mixture
+                     Dim val As Double = 0.0#
+                     Dim subst As Interfaces.ICompound
+@@ -768,32 +658,23 @@ Namespace PropertyPackages
+ 
+         Public Overrides Function AUX_CONVERT_MOL_TO_MASS(subst As String, phasenumber As Integer) As Double
+ 
+-            Dim mol_x_mm As Double
+-            Dim sub1 As Interfaces.ICompound
+-
+-            For Each sub1 In Me.CurrentMaterialStream.Phases(phasenumber).Compounds.Values
+-                If phasenumber = 2 Then
+-                    mol_x_mm += sub1.MoleFraction.GetValueOrDefault * bop.VaporMolecularWeight(sub1.ConstantProperties.BO_SGG)
+-                ElseIf phasenumber = 3 Then
+-                    mol_x_mm += sub1.MoleFraction.GetValueOrDefault * bop.LiquidMolecularWeight(sub1.ConstantProperties.BO_SGO, sub1.ConstantProperties.BO_BSW)
+-                Else
+-                    mol_x_mm += sub1.MoleFraction.GetValueOrDefault * bop.LiquidMolecularWeight(sub1.ConstantProperties.BO_SGG, sub1.ConstantProperties.BO_BSW)
+-                End If
++            ' Flowstead patch (D101): each compound's molecular weight in the phase (overall, gas, or live liquid at the
++            ' stream's T and P), so mass fractions add up with the phase molecular weights.
++            Dim tp = StreamTP()
++            Dim mw = Function(c As Interfaces.ICompound) As Double
++                         Dim cp = c.ConstantProperties
++                         If phasenumber = 0 Then Return cp.Molar_Weight
++                         If phasenumber = 2 Then Return bop.VaporMolecularWeight(cp.BO_SGG)
++                         Return bop.LiveLiquidMolecularWeight(tp(0), tp(1), cp.BO_SGO, cp.BO_SGG, cp.BO_GOR, cp.BO_BSW, If(cp.BO_RsMult = 0, 1.0, cp.BO_RsMult))
++                     End Function
++
++            Dim mol_x_mm As Double = 0.0#
++            For Each sub1 As Interfaces.ICompound In Me.CurrentMaterialStream.Phases(phasenumber).Compounds.Values
++                mol_x_mm += sub1.MoleFraction.GetValueOrDefault * mw(sub1)
+             Next
+ 
+-            sub1 = Me.CurrentMaterialStream.Phases(phasenumber).Compounds(subst)
+-
+-            If mol_x_mm <> 0.0# Then
+-                If phasenumber = 2 Then
+-                    Return sub1.MoleFraction.GetValueOrDefault * bop.VaporMolecularWeight(sub1.ConstantProperties.BO_SGG) / mol_x_mm
+-                ElseIf phasenumber = 3 Then
+-                    Return sub1.MoleFraction.GetValueOrDefault * bop.LiquidMolecularWeight(sub1.ConstantProperties.BO_SGO, sub1.ConstantProperties.BO_BSW) / mol_x_mm
+-                Else
+-                    Return sub1.MoleFraction.GetValueOrDefault * bop.LiquidMolecularWeight(sub1.ConstantProperties.BO_SGO, sub1.ConstantProperties.BO_BSW) / mol_x_mm
+-                End If
+-            Else
+-                Return 0.0#
+-            End If
++            Dim s1 = Me.CurrentMaterialStream.Phases(phasenumber).Compounds(subst)
++            If mol_x_mm <> 0.0# Then Return s1.MoleFraction.GetValueOrDefault * mw(s1) / mol_x_mm Else Return 0.0#
+ 
+         End Function
+ 
+diff --git a/engine/DWSIM.Thermodynamics/PropertyPackages/Models/BlackOilProperties.vb b/engine/DWSIM.Thermodynamics/PropertyPackages/Models/BlackOilProperties.vb
+index fbfc7ef..a0ba194 100644
+--- a/engine/DWSIM.Thermodynamics/PropertyPackages/Models/BlackOilProperties.vb
++++ b/engine/DWSIM.Thermodynamics/PropertyPackages/Models/BlackOilProperties.vb
+@@ -104,45 +104,94 @@ Namespace PropertyPackages.Auxiliary
+             Return (100 - BSW) / 100 * (Hid - DHvap) + BSW / 100 * water.enthalpyW(T, P / 100000)
+ 
+         End Function
+-        Public Function LiquidDensity(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double, BSW As Double,
+-                                      Optional RsMult As Double = 1.0, Optional BoMult As Double = 1.0) As Double
+-
+-            Dim API, WOR, GORss As Double
+-
+-            Dim Tf, Trank, Ppsia As Double
+-
+-            Tf = (T - 273.15) * 9 / 5 + 32
+-            Trank = Tf + 459.67
+-            Ppsia = P * 0.000145038
+-
+-            API = 141.5 / SGO - 131.5
+-
+-            WOR = BSW / (100 - BSW)
+-
+-            GORss = GOR * 5.6738
+-
+-            Dim Rs, Pb As Double
+-
+-            Rs = SGG * (((Ppsia) / 18.2 + 1.4) * 10 ^ (0.0125 * API - 0.00091 * Tf)) ^ 1.2048
+-
+-            Pb = 18.2 * ((GORss / SGG) ^ (1 / 1.2048) * 10 ^ (0.00091 * Tf - 0.0125 * API) - 1.4)
++        ' ---- Flowstead patch (D101): one consistent black-oil balance ----
++        ' Per m3 of stock-tank oil: gas GOR Sm3 at 1.225 SGG kg/Sm3 (air at 15 C), oil 999 SGO kg, water 999 WOR kg.
++        ' Standing's Rs is capped at the producing GOR (above the bubble point the oil holds all its gas), Bo above the
++        ' bubble point follows Vasquez-Beggs, and the phase split and the liquid's molecular weight come from the same
++        ' masses and moles, so phase flows add up to the stream's.
++
++        Public Const M3PerM3ToScfPerStb As Double = 5.6146
++        Public Const AirStdDensity As Double = 1.225
++        Public Const WaterStdDensity As Double = 999.0
++        Public Const WaterMolecularWeight As Double = 18.015
++
++        ''' <summary>Standing's Rs at (T, P), scf/STB, calibrated by RsMult and capped at the producing GOR.</summary>
++        Public Function CappedRs(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double, Optional RsMult As Double = 1.0) As Double
++            Dim Tf As Double = (T - 273.15) * 9 / 5 + 32
++            Dim Ppsia As Double = P * 0.000145038
++            Dim API As Double = 141.5 / SGO - 131.5
++            Dim Rs As Double = SGG * (((Ppsia) / 18.2 + 1.4) * 10 ^ (0.0125 * API - 0.00091 * Tf)) ^ 1.2048 * RsMult
++            Return Math.Max(0.0, Math.Min(Rs, GOR * M3PerM3ToScfPerStb))
++        End Function
+ 
+-            Dim Bos As Double
++        ''' <summary>Standing's bubble point of the live oil at T, psia, calibrated by PbMult.</summary>
++        Public Function BubblePointPsia(T As Double, SGO As Double, SGG As Double, GOR As Double, Optional PbMult As Double = 1.0) As Double
++            Dim Tf As Double = (T - 273.15) * 9 / 5 + 32
++            Dim API As Double = 141.5 / SGO - 131.5
++            Return 18.2 * ((GOR * M3PerM3ToScfPerStb / SGG) ^ (1 / 1.2048) * 10 ^ (0.00091 * Tf - 0.0125 * API) - 1.4) * PbMult
++        End Function
+ 
+-            Bos = 0.9759 + 0.00012 * (Rs * (SGG / SGO) ^ 0.5 + 1.25 * Tf) ^ 1.2
++        ''' <summary>Oil formation volume factor: Standing at and below the bubble point, Vasquez-Beggs above it.</summary>
++        Public Function LiveOilFVF(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double,
++                                   Optional RsMult As Double = 1.0, Optional BoMult As Double = 1.0, Optional PbMult As Double = 1.0) As Double
++            Dim Tf As Double = (T - 273.15) * 9 / 5 + 32
++            Dim Ppsia As Double = P * 0.000145038
++            Dim API As Double = 141.5 / SGO - 131.5
++            Dim Rs As Double = CappedRs(T, P, SGO, SGG, GOR, 1.0)
++            Dim Bo As Double = 0.9759 + 0.00012 * (Rs * (SGG / SGO) ^ 0.5 + 1.25 * Tf) ^ 1.2
++            Dim Pb As Double = BubblePointPsia(T, SGO, SGG, GOR, PbMult)
++            If Ppsia > Pb AndAlso Pb > 0 Then
++                Dim Rsb As Double = GOR * M3PerM3ToScfPerStb
++                Dim A As Double = 0.00001 * (5 * Rsb + 17.2 * Tf - 1180 * SGG + 12.61 * API - 1433)
++                Bo = Bo * (Pb / Ppsia) ^ A
++            End If
++            Return Bo * BoMult
++        End Function
+ 
+-            ' lab-PVT calibration: scale each correlated value independently
+-            Rs = Rs * RsMult
+-            Bos = Bos * BoMult
++        ''' <summary>Live-oil density, kg/m3: (oil + dissolved gas) / Bo, as Standing (1981).</summary>
++        Public Function LiveOilDensity(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double,
++                                       Optional RsMult As Double = 1.0, Optional BoMult As Double = 1.0, Optional PbMult As Double = 1.0) As Double
++            Dim Rs As Double = CappedRs(T, P, SGO, SGG, GOR, RsMult)
++            Return (WaterStdDensity * SGO + AirStdDensity * SGG * Rs / M3PerM3ToScfPerStb) / LiveOilFVF(T, P, SGO, SGG, GOR, RsMult, BoMult, PbMult)
++        End Function
+ 
+-            Dim rhoo, rhoo0 As Double
++        ''' <summary>Moles, kmol, of gas, dead oil and water per m3 of stock-tank oil.</summary>
++        Private Sub StockTankMoles(SGO As Double, SGG As Double, GOR As Double, BSW As Double, ByRef ng As Double, ByRef no As Double, ByRef nw As Double)
++            Dim WOR As Double = BSW / (100 - BSW)
++            ng = AirStdDensity * SGG * GOR / VaporMolecularWeight(SGG)
++            no = WaterStdDensity * SGO / LiquidMolecularWeight(SGO, 0)
++            nw = WaterStdDensity * WOR / WaterMolecularWeight
++        End Sub
+ 
+-            rhoo0 = SGO * 997
++        ''' <summary>The black oil's overall molecular weight: total mass over total moles.</summary>
++        Public Function OverallMolecularWeight(SGO As Double, SGG As Double, GOR As Double, BSW As Double) As Double
++            Dim ng, no, nw As Double
++            StockTankMoles(SGO, SGG, GOR, BSW, ng, no, nw)
++            Dim mass As Double = AirStdDensity * SGG * GOR + WaterStdDensity * SGO + WaterStdDensity * BSW / (100 - BSW)
++            Return mass / (ng + no + nw)
++        End Function
+ 
+-            rhoo = (rhoo0 + Rs / 5.6738) / Bos
++        ''' <summary>Free gas at (T, P) as a mole fraction of the black oil.</summary>
++        Public Function FreeGasMoleFraction(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double, BSW As Double, Optional RsMult As Double = 1.0) As Double
++            Dim ng, no, nw As Double
++            StockTankMoles(SGO, SGG, GOR, BSW, ng, no, nw)
++            Dim Rs As Double = CappedRs(T, P, SGO, SGG, GOR, RsMult) / M3PerM3ToScfPerStb
++            Dim nfree As Double = AirStdDensity * SGG * Math.Max(0.0, GOR - Rs) / VaporMolecularWeight(SGG)
++            Return nfree / (ng + no + nw)
++        End Function
+ 
+-            Return (100 - BSW) / 100 * rhoo + BSW / 100 * water.densSatLiqTW(T)
++        ''' <summary>The liquid's molecular weight at (T, P): oil, water and the gas dissolved in the oil.</summary>
++        Public Function LiveLiquidMolecularWeight(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double, BSW As Double, Optional RsMult As Double = 1.0) As Double
++            Dim ng, no, nw As Double
++            StockTankMoles(SGO, SGG, GOR, BSW, ng, no, nw)
++            Dim Rs As Double = CappedRs(T, P, SGO, SGG, GOR, RsMult) / M3PerM3ToScfPerStb
++            Dim mg As Double = AirStdDensity * SGG * Rs
++            Return (mg + WaterStdDensity * SGO + WaterStdDensity * BSW / (100 - BSW)) / (mg / VaporMolecularWeight(SGG) + no + nw)
++        End Function
+ 
++        Public Function LiquidDensity(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double, BSW As Double,
++                                      Optional RsMult As Double = 1.0, Optional BoMult As Double = 1.0, Optional PbMult As Double = 1.0) As Double
++            Return (100 - BSW) / 100 * LiveOilDensity(T, P, SGO, SGG, GOR, RsMult, BoMult, PbMult) + BSW / 100 * water.densSatLiqTW(T)
+         End Function
+         Public Function LiquidCp(T As Double, P As Double, SGG As Double, SGO As Double, BSW As Double) As Double
+             Dim Tc, Pc, w, MW As Double
+@@ -171,32 +220,21 @@ Namespace PropertyPackages.Auxiliary
+             Dim Ppsia As Double = P * 0.000145038
+             Dim API As Double = 141.5 / SGO - 131.5
+             Dim Rs As Double = SGG * (((Ppsia) / 18.2 + 1.4) * 10 ^ (0.0125 * API - 0.00091 * Tf)) ^ 1.2048
+-            Return Rs / 5.6738
++            Return Rs / M3PerM3ToScfPerStb
+         End Function
+ 
+         ''' <summary>Standing bubble point pressure of a live oil at T for a producing GOR, in Pa (uncalibrated).</summary>
+         Public Function BubblePointStanding(T As Double, SGO As Double, SGG As Double, GOR As Double) As Double
+             Dim Tf As Double = (T - 273.15) * 9 / 5 + 32
+             Dim API As Double = 141.5 / SGO - 131.5
+-            Dim GORss As Double = GOR * 5.6738
++            Dim GORss As Double = GOR * M3PerM3ToScfPerStb
+             Dim Pb As Double = 18.2 * ((GORss / SGG) ^ (1 / 1.2048) * 10 ^ (0.00091 * Tf - 0.0125 * API) - 1.4)
+             Return Pb / 0.000145038
+         End Function
+ 
+         ''' <summary>Standing oil formation volume factor Bo at (T, P), m3/m3 (uncalibrated correlation).</summary>
+         Public Function OilFVF(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double) As Double
+-            Dim Tf As Double = (T - 273.15) * 9 / 5 + 32
+-            Dim Ppsia As Double = P * 0.000145038
+-            Dim API As Double = 141.5 / SGO - 131.5
+-            Dim GORss As Double = GOR * 5.6738
+-            Dim Rs As Double = SGG * (((Ppsia) / 18.2 + 1.4) * 10 ^ (0.0125 * API - 0.00091 * Tf)) ^ 1.2048
+-            Dim Pb As Double = 18.2 * ((GORss / SGG) ^ (1 / 1.2048) * 10 ^ (0.00091 * Tf - 0.0125 * API) - 1.4)
+-            Dim Bos As Double = 0.9759 + 0.00012 * (Rs * (SGG / SGO) ^ 0.5 + 1.25 * Tf) ^ 1.2
+-            Dim Tsep As Double = Tf, Psep As Double = Ppsia
+-            Dim SGfg100 As Double = SGG * (1 + 0.00005912 * API * Tsep * Math.Log(Psep / 114.7) / Math.Log(10))
+-            Dim C As Double = 0.0001 * (2.81 * GOR + 3.1 * Tf + 171 / SGfg100 - 118 * SGfg100 - 1102)
+-            Dim Boss As Double = Bos * (Pb / Ppsia) ^ C
+-            If Ppsia < Pb Then Return Bos Else Return Boss
++            Return LiveOilFVF(T, P, SGO, SGG, GOR)
+         End Function
+ 
+         Public Function LiquidViscosity(T As Double, P As Double, SGO As Double, SGG As Double, GOR As Double, BSW As Double, v1 As Double, t1 As Double, v2 As Double, t2 As Double,
+@@ -220,17 +258,13 @@ Namespace PropertyPackages.Auxiliary
+ 
+                 WOR = BSW / (100 - BSW)
+ 
+-                GORss = GOR * 5.6738
++                GORss = GOR * M3PerM3ToScfPerStb
+ 
+                 Dim Rs, Pb As Double
+ 
+-                Rs = SGG * (((Ppsia) / 18.2 + 1.4) * 10 ^ (0.0125 * API - 0.00091 * Tf)) ^ 1.2048
+-
+-                Pb = 18.2 * ((GORss / SGG) ^ (1 / 1.2048) * 10 ^ (0.00091 * Tf - 0.0125 * API) - 1.4)
+-
+-                ' lab-PVT calibration of Rs and Pb
+-                Rs = Rs * RsMult
+-                Pb = Pb * PbMult
++                ' Flowstead patch (D101): Rs capped at the producing GOR
++                Rs = CappedRs(T, P, SGO, SGG, GOR, RsMult)
++                Pb = BubblePointPsia(T, SGO, SGG, GOR, PbMult)
+ 
+                 Dim Bos As Double
+ 

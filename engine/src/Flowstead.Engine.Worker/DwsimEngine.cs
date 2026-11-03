@@ -33,6 +33,7 @@ public sealed partial class DwsimEngine
         ("Steam Tables (IAPWS-IF97)", "Steam Tables (IAPWS-IF97)"),
         ("GERG-2008", "GERG-2008"),
         ("CoolProp", "CoolProp"),
+        ("Black Oil", "Black Oil"),
     ];
 
     private const string PrLkName = "Peng-Robinson / Lee-Kesler (PR/LK)";
@@ -728,10 +729,11 @@ public sealed partial class DwsimEngine
         var fs = _automation.CreateFlowsheet();
         // DWSIM hands every flowsheet the engine's own compound dictionary; hypotheticals go into a copy so they
         // never leak into later solves or the compound search.
-        if (model.Hypotheticals.Count > 0)
+        if (model.Hypotheticals.Count > 0 || model.BlackOils.Count > 0)
         {
             fs.AvailableCompounds = new Dictionary<string, ICompoundConstantProperties>(_automation.AvailableCompounds);
             foreach (var h in model.Hypotheticals) fs.AvailableCompounds[h.Name] = Hypotheticals.Characterise(h);
+            foreach (var b in model.BlackOils) fs.AvailableCompounds[b.Name] = BlackOils.Compound(b);
         }
         foreach (var c in model.Compounds) fs.AddCompound(c);
         var ppName = MvpPackages.FirstOrDefault(p => p.Name == model.PropertyPackage).Dwsim ?? model.PropertyPackage!;

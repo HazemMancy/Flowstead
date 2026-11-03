@@ -48,6 +48,7 @@ object OfflineCatalogue {
         "Steam Tables (IAPWS-IF97)",
         "GERG-2008",
         "CoolProp",
+        "Black Oil",
     )
 }
 

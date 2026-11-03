@@ -129,6 +129,7 @@ data class FluidUi(
     val vapourViscosity: String? = null,
     val compounds: List<String> = emptyList(),
     val hypotheticals: List<Hypothetical> = emptyList(),
+    val blackOils: List<app.flowstead.core.model.BlackOil> = emptyList(),
     /** Streams with a composition given (tag → mole fractions), for the thermodynamics tools. */
     val streams: List<Pair<String, Map<String, Double>>> = emptyList(),
     /** How many pairs carry the user's kij. */
@@ -181,6 +182,7 @@ class FluidPackageViewModel @Inject constructor(
             vapourViscosity = p?.flowsheet?.vapourViscosity,
             compounds = p?.flowsheet?.compounds.orEmpty(),
             hypotheticals = p?.flowsheet?.hypotheticals.orEmpty(),
+            blackOils = p?.flowsheet?.blackOils.orEmpty(),
             streams = p?.flowsheet?.objects.orEmpty()
                 .filter { it.type == app.flowstead.core.model.ObjectType.MaterialStream && it.composition.values.sum() > 0 }
                 .map { it.tag to it.composition },
@@ -297,6 +299,17 @@ class FluidPackageViewModel @Inject constructor(
 
     fun deleteHypothetical(name: String) = remove(name)
 
+    fun saveBlackOil(b: app.flowstead.core.model.BlackOil, onSaved: () -> Unit) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        try {
+            val withOil = FlowsheetEditing.upsertBlackOil(p.flowsheet, b)
+            projects.saveFlowsheet(projectId, if (withOil.propertyPackage == null) withOil.copy(propertyPackage = app.flowstead.core.model.BlackOil.PACKAGE) else withOil)
+            onSaved()
+        } catch (e: EditRejected) {
+            _messages.send(e.message ?: "Not saved")
+        }
+    }
+
     // ---- thermodynamics tools (D100)
 
     private val _thermo = MutableStateFlow<ThermoState>(ThermoState.Idle)
@@ -377,6 +390,8 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
     val kij by viewModel.kij.collectAsStateWithLifecycle()
     var assayOpen by remember { mutableStateOf(false) }
     val assay by viewModel.assay.collectAsStateWithLifecycle()
+    var oilEditing by remember { mutableStateOf<app.flowstead.core.model.BlackOil?>(null) }
+    var oilCreating by remember { mutableStateOf(false) }
     var thermoOpen by remember { mutableStateOf(false) }
     val thermo by viewModel.thermo.collectAsStateWithLifecycle()
     FluidPackageContent(
@@ -389,7 +404,13 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onKij = { viewModel.loadKij(); kijOpen = true },
         onAssay = { viewModel.clearAssay(); assayOpen = true },
         onThermo = { viewModel.clearThermo(); thermoOpen = true },
+        onNewBlackOil = { oilCreating = true },
+        onEditBlackOil = { oilEditing = it },
     )
+    if (oilCreating || oilEditing != null) {
+        val close = { oilCreating = false; oilEditing = null }
+        BlackOilSheet(oilEditing, onSave = { b -> viewModel.saveBlackOil(b, close) }, onDelete = { n -> viewModel.remove(n); close() }, onDismiss = close)
+    }
     if (thermoOpen) ThermoToolsSheet(
         ui = ui,
         state = thermo,
@@ -440,6 +461,8 @@ fun FluidPackageContent(
     onKij: () -> Unit = {},
     onAssay: () -> Unit = {},
     onThermo: () -> Unit = {},
+    onNewBlackOil: () -> Unit = {},
+    onEditBlackOil: (app.flowstead.core.model.BlackOil) -> Unit = {},
 ) {
     var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
@@ -547,6 +570,31 @@ fun FluidPackageContent(
                         Text("Edit kij" + if (ui.userKij > 0) " (${ui.userKij} set by you)" else "")
                     }
                 }
+            }
+            if (ui.propertyPackage == app.flowstead.core.model.BlackOil.PACKAGE || ui.blackOils.isNotEmpty()) {
+                item { HorizontalDivider() }
+                item { Text("Black oils (${ui.blackOils.size})", style = MaterialTheme.typography.titleMedium) }
+                item {
+                    Text(
+                        "The Black Oil package takes black oils only: each from its API gravity, gas gravity, GOR and water cut.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                items(ui.blackOils, key = { "bo_${it.name}" }) { b ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClickLabel = "Edit ${b.name}") { onEditBlackOil(b) },
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(b.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "API ${ValueFormat.number(b.api, 1)} · gas SG ${ValueFormat.number(b.gasSpecificGravity, 3)} · GOR ${ValueFormat.number(b.gasOilRatio, 0)} Sm³/m³ · water ${ValueFormat.number(b.waterCut * 100, 0)} %",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                item { OutlinedButton(onClick = onNewBlackOil, modifier = Modifier.heightIn(min = 48.dp).testTag("add_black_oil")) { Text("Add black oil") } }
             }
             item { HorizontalDivider() }
             item { Text("Thermodynamics tools", style = MaterialTheme.typography.titleMedium) }

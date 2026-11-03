@@ -9,12 +9,14 @@ Flowstead's engine is DWSIM. Nothing here tracks a moving branch.
 | DWSIM version | 10.2.12 |
 | Build | From source by `engine/scripts/fetch-dwsim.sh`: `dotnet publish` of `engine/DWSIM.Automation` (the headless engine and its references) for linux-x64, plus the user compounds in `content/addcomps`. Desktop UI projects are not built. |
 | Runtime | .NET 10: `Microsoft.NETCore.App` 10 on the server, the Mono runtime pack 10.0.13 on the phone |
+| Flowstead patches | `engine/patches/dwsim-blackoil.patch` (D101), applied by `fetch-dwsim.sh` |
 | Android natives | SkiaSharp 2.88.9 (`SkiaSharp.NativeAssets.Android`, SHA-256 pinned in `engine/embedded/android/prepare.sh`) |
 
 ## Why a source build
 
 DWSIM 10 is a separate repository from DWSIM 9 and targets `net10.0` with SDK-style projects, so it builds on Linux
-with the .NET SDK. Building it from the pinned commit means the engine Flowstead ships is exactly the GPL source above,
+with the .NET SDK. Building it from the pinned commit means the engine Flowstead ships is the GPL source above plus the patches in
+`engine/patches` (each recorded in docs/DECISIONS.md),
 and nothing in the build comes from a binary package. The release packages on dwsim.org bundle a proprietary assistant
 server; Flowstead does not use them.
 

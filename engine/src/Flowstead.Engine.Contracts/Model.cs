@@ -19,6 +19,8 @@ public sealed record Flowsheet
     public List<Reaction> Reactions { get; init; } = [];
     /// <summary>User-defined pseudo-components; each name also appears in <see cref="Compounds"/>.</summary>
     public List<Hypothetical> Hypotheticals { get; init; } = [];
+    /// <summary>Black oils for the Black Oil package (D101); each name also appears in <see cref="Compounds"/>.</summary>
+    public List<BlackOil> BlackOils { get; init; } = [];
     /// <summary>Liquid density method: null for Flowstead's default (COSTALD for cubic-package liquid mixtures, D91); "costald" for COSTALD, as HYSYS (D39).</summary>
     public string? LiquidDensity { get; init; }
     /// <summary>Cubic EOS volume shift: null for DWSIM's Peneloux shift on vapour and liquid; "none" for the plain EOS, as HYSYS's PR (D41).</summary>
@@ -116,6 +118,29 @@ public sealed record SimObject
     /// and roughness are the default for every section.
     /// </summary>
     public List<PipeSection>? PipeSections { get; init; }
+}
+
+/// <summary>
+/// A black oil (D101): a reservoir fluid by its stock-tank oil and gas gravities, producing gas-oil ratio and water cut,
+/// for DWSIM's Black Oil package as Flowstead patches it (Standing's Rs capped at the GOR, Standing's Bo and density
+/// below the bubble point, Vasquez-Beggs above it, Beggs-Robinson viscosity unless two dead-oil viscosities are given).
+/// </summary>
+public sealed record BlackOil
+{
+    public required string Name { get; init; }
+    /// <summary>Stock-tank oil specific gravity, 60/60 °F (API = 141.5/SG − 131.5).</summary>
+    public required double OilSpecificGravity { get; init; }
+    /// <summary>Gas specific gravity (air = 1).</summary>
+    public required double GasSpecificGravity { get; init; }
+    /// <summary>Producing gas-oil ratio, standard m³ of gas per m³ of stock-tank oil.</summary>
+    public required double GasOilRatio { get; init; }
+    /// <summary>Water cut (BS&amp;W), fraction of the liquid volume, 0–1.</summary>
+    public double WaterCut { get; init; }
+    /// <summary>Optional dead-oil kinematic viscosities, m²/s, at two temperatures, K.</summary>
+    public double? Viscosity1 { get; init; }
+    public double? ViscosityTemperature1 { get; init; }
+    public double? Viscosity2 { get; init; }
+    public double? ViscosityTemperature2 { get; init; }
 }
 
 /// <summary>One straight run of pipe, or a fitting (<see cref="Fitting"/> set), in a pipe segment.</summary>

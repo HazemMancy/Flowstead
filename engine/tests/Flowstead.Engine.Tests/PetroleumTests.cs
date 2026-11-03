@@ -179,3 +179,106 @@ public sealed class PetroleumTests(EngineFixture engine, ITestOutputHelper outpu
     }
 }
 
+
+/// <summary>DWSIM's Black Oil package as Flowstead patches it (D101), against Standing and Vasquez–Beggs by hand.</summary>
+[Collection(EngineCollection.Name)]
+public sealed class BlackOilTests(EngineFixture engine, ITestOutputHelper output)
+{
+    // 35 °API oil, gas SG 0.75, GOR 100 Sm³/m³.
+    private static readonly BlackOil Oil = new() { Name = "Well-1", OilSpecificGravity = 141.5 / (35 + 131.5), GasSpecificGravity = 0.75, GasOilRatio = 100 };
+    private const double T = 353.15; // 80 °C = 176 °F
+
+    private static Flowsheet At(double t, double p, BlackOil oil) => new()
+    {
+        PropertyPackage = "Black Oil", Compounds = [oil.Name], BlackOils = [oil],
+        Objects = [new SimObject { Id = "s", Tag = "S", Type = ObjectType.MaterialStream, Composition = new() { [oil.Name] = 1.0 },
+            Specs = new() { [SpecKeys.Temperature] = new(t, "K"), [SpecKeys.Pressure] = new(p, "Pa"), [SpecKeys.MassFlow] = new(10, "kg/s") } }],
+    };
+
+    private async Task<ObjectResult> Stream(double t, double p, BlackOil? oil = null)
+    {
+        var r = (await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", At(t, p, oil ?? Oil), Json.Options)))!;
+        Assert.True(r.Status == SolveStatus.Converged, string.Join("; ", r.Messages.Select(m => m.Text)));
+        return r.Objects["s"];
+    }
+
+    // ---- the textbook correlations, written out here (oilfield units inside) ----
+    private static double Tf(double t) => (t - 273.15) * 9 / 5 + 32;
+    private static double Api(double sgo) => 141.5 / sgo - 131.5;
+    private const double Scf = 5.6146; // scf/STB per Sm³/m³
+    private static double Rs(double t, double pPa, BlackOil o) =>
+        Math.Min(o.GasSpecificGravity * Math.Pow((pPa * 0.000145038 / 18.2 + 1.4) * Math.Pow(10, 0.0125 * Api(o.OilSpecificGravity) - 0.00091 * Tf(t)), 1.2048), o.GasOilRatio * Scf);
+    private static double Pb(double t, BlackOil o) =>
+        18.2 * (Math.Pow(o.GasOilRatio * Scf / o.GasSpecificGravity, 1 / 1.2048) * Math.Pow(10, 0.00091 * Tf(t) - 0.0125 * Api(o.OilSpecificGravity)) - 1.4) / 0.000145038;
+    private static double Bo(double t, double p, BlackOil o)
+    {
+        var bos = 0.9759 + 0.00012 * Math.Pow(Rs(t, p, o) * Math.Sqrt(o.GasSpecificGravity / o.OilSpecificGravity) + 1.25 * Tf(t), 1.2);
+        if (p <= Pb(t, o)) return bos;
+        var a = 1e-5 * (5 * o.GasOilRatio * Scf + 17.2 * Tf(t) - 1180 * o.GasSpecificGravity + 12.61 * Api(o.OilSpecificGravity) - 1433);
+        return bos * Math.Pow(Pb(t, o) / p, a);
+    }
+    private static double OilDensity(double t, double p, BlackOil o) => (999 * o.OilSpecificGravity + 1.225 * o.GasSpecificGravity * Rs(t, p, o) / Scf) / Bo(t, p, o);
+
+    [Fact]
+    public async Task AboveTheBubblePointTheOilKeepsItsGasAndCompresses()
+    {
+        var pb = Pb(T, Oil);
+        output.WriteLine($"Standing Pb {pb / 1e5:0.0} bar");
+        double? last = null;
+        foreach (var bar in new[] { 200.0, 250, 300 })
+        {
+            var s = await Stream(T, bar * 1e5);
+            Assert.Equal(0.0, s.Properties["vapourFraction"], 1e-9);
+            var rho = s.Phases!["liquid1"].Properties["density"];
+            output.WriteLine($"{bar} bar: {rho:0.0} kg/m³ (hand {OilDensity(T, bar * 1e5, Oil):0.0})");
+            Assert.Equal(OilDensity(T, bar * 1e5, Oil), rho, rho * 0.002);
+            if (last is { } l) Assert.True(rho > l, "denser at higher pressure above the bubble point");
+            last = rho;
+        }
+    }
+
+    [Fact]
+    public async Task BelowTheBubblePointGasComesOutAsStandingSays()
+    {
+        foreach (var bar in new[] { 150.0, 100, 50, 10 })
+        {
+            var p = bar * 1e5;
+            var s = await Stream(T, p);
+            var gas = s.Phases!["vapour"].Properties;
+            var liq = s.Phases["liquid1"].Properties;
+            // Free gas per m³ of stock-tank oil, by mass: 1.225 SGg (GOR − Rs); of a total gas + oil mass.
+            var free = 1.225 * Oil.GasSpecificGravity * (Oil.GasOilRatio - Rs(T, p, Oil) / Scf);
+            var total = 1.225 * Oil.GasSpecificGravity * Oil.GasOilRatio + 999 * Oil.OilSpecificGravity;
+            output.WriteLine($"{bar} bar: gas {gas["massFlow"]:0.0000} kg/s (hand {10 * free / total:0.0000}), oil {liq["density"]:0.0} kg/m³ (hand {OilDensity(T, p, Oil):0.0})");
+            Assert.Equal(10 * free / total, gas["massFlow"], 10 * free / total * 0.005);
+            Assert.Equal(OilDensity(T, p, Oil), liq["density"], liq["density"] * 0.002);
+            // Phase flows add up to the stream's.
+            Assert.Equal(10.0, gas["massFlow"] + liq["massFlow"], 1e-6);
+            Assert.Equal(Oil.GasSpecificGravity * 28.97, gas["molecularWeight"], 1e-6);
+        }
+    }
+
+    [Fact]
+    public async Task WaterCutIsCarriedInTheLiquid()
+    {
+        var wet = Oil with { Name = "Wet", WaterCut = 0.3 };
+        var s = await Stream(T, 50e5, wet);
+        var gas = s.Phases!["vapour"].Properties;
+        var liq = s.Phases["liquid1"].Properties;
+        Assert.Equal(10.0, gas["massFlow"] + liq["massFlow"], 1e-6);
+        // Water adds liquid mass, none to the gas: the gas share of the mass falls with the water.
+        var dry = await Stream(T, 50e5);
+        Assert.True(gas["massFlow"] < dry.Phases!["vapour"].Properties["massFlow"]);
+    }
+
+    [Fact]
+    public async Task BadBlackOilsAreExplained()
+    {
+        var bad = At(T, 50e5, Oil with { GasOilRatio = -1 });
+        var r = (await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", bad, Json.Options)))!;
+        Assert.Contains(r.Messages, m => m.Text.Contains("GOR must be"));
+        var mixed = At(T, 50e5, Oil) with { Compounds = ["Well-1", "Methane"] };
+        r = (await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", mixed, Json.Options)))!;
+        Assert.Contains(r.Messages, m => m.Text.Contains("black oils only"));
+    }
+}

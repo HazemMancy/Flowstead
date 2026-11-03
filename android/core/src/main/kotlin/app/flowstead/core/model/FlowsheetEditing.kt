@@ -288,6 +288,15 @@ object FlowsheetEditing {
         return withComposition to withComposition.obj(stream.id)!!
     }
 
+    /** Adds or replaces a black oil (by name) and puts it in the component list (D101). */
+    fun upsertBlackOil(fs: Flowsheet, b: BlackOil): Flowsheet {
+        b.problem()?.let { throw EditRejected(it) }
+        val existing = fs.blackOil(b.name)
+        if (existing == null && b.name in fs.compounds) throw EditRejected("A component called ${b.name} is already in the list")
+        val oils = if (existing == null) fs.blackOils + b else fs.blackOils.map { if (it.name == b.name) b else it }
+        return fs.copy(blackOils = oils, compounds = if (b.name in fs.compounds) fs.compounds else fs.compounds + b.name)
+    }
+
     /** Removes a hypothetical and, like any component, its fractions and references. */
     fun deleteHypothetical(fs: Flowsheet, name: String): Flowsheet = setCompounds(fs, fs.compounds - name)
 
@@ -325,6 +334,7 @@ object FlowsheetEditing {
         // A hypothetical taken out of the list goes with it.
         return fs.copy(
             compounds = distinct, objects = objects, hypotheticals = fs.hypotheticals.filter { it.name in distinct },
+            blackOils = fs.blackOils.filter { it.name in distinct },
             interactionParameters = fs.interactionParameters.filter { it.a in distinct && it.b in distinct },
         )
     }

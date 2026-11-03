@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 WORKDIR /src
 COPY scripts/ scripts/
 COPY native/ native/
+COPY patches/ patches/
 # DWSIM built from its GPL source at the pinned commit (ENGINE_VERSION.md).
 RUN scripts/fetch-dwsim.sh /opt/dwsim
 COPY Directory.Build.props ./

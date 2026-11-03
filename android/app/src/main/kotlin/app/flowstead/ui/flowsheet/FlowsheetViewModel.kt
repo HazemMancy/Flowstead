@@ -390,7 +390,7 @@ class FlowsheetViewModel @Inject constructor(
         if (basis.needsEngineData) loadCompoundBasis()
     }
 
-    private fun fluidKey(fs: Flowsheet) = listOf(fs.propertyPackage, fs.compounds, fs.hypotheticals).toString()
+    private fun fluidKey(fs: Flowsheet) = listOf(fs.propertyPackage, fs.compounds, fs.hypotheticals, fs.blackOils).toString()
 
     /** Asks the engine for the fluid's molecular weights and liquid densities, once per fluid. */
     fun loadCompoundBasis() {

@@ -107,11 +107,13 @@ internal object HelpTopics {
             The reference equation for natural gas (ISO 20765-2): densities and energies of natural gases to within a fraction of a per cent.
             ## CoolProp
             High-accuracy pure-fluid and mixture properties (Helmholtz-energy equations of state) for refrigerants and pure components.
+            ## Black Oil
+            A reservoir fluid from its well-test data: oil API gravity, gas gravity, producing GOR and water cut (Fluid package → Add black oil). Standing's solution gas, bubble point, formation volume factor and density, Vasquez–Beggs above the bubble point, Beggs–Robinson viscosity. Flowstead corrects DWSIM's implementation so the oil keeps its gas above the bubble point and phase flows add up (D101).
             ## Water with hydrocarbons
             With a cubic equation of state, water and hydrocarbons are flashed as an immiscible free-water phase, as HYSYS does, unless the rigorous three-phase flash is needed.
             """.trimIndent(),
-            keywords = listOf("PR", "SRK", "NRTL", "UNIQUAC", "IAPWS", "GERG", "CoolProp", "equation of state", "Lee-Kesler", "Peneloux", "COSTALD"),
-            methods = listOf("D3", "D17", "D28", "D39", "D41", "D44", "D90", "D91"),
+            keywords = listOf("PR", "SRK", "NRTL", "UNIQUAC", "IAPWS", "GERG", "CoolProp", "equation of state", "Lee-Kesler", "Peneloux", "COSTALD", "black oil", "GOR", "Standing"),
+            methods = listOf("D3", "D17", "D28", "D39", "D41", "D44", "D90", "D91", "D101"),
         ),
         HelpTopic(
             "kij", THERMO, "Binary interaction parameters and hypotheticals",

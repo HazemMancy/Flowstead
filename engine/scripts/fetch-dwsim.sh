@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Builds DWSIM's headless engine assemblies from the GPL source at the pinned commit of DanWBR/dwsim10
-# (see ENGINE_VERSION.md) into engine/dwsim-bin/ (or the folder given as $1), with the user compounds the desktop
+# (see ENGINE_VERSION.md), with Flowstead's patches in engine/patches applied, into engine/dwsim-bin/ (or the folder given as $1), with the user compounds the desktop
 # package ships next to them. Needs git and the .NET 10 SDK. Desktop UI projects are not built.
 set -euo pipefail
 
@@ -23,7 +23,13 @@ ipopt_stub() {
   ${CC:-cc} -shared -fPIC -O2 -Wall -Werror -o "$out/libIpopt39.so" "$here/native/ipopt_stub.c"
 }
 
-if [[ -f "$out/.version" && "$(cat "$out/.version")" == "$COMMIT" ]]; then
+# Flowstead's fixes to DWSIM (engine/patches, D101) are applied to the pinned source; the build is stamped with them.
+patches=("$here"/patches/*.patch)
+[[ -e "${patches[0]}" ]] || patches=()
+stamp="$COMMIT"
+if (( ${#patches[@]} )); then stamp="$COMMIT+$(cat "${patches[@]}" | sha256sum | cut -c1-16)"; fi
+
+if [[ -f "$out/.version" && "$(cat "$out/.version")" == "$stamp" ]]; then
   ipopt_stub
   echo "DWSIM $VERSION already built in $out"
   exit 0
@@ -37,6 +43,11 @@ if [[ "$(git -C "$src" rev-parse HEAD 2>/dev/null)" != "$COMMIT" ]]; then
   git -C "$src" checkout -q FETCH_HEAD
   git -C "$src" submodule -q update --init --recursive --depth 1
 fi
+git -C "$src" checkout -q -- .
+for p in "${patches[@]}"; do
+  git -C "$src" apply --whitespace=nowarn "$p"
+  echo "Applied $(basename "$p")"
+done
 echo "DWSIM source: $REPO @ $COMMIT ($VERSION)"
 
 rm -rf "$out"
@@ -44,5 +55,5 @@ dotnet publish "$src/engine/DWSIM.Automation/DWSIM.Automation.csproj" -c Release
   -p:CoolPropRid=linux-x64 -p:DebugType=none -o "$out" -v quiet -nologo
 cp -r "$src/content/addcomps" "$out/addcomps"
 ipopt_stub
-echo "$COMMIT" > "$out/.version"
+echo "$stamp" > "$out/.version"
 echo "DWSIM $VERSION built in $out ($(ls "$out" | wc -l) files, $(du -sh "$out" | cut -f1))"
