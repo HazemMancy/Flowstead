@@ -290,7 +290,8 @@ public static class ReliefMath
         var headDepth = g.Diameter / 4;
         var bottom = head * Math.Min(1, hw / headDepth);
         var shell = Math.PI * g.Diameter * Math.Clamp(hw - headDepth, 0, g.Length);
-        return bottom + shell;
+        var top = head * Math.Clamp((hw - headDepth - g.Length) / headDepth, 0, 1);
+        return bottom + shell + top;
     }
 
     /// <summary>Exposed area of a gas-filled vessel within 7.6 m of grade.</summary>

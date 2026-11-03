@@ -136,6 +136,47 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.Equal(17e5 * 1.21 + 101325, s.RelievingPressure, 1e-6);
     }
 
+    [Theory]
+    [InlineData(0.0068)] // saturated at 37 °C: all vapour at 40 °C, the condensate is the dew-point liquid
+    [InlineData(0.02)]   // with free water
+    public async Task FireOnAWetAirReceiverBoilsItsWater(double water)
+    {
+        // The owner's instrument air receiver (HYSYS gives 1D2): 1.29 m × 1.84 m T/T vertical, 0.3 m of water, set 10 barg.
+        var air = new Dictionary<string, double> { ["Nitrogen"] = 0.79 * (1 - water), ["Oxygen"] = 0.21 * (1 - water), ["Water"] = water };
+        var d = new ReliefDevice
+        {
+            Id = "psv", Tag = "PSV-100", SetPressure = 10e5 + 101325, Composition = air, OperatingTemperature = 313.15, OperatingPressure = 9e5 + 101325,
+            Vessel = new VesselGeometry(1.29, 1.84, false, 0.3, 0),
+            Scenarios = [new ReliefScenario { Kind = ReliefScenarioKinds.Fire, Name = "Fire" }],
+        };
+        var r = await Relief(d, "Nitrogen", "Oxygen", "Water");
+        var s = r.Scenarios.Single();
+        Assert.Null(s.Error);
+        Assert.Equal(ReliefMath.WettedArea(d.Vessel), s.Details["wettedArea"], 9);
+        // Water's latent heat at 13.1 bara is 1958 kJ/kg (IAPWS-IF97); a trace of dissolved air must not inflate it.
+        Assert.InRange(s.Details["latentHeat"], 1.85e6, 2.15e6);
+        Assert.InRange(s.RelievingTemperature!.Value, 460, 470); // water boils near 192 °C
+        Assert.Equal(water < 0.007, s.Details.ContainsKey("dewPoint"));
+        Assert.Equal("D", r.Orifice);
+        Assert.Equal("1D2", r.ValveSize);
+    }
+
+    [Fact]
+    public async Task FireOnADryGasVesselIgnoresAStrayLiquidLevel()
+    {
+        var d = new ReliefDevice
+        {
+            Id = "psv", Tag = "PSV-100", SetPressure = 10e5 + 101325, Composition = new() { ["Nitrogen"] = 0.79, ["Oxygen"] = 0.21 },
+            OperatingTemperature = 313.15, OperatingPressure = 9e5 + 101325, Vessel = new VesselGeometry(1.29, 1.84, false, 0.3, 0),
+            Scenarios = [new ReliefScenario { Kind = ReliefScenarioKinds.Fire, Name = "Fire" }],
+        };
+        var s = (await Relief(d, "Nitrogen", "Oxygen")).Scenarios.Single();
+        Assert.Null(s.Error);
+        Assert.Contains(s.Warnings, w => w.Contains("dry gas"));
+        // The whole shell and both heads are exposed (2.5 m tall, under 7.6 m).
+        Assert.Equal(Math.PI * 1.29 * 1.84 + 2 * 1.084 * 1.29 * 1.29, s.Details["exposedArea"], 9);
+    }
+
     [Fact]
     public async Task ScenariosGoverningAndThermalAndControlValve()
     {

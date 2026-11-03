@@ -193,24 +193,45 @@ public sealed class ReliefCalc(ReliefRequest req, Func<Flowsheet, SolveResult> s
 
     /// <summary>
     /// Fire: with liquid, the heat Q = 43.2 F A^0.82 kW (70.9 without adequate drainage and fire-fighting) on the wetted
-    /// area boils the liquid at the relieving pressure, W = Q/λ, λ from DWSIM (the enthalpy to vaporise the first 5 %
-    /// of the liquid at its bubble point). Gas-filled: W = 0.2772 √(M P1) A′ (Tw − T1)^1.25 / T1^1.1506 kg/h.
+    /// area boils the liquid at the relieving pressure, W = Q/λ, λ from DWSIM (the enthalpy to vaporise
+    /// of the liquid from 5 % to 10 % vaporised; a gas with a liquid level gives its dew-point liquid). Gas-filled: W = 0.2772 √(M P1) A′ (Tw − T1)^1.25 / T1^1.1506 kg/h.
     /// </summary>
     private (double, Dictionary<string, double>, double) Fire(ReliefScenario s, double p1, Dictionary<string, double> details, List<string> warnings)
     {
         var op = Flash(_d.Composition, T: _d.OperatingTemperature, P: _d.OperatingPressure) ?? throw new InvalidDataException("DWSIM could not flash the vessel contents at operating conditions");
         var liquid = LiquidComposition(op);
         var g = _d.Vessel;
+        if (liquid is null && g is { LiquidLevel: > 0 } && s.Area is null)
+        {
+            // A liquid level with contents that are all vapour at operating conditions: a saturated gas, as in a wet air
+            // receiver, whose condensate collects at the bottom. The liquid is the one that condenses first (the dew-point
+            // liquid at operating pressure), as HYSYS sizes the wetted fire on the vessel's liquid.
+            // DWSIM reports no liquid at a vapour fraction of exactly 1, so the first drop is taken just inside the dew point.
+            // Only a gas at (or within 5 K of) its dew point holds condensate; a dry gas, whose dew point is far colder,
+            // stays gas-filled whatever level is entered.
+            var dew = Flash(_d.Composition, P: _d.OperatingPressure, Vf: 0.999);
+            if (dew is not null && dew.Properties["temperature"] >= _d.OperatingTemperature - 5) liquid = LiquidComposition(dew);
+            if (liquid is not null)
+            {
+                details["dewPoint"] = dew!.Properties["temperature"];
+                warnings.Add("The contents are all vapour at operating conditions, but the vessel has a liquid level: the liquid is taken as the condensate (the dew-point liquid).");
+            }
+            else
+                warnings.Add("The vessel has a liquid level, but its contents are a dry gas (dew point well below the operating temperature): sized as gas-filled.");
+        }
         if (liquid is not null && (g is null || g.LiquidLevel > 0 || s.Area is not null))
         {
             var area = s.Area ?? (g is null ? throw new InvalidDataException("Give the vessel geometry or the wetted area") : ReliefMath.WettedArea(g));
             if (!(area > 0)) throw new InvalidDataException("No wetted area within 7.6 m of grade: no fire relief from liquid");
             var q = (s.AdequateDrainage ? 43200 : 70900) * s.EnvironmentFactor * Math.Pow(area, 0.82);
-            var bubble = Flash(liquid, P: p1, Vf: 0) ?? throw new InvalidDataException("DWSIM could not find the liquid's bubble point at the relieving pressure");
-            var boil = Flash(liquid, P: p1, Vf: 0.05) ?? throw new InvalidDataException("DWSIM could not partly vaporise the liquid at the relieving pressure");
-            var vapourMass = Phase(boil, "vapour", "massFlow") / boil.Properties["massFlow"];
-            var latent = (boil.Properties["massEnthalpy"] - bubble.Properties["massEnthalpy"]) / vapourMass;
-            if (!(latent > 0)) throw new InvalidDataException("DWSIM gave no latent heat (the liquid may be above its critical point at relieving pressure)");
+            // The latent heat over the second 5 % vaporised (5 % to 10 %): the first increment also carries the sensible
+            // heat from the bubble point, which dissolved light gases pull far down (a trace of air in water puts it near
+            // 57 °C at 13 bar), and that heat is not boil-off.
+            var first = Flash(liquid, P: p1, Vf: 0.05) ?? throw new InvalidDataException("DWSIM could not partly vaporise the liquid at the relieving pressure");
+            var boil = Flash(liquid, P: p1, Vf: 0.10) ?? throw new InvalidDataException("DWSIM could not partly vaporise the liquid at the relieving pressure");
+            var vapourMass = Phase(boil, "vapour", "massFlow") / boil.Properties["massFlow"] - Phase(first, "vapour", "massFlow") / first.Properties["massFlow"];
+            var latent = (boil.Properties["massEnthalpy"] - first.Properties["massEnthalpy"]) / vapourMass;
+            if (!(vapourMass > 0) || !(latent > 0)) throw new InvalidDataException("DWSIM gave no latent heat (the liquid may be above its critical point at relieving pressure)");
             details["wettedArea"] = area;
             details["heatInput"] = q;
             details["latentHeat"] = latent;

@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-10-20_
+_Last updated: 2026-11-03_
 
 ## Works
 
@@ -162,6 +162,7 @@ _Last updated: 2026-10-20_
 - **DWSIM file compatibility (D98):** pipe segments made of runs and fittings (DWSIM's 28 fittings, a section editor, the profile and data sheet); Adjusts, controllers and Sets written to and read from DWSIM files as DWSIM Adjusts, PID controllers and Specs; pressure–entropy streams; the engine's own energy streams no longer appear after a round trip. Loop solver fix: a flowsheet already on target returns its solution, not a probe.
 - **Petroleum assays (D99):** Fluid package → Characterise an assay: TBP, D86, D1160 or D2887 curves with bulk SG/MW and light ends, or a bulk plus fraction, cut into pseudo-components (hypotheticals) and a stream of the assay's composition. Stream editor → Distillation curves and product properties: TBP, D86, D1160, D2887, EFV and the API product properties (flash, pour, cloud points, cetane index, RVP …). Black oil (D101): DWSIM's Black Oil package corrected in Flowstead's build (engine/patches); Fluid package → Add black oil (API, gas SG, GOR, water cut).
 - **Thermodynamics tools (D100):** Fluid package → Thermodynamics tools: binary T–x–y / P–x–y with the liquid–liquid region, ternary diagrams (grid of DWSIM three-phase flashes, tie lines), true critical point (Heidemann–Khalil), up to eight packages compared on one composition, property charts along T or P.
+- **3.1.1 (D102):** fire relief on a saturated gas with a liquid level (a wet air receiver) boils its condensate (wetted fire, 1D2 as HYSYS); the fire latent heat is taken from 5 % to 10 % vaporised, so dissolved gases no longer inflate it (14.6 → 2.04 MJ/kg for wet air at 13 bar); a vertical vessel's exposed area includes the top head.
 - **D87:** a direct Install button (with the install permission) was tested as a pre-release and blocked by Play Protect, as in D74; releases keep Open Downloads.
 
 - **On-device engine:** since 3.0 DWSIM 10.2.12 (Mono 10.0.13, SkiaSharp 2.88.9): all 20 benchmarks on the CI emulator, debug and minified release builds. First verified with DWSIM 9.0.5: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
