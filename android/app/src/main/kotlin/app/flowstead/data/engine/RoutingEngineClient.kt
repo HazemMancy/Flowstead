@@ -46,4 +46,8 @@ class RoutingEngineClient @Inject constructor(
         pick(baseUrl).depressuring(baseUrl, apiKey, request)
     override suspend fun dynamics(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DynamicsRequest) =
         pick(baseUrl).dynamics(baseUrl, apiKey, request)
+    override suspend fun assay(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.AssayRequest) =
+        pick(baseUrl).assay(baseUrl, apiKey, request)
+    override suspend fun petroleumProperties(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PetroleumPropertiesRequest) =
+        pick(baseUrl).petroleumProperties(baseUrl, apiKey, request)
 }

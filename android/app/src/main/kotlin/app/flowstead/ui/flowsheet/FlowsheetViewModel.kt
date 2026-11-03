@@ -122,6 +122,8 @@ data class FlowsheetUi(
     val dataSheetFor: String? = null,
     /** The last phase envelope asked for, while the project is open (D50). */
     val envelope: EnvelopeUi? = null,
+    /** The last distillation curves asked for (D99). */
+    val petroleum: PetroleumUi? = null,
     val caseStudiesOpen: Boolean = false,
     /** A case study running now (D51). */
     val caseRun: CaseRunUi? = null,
@@ -200,6 +202,8 @@ class FlowsheetViewModel @Inject constructor(
         val envelope: EnvelopeUi? = null,
         /** Model hash the envelope was traced for. */
         val envelopeHash: String? = null,
+        val petroleum: PetroleumUi? = null,
+        val petroleumHash: String? = null,
         val caseStudiesOpen: Boolean = false,
         val caseRun: CaseRunUi? = null,
         val pvtFor: String? = null,
@@ -262,6 +266,7 @@ class FlowsheetViewModel @Inject constructor(
                 editingSizingCriteria = l.editingSizingCriteria,
                 dataSheetFor = l.dataSheetFor?.takeIf { id -> id == ALL_EQUIPMENT || fs.objects.any { it.id == id } },
                 envelope = l.envelope?.copy(stale = l.envelopeHash != null && l.envelopeHash != fs.modelHash()),
+                petroleum = l.petroleum?.copy(stale = l.petroleumHash != null && l.petroleumHash != fs.modelHash()),
                 caseStudiesOpen = l.caseStudiesOpen,
                 dynamicsOpen = l.dynamicsOpen,
                 dynamics = l.dynamics,
@@ -659,6 +664,27 @@ class FlowsheetViewModel @Inject constructor(
                 is EngineResult.Failed -> EnvelopeUi(streamId, error = "No envelope: ${r.reason}")
             }
             local.update { it.copy(envelope = next, envelopeHash = fs.modelHash()) }
+        }
+    }
+
+    /** A stream's distillation curves and petroleum product properties, DWSIM 10's (D99). */
+    fun petroleumProperties(streamId: String) {
+        val fs = current ?: return
+        if (local.value.petroleum?.loading == true) return
+        val (composition, why) = streamComposition(fs, streamId)
+        if (composition == null) {
+            local.update { it.copy(petroleum = PetroleumUi(streamId, error = why)) }
+            return
+        }
+        local.update { it.copy(petroleum = PetroleumUi(streamId, loading = true)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val next = if (url.isBlank()) PetroleumUi(streamId, error = "Set the engine address in Settings")
+            else when (val r = engine.petroleumProperties(url, secrets.apiKey(), app.flowstead.core.api.PetroleumPropertiesRequest(fs, composition))) {
+                is EngineResult.Ok -> PetroleumUi(streamId, result = r.value)
+                is EngineResult.Failed -> PetroleumUi(streamId, error = "No distillation curves: ${r.reason}")
+            }
+            local.update { it.copy(petroleum = next, petroleumHash = fs.modelHash()) }
         }
     }
 

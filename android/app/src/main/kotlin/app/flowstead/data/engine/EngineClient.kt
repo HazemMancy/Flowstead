@@ -84,6 +84,12 @@ interface EngineClient {
     /** A dynamic run from the steady state (D86). */
     suspend fun dynamics(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DynamicsRequest): EngineResult<app.flowstead.core.api.DynamicsResult> =
         EngineResult.Failed("This engine is older than 2.0 and can't run dynamics")
+    /** A petroleum assay cut into pseudo-components (D99). */
+    suspend fun assay(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.AssayRequest): EngineResult<app.flowstead.core.api.AssayResult> =
+        EngineResult.Failed("This engine can't characterise assays; update it")
+    /** A stream's distillation curves and petroleum product properties (D99). */
+    suspend fun petroleumProperties(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PetroleumPropertiesRequest): EngineResult<app.flowstead.core.api.PetroleumPropertiesResult> =
+        EngineResult.Failed("This engine can't give distillation curves; update it")
 }
 
 @Singleton
@@ -151,6 +157,24 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
     override suspend fun phaseEnvelope(baseUrl: String, apiKey: String?, request: PhaseEnvelopeRequest): EngineResult<PhaseEnvelope> =
         call {
             http.post("$baseUrl/phase-envelope") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+        }
+
+    override suspend fun assay(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.AssayRequest): EngineResult<app.flowstead.core.api.AssayResult> =
+        call {
+            http.post("$baseUrl/assay") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+        }
+
+    override suspend fun petroleumProperties(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PetroleumPropertiesRequest): EngineResult<app.flowstead.core.api.PetroleumPropertiesResult> =
+        call {
+            http.post("$baseUrl/petroleum-properties") {
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(request)

@@ -394,6 +394,8 @@ public static class WorkerMethods
     public const string InteractionParameters = "interactionParameters";
     public const string CompoundBasis = "compoundBasis";
     public const string Dynamics = "dynamics";
+    public const string Assay = "assay";
+    public const string PetroleumProperties = "petroleumProperties";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

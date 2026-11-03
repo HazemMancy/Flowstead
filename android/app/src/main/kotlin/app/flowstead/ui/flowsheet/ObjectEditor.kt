@@ -138,6 +138,8 @@ interface EditorActions {
     fun setCurve(id: String, curve: PerformanceCurve?) = Unit
     /** Sets or clears a pipe segment's sections and fittings (D98). */
     fun setPipeSections(id: String, sections: List<app.flowstead.core.model.PipeSegmentSection>?) = Unit
+    /** Asks the engine for this stream's distillation curves and product properties (D99); the answer arrives as [PetroleumUi]. */
+    fun petroleumProperties(streamId: String) = Unit
     /** Asks the engine for this stream's phase envelope (D50, D52); the answer arrives as [EnvelopeUi]. */
     fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean, inhibitor: String? = null, inhibitorFraction: Double = 0.0) = Unit
     /** Opens the PVT laboratory (D53) on this stream's composition. */
@@ -170,6 +172,7 @@ fun ObjectEditorSheet(
     actions: EditorActions,
     onDismiss: () -> Unit,
     envelope: EnvelopeUi? = null,
+    petroleum: PetroleumUi? = null,
     safety: SafetyActions? = null,
     safetyRunning: Set<String> = emptySet(),
     compositionBasis: CompositionBasis = CompositionBasis.MoleFraction,
@@ -308,7 +311,7 @@ fun ObjectEditorSheet(
                 else -> Calculated("${obj.type.displayName()} editing arrives with the remaining unit operations.")
             }
             if (!obj.type.isStream && Ports.of(obj.type).isNotEmpty()) ConnectionsSection(fs, obj, actions)
-            ResultsSection(fs, obj, results, unitSet, ctx, envelope?.takeIf { it.streamId == obj.id }, actions)
+            ResultsSection(fs, obj, results, unitSet, ctx, envelope?.takeIf { it.streamId == obj.id }, actions, petroleum?.takeIf { it.streamId == obj.id })
             if (obj.type == ObjectType.PipeSegment) PipeSizingSection(fs, obj, results, unitSet, ctx, actions)
             if (obj.type == ObjectType.Separator || obj.type == ObjectType.ThreePhaseSeparator) SeparatorSizingSection(fs, obj, results, unitSet, ctx, actions)
             if (obj.type in app.flowstead.core.model.EquipmentSizing.TYPES) EquipmentSizingSection(fs, obj, results, unitSet, ctx, actions)
@@ -710,6 +713,7 @@ private fun ResultsSection(
     ctx: UnitContext,
     envelope: EnvelopeUi?,
     actions: EditorActions,
+    petroleum: PetroleumUi? = null,
 ) {
     val stream = obj.type == ObjectType.MaterialStream
     val keys = when {
@@ -738,6 +742,7 @@ private fun ResultsSection(
     if (stream) {
         StreamResults(fs, obj.id, results, unitSet, ctx)
         EnvelopeSection(obj, results, envelope, unitSet, ctx, actions)
+        PetroleumSection(obj, petroleum, unitSet, ctx, actions)
         return
     }
     for (key in keys) {

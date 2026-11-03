@@ -134,6 +134,12 @@ api.MapPost("/compounds/basis", async (Flowsheet fs, EngineService e, Cancellati
 api.MapPost("/phase-envelope", async (PhaseEnvelopeRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PhaseEnvelopeAsync(req, ct), "invalid_envelope"));
 
+// Petroleum assays and a stream's distillation curves (D99).
+api.MapPost("/assay", async (AssayRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.AssayAsync(req, ct), "invalid_assay"));
+api.MapPost("/petroleum-properties", async (PetroleumPropertiesRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.PetroleumPropertiesAsync(req, ct), "invalid_stream"));
+
 // PVT laboratory experiments (D53).
 api.MapPost("/pvt", async (PvtRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PvtAsync(req, ct), "invalid_pvt"));

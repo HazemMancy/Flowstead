@@ -74,6 +74,16 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
             engine.call("phaseEnvelope", FlowsheetJson.encodeToJsonElement(PhaseEnvelopeRequest.serializer(), request))
         }
 
+    override suspend fun assay(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.AssayRequest): EngineResult<app.flowstead.core.api.AssayResult> =
+        decode(app.flowstead.core.api.AssayResult.serializer()) {
+            engine.call("assay", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.AssayRequest.serializer(), request))
+        }
+
+    override suspend fun petroleumProperties(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PetroleumPropertiesRequest): EngineResult<app.flowstead.core.api.PetroleumPropertiesResult> =
+        decode(app.flowstead.core.api.PetroleumPropertiesResult.serializer()) {
+            engine.call("petroleumProperties", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.PetroleumPropertiesRequest.serializer(), request))
+        }
+
     override suspend fun pvt(baseUrl: String, apiKey: String?, request: PvtRequest): EngineResult<PvtResult> =
         decode(PvtResult.serializer()) {
             engine.call("pvt", FlowsheetJson.encodeToJsonElement(PvtRequest.serializer(), request))

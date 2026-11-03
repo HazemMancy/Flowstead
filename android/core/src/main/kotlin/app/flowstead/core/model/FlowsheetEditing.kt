@@ -271,6 +271,23 @@ object FlowsheetEditing {
         return fs.copy(hypotheticals = hypos, compounds = if (h.name in fs.compounds) fs.compounds else fs.compounds + h.name)
     }
 
+    /**
+     * Puts an assay's pseudo-components (D99) in the fluid: each becomes a hypothetical (replacing one of the same
+     * name), the light ends are added as components, and a new material stream gets the assay's composition, for the
+     * user to give its temperature, pressure and flow. Returns the flowsheet and the new stream.
+     */
+    fun addAssay(fs: Flowsheet, result: app.flowstead.core.api.AssayResult, x: Double, y: Double): Pair<Flowsheet, SimObject> {
+        if (result.hypotheticals.isEmpty()) throw EditRejected("The assay has no pseudo-components")
+        val clash = result.hypotheticals.firstOrNull { h -> h.name in fs.compounds && fs.hypothetical(h.name) == null }
+        if (clash != null) throw EditRejected("A component called ${clash.name} is already in the list")
+        var next = fs
+        for (h in result.hypotheticals) next = upsertHypothetical(next, h)
+        next = next.copy(compounds = (next.compounds + result.composition.keys).distinct())
+        val (added, stream) = add(next, ObjectType.MaterialStream, x, y)
+        val withComposition = setComposition(added, stream.id, result.composition)
+        return withComposition to withComposition.obj(stream.id)!!
+    }
+
     /** Removes a hypothetical and, like any component, its fractions and references. */
     fun deleteHypothetical(fs: Flowsheet, name: String): Flowsheet = setCompounds(fs, fs.compounds - name)
 

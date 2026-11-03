@@ -123,6 +123,15 @@ internal object HelpTopics {
             methods = listOf("D33", "D58"),
         ),
         HelpTopic(
+            "assay", THERMO, "Petroleum assays and distillation curves",
+            """
+            **Characterise an assay** (Fluid package), as HYSYS's Oil Manager: a TBP, ASTM D86, D1160 or D2887 curve, the bulk SG and MW if known, and light ends (methane to pentane, given apart from the curve or included in it), cut into 2–50 pseudo-components of equal boiling range or at the cut temperatures you give. A plus fraction known only by its bulk MW, SG or boiling point is split by Riazi's distribution. The cuts become hypotheticals and a new stream gets the assay's composition.
+            **A stream's curves** (stream editor): DWSIM 10's TBP, D86, D1160, D2887 and EFV curves of its composition, and the API correlations for the product properties: SG, API gravity, Watson K, viscosities, flash, pour, cloud, freezing and aniline points, smoke point, cetane indices, true and Reid vapour pressure.
+            """.trimIndent(),
+            keywords = listOf("assay", "TBP", "D86", "D1160", "D2887", "distillation", "oil manager", "pseudo", "pour point", "cloud point", "flash point", "cetane", "RVP", "Watson"),
+            methods = listOf("D99"),
+        ),
+        HelpTopic(
             "envelope", THERMO, "Phase envelope, quality lines and hydrates",
             """
             From any stream: the bubble and dew curves of its composition, the critical point, cricondenbar and cricondentherm, lines of constant vapour fraction, and the hydrate formation curve (van der Waals–Platteeuw) with or without an inhibitor (methanol, MEG, DEG or TEG) in the free water.

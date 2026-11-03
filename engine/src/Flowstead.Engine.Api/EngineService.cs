@@ -48,6 +48,14 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<PhaseEnvelope> PhaseEnvelopeAsync(PhaseEnvelopeRequest req, CancellationToken ct) =>
         pool.CallAsync<PhaseEnvelope>(WorkerMethods.PhaseEnvelope, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
+    /// <summary>A petroleum assay (D99): the pseudo-components' fits take a moment; the solve timeout.</summary>
+    public Task<AssayResult> AssayAsync(AssayRequest req, CancellationToken ct) =>
+        pool.CallAsync<AssayResult>(WorkerMethods.Assay, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+
+    /// <summary>A stream's distillation curves (D99): an EFV flash curve among them; the solve timeout.</summary>
+    public Task<PetroleumPropertiesResult> PetroleumPropertiesAsync(PetroleumPropertiesRequest req, CancellationToken ct) =>
+        pool.CallAsync<PetroleumPropertiesResult>(WorkerMethods.PetroleumProperties, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+
     /// <summary>A PVT experiment runs many flashes, so it gets the solve timeout.</summary>
     public Task<PvtResult> PvtAsync(PvtRequest req, CancellationToken ct) =>
         pool.CallAsync<PvtResult>(WorkerMethods.Pvt, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);

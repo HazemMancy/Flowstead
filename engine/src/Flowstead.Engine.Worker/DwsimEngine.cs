@@ -614,6 +614,34 @@ public sealed class DwsimEngine
         return (pp, ms);
     }
 
+    /// <summary>A petroleum assay cut into pseudo-components (D99); light ends read from the flowsheet's package.</summary>
+    public AssayResult Assay(AssayRequest req)
+    {
+        if (req.Flowsheet.PropertyPackage is null) throw new InvalidDataException("Choose a fluid package first");
+        Dictionary<string, (double, double)> light = [];
+        var names = req.LightEnds.Keys.Where(_automation.AvailableCompounds.ContainsKey).ToList();
+        if (names.Count > 0)
+        {
+            var (pp, ms) = SingleStream(req.Flowsheet with { Compounds = names, Hypotheticals = [], Objects = [], Connections = [], Reactions = [] },
+                names.ToDictionary(n => n, _ => 1.0));
+            foreach (var n in names)
+            {
+                var c = ms.Phases[0].Compounds[n].ConstantProperties;
+                if (StandardLiquid.Density(c, pp) is { } rho) light[n] = (c.Molar_Weight, rho);
+                else if (req.LightEndsBasis != AssayBases.Volume) light[n] = (c.Molar_Weight, double.NaN);
+                else throw new InvalidDataException($"Light end '{n}' has no liquid density at 60 °F; give the light ends by mole or mass.");
+            }
+        }
+        return Assays.Characterise(req, n => light.TryGetValue(n, out var v) ? v : null);
+    }
+
+    /// <summary>A stream's distillation curves and petroleum product properties, DWSIM 10's (D99).</summary>
+    public PetroleumPropertiesResult PetroleumProperties(PetroleumPropertiesRequest req)
+    {
+        var (_, ms) = SingleStream(req.Flowsheet, req.Composition);
+        return Assays.StreamProperties(ms, req.TbpBasis);
+    }
+
     /// <summary>
     /// Each compound's molecular weight (kg/kmol) and ideal liquid density at 60 °F (kg/m³, <see cref="StandardLiquid"/>,
     /// null when there is no basis for one): what converts a composition entered by mass or by liquid volume into mole

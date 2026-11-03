@@ -292,6 +292,43 @@ class FluidPackageViewModel @Inject constructor(
 
     fun deleteHypothetical(name: String) = remove(name)
 
+    // ---- petroleum assays (D99)
+
+    private val _assay = MutableStateFlow<AssayState>(AssayState.Idle)
+    val assay: StateFlow<AssayState> = _assay
+
+    fun clearAssay() { _assay.value = AssayState.Idle }
+
+    /** Cuts the assay with the flowsheet's package; [request]'s flowsheet is replaced by the project's. */
+    fun characterise(request: app.flowstead.core.api.AssayRequest) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        val url = settings.settings.first().engineTarget
+        if (url.isBlank()) { _assay.value = AssayState.Failed("Choose an engine in Settings to characterise assays"); return@launch }
+        if (p.flowsheet.propertyPackage == null) { _assay.value = AssayState.Failed("Choose a property package first"); return@launch }
+        _assay.value = AssayState.Working
+        _assay.value = when (val r = engine.assay(url, secrets.apiKey(), request.copy(flowsheet = p.flowsheet))) {
+            is EngineResult.Ok -> AssayState.Done(request, r.value)
+            is EngineResult.Failed -> AssayState.Failed(r.reason)
+        }
+    }
+
+    /** Puts the pseudo-components in the fluid and makes a stream of the assay's composition. */
+    fun applyAssay(result: app.flowstead.core.api.AssayResult, onDone: () -> Unit) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        val objs = p.flowsheet.objects
+        val x = (objs.maxOfOrNull { it.x } ?: 0.0) + 160.0
+        val y = objs.minOfOrNull { it.y } ?: 160.0
+        try {
+            val (fs, stream) = FlowsheetEditing.addAssay(p.flowsheet, result, x, y)
+            projects.saveFlowsheet(projectId, fs)
+            _messages.send("${result.hypotheticals.size} pseudo-components added; stream ${stream.tag} has the assay's composition: give its temperature, pressure and flow")
+            clearAssay()
+            onDone()
+        } catch (e: EditRejected) {
+            _messages.send(e.message ?: "Not added")
+        }
+    }
+
     fun remove(name: String) = viewModelScope.launch {
         val p = projects.observeProject(projectId).first() ?: return@launch
         val used = p.flowsheet.objects.count { name in it.composition }
@@ -311,6 +348,8 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
     var creating by remember { mutableStateOf(false) }
     var kijOpen by remember { mutableStateOf(false) }
     val kij by viewModel.kij.collectAsStateWithLifecycle()
+    var assayOpen by remember { mutableStateOf(false) }
+    val assay by viewModel.assay.collectAsStateWithLifecycle()
     FluidPackageContent(
         ui, snackbar, viewModel::setPackage, viewModel::add, viewModel::remove, viewModel::setQuery, viewModel::setFamily, onBack,
         onNewHypothetical = { viewModel.clearEstimate(); creating = true },
@@ -319,8 +358,17 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onVolumeShift = viewModel::setVolumeShift,
         onVapourViscosity = viewModel::setVapourViscosity,
         onKij = { viewModel.loadKij(); kijOpen = true },
+        onAssay = { viewModel.clearAssay(); assayOpen = true },
     )
     if (kijOpen) KijSheet(kij, onSet = viewModel::setKij, onDismiss = { kijOpen = false })
+    if (assayOpen) AssaySheet(
+        unitSet = ui.unitSet,
+        compounds = ui.compounds.filter { c -> ui.hypotheticals.none { it.name == c } },
+        state = assay,
+        onCharacterise = viewModel::characterise,
+        onApply = { r -> viewModel.applyAssay(r) { assayOpen = false } },
+        onDismiss = { assayOpen = false },
+    )
     if (creating || editing != null) {
         val close = { creating = false; editing = null }
         HypotheticalSheet(
@@ -352,6 +400,7 @@ fun FluidPackageContent(
     onVolumeShift: (String?) -> Unit = {},
     onVapourViscosity: (String?) -> Unit = {},
     onKij: () -> Unit = {},
+    onAssay: () -> Unit = {},
 ) {
     var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
@@ -501,7 +550,10 @@ fun FluidPackageContent(
                 }
             }
             item {
-                OutlinedButton(onClick = onNewHypothetical, modifier = Modifier.testTag("add_hypothetical")) { Text("Add hypothetical") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onNewHypothetical, modifier = Modifier.testTag("add_hypothetical")) { Text("Add hypothetical") }
+                    OutlinedButton(onClick = onAssay, modifier = Modifier.testTag("open_assay")) { Text("Characterise an assay") }
+                }
             }
             item { HorizontalDivider() }
             item {

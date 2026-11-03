@@ -279,6 +279,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun openHelp(type: app.flowstead.core.model.ObjectType) = onOpenHelp(app.flowstead.core.help.Help.forType(type)?.id)
             override fun setSizing(id: String, sizing: app.flowstead.core.model.SeparatorSizingInput?) = vm.setSizing(id, sizing)
             override fun setEquipmentSizing(id: String, sizing: app.flowstead.core.model.EquipmentSizingInput?) = vm.setEquipmentSizing(id, sizing)
+            override fun petroleumProperties(streamId: String) = vm.petroleumProperties(streamId)
             override fun phaseEnvelope(streamId: String, qualities: List<Double>, hydrates: Boolean, inhibitor: String?, inhibitorFraction: Double) =
                 vm.phaseEnvelope(streamId, qualities, hydrates, inhibitor, inhibitorFraction)
             override fun openPvt(streamId: String) = vm.openPvt(streamId)
@@ -356,6 +357,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 actions = editorActions,
                 onDismiss = vm::closeEditor,
                 envelope = ui.envelope,
+                petroleum = ui.petroleum,
                 safety = safetyActions,
                 safetyRunning = ui.safetyRunning,
                 compositionBasis = ui.compositionBasis,
