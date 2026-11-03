@@ -396,6 +396,11 @@ public static class WorkerMethods
     public const string Dynamics = "dynamics";
     public const string Assay = "assay";
     public const string PetroleumProperties = "petroleumProperties";
+    public const string BinaryDiagram = "binaryDiagram";
+    public const string Ternary = "ternary";
+    public const string CriticalPoints = "criticalPoints";
+    public const string ComparePackages = "comparePackages";
+    public const string PropertySweep = "propertySweep";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

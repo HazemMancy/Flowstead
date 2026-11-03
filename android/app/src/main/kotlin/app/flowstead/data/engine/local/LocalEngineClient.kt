@@ -74,6 +74,31 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
             engine.call("phaseEnvelope", FlowsheetJson.encodeToJsonElement(PhaseEnvelopeRequest.serializer(), request))
         }
 
+    override suspend fun binaryDiagram(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.BinaryDiagramRequest): EngineResult<app.flowstead.core.api.BinaryDiagramResult> =
+        decode(app.flowstead.core.api.BinaryDiagramResult.serializer()) {
+            engine.call("binaryDiagram", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.BinaryDiagramRequest.serializer(), request))
+        }
+
+    override suspend fun ternary(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.TernaryRequest): EngineResult<app.flowstead.core.api.TernaryResult> =
+        decode(app.flowstead.core.api.TernaryResult.serializer()) {
+            engine.call("ternary", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.TernaryRequest.serializer(), request))
+        }
+
+    override suspend fun criticalPoints(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.CriticalPointRequest): EngineResult<app.flowstead.core.api.CriticalPointResult> =
+        decode(app.flowstead.core.api.CriticalPointResult.serializer()) {
+            engine.call("criticalPoints", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.CriticalPointRequest.serializer(), request))
+        }
+
+    override suspend fun comparePackages(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PackageComparisonRequest): EngineResult<app.flowstead.core.api.PackageComparisonResult> =
+        decode(app.flowstead.core.api.PackageComparisonResult.serializer()) {
+            engine.call("comparePackages", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.PackageComparisonRequest.serializer(), request))
+        }
+
+    override suspend fun propertySweep(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PropertySweepRequest): EngineResult<app.flowstead.core.api.PropertySweepResult> =
+        decode(app.flowstead.core.api.PropertySweepResult.serializer()) {
+            engine.call("propertySweep", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.PropertySweepRequest.serializer(), request))
+        }
+
     override suspend fun assay(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.AssayRequest): EngineResult<app.flowstead.core.api.AssayResult> =
         decode(app.flowstead.core.api.AssayResult.serializer()) {
             engine.call("assay", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.AssayRequest.serializer(), request))

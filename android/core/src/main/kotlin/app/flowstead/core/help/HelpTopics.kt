@@ -132,6 +132,19 @@ internal object HelpTopics {
             methods = listOf("D99"),
         ),
         HelpTopic(
+            "thermo-tools", THERMO, "Thermodynamics tools",
+            """
+            **Fluid package → Thermodynamics tools**, all with the fluid's package and components:
+            - **Binary diagram**: T–x–y at a pressure or P–x–y at a temperature, bubble and dew curves, and where two liquids form, both liquids' compositions (activity-coefficient packages).
+            - **Ternary**: three components at T and P, flashed on a grid with the three-phase search: tie lines between the two liquids, and which points have vapour.
+            - **Critical point**: a stream's true critical temperature, pressure and volume (Heidemann–Khalil).
+            - **Compare packages**: one composition at T and P with up to eight packages side by side (vapour fraction, densities, enthalpy, Cp, viscosities).
+            - **Property chart**: a property along temperature or pressure.
+            """.trimIndent(),
+            keywords = listOf("Txy", "Pxy", "binary", "ternary", "LLE", "tie line", "critical point", "compare", "property chart", "sweep"),
+            methods = listOf("D100"),
+        ),
+        HelpTopic(
             "envelope", THERMO, "Phase envelope, quality lines and hydrates",
             """
             From any stream: the bubble and dew curves of its composition, the critical point, cricondenbar and cricondentherm, lines of constant vapour fraction, and the hydrate formation curve (van der Waals–Platteeuw) with or without an inhibitor (methanol, MEG, DEG or TEG) in the free water.

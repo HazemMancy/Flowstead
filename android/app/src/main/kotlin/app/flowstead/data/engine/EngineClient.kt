@@ -87,6 +87,21 @@ interface EngineClient {
     /** A petroleum assay cut into pseudo-components (D99). */
     suspend fun assay(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.AssayRequest): EngineResult<app.flowstead.core.api.AssayResult> =
         EngineResult.Failed("This engine can't characterise assays; update it")
+    /** Thermodynamics tools (D100). */
+    suspend fun binaryDiagram(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.BinaryDiagramRequest): EngineResult<app.flowstead.core.api.BinaryDiagramResult> =
+        EngineResult.Failed("This engine can't draw binary diagrams; update it")
+    /** Thermodynamics tools (D100). */
+    suspend fun ternary(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.TernaryRequest): EngineResult<app.flowstead.core.api.TernaryResult> =
+        EngineResult.Failed("This engine can't draw ternary diagrams; update it")
+    /** Thermodynamics tools (D100). */
+    suspend fun criticalPoints(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.CriticalPointRequest): EngineResult<app.flowstead.core.api.CriticalPointResult> =
+        EngineResult.Failed("This engine can't find critical points; update it")
+    /** Thermodynamics tools (D100). */
+    suspend fun comparePackages(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PackageComparisonRequest): EngineResult<app.flowstead.core.api.PackageComparisonResult> =
+        EngineResult.Failed("This engine can't compare packages; update it")
+    /** Thermodynamics tools (D100). */
+    suspend fun propertySweep(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PropertySweepRequest): EngineResult<app.flowstead.core.api.PropertySweepResult> =
+        EngineResult.Failed("This engine can't chart properties; update it")
     /** A stream's distillation curves and petroleum product properties (D99). */
     suspend fun petroleumProperties(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PetroleumPropertiesRequest): EngineResult<app.flowstead.core.api.PetroleumPropertiesResult> =
         EngineResult.Failed("This engine can't give distillation curves; update it")
@@ -160,6 +175,56 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(request)
+            }
+        }
+
+    override suspend fun binaryDiagram(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.BinaryDiagramRequest): EngineResult<app.flowstead.core.api.BinaryDiagramResult> =
+        call {
+            http.post("$baseUrl/binary-diagram") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 5 * 60_000L }
+            }
+        }
+
+    override suspend fun ternary(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.TernaryRequest): EngineResult<app.flowstead.core.api.TernaryResult> =
+        call {
+            http.post("$baseUrl/ternary") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 5 * 60_000L }
+            }
+        }
+
+    override suspend fun criticalPoints(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.CriticalPointRequest): EngineResult<app.flowstead.core.api.CriticalPointResult> =
+        call {
+            http.post("$baseUrl/critical-points") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 5 * 60_000L }
+            }
+        }
+
+    override suspend fun comparePackages(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PackageComparisonRequest): EngineResult<app.flowstead.core.api.PackageComparisonResult> =
+        call {
+            http.post("$baseUrl/compare-packages") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 5 * 60_000L }
+            }
+        }
+
+    override suspend fun propertySweep(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PropertySweepRequest): EngineResult<app.flowstead.core.api.PropertySweepResult> =
+        call {
+            http.post("$baseUrl/property-sweep") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 5 * 60_000L }
             }
         }
 

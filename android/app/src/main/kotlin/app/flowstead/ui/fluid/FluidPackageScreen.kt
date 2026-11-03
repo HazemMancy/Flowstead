@@ -129,6 +129,8 @@ data class FluidUi(
     val vapourViscosity: String? = null,
     val compounds: List<String> = emptyList(),
     val hypotheticals: List<Hypothetical> = emptyList(),
+    /** Streams with a composition given (tag → mole fractions), for the thermodynamics tools. */
+    val streams: List<Pair<String, Map<String, Double>>> = emptyList(),
     /** How many pairs carry the user's kij. */
     val userKij: Int = 0,
     val packages: List<String> = OfflineCatalogue.propertyPackages,
@@ -179,6 +181,9 @@ class FluidPackageViewModel @Inject constructor(
             vapourViscosity = p?.flowsheet?.vapourViscosity,
             compounds = p?.flowsheet?.compounds.orEmpty(),
             hypotheticals = p?.flowsheet?.hypotheticals.orEmpty(),
+            streams = p?.flowsheet?.objects.orEmpty()
+                .filter { it.type == app.flowstead.core.model.ObjectType.MaterialStream && it.composition.values.sum() > 0 }
+                .map { it.tag to it.composition },
             userKij = p?.flowsheet?.interactionParameters?.size ?: 0,
             packages = pk,
             query = s.query,
@@ -292,6 +297,28 @@ class FluidPackageViewModel @Inject constructor(
 
     fun deleteHypothetical(name: String) = remove(name)
 
+    // ---- thermodynamics tools (D100)
+
+    private val _thermo = MutableStateFlow<ThermoState>(ThermoState.Idle)
+    val thermo: StateFlow<ThermoState> = _thermo
+
+    fun clearThermo() { _thermo.value = ThermoState.Idle }
+
+    /** Runs one tool with the project's fluid: [call] gets the engine address, key and the flowsheet. */
+    fun runThermo(call: suspend (url: String, key: String?, fs: app.flowstead.core.model.Flowsheet) -> EngineResult<Any>) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        val url = settings.settings.first().engineTarget
+        if (url.isBlank()) { _thermo.value = ThermoState.Failed("Choose an engine in Settings first"); return@launch }
+        if (p.flowsheet.propertyPackage == null) { _thermo.value = ThermoState.Failed("Choose a property package first"); return@launch }
+        _thermo.value = ThermoState.Working
+        _thermo.value = when (val r = call(url, secrets.apiKey(), p.flowsheet)) {
+            is EngineResult.Ok -> ThermoState.Done(r.value)
+            is EngineResult.Failed -> ThermoState.Failed(r.reason)
+        }
+    }
+
+    val engineClient: EngineClient get() = engine
+
     // ---- petroleum assays (D99)
 
     private val _assay = MutableStateFlow<AssayState>(AssayState.Idle)
@@ -350,6 +377,8 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
     val kij by viewModel.kij.collectAsStateWithLifecycle()
     var assayOpen by remember { mutableStateOf(false) }
     val assay by viewModel.assay.collectAsStateWithLifecycle()
+    var thermoOpen by remember { mutableStateOf(false) }
+    val thermo by viewModel.thermo.collectAsStateWithLifecycle()
     FluidPackageContent(
         ui, snackbar, viewModel::setPackage, viewModel::add, viewModel::remove, viewModel::setQuery, viewModel::setFamily, onBack,
         onNewHypothetical = { viewModel.clearEstimate(); creating = true },
@@ -359,6 +388,15 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onVapourViscosity = viewModel::setVapourViscosity,
         onKij = { viewModel.loadKij(); kijOpen = true },
         onAssay = { viewModel.clearAssay(); assayOpen = true },
+        onThermo = { viewModel.clearThermo(); thermoOpen = true },
+    )
+    if (thermoOpen) ThermoToolsSheet(
+        ui = ui,
+        state = thermo,
+        engine = viewModel.engineClient,
+        onRun = viewModel::runThermo,
+        onClear = viewModel::clearThermo,
+        onDismiss = { thermoOpen = false },
     )
     if (kijOpen) KijSheet(kij, onSet = viewModel::setKij, onDismiss = { kijOpen = false })
     if (assayOpen) AssaySheet(
@@ -401,6 +439,7 @@ fun FluidPackageContent(
     onVapourViscosity: (String?) -> Unit = {},
     onKij: () -> Unit = {},
     onAssay: () -> Unit = {},
+    onThermo: () -> Unit = {},
 ) {
     var details by remember { mutableStateOf<Compound?>(null) }
     Scaffold(
@@ -508,6 +547,17 @@ fun FluidPackageContent(
                         Text("Edit kij" + if (ui.userKij > 0) " (${ui.userKij} set by you)" else "")
                     }
                 }
+            }
+            item { HorizontalDivider() }
+            item { Text("Thermodynamics tools", style = MaterialTheme.typography.titleMedium) }
+            item {
+                Text(
+                    "Binary and ternary phase diagrams, the true critical point, the fluid packages side by side, and property charts, with this fluid.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item {
+                OutlinedButton(onClick = onThermo, enabled = ui.compounds.isNotEmpty(), modifier = Modifier.heightIn(min = 48.dp).testTag("open_thermo")) { Text("Open the tools") }
             }
             item { HorizontalDivider() }
             item { Text("Components (${ui.compounds.size})", style = MaterialTheme.typography.titleMedium) }

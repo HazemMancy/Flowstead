@@ -64,6 +64,11 @@ public sealed class WorkerHost(TextWriter output)
         WorkerMethods.PvtRegression => JsonSerializer.SerializeToNode(engine.PvtRegression(Params<PvtRegressionRequest>(req)), Json.Options),
         WorkerMethods.Assay => JsonSerializer.SerializeToNode(engine.Assay(Params<AssayRequest>(req)), Json.Options),
         WorkerMethods.PetroleumProperties => JsonSerializer.SerializeToNode(engine.PetroleumProperties(Params<PetroleumPropertiesRequest>(req)), Json.Options),
+        WorkerMethods.BinaryDiagram => JsonSerializer.SerializeToNode(engine.BinaryDiagram(Params<BinaryDiagramRequest>(req)), Json.Options),
+        WorkerMethods.Ternary => JsonSerializer.SerializeToNode(engine.Ternary(Params<TernaryRequest>(req)), Json.Options),
+        WorkerMethods.CriticalPoints => JsonSerializer.SerializeToNode(engine.CriticalPoints(Params<CriticalPointRequest>(req)), Json.Options),
+        WorkerMethods.ComparePackages => JsonSerializer.SerializeToNode(engine.ComparePackages(Params<PackageComparisonRequest>(req)), Json.Options),
+        WorkerMethods.PropertySweep => JsonSerializer.SerializeToNode(engine.PropertySweep(Params<PropertySweepRequest>(req)), Json.Options),
         WorkerMethods.TestSleep when TestHooks => Sleep(req.Params!.GetValue<int>()),
         _ => throw new InvalidOperationException($"Unknown method '{req.Method}'"),
     };

@@ -46,6 +46,16 @@ class RoutingEngineClient @Inject constructor(
         pick(baseUrl).depressuring(baseUrl, apiKey, request)
     override suspend fun dynamics(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DynamicsRequest) =
         pick(baseUrl).dynamics(baseUrl, apiKey, request)
+    override suspend fun binaryDiagram(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.BinaryDiagramRequest) =
+        pick(baseUrl).binaryDiagram(baseUrl, apiKey, request)
+    override suspend fun ternary(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.TernaryRequest) =
+        pick(baseUrl).ternary(baseUrl, apiKey, request)
+    override suspend fun criticalPoints(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.CriticalPointRequest) =
+        pick(baseUrl).criticalPoints(baseUrl, apiKey, request)
+    override suspend fun comparePackages(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PackageComparisonRequest) =
+        pick(baseUrl).comparePackages(baseUrl, apiKey, request)
+    override suspend fun propertySweep(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PropertySweepRequest) =
+        pick(baseUrl).propertySweep(baseUrl, apiKey, request)
     override suspend fun assay(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.AssayRequest) =
         pick(baseUrl).assay(baseUrl, apiKey, request)
     override suspend fun petroleumProperties(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.PetroleumPropertiesRequest) =

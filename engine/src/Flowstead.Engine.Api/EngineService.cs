@@ -56,6 +56,18 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<PetroleumPropertiesResult> PetroleumPropertiesAsync(PetroleumPropertiesRequest req, CancellationToken ct) =>
         pool.CallAsync<PetroleumPropertiesResult>(WorkerMethods.PetroleumProperties, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
+    /// <summary>Thermodynamics tools (D100): diagrams and sweeps are many flashes, so they get the solve timeout.</summary>
+    public Task<BinaryDiagramResult> BinaryDiagramAsync(BinaryDiagramRequest req, CancellationToken ct) =>
+        pool.CallAsync<BinaryDiagramResult>(WorkerMethods.BinaryDiagram, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+    public Task<TernaryResult> TernaryAsync(TernaryRequest req, CancellationToken ct) =>
+        pool.CallAsync<TernaryResult>(WorkerMethods.Ternary, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+    public Task<CriticalPointResult> CriticalPointsAsync(CriticalPointRequest req, CancellationToken ct) =>
+        pool.CallAsync<CriticalPointResult>(WorkerMethods.CriticalPoints, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+    public Task<PackageComparisonResult> ComparePackagesAsync(PackageComparisonRequest req, CancellationToken ct) =>
+        pool.CallAsync<PackageComparisonResult>(WorkerMethods.ComparePackages, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+    public Task<PropertySweepResult> PropertySweepAsync(PropertySweepRequest req, CancellationToken ct) =>
+        pool.CallAsync<PropertySweepResult>(WorkerMethods.PropertySweep, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+
     /// <summary>A PVT experiment runs many flashes, so it gets the solve timeout.</summary>
     public Task<PvtResult> PvtAsync(PvtRequest req, CancellationToken ct) =>
         pool.CallAsync<PvtResult>(WorkerMethods.Pvt, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);

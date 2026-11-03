@@ -20,7 +20,7 @@ using Flowsheet = Flowstead.Engine.Contracts.Flowsheet;
 
 namespace Flowstead.Engine.Worker;
 
-public sealed class DwsimEngine
+public sealed partial class DwsimEngine
 {
     /// <summary>Flowstead name → DWSIM ComponentName. Order is the order shown in the app.</summary>
     public static readonly IReadOnlyList<(string Name, string Dwsim)> MvpPackages =
@@ -1220,7 +1220,7 @@ public sealed class DwsimEngine
     /// flowsheet is built once and each call only resets the stream's state and composition and recalculates it,
     /// read back the same way as a solve. Anything other than a lone material stream goes to <see cref="Solve"/>.
     /// </summary>
-    private Func<Flowsheet, SolveResult> StreamFlasher(bool saturationPoints = true)
+    private Func<Flowsheet, SolveResult> StreamFlasher(bool saturationPoints = true, WaterMode? water = null)
     {
         string? key = null;
         MaterialStream? ms = null;
@@ -1232,7 +1232,7 @@ public sealed class DwsimEngine
             {
                 if (ms is null || k != key)
                 {
-                    var (_, map) = Build(model);
+                    var (_, map) = Build(model, water);
                     (ms, key) = ((MaterialStream)map[o.Id], k);
                 }
                 ApplyStream(model, o, ms);

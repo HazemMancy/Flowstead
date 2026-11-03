@@ -140,6 +140,18 @@ api.MapPost("/assay", async (AssayRequest req, EngineService e, CancellationToke
 api.MapPost("/petroleum-properties", async (PetroleumPropertiesRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PetroleumPropertiesAsync(req, ct), "invalid_stream"));
 
+// Thermodynamics tools (D100).
+api.MapPost("/binary-diagram", async (BinaryDiagramRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.BinaryDiagramAsync(req, ct), "invalid_diagram"));
+api.MapPost("/ternary", async (TernaryRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.TernaryAsync(req, ct), "invalid_ternary"));
+api.MapPost("/critical-points", async (CriticalPointRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.CriticalPointsAsync(req, ct), "invalid_stream"));
+api.MapPost("/compare-packages", async (PackageComparisonRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.ComparePackagesAsync(req, ct), "invalid_comparison"));
+api.MapPost("/property-sweep", async (PropertySweepRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.PropertySweepAsync(req, ct), "invalid_sweep"));
+
 // PVT laboratory experiments (D53).
 api.MapPost("/pvt", async (PvtRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PvtAsync(req, ct), "invalid_pvt"));
