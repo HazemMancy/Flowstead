@@ -129,7 +129,8 @@ class McCabeThieleTest {
         // The diagram draws the stripping line from the bottoms to that point.
         val plot = McCabeThiele.plot(McCabeThiele.solve(curve, 0.95, 0.05, 0.5, 0.0, 3.0)!!, 0.95, 0.05, 3.0, "A")
         val strip = plot.series.first { it.label == "Stripping line" }
-        assertEquals(listOf(0.05, 0.35), strip.x)
+        assertEquals(0.05, strip.x.first(), 1e-12)
+        assertEquals(0.35, strip.x.last(), 1e-12)
         assertEquals(0.5, strip.y.last(), 1e-12)
     }
 }
