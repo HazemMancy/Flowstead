@@ -127,7 +127,7 @@ private fun CheckTool(ui: FlowsheetUi, vm: FlowsheetViewModel) {
             CheckLevel.Info -> MaterialTheme.colorScheme.onSurfaceVariant
         }
         Row(
-            Modifier.fillMaxWidth().then(if (item.objectId != null) Modifier.clickable { vm.closeTools(); vm.openEditor(item.objectId) } else Modifier).padding(vertical = 6.dp),
+            Modifier.fillMaxWidth().then(item.objectId?.let { id -> Modifier.clickable { vm.closeTools(); vm.openEditor(id) } } ?: Modifier).padding(vertical = 6.dp),
             verticalAlignment = Alignment.Top,
         ) {
             Text(item.level.name, color = colour, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(72.dp))
