@@ -2,9 +2,9 @@ name: android
 
 on:
   push:
-    paths: ["android/**", "shared/**", "engine/**", "benchmarks/**", ".github/workflows/android.yml"]
+    paths: ["android/**", "shared/**", "engine/**", "benchmarks/**", "docs/DECISIONS.md", "docs/release-notes/**", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["android/**", "shared/**", "engine/**", "benchmarks/**", ".github/workflows/android.yml"]
+    paths: ["android/**", "shared/**", "engine/**", "benchmarks/**", "docs/DECISIONS.md", "docs/release-notes/**", ".github/workflows/android.yml"]
 
 jobs:
   build-test:
