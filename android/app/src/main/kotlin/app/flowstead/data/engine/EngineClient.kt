@@ -87,6 +87,18 @@ interface EngineClient {
     /** A petroleum assay cut into pseudo-components (D99). */
     suspend fun assay(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.AssayRequest): EngineResult<app.flowstead.core.api.AssayResult> =
         EngineResult.Failed("This engine can't characterise assays; update it")
+    /** Compound and data tools (D104–D106). */
+    suspend fun structureCompound(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.StructureCompoundRequest): EngineResult<app.flowstead.core.api.StructureCompoundResult> =
+        EngineResult.Failed("This engine can't build compounds from structure; update it")
+    /** Compound and data tools (D104–D106). */
+    suspend fun regressVle(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.VleRegressionRequest): EngineResult<app.flowstead.core.api.VleRegressionResult> =
+        EngineResult.Failed("This engine can't regress VLE data; update it")
+    /** Compound and data tools (D104–D106). */
+    suspend fun optimise(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.OptimiseRequest): EngineResult<app.flowstead.core.api.OptimiseResult> =
+        EngineResult.Failed("This engine has no optimiser; update it")
+    /** Compound and data tools (D104–D106). */
+    suspend fun findReactions(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.ReactionFinderRequest): EngineResult<app.flowstead.core.api.ReactionFinderResult> =
+        EngineResult.Failed("This engine has no reaction finder; update it")
     /** Thermodynamics tools (D100). */
     suspend fun binaryDiagram(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.BinaryDiagramRequest): EngineResult<app.flowstead.core.api.BinaryDiagramResult> =
         EngineResult.Failed("This engine can't draw binary diagrams; update it")
@@ -175,6 +187,46 @@ class KtorEngineClient @Inject constructor(private val http: HttpClient) : Engin
                 apiKey?.let { bearerAuth(it) }
                 contentType(ContentType.Application.Json)
                 setBody(request)
+            }
+        }
+
+    override suspend fun structureCompound(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.StructureCompoundRequest): EngineResult<app.flowstead.core.api.StructureCompoundResult> =
+        call {
+            http.post("$baseUrl/structure-compound") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 60 * 1000L }
+            }
+        }
+
+    override suspend fun regressVle(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.VleRegressionRequest): EngineResult<app.flowstead.core.api.VleRegressionResult> =
+        call {
+            http.post("$baseUrl/regress-vle") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 600 * 1000L }
+            }
+        }
+
+    override suspend fun optimise(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.OptimiseRequest): EngineResult<app.flowstead.core.api.OptimiseResult> =
+        call {
+            http.post("$baseUrl/optimise") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 1800 * 1000L }
+            }
+        }
+
+    override suspend fun findReactions(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.ReactionFinderRequest): EngineResult<app.flowstead.core.api.ReactionFinderResult> =
+        call {
+            http.post("$baseUrl/find-reactions") {
+                apiKey?.let { bearerAuth(it) }
+                contentType(ContentType.Application.Json)
+                setBody(request)
+                timeout { requestTimeoutMillis = 120 * 1000L }
             }
         }
 

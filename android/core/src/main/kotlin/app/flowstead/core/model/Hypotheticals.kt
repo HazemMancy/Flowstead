@@ -21,11 +21,21 @@ data class Hypothetical(
     val criticalTemperature: Double? = null,
     val criticalPressure: Double? = null,
     val acentricFactor: Double? = null,
+    /**
+     * Defined by molecular structure (D104): a SMILES string, or Joback group counts by DWSIM's group number (1–41).
+     * The engine estimates the constants by Joback; a given NBP, Tc, Pc or ω replaces the estimate.
+     */
+    val smiles: String? = null,
+    val jobackGroups: Map<Int, Int>? = null,
 ) {
+    val byStructure: Boolean get() = !smiles.isNullOrBlank() || !jobackGroups.isNullOrEmpty()
+
     /** What is wrong with the inputs, or null. Mirrors the engine validator's ranges. */
     fun problem(): String? {
         if (name.isBlank()) return "Give the hypothetical a name"
-        if (normalBoilingPoint == null && molecularWeight == null) return "Give the normal boiling point or the molecular weight"
+        if (byStructure) {
+            jobackGroups?.let { g -> if (g.values.any { it < 0 } || g.keys.any { it !in 1..41 }) return "Joback groups are numbered 1 to 41, with counts of zero or more" }
+        } else if (normalBoilingPoint == null && molecularWeight == null) return "Give the normal boiling point or the molecular weight"
         fun out(v: Double?, lo: Double, hi: Double) = v != null && !(v >= lo && v <= hi)
         return when {
             out(normalBoilingPoint, 150.0, 1500.0) -> "Normal boiling point must be between 150 and 1500 K"

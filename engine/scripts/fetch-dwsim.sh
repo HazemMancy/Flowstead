@@ -26,8 +26,8 @@ ipopt_stub() {
 # Flowstead's fixes to DWSIM (engine/patches, D101) are applied to the pinned source; the build is stamped with them.
 patches=("$here"/patches/*.patch)
 [[ -e "${patches[0]}" ]] || patches=()
-stamp="$COMMIT"
-if (( ${#patches[@]} )); then stamp="$COMMIT+$(cat "${patches[@]}" | sha256sum | cut -c1-16)"; fi
+stamp="$COMMIT+rf"  # +rf: the reaction finder is built too (D106)
+if (( ${#patches[@]} )); then stamp="$stamp+$(cat "${patches[@]}" | sha256sum | cut -c1-16)"; fi
 
 if [[ -f "$out/.version" && "$(cat "$out/.version")" == "$stamp" ]]; then
   ipopt_stub
@@ -53,6 +53,11 @@ echo "DWSIM source: $REPO @ $COMMIT ($VERSION)"
 rm -rf "$out"
 dotnet publish "$src/engine/DWSIM.Automation/DWSIM.Automation.csproj" -c Release -r linux-x64 --self-contained false \
   -p:CoolPropRid=linux-x64 -p:DebugType=none -o "$out" -v quiet -nologo
+# DWSIM's reaction finder (D106) is not a dependency of DWSIM.Automation; it builds on its own, next to it.
+rf="$(mktemp -d)"
+dotnet build "$src/engine/DWSIM.ReactionFinder.Logic/DWSIM.ReactionFinder.Logic.csproj" -c Release -o "$rf" -v quiet -nologo -p:DebugType=none
+cp "$rf/DWSIM.ReactionFinder.Logic.dll" "$out/"
+rm -rf "$rf"
 cp -r "$src/content/addcomps" "$out/addcomps"
 ipopt_stub
 echo "$stamp" > "$out/.version"

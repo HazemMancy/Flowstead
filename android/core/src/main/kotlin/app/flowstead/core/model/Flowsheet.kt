@@ -240,7 +240,18 @@ object PipeFittings {
 
 /** kij between compounds [a] and [b] (symmetric). Same as the engine's BinaryParameter. */
 @Serializable
-data class BinaryParameter(val a: String, val b: String, val kij: Double)
+data class BinaryParameter(
+    val a: String,
+    val b: String,
+    val kij: Double,
+    /** NRTL or UNIQUAC (D104): A12, A21 in cal/mol as DWSIM keeps them, and NRTL's α12. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val a12: Double? = null,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val a21: Double? = null,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val alpha12: Double? = null,
+)
 
 /** One curve of a multi-speed map. */
 @Serializable

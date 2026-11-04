@@ -74,6 +74,26 @@ class LocalEngineClient @Inject constructor(private val engine: LocalEngine) : E
             engine.call("phaseEnvelope", FlowsheetJson.encodeToJsonElement(PhaseEnvelopeRequest.serializer(), request))
         }
 
+    override suspend fun structureCompound(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.StructureCompoundRequest): EngineResult<app.flowstead.core.api.StructureCompoundResult> =
+        decode(app.flowstead.core.api.StructureCompoundResult.serializer()) {
+            engine.call("structureCompound", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.StructureCompoundRequest.serializer(), request))
+        }
+
+    override suspend fun regressVle(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.VleRegressionRequest): EngineResult<app.flowstead.core.api.VleRegressionResult> =
+        decode(app.flowstead.core.api.VleRegressionResult.serializer()) {
+            engine.call("regressVle", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.VleRegressionRequest.serializer(), request))
+        }
+
+    override suspend fun optimise(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.OptimiseRequest): EngineResult<app.flowstead.core.api.OptimiseResult> =
+        decode(app.flowstead.core.api.OptimiseResult.serializer()) {
+            engine.call("optimise", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.OptimiseRequest.serializer(), request))
+        }
+
+    override suspend fun findReactions(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.ReactionFinderRequest): EngineResult<app.flowstead.core.api.ReactionFinderResult> =
+        decode(app.flowstead.core.api.ReactionFinderResult.serializer()) {
+            engine.call("findReactions", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.ReactionFinderRequest.serializer(), request))
+        }
+
     override suspend fun binaryDiagram(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.BinaryDiagramRequest): EngineResult<app.flowstead.core.api.BinaryDiagramResult> =
         decode(app.flowstead.core.api.BinaryDiagramResult.serializer()) {
             engine.call("binaryDiagram", FlowsheetJson.encodeToJsonElement(app.flowstead.core.api.BinaryDiagramRequest.serializer(), request))

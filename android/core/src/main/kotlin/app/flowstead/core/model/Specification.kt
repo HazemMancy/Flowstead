@@ -81,6 +81,10 @@ object SpecKey {
     const val VOLUME = "volume"
     /** Plug-flow reactor length; the diameter follows from the volume. */
     const val REACTOR_LENGTH = "reactorLength"
+    /** Catalytic reactions in a PFR or CSTR (D104): kg of catalyst per m³ of reactor, bed void fraction, particle size. */
+    const val CATALYST_LOADING = "catalystLoading"
+    const val CATALYST_VOID_FRACTION = "catalystVoidFraction"
+    const val CATALYST_PARTICLE_DIAMETER = "catalystParticleDiameter"
 
     /** Component splitter: fraction of [compound]'s feed sent to outlet 1 (overhead). */
     const val SPLIT_PREFIX = "split:"
@@ -154,6 +158,9 @@ object SpecKey {
         INCREMENTS -> Quantity.Count
         HEAT_TRANSFER_COEFFICIENT -> Quantity.HeatTransferCoefficient
         VOLUME -> Quantity.Volume
+        CATALYST_LOADING -> Quantity.Density
+        CATALYST_VOID_FRACTION -> Quantity.Fraction
+        CATALYST_PARTICLE_DIAMETER -> Quantity.Length
         else -> if (key.startsWith(SPLIT_PREFIX)) Quantity.Fraction else throw IllegalArgumentException("Unknown spec '$key'")
     }
 
@@ -192,6 +199,9 @@ object SpecKey {
         PIPE_DIAMETER -> "Pipe inside diameter"
         VOLUME -> "Volume"
         REACTOR_LENGTH -> "Length"
+        CATALYST_LOADING -> "Catalyst loading (per m³ of reactor)"
+        CATALYST_VOID_FRACTION -> "Bed void fraction"
+        CATALYST_PARTICLE_DIAMETER -> "Catalyst particle diameter"
         TRAYS -> "Theoretical trays"
         "feedStage1" -> "Feed 1 tray"
         "feedStage2" -> "Feed 2 tray"

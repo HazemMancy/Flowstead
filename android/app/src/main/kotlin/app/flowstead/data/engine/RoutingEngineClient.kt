@@ -46,6 +46,14 @@ class RoutingEngineClient @Inject constructor(
         pick(baseUrl).depressuring(baseUrl, apiKey, request)
     override suspend fun dynamics(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.DynamicsRequest) =
         pick(baseUrl).dynamics(baseUrl, apiKey, request)
+    override suspend fun structureCompound(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.StructureCompoundRequest) =
+        pick(baseUrl).structureCompound(baseUrl, apiKey, request)
+    override suspend fun regressVle(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.VleRegressionRequest) =
+        pick(baseUrl).regressVle(baseUrl, apiKey, request)
+    override suspend fun optimise(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.OptimiseRequest) =
+        pick(baseUrl).optimise(baseUrl, apiKey, request)
+    override suspend fun findReactions(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.ReactionFinderRequest) =
+        pick(baseUrl).findReactions(baseUrl, apiKey, request)
     override suspend fun binaryDiagram(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.BinaryDiagramRequest) =
         pick(baseUrl).binaryDiagram(baseUrl, apiKey, request)
     override suspend fun ternary(baseUrl: String, apiKey: String?, request: app.flowstead.core.api.TernaryRequest) =

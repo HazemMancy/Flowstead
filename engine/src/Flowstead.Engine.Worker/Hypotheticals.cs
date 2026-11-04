@@ -30,6 +30,7 @@ public static class Hypotheticals
 
     public static ConstantProperties Characterise(Hypothetical h)
     {
+        if (StructureCompounds.IsStructure(h)) return StructureCompounds.Characterise(h);
         if (Cache.TryGetValue(h, out var cached)) return cached;
         var c = CharacteriseNew(h);
         if (Cache.Count > 500) Cache.Clear();
@@ -179,6 +180,18 @@ public static class Hypotheticals
     public static HypotheticalProperties Describe(Hypothetical h, ICompoundConstantProperties c)
     {
         var estimated = new List<string>();
+        if (StructureCompounds.IsStructure(h))
+        {
+            // By structure: Joback for everything not given; SG from the Rackett density at 60 °F.
+            foreach (var (k, v) in new (string, double?)[] { ("normalBoilingPoint", h.NormalBoilingPoint), ("criticalTemperature", h.CriticalTemperature),
+                         ("criticalPressure", h.CriticalPressure), ("acentricFactor", h.AcentricFactor) })
+                if (v is null) estimated.Add(k);
+            estimated.Add("specificGravity");
+            var sg60 = PROPS.liq_dens_rackett(288.706, c.Critical_Temperature, c.Critical_Pressure, c.Acentric_Factor, c.Molar_Weight) / 999.012;
+            if (!double.IsFinite(sg60)) sg60 = 0;
+            return new HypotheticalProperties(h.Name, c.Normal_Boiling_Point, c.Molar_Weight, sg60, c.Critical_Temperature, c.Critical_Pressure,
+                c.Acentric_Factor, c.Critical_Volume, sg60 > 0 ? Math.Cbrt(1.8 * c.Normal_Boiling_Point) / sg60 : 0, c.Formula ?? "", estimated);
+        }
         if (h.NormalBoilingPoint is null) estimated.Add("normalBoilingPoint");
         if (h.MolecularWeight is null) estimated.Add("molecularWeight");
         if (h.SpecificGravity is null) estimated.Add("specificGravity");

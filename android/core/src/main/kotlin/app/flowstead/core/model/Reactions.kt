@@ -12,6 +12,7 @@ enum class ReactionType(val label: String) {
     @SerialName("conversion") Conversion("Conversion"),
     @SerialName("equilibrium") Equilibrium("Equilibrium"),
     @SerialName("kinetic") Kinetic("Kinetic"),
+    @SerialName("catalytic") Catalytic("Catalytic"),
 }
 
 @Serializable
@@ -43,6 +44,16 @@ data class Reaction(
     val forwardE: Double? = null,
     val reverseA: Double? = null,
     val reverseE: Double? = null,
+    /**
+     * Catalytic (D104), DWSIM's Langmuir–Hinshelwood form: rate = numerator / denominator per kg of catalyst, DWSIM
+     * expressions of T (K) and the concentrations R1, R2… (reactants), P1… (products), N1… (inerts) in stoichiometry order.
+     */
+    val rateNumerator: String? = null,
+    val rateDenominator: String? = null,
+    val concentrationUnit: String? = null,
+    val rateUnit: String? = null,
+    val minTemperature: Double? = null,
+    val maxTemperature: Double? = null,
 ) {
     /** "CH4 + 2 O2 → CO2 + 2 H2O" style, with compound names. */
     fun equation(): String {
@@ -54,6 +65,12 @@ data class Reaction(
         val arrow = if (type == ReactionType.Equilibrium) " ⇌ " else " → "
         return side(reactants) + arrow + side(products)
     }
+}
+
+/** Units a catalytic rate expression may use; same as the engine's CatalyticUnits. */
+object CatalyticUnits {
+    val CONCENTRATIONS = listOf("mol/m3", "mol/L", "kmol/m3")
+    val RATES = listOf("mol/[kg.s]", "mol/[kg.h]", "kmol/[kg.h]", "mol/[m3.s]", "mol/[L.s]", "kmol/[m3.h]")
 }
 
 /** Keys reactors use in refs. Same strings as the engine's ReactorKeys. */
@@ -99,6 +116,13 @@ object Reactors {
                 else -> if (x <= 0 || x > 1) "conversion must be above 0 and at most 100 %" else null
             }
             ReactionType.Equilibrium -> if (r.phase == ReactionPhase.Mixture) "choose the vapour or liquid phase" else null
+            ReactionType.Catalytic -> when {
+                r.rateNumerator.isNullOrBlank() -> "give the rate expression's numerator"
+                r.concentrationUnit != null && r.concentrationUnit !in CatalyticUnits.CONCENTRATIONS -> "unknown concentration unit ${r.concentrationUnit}"
+                r.rateUnit != null && r.rateUnit !in CatalyticUnits.RATES -> "unknown rate unit ${r.rateUnit}"
+                r.minTemperature != null && r.maxTemperature != null && r.maxTemperature <= r.minTemperature -> "the maximum temperature must be above the minimum"
+                else -> null
+            }
             ReactionType.Kinetic -> when {
                 r.forwardA == null || r.forwardA <= 0 -> "give a positive pre-exponential factor A"
                 r.forwardE == null -> "give the activation energy E"
@@ -116,7 +140,8 @@ object Reactors {
             if (ids.isEmpty()) needs += "${type.label.lowercase()} reactions"
             for (id in ids) {
                 val r = fs.reaction(id) ?: return SpecStatus.Invalid("A reaction it uses no longer exists")
-                if (r.type != type) return SpecStatus.Invalid("${r.name} is a ${r.type.label.lowercase()} reaction")
+                if (r.type != type && !(type == ReactionType.Kinetic && r.type == ReactionType.Catalytic))
+                    return SpecStatus.Invalid("${r.name} is a ${r.type.label.lowercase()} reaction")
                 problem(fs, r)?.let { return SpecStatus.Invalid("${r.name}: $it") }
             }
         }
@@ -128,6 +153,11 @@ object Reactors {
         s[SpecKey.PRESSURE_DROP]?.let { if (it.si < 0) return SpecStatus.Invalid("Pressure drop can't be negative") }
         if (o.type == ObjectType.Cstr || o.type == ObjectType.Pfr) {
             s[SpecKey.VOLUME]?.let { if (it.si <= 0) return SpecStatus.Invalid("Volume must be positive") } ?: run { needs += "volume" }
+        }
+        if ((o.type == ObjectType.Cstr || o.type == ObjectType.Pfr) && reactions(fs, o).any { it.type == ReactionType.Catalytic }) {
+            s[SpecKey.CATALYST_LOADING]?.let { if (it.si <= 0) return SpecStatus.Invalid("Catalyst loading must be positive") } ?: run { needs += "catalyst loading" }
+            if (o.type == ObjectType.Pfr) s[SpecKey.CATALYST_VOID_FRACTION]?.let { if (it.si <= 0 || it.si >= 1) return SpecStatus.Invalid("Void fraction must be above 0 and below 1") }
+                ?: run { needs += "bed void fraction" }
         }
         if (o.type == ObjectType.Pfr) {
             s[SpecKey.REACTOR_LENGTH]?.let { if (it.si <= 0) return SpecStatus.Invalid("Length must be positive") } ?: run { needs += "length" }

@@ -26,6 +26,8 @@ string[] roots =
     "DWSIM.Thermodynamics.AdvancedEOS.PRSRKTDep", "DWSIM.Thermodynamics.CoolPropInterface",
     "DWSIM.MathOps.SwarmOps", "DWSIM.DynamicsManager", "DWSIM.FileStorage", "DWSIM.Logging",
     "DWSIM.Thermodynamics.ThermoC", "ThermoCS",
+    // DWSIM's reaction finder (D106), referenced by the Flowstead worker.
+    "DWSIM.ReactionFinder.Logic",
     // Type-forwarded from the BCL's System.Drawing facade; DWSIM ships the implementation.
     "System.Drawing.Common",
 ];

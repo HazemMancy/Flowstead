@@ -5,6 +5,8 @@
 package app.flowstead.ui.fluid
 
 import androidx.compose.ui.focus.onFocusChanged
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardActions
@@ -161,6 +163,7 @@ class FluidPackageViewModel @Inject constructor(
     private val secrets: SecretStore,
     private val engine: EngineClient,
     private val library: CompoundLibrary,
+    private val http: io.ktor.client.HttpClient,
 ) : ViewModel() {
     private val projectId = savedState.toRoute<FluidRoute>().projectId
     private val search = MutableStateFlow(Search("", CompoundCatalogue.COMMON))
@@ -332,6 +335,59 @@ class FluidPackageViewModel @Inject constructor(
 
     val engineClient: EngineClient get() = engine
 
+    // ---- compound and data tools (D104, D106)
+
+    private val _data = MutableStateFlow<ThermoState>(ThermoState.Idle)
+    val data: StateFlow<ThermoState> = _data
+    private val _pubChem = MutableStateFlow<PubChemState>(PubChemState.Idle)
+    val pubChem: StateFlow<PubChemState> = _pubChem
+
+    fun clearData() { _data.value = ThermoState.Idle }
+
+    fun runData(call: suspend (url: String, key: String?, fs: app.flowstead.core.model.Flowsheet) -> EngineResult<Any>) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        val url = settings.settings.first().engineTarget
+        if (url.isBlank()) { _data.value = ThermoState.Failed("Choose an engine in Settings first"); return@launch }
+        _data.value = ThermoState.Working
+        _data.value = when (val r = call(url, secrets.apiKey(), p.flowsheet)) {
+            is EngineResult.Ok -> ThermoState.Done(r.value)
+            is EngineResult.Failed -> ThermoState.Failed(r.reason)
+        }
+    }
+
+    /** A name or CAS number looked up on PubChem for its structure (D104); needs the internet. */
+    fun lookUpPubChem(query: String) = viewModelScope.launch {
+        _pubChem.value = PubChemState.Working
+        _pubChem.value = try {
+            val res = http.get(app.flowstead.core.compounds.PubChem.url(query))
+            val body = res.bodyAsText()
+            val found = app.flowstead.core.compounds.PubChem.parse(body)
+            when {
+                found.isNotEmpty() -> PubChemState.Found(found)
+                else -> PubChemState.Failed(app.flowstead.core.compounds.PubChem.fault(body)?.let { "PubChem: $it" } ?: "PubChem found no compound called “${query.trim()}”")
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            PubChemState.Failed("PubChem could not be reached (${e.message ?: e::class.simpleName}); check the connection")
+        }
+    }
+
+    fun saveBinaryParameter(parameter: app.flowstead.core.model.BinaryParameter) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        try {
+            projects.saveFlowsheet(projectId, FlowsheetEditing.upsertBinaryParameter(p.flowsheet, parameter))
+            _messages.send("Saved: the fluid now uses the fitted parameters for ${parameter.a}–${parameter.b}")
+        } catch (e: EditRejected) { _messages.send(e.message ?: "Not saved") }
+    }
+
+    fun addReaction(reaction: app.flowstead.core.model.Reaction) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        try {
+            projects.saveFlowsheet(projectId, FlowsheetEditing.addSuggestedReaction(p.flowsheet, reaction))
+            _messages.send("${reaction.name} added; choose it in a ${reaction.type.label.lowercase()} reactor")
+        } catch (e: EditRejected) { _messages.send(e.message ?: "Not added") }
+    }
+
     // ---- petroleum assays (D99)
 
     private val _assay = MutableStateFlow<AssayState>(AssayState.Idle)
@@ -394,6 +450,9 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
     var oilCreating by remember { mutableStateOf(false) }
     var thermoOpen by remember { mutableStateOf(false) }
     val thermo by viewModel.thermo.collectAsStateWithLifecycle()
+    var dataOpen by remember { mutableStateOf(false) }
+    val data by viewModel.data.collectAsStateWithLifecycle()
+    val pubChem by viewModel.pubChem.collectAsStateWithLifecycle()
     FluidPackageContent(
         ui, snackbar, viewModel::setPackage, viewModel::add, viewModel::remove, viewModel::setQuery, viewModel::setFamily, onBack,
         onNewHypothetical = { viewModel.clearEstimate(); creating = true },
@@ -404,6 +463,7 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onKij = { viewModel.loadKij(); kijOpen = true },
         onAssay = { viewModel.clearAssay(); assayOpen = true },
         onThermo = { viewModel.clearThermo(); thermoOpen = true },
+        onDataTools = { viewModel.clearData(); dataOpen = true },
         onNewBlackOil = { oilCreating = true },
         onEditBlackOil = { oilEditing = it },
     )
@@ -418,6 +478,19 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onRun = viewModel::runThermo,
         onClear = viewModel::clearThermo,
         onDismiss = { thermoOpen = false },
+    )
+    if (dataOpen) DataToolsSheet(
+        ui = ui,
+        state = data,
+        pubChem = pubChem,
+        engine = viewModel.engineClient,
+        onRun = viewModel::runData,
+        onClear = viewModel::clearData,
+        onPubChem = viewModel::lookUpPubChem,
+        onSaveCompound = { h -> viewModel.saveHypothetical(h) {} },
+        onSaveParameter = viewModel::saveBinaryParameter,
+        onAddReaction = viewModel::addReaction,
+        onDismiss = { dataOpen = false },
     )
     if (kijOpen) KijSheet(kij, onSet = viewModel::setKij, onDismiss = { kijOpen = false })
     if (assayOpen) AssaySheet(
@@ -461,6 +534,7 @@ fun FluidPackageContent(
     onKij: () -> Unit = {},
     onAssay: () -> Unit = {},
     onThermo: () -> Unit = {},
+    onDataTools: () -> Unit = {},
     onNewBlackOil: () -> Unit = {},
     onEditBlackOil: (app.flowstead.core.model.BlackOil) -> Unit = {},
 ) {
@@ -606,6 +680,17 @@ fun FluidPackageContent(
             }
             item {
                 OutlinedButton(onClick = onThermo, enabled = ui.compounds.isNotEmpty(), modifier = Modifier.heightIn(min = 48.dp).testTag("open_thermo")) { Text("Open the tools") }
+            }
+            item { HorizontalDivider() }
+            item { Text("Compound and data tools", style = MaterialTheme.typography.titleMedium) }
+            item {
+                Text(
+                    "A component from its molecular structure (SMILES, Joback groups or a PubChem name), interaction parameters fitted to measured VLE, and DWSIM's reaction finder.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item {
+                OutlinedButton(onClick = onDataTools, modifier = Modifier.heightIn(min = 48.dp).testTag("open_data_tools")) { Text("Open the data tools") }
             }
             item { HorizontalDivider() }
             item { Text("Components (${ui.compounds.size})", style = MaterialTheme.typography.titleMedium) }

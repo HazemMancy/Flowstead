@@ -81,6 +81,7 @@ import app.flowstead.core.model.Port
 import app.flowstead.core.model.PortKind
 import app.flowstead.core.model.PortSide
 import app.flowstead.core.model.Ports
+import app.flowstead.core.model.CatalyticUnits
 import app.flowstead.core.model.Reaction
 import app.flowstead.core.model.ReactionPhase
 import app.flowstead.core.model.ReactionType
@@ -378,12 +379,23 @@ private fun ReactorEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: 
     if (obj.type == ObjectType.Pfr) SpecField(obj, SpecKey.REACTOR_LENGTH, unitSet, ctx, actions)
     SpecField(obj, SpecKey.PRESSURE_DROP, unitSet, ctx, actions, optionalHint = "0 if empty")
     val type = Reactors.reactionType(obj.type) ?: return
+    // Kinetic reactors (CSTR, PFR) also run catalytic reactions (D104), with the catalyst they hold.
+    val kinds = if (type == ReactionType.Kinetic) listOf(ReactionType.Kinetic, ReactionType.Catalytic) else listOf(type)
+    if (type == ReactionType.Kinetic && Reactors.reactions(fs, obj).any { it.type == ReactionType.Catalytic }) {
+        SectionLabel("Catalyst")
+        Calculated("A catalytic rate is per kg of catalyst; the reactor holds loading × volume of it.")
+        SpecField(obj, SpecKey.CATALYST_LOADING, unitSet, ctx, actions)
+        if (obj.type == ObjectType.Pfr) {
+            SpecField(obj, SpecKey.CATALYST_VOID_FRACTION, unitSet, ctx, actions)
+            SpecField(obj, SpecKey.CATALYST_PARTICLE_DIAMETER, unitSet, ctx, actions, optionalHint = "Ergun pressure drop if given")
+        }
+    }
 
-    SectionLabel("${type.label} reactions")
+    SectionLabel(kinds.joinToString(" and ") { it.label } + " reactions")
     val used = Reactors.reactionIds(obj)
     var editing by remember(obj.id) { mutableStateOf<String?>(null) }
     fun setUsed(ids: List<String>) = actions.setRef(obj.id, ReactorKeys.REACTIONS, ids.joinToString(",").ifEmpty { null })
-    for (r in fs.reactions.filter { it.type == type }) {
+    for (r in fs.reactions.filter { it.type in kinds }) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Checkbox(
                 checked = r.id in used,
@@ -398,16 +410,17 @@ private fun ReactorEditor(fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: 
         }
         if (editing == r.id) ReactionFields(fs, r, actions) { editing = null }
     }
-    TextButton(
+    for (kind in kinds) TextButton(
         onClick = {
             val id = FlowsheetEditing.newId()
             val n = generateSequence(1) { it + 1 }.first { k -> fs.reactions.none { it.name == "Rxn-$k" } }
-            actions.upsertReaction(Reaction(id, "Rxn-$n", type, phase = if (type == ReactionType.Equilibrium) ReactionPhase.Vapour else ReactionPhase.Mixture))
+            actions.upsertReaction(Reaction(id, "Rxn-$n", kind, phase = if (kind == ReactionType.Equilibrium) ReactionPhase.Vapour else ReactionPhase.Mixture))
             setUsed(used + id)
             editing = id
         },
-        modifier = Modifier.heightIn(min = 48.dp).testTag("new_reaction"),
-    ) { Text("New ${type.label.lowercase()} reaction") }
+        modifier = Modifier.heightIn(min = 48.dp).testTag(if (kind == type) "new_reaction" else "new_${kind.name.lowercase()}_reaction"),
+    ) { Text("New ${kind.label.lowercase()} reaction") }
+    Calculated("Fluid package → Compound and data tools → Reaction finder suggests reactions among the components.")
 }
 
 /** One reaction: name, stoichiometry (blank = not in the reaction), base compound, phase and its kind's parameters. */
@@ -439,6 +452,25 @@ private fun ReactionFields(fs: Flowsheet, r: Reaction, actions: EditorActions, o
                 PlainNumber("Temperature approach", r.approachTemperature, "rxn_${r.id}_approach", unit = "K", hint = "0 if empty") {
                     save(r.copy(approachTemperature = it))
                 }
+            }
+            ReactionType.Catalytic -> {
+                val order = r.stoichiometry.entries.toList()
+                fun symbols(sign: Int, letter: String) = order.filter { (if (sign < 0) it.value < 0 else if (sign > 0) it.value > 0 else it.value == 0.0) }
+                    .mapIndexed { i, e -> "$letter${i + 1} = ${e.key}" }
+                Calculated(
+                    "Langmuir–Hinshelwood: rate = numerator / denominator per kg of catalyst, DWSIM expressions of T (K) and the " +
+                        "concentrations " + (symbols(-1, "R") + symbols(1, "P")).joinToString(", ") + ". E.g. 2.5e-3*exp(-45000/(8.314*T))*R1 over (1+0.4*R1)^2.",
+                )
+                var num by remember(r.id, r.rateNumerator) { mutableStateOf(r.rateNumerator.orEmpty()) }
+                var den by remember(r.id, r.rateDenominator) { mutableStateOf(r.rateDenominator.orEmpty()) }
+                OutlinedTextField(num, { num = it }, label = { Text("Rate numerator") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("rxn_${r.id}_num").onFocusChanged { if (!it.isFocused) save(r.copy(rateNumerator = num.trim().ifBlank { null })) })
+                OutlinedTextField(den, { den = it }, label = { Text("Rate denominator") }, placeholder = { Text("1") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("rxn_${r.id}_den").onFocusChanged { if (!it.isFocused) save(r.copy(rateDenominator = den.trim().ifBlank { null })) })
+                Choice("Concentrations in", r.concentrationUnit ?: CatalyticUnits.CONCENTRATIONS.first(), CatalyticUnits.CONCENTRATIONS.map { it to it }) { save(r.copy(concentrationUnit = it)) }
+                Choice("Rate in", r.rateUnit ?: CatalyticUnits.RATES.first(), CatalyticUnits.RATES.map { it to it }) { save(r.copy(rateUnit = it)) }
+                PlainNumber("Lowest temperature", r.minTemperature, "rxn_${r.id}_tmin", unit = "K", hint = "no limit") { save(r.copy(minTemperature = it)) }
+                PlainNumber("Highest temperature", r.maxTemperature, "rxn_${r.id}_tmax", unit = "K", hint = "no limit") { save(r.copy(maxTemperature = it)) }
             }
             ReactionType.Kinetic -> {
                 Calculated("r = A·exp(−E/RT)·Π cᵢ^orderᵢ, in mol/(m³·s) with concentrations in mol/m³.")

@@ -44,7 +44,7 @@ class FluidPackageTest {
 
     private suspend fun vm(): FluidPackageViewModel {
         val id = repo.create("Gas", Flowsheet(propertyPackage = "Peng-Robinson (PR)"))
-        return FluidPackageViewModel(SavedStateHandle(mapOf("projectId" to id)), repo, FakeSettingsRepository(), FakeSecretStore(), FakeEngineClient(), FileCompoundLibrary())
+        return FluidPackageViewModel(SavedStateHandle(mapOf("projectId" to id)), repo, FakeSettingsRepository(), FakeSecretStore(), FakeEngineClient(), FileCompoundLibrary(), io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp))
     }
 
     @Test

@@ -69,6 +69,10 @@ public sealed class WorkerHost(TextWriter output)
         WorkerMethods.CriticalPoints => JsonSerializer.SerializeToNode(engine.CriticalPoints(Params<CriticalPointRequest>(req)), Json.Options),
         WorkerMethods.ComparePackages => JsonSerializer.SerializeToNode(engine.ComparePackages(Params<PackageComparisonRequest>(req)), Json.Options),
         WorkerMethods.PropertySweep => JsonSerializer.SerializeToNode(engine.PropertySweep(Params<PropertySweepRequest>(req)), Json.Options),
+        WorkerMethods.StructureCompound => JsonSerializer.SerializeToNode(engine.StructureCompound(Params<StructureCompoundRequest>(req)), Json.Options),
+        WorkerMethods.RegressVle => JsonSerializer.SerializeToNode(engine.RegressVle(Params<VleRegressionRequest>(req)), Json.Options),
+        WorkerMethods.Optimise => JsonSerializer.SerializeToNode(engine.Optimise(Params<OptimiseRequest>(req)), Json.Options),
+        WorkerMethods.FindReactions => JsonSerializer.SerializeToNode(engine.FindReactions(Params<ReactionFinderRequest>(req)), Json.Options),
         WorkerMethods.TestSleep when TestHooks => Sleep(req.Params!.GetValue<int>()),
         _ => throw new InvalidOperationException($"Unknown method '{req.Method}'"),
     };

@@ -57,12 +57,19 @@ public static class Reactors
                 ReactionType.Equilibrium => fs.CreateEquilibriumReaction(r.Id, r.Name, stoich, r.BaseCompound, phase,
                     r.Phase == ReactionPhase.Liquid ? "Activity" : "Fugacity", r.Phase == ReactionPhase.Liquid ? "" : "bar",
                     r.ApproachTemperature ?? 0.0, ""),
+                // Langmuir–Hinshelwood (D104): DWSIM evaluates numerator/denominator per kg of catalyst and scales by the
+                // reactor's catalyst loading over its void fraction.
+                ReactionType.Catalytic => fs.CreateHetCatReaction(r.Id, r.Name, stoich, r.BaseCompound, phase,
+                    "Molar Concentration", r.ConcentrationUnit ?? "mol/m3", r.RateUnit ?? "mol/[kg.s]", Expression(r.RateNumerator!),
+                    string.IsNullOrWhiteSpace(r.RateDenominator) ? "1" : Expression(r.RateDenominator!)),
                 _ => fs.CreateKineticReaction(r.Id, r.Name, stoich,
                     stoich.Keys.ToDictionary(c => c, c => r.ForwardOrders.GetValueOrDefault(c)),
                     stoich.Keys.ToDictionary(c => c, c => r.ReverseOrders.GetValueOrDefault(c)),
                     r.BaseCompound, phase, "Molar Concentration", "mol/m3", "mol/[m3.s]",
                     r.ForwardA ?? 0.0, r.ForwardE ?? 0.0, r.ReverseA ?? 0.0, r.ReverseE ?? 0.0, "", ""),
             };
+            if (r.MinTemperature is { } tmin) dr.Tmin = tmin;
+            if (r.MaxTemperature is { } tmax) dr.Tmax = tmax;
             fs.AddReaction(dr);
         }
         foreach (var o in model.Objects.Where(o => IsReactor(o.Type) && o.Type != ObjectType.GibbsReactor))
@@ -74,6 +81,15 @@ public static class Reactors
             ((Reactor)map[o.Id]).ReactionSetID = set.ID;
         }
     }
+
+    /// <summary>
+    /// DWSIM's expression parser reads no scientific notation (not even its own library's "1.02e2"): numbers like
+    /// 6e-7 or 1.02E2 are written out as plain decimals before DWSIM sees the expression.
+    /// </summary>
+    public static string Expression(string e) => System.Text.RegularExpressions.Regex.Replace(e,
+        @"(?<![A-Za-z_0-9.])(\d+\.?\d*|\.\d+)[eE]([+-]?\d+)",
+        m => double.Parse(m.Value, System.Globalization.CultureInfo.InvariantCulture)
+            .ToString("0.############################", System.Globalization.CultureInfo.InvariantCulture));
 
     public static void Apply(SimObject o, Reactor r, IReadOnlyList<string> compounds)
     {
@@ -95,8 +111,19 @@ public static class Reactors
                 break;
             case Reactor_CSTR c:
                 c.Volume = V(SpecKeys.Volume)!.Value;
+                c.CatalystAmount = (V(SpecKeys.CatalystLoading) ?? 0.0) * c.Volume;
                 break;
             case Reactor_PFR p:
+                p.CatalystLoading = V(SpecKeys.CatalystLoading) ?? 0.0;
+                p.CatalystVoidFraction = V(SpecKeys.CatalystVoidFraction) ?? 0.0;
+                p.CatalystParticleDiameter = V(SpecKeys.CatalystParticleDiameter) ?? 0.0;
+                // A packed bed's pressure drop is Ergun's, which needs the particle size; without it DWSIM divided by
+                // zero, so the reactor's own pressure-drop specification (none: zero) applies instead.
+                if (p.CatalystLoading > 0 && !(p.CatalystParticleDiameter > 0))
+                {
+                    p.UseUserDefinedPressureDrop = true;
+                    p.UserDefinedPressureDrop = V(SpecKeys.PressureDrop) ?? 0.0;
+                }
                 p.Volume = V(SpecKeys.Volume)!.Value;
                 p.Length = V(SpecKeys.ReactorLength)!.Value;
                 p.Diameter = Math.Sqrt(4.0 * p.Volume / (Math.PI * p.Length));

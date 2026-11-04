@@ -152,6 +152,16 @@ api.MapPost("/compare-packages", async (PackageComparisonRequest req, EngineServ
 api.MapPost("/property-sweep", async (PropertySweepRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PropertySweepAsync(req, ct), "invalid_sweep"));
 
+// Compound and data tools (D104), the optimiser (D105) and the reaction finder (D106).
+api.MapPost("/structure-compound", async (StructureCompoundRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.StructureCompoundAsync(req, ct), "invalid_structure"));
+api.MapPost("/regress-vle", async (VleRegressionRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.RegressVleAsync(req, ct), "invalid_regression"));
+api.MapPost("/optimise", async (OptimiseRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.OptimiseAsync(req, ct), "invalid_optimiser"));
+api.MapPost("/find-reactions", async (ReactionFinderRequest req, EngineService e, CancellationToken ct) =>
+    await FileCall(() => e.FindReactionsAsync(req, ct), "invalid_flowsheet"));
+
 // PVT laboratory experiments (D53).
 api.MapPost("/pvt", async (PvtRequest req, EngineService e, CancellationToken ct) =>
     await FileCall(() => e.PvtAsync(req, ct), "invalid_pvt"));

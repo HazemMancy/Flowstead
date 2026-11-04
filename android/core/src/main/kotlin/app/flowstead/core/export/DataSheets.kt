@@ -282,6 +282,7 @@ object DataSheets {
                     ReactionType.Conversion -> r.conversion?.let { "X(${r.baseCompound}) = ${ValueFormat.number(it * 100, 1)} %" }
                     ReactionType.Equilibrium -> "Equilibrium, ${r.phase.name.lowercase()} phase"
                     ReactionType.Kinetic -> "Kinetic (Arrhenius)"
+                    ReactionType.Catalytic -> "Catalytic (Langmuir–Hinshelwood): ${r.rateNumerator} / ${r.rateDenominator ?: "1"}"
                 }
                 DataSheet.Line(r.name, "", listOf(r.equation(), basis.orEmpty()))
             }

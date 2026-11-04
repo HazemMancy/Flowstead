@@ -78,7 +78,13 @@ public static class Validator
             if (string.IsNullOrWhiteSpace(n)) { err("A hypothetical needs a name."); continue; }
             if (database.Contains(n)) err($"Hypothetical '{n}': a database compound has that name; choose another.");
             if (!fs.Compounds.Contains(n)) err($"Hypothetical '{n}' is not in the component list.");
-            if (h.NormalBoilingPoint is null && h.MolecularWeight is null) err($"Hypothetical '{n}': give the normal boiling point or the molecular weight.");
+            if (StructureCompounds.IsStructure(h))
+            {
+                try { StructureCompounds.Groups(h, []); }
+                catch (InvalidDataException e) { err($"Hypothetical '{n}': {e.Message}."); }
+                catch (Exception e) when (e is ArgumentException or FormatException or IndexOutOfRangeException) { err($"Hypothetical '{n}': the structure could not be read ({e.Message})."); }
+            }
+            else if (h.NormalBoilingPoint is null && h.MolecularWeight is null) err($"Hypothetical '{n}': give the normal boiling point or the molecular weight.");
             void Range(double? v, double lo, double hi, string what)
             {
                 if (v is { } x && !(x >= lo && x <= hi)) err($"Hypothetical '{n}': {what} must be between {lo} and {hi}.");
@@ -191,6 +197,13 @@ public static class Validator
                     if (r.Conversion is not { } x) err($"{name}: give the conversion of {r.BaseCompound}.", null);
                     else if (x is <= 0 or > 1) err($"{name}: conversion must be above 0 and at most 100 %.", null);
                     break;
+                case ReactionType.Catalytic:
+                    if (string.IsNullOrWhiteSpace(r.RateNumerator)) err($"{name}: give the rate expression's numerator.", null);
+                    if (r.RateDenominator is { } den && string.IsNullOrWhiteSpace(den)) err($"{name}: the rate expression's denominator is empty (leave it out for 1).", null);
+                    if (r.ConcentrationUnit is { } cu && !CatalyticUnits.Concentrations.Contains(cu)) err($"{name}: concentration unit '{cu}' is not one of {string.Join(", ", CatalyticUnits.Concentrations)}.", null);
+                    if (r.RateUnit is { } ru && !CatalyticUnits.Rates.Contains(ru)) err($"{name}: rate unit '{ru}' is not one of {string.Join(", ", CatalyticUnits.Rates)}.", null);
+                    if (r.MinTemperature is { } lo && r.MaxTemperature is { } hi && !(hi > lo)) err($"{name}: the maximum temperature must be above the minimum.", null);
+                    break;
                 case ReactionType.Kinetic:
                     if (r.ForwardA is not > 0) err($"{name}: give a positive pre-exponential factor A.", null);
                     if (r.ForwardE is not { } e || !double.IsFinite(e)) err($"{name}: give the activation energy E.", null);
@@ -213,7 +226,7 @@ public static class Validator
             {
                 var r = fs.Reactions.FirstOrDefault(x => x.Id == id);
                 if (r is null) err($"{o.Tag}: a reaction it uses no longer exists.", o.Id);
-                else if (r.Type != type) err($"{o.Tag}: {r.Name} is a {r.Type.ToString().ToLowerInvariant()} reaction; this reactor runs {type.ToString().ToLowerInvariant()} reactions.", o.Id);
+                else if (r.Type != type && !(type == ReactionType.Kinetic && r.Type == ReactionType.Catalytic)) err($"{o.Tag}: {r.Name} is a {r.Type.ToString().ToLowerInvariant()} reaction; this reactor runs {type.ToString().ToLowerInvariant()} reactions.", o.Id);
             }
         }
         switch (o.Refs.GetValueOrDefault(ReactorKeys.Mode))
@@ -230,6 +243,12 @@ public static class Validator
         {
             if (s.GetValueOrDefault(SpecKeys.Volume) is not { } v) err($"{o.Tag}: under-specified — give the reactor volume.", o.Id);
             else if (v.Si <= 0) err($"{o.Tag}: volume must be positive.", o.Id);
+        }
+        if (o.Type is ObjectType.Cstr or ObjectType.Pfr && Reactors.ReactionIds(o).Any(id => fs.Reactions.FirstOrDefault(r => r.Id == id)?.Type == ReactionType.Catalytic))
+        {
+            if (s.GetValueOrDefault(SpecKeys.CatalystLoading) is not { Si: > 0 }) err($"{o.Tag}: under-specified — its catalytic reactions need the catalyst loading (kg per m³ of reactor).", o.Id);
+            if (o.Type == ObjectType.Pfr && s.GetValueOrDefault(SpecKeys.CatalystVoidFraction) is not { Si: > 0 and < 1 }) err($"{o.Tag}: give the bed void fraction (above 0, below 1).", o.Id);
+            if (s.GetValueOrDefault(SpecKeys.CatalystParticleDiameter) is { Si: <= 0 }) err($"{o.Tag}: the catalyst particle diameter must be positive.", o.Id);
         }
         if (o.Type == ObjectType.Pfr)
         {

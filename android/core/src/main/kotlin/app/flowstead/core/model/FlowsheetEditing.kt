@@ -343,8 +343,32 @@ object FlowsheetEditing {
     fun setInteractionParameter(fs: Flowsheet, a: String, b: String, kij: Double?): Flowsheet {
         if (a == b || a !in fs.compounds || b !in fs.compounds) throw EditRejected("kij needs two different compounds of the fluid")
         if (kij != null && !(kij > -1 && kij < 1)) throw EditRejected("kij must be between −1 and 1")
-        val others = fs.interactionParameters.filterNot { (it.a == a && it.b == b) || (it.a == b && it.b == a) }
-        return fs.copy(interactionParameters = if (kij == null) others else others + BinaryParameter(a, b, kij))
+        val existing = fs.interactionParameters.firstOrNull { (it.a == a && it.b == b) || (it.a == b && it.b == a) }
+        val others = fs.interactionParameters.filterNot { it === existing }
+        // Keep the pair's NRTL/UNIQUAC parameters (D104) when only its kij changes.
+        val activity = existing?.takeIf { it.a12 != null && it.a21 != null }?.let { if (it.a == a) it else it.copy(a = a, b = b, a12 = it.a21, a21 = it.a12) }
+        return fs.copy(interactionParameters = when {
+            kij != null -> others + (activity?.copy(kij = kij) ?: BinaryParameter(a, b, kij))
+            activity != null -> others + activity.copy(kij = 0.0)
+            else -> others
+        })
+    }
+
+    /**
+     * Sets a pair's parameters as a regression fitted them (D104): its kij, or its NRTL/UNIQUAC A12, A21 (and α12), in
+     * place of any the pair had.
+     */
+    fun upsertBinaryParameter(fs: Flowsheet, p: BinaryParameter): Flowsheet {
+        if (p.a == p.b || p.a !in fs.compounds || p.b !in fs.compounds) throw EditRejected("The parameters need two different compounds of the fluid")
+        val others = fs.interactionParameters.filterNot { (it.a == p.a && it.b == p.b) || (it.a == p.b && it.b == p.a) }
+        return fs.copy(interactionParameters = others + p)
+    }
+
+    /** Adds a reaction the reaction finder suggested (D106), under a fresh id and a name not yet used. */
+    fun addSuggestedReaction(fs: Flowsheet, r: Reaction): Flowsheet {
+        r.stoichiometry.keys.firstOrNull { it !in fs.compounds }?.let { throw EditRejected("$it is not in the component list") }
+        val name = generateSequence(r.name) { it + "'" }.first { n -> fs.reactions.none { it.name == n } }
+        return upsertReaction(fs, r.copy(id = newId(), name = name))
     }
 
     /**

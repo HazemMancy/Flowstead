@@ -401,6 +401,10 @@ public static class WorkerMethods
     public const string CriticalPoints = "criticalPoints";
     public const string ComparePackages = "comparePackages";
     public const string PropertySweep = "propertySweep";
+    public const string StructureCompound = "structureCompound";
+    public const string RegressVle = "regressVle";
+    public const string Optimise = "optimise";
+    public const string FindReactions = "findReactions";
     /// <summary>Test hook: blocks for N ms. Only answered when FLOWSTEAD_WORKER_TEST_HOOKS=1.</summary>
     public const string TestSleep = "testSleep";
 }

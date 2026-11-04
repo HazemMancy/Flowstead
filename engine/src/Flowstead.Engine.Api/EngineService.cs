@@ -68,6 +68,16 @@ public sealed class EngineService(WorkerPool pool, EngineOptions options)
     public Task<PropertySweepResult> PropertySweepAsync(PropertySweepRequest req, CancellationToken ct) =>
         pool.CallAsync<PropertySweepResult>(WorkerMethods.PropertySweep, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
 
+    /// <summary>Compound and data tools (D104); the optimiser (D105) is many solves, so it gets ten solve timeouts.</summary>
+    public Task<StructureCompoundResult> StructureCompoundAsync(StructureCompoundRequest req, CancellationToken ct) =>
+        pool.CallAsync<StructureCompoundResult>(WorkerMethods.StructureCompound, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+    public Task<VleRegressionResult> RegressVleAsync(VleRegressionRequest req, CancellationToken ct) =>
+        pool.CallAsync<VleRegressionResult>(WorkerMethods.RegressVle, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds * 3), ct);
+    public Task<OptimiseResult> OptimiseAsync(OptimiseRequest req, CancellationToken ct) =>
+        pool.CallAsync<OptimiseResult>(WorkerMethods.Optimise, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds * 10), ct);
+    public Task<ReactionFinderResult> FindReactionsAsync(ReactionFinderRequest req, CancellationToken ct) =>
+        pool.CallAsync<ReactionFinderResult>(WorkerMethods.FindReactions, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);
+
     /// <summary>A PVT experiment runs many flashes, so it gets the solve timeout.</summary>
     public Task<PvtResult> PvtAsync(PvtRequest req, CancellationToken ct) =>
         pool.CallAsync<PvtResult>(WorkerMethods.Pvt, req, TimeSpan.FromSeconds(options.SolveTimeoutSeconds), ct);

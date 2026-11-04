@@ -300,6 +300,16 @@ public static class DwxmzImporter
                         ReverseA = r.A_Reverse == 0 ? null : r.A_Reverse, ReverseE = r.A_Reverse == 0 ? null : r.E_Reverse,
                     });
                     break;
+                case DWSIM.Interfaces.Enums.ReactionType.Heterogeneous_Catalytic
+                    when r.ReactionBasis == DWSIM.Interfaces.Enums.ReactionBasis.MolarConc && CatalyticUnits.Concentrations.Contains(r.ConcUnit) && CatalyticUnits.Rates.Contains(r.VelUnit):
+                    list.Add(basic with
+                    {
+                        Type = ReactionType.Catalytic, RateNumerator = r.RateEquationNumerator,
+                        ConcentrationUnit = r.ConcUnit, RateUnit = r.VelUnit,
+                        MinTemperature = r.Tmin > 0 ? r.Tmin : null, MaxTemperature = r.Tmax is > 0 and < 2000 ? r.Tmax : null,
+                        RateDenominator = string.IsNullOrWhiteSpace(r.RateEquationDenominator) || r.RateEquationDenominator.Trim() == "1" ? null : r.RateEquationDenominator,
+                    });
+                    break;
                 default:
                     warnings.Add($"Reaction {r.Name}: this kind of {r.ReactionType} reaction (basis, units or rate expression) is not supported; it was left out.");
                     break;
@@ -417,8 +427,18 @@ public static class DwxmzImporter
                 };
                 if (rx.ReactorOperationMode == DWSIM.UnitOperations.Reactors.OperationMode.OutletTemperature) Put(SpecKeys.OutletTemperature, rx.OutletTemperature, "C");
                 Put(SpecKeys.PressureDrop, rx.DeltaP, "dkPa");
-                if (rx is DWSIM.UnitOperations.Reactors.Reactor_CSTR cstr) Put(SpecKeys.Volume, cstr.Volume, "m3");
-                if (rx is DWSIM.UnitOperations.Reactors.Reactor_PFR pfr) { Put(SpecKeys.Volume, pfr.Volume, "m3"); Put(SpecKeys.ReactorLength, pfr.Length, "m"); }
+                if (rx is DWSIM.UnitOperations.Reactors.Reactor_CSTR cstr)
+                {
+                    Put(SpecKeys.Volume, cstr.Volume, "m3");
+                    if (cstr.CatalystAmount > 0 && cstr.Volume > 0) Put(SpecKeys.CatalystLoading, cstr.CatalystAmount / cstr.Volume, "kg/m3");
+                }
+                if (rx is DWSIM.UnitOperations.Reactors.Reactor_PFR pfr)
+                {
+                    Put(SpecKeys.Volume, pfr.Volume, "m3"); Put(SpecKeys.ReactorLength, pfr.Length, "m");
+                    if (pfr.CatalystLoading > 0) Put(SpecKeys.CatalystLoading, pfr.CatalystLoading, "kg/m3");
+                    if (pfr.CatalystVoidFraction > 0) Put(SpecKeys.CatalystVoidFraction, pfr.CatalystVoidFraction, "");
+                    if (pfr.CatalystParticleDiameter > 0) Put(SpecKeys.CatalystParticleDiameter, pfr.CatalystParticleDiameter, "m");
+                }
                 if (rx is not DWSIM.UnitOperations.Reactors.Reactor_Gibbs && ((DWSIM.SharedClasses.UnitOperations.BaseClass)so).FlowSheet.ReactionSets.TryGetValue(rx.ReactionSetID ?? "", out var set))
                     refs[ReactorKeys.Reactions] = string.Join(",", set.Reactions.Values.Where(r => r.IsActive).OrderBy(r => r.Rank).Select(r => r.ReactionID));
                 break;

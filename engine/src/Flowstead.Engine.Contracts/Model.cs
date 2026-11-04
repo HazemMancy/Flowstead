@@ -35,7 +35,13 @@ public sealed record Flowsheet
 }
 
 /// <summary>kij between compounds <paramref name="A"/> and <paramref name="B"/> (symmetric).</summary>
-public sealed record BinaryParameter(string A, string B, double Kij);
+public sealed record BinaryParameter(string A, string B, double Kij)
+{
+    /// <summary>NRTL or UNIQUAC (D104): A12 and A21 in cal/mol as DWSIM keeps them (τ12 = A12/RT), and NRTL's α12.</summary>
+    public double? A12 { get; init; }
+    public double? A21 { get; init; }
+    public double? Alpha12 { get; init; }
+}
 
 public static class VapourViscosityMethods
 {
@@ -68,9 +74,16 @@ public sealed record Hypothetical
     public double? CriticalTemperature { get; init; }
     public double? CriticalPressure { get; init; }
     public double? AcentricFactor { get; init; }
+    /// <summary>
+    /// A compound defined by its molecular structure (D104): a SMILES string, or Joback group counts by DWSIM's group
+    /// number (1–41). Constants by Joback, ω by Lee–Kesler; a given NBP, Tc, Pc or ω replaces the estimate. Molecular
+    /// weight and SG are ignored (the structure fixes the weight).
+    /// </summary>
+    public string? Smiles { get; init; }
+    public Dictionary<int, int>? JobackGroups { get; init; }
 }
 
-public enum ReactionType { Conversion, Equilibrium, Kinetic }
+public enum ReactionType { Conversion, Equilibrium, Kinetic, Catalytic }
 
 public enum ReactionPhase { Mixture, Vapour, Liquid }
 
@@ -96,6 +109,25 @@ public sealed record Reaction
     public double? ForwardE { get; init; }
     public double? ReverseA { get; init; }
     public double? ReverseE { get; init; }
+    /// <summary>
+    /// Catalytic (heterogeneous) reactions, DWSIM's Langmuir–Hinshelwood form: rate = numerator / denominator in
+    /// mol/(kg_cat·s), DWSIM expressions of T (K) and the concentrations (mol/m³) R1, R2… of the reactants, P1, P2… of the
+    /// products and N1… of the inerts, in the order of the stoichiometry. An empty denominator is 1.
+    /// </summary>
+    public string? RateNumerator { get; init; }
+    public string? RateDenominator { get; init; }
+    /// <summary>Catalytic: the units of the concentrations in the expression and of its rate, as DWSIM names them
+    /// (<see cref="CatalyticUnits"/>; default mol/m3 and mol/[kg.s]); the rate is zero outside MinTemperature–MaxTemperature (K).</summary>
+    public string? ConcentrationUnit { get; init; }
+    public string? RateUnit { get; init; }
+    public double? MinTemperature { get; init; }
+    public double? MaxTemperature { get; init; }
+}
+
+public static class CatalyticUnits
+{
+    public static readonly IReadOnlyList<string> Concentrations = ["mol/m3", "mol/L", "kmol/m3"];
+    public static readonly IReadOnlyList<string> Rates = ["mol/[kg.s]", "mol/[kg.h]", "kmol/[kg.h]", "mol/[m3.s]", "mol/[L.s]", "kmol/[m3.h]"];
 }
 
 public sealed record SimObject
@@ -345,6 +377,10 @@ public static class SpecKeys
     public const string Volume = "volume";
     /// <summary>Plug-flow reactor length (m); the diameter follows from the volume.</summary>
     public const string ReactorLength = "reactorLength";
+    /// <summary>Catalytic reactions in a PFR or CSTR (D104): catalyst kg per m³ of reactor, bed void fraction, particle diameter (m).</summary>
+    public const string CatalystLoading = "catalystLoading";
+    public const string CatalystVoidFraction = "catalystVoidFraction";
+    public const string CatalystParticleDiameter = "catalystParticleDiameter";
 
     /// <summary>
     /// Component splitter: "split:&lt;compound&gt;" is the fraction of that compound's inlet flow sent
