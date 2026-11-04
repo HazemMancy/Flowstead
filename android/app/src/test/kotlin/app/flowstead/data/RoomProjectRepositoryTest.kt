@@ -30,7 +30,7 @@ class RoomProjectRepositoryTest {
     private val db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), AppDatabase::class.java)
         .allowMainThreadQueries()
         .build()
-    private val repo = RoomProjectRepository(db.projectDao()) { now++ }
+    private val repo = RoomProjectRepository(db.projectDao(), clock = { now++ })
 
     @After fun close() = db.close()
 
