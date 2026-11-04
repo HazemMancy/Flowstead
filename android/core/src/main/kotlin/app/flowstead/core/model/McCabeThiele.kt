@@ -91,7 +91,7 @@ object McCabeThiele {
             stages += McCabeStage(x, y)
             if (x <= xB) {
                 val prev = if (stages.size >= 2) stages[stages.size - 2].x else xD
-                count = stages.size - 1 + (prev - xB) / (prev - x)
+                count = stages.size - 1 + fraction(prev, x, xB)
                 break
             }
             if (!stripping && x < xi) { stripping = true; feed = stages.size }
@@ -102,6 +102,16 @@ object McCabeThiele {
         return McCabeResult(curve, stages, count, feed, minimumStages(curve, xD, xB), minimumReflux(curve, xD, zF, q), warnings)
     }
 
+    /**
+     * The last, partial stage: how far from [from] to [to] the bottoms [xB] lies, in ln(x/(1 − x)), the measure in
+     * which separation per stage is even for a constant volatility (so Fenske's count comes out exactly).
+     */
+    private fun fraction(from: Double, to: Double, xB: Double): Double {
+        fun r(x: Double) = kotlin.math.ln(x.coerceIn(1e-12, 1 - 1e-12) / (1 - x.coerceIn(1e-12, 1 - 1e-12)))
+        val span = r(from) - r(to)
+        return if (span > 0) ((r(from) - r(xB)) / span).coerceIn(0.0, 1.0) else 1.0
+    }
+
     /** Stages at total reflux (operating line y = x), including the reboiler, the last as a fraction. */
     fun minimumStages(curve: List<Pair<Double, Double>>, xD: Double, xB: Double): Double {
         var x = xD
@@ -109,7 +119,7 @@ object McCabeThiele {
         while (n < 500) {
             val next = interp(curve, x, byX = false)
             n++
-            if (next <= xB) return n - 1 + (x - xB) / (x - next)
+            if (next <= xB) return n - 1 + fraction(x, next, xB)
             if (abs(next - x) < 1e-12) return Double.POSITIVE_INFINITY
             x = next
         }
