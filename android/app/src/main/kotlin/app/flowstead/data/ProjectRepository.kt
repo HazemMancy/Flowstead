@@ -12,6 +12,7 @@ import app.flowstead.core.model.modelHash
 import app.flowstead.data.db.ProjectDao
 import app.flowstead.data.db.ProjectEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
@@ -46,6 +47,11 @@ interface ProjectRepository {
     suspend fun delete(id: String)
     suspend fun saveFlowsheet(id: String, flowsheet: Flowsheet)
     suspend fun saveSolve(id: String, solve: StoredSolve)
+    /** Backup recovery (D105): a project's kept copies, newest first, and the last copy of projects that are gone. */
+    suspend fun backups(id: String): List<Backup> = emptyList()
+    suspend fun orphanBackups(): List<Backup> = emptyList()
+    /** Opens a backup as a new project, leaving the original as it is; returns the new id. */
+    suspend fun restoreBackup(backup: Backup): String? = null
 }
 
 /** Clock seam so tests control timestamps. */
@@ -57,6 +63,7 @@ fun interface Clock {
 class RoomProjectRepository @Inject constructor(
     private val dao: ProjectDao,
     private val clock: Clock,
+    private val backupStore: BackupStore? = null,
 ) : ProjectRepository {
 
     override fun observeProjects(): Flow<List<ProjectSummary>> = dao.observeSummaries().map { rows ->
@@ -112,13 +119,33 @@ class RoomProjectRepository @Inject constructor(
 
     override suspend fun rename(id: String, name: String) = dao.rename(id, cleanName(name), clock.now())
 
-    override suspend fun delete(id: String) = dao.delete(id)
+    override suspend fun delete(id: String) {
+        // The last state is kept, so a deleted project can be recovered.
+        dao.get(id)?.let { e -> runCatching { backupStore?.keep(id, e.name, e.flowsheetJson, clock.now(), force = true) } }
+        dao.delete(id)
+    }
 
     override suspend fun saveFlowsheet(id: String, flowsheet: Flowsheet) {
         val e = dao.get(id) ?: return
-        dao.update(
-            e.copy(flowsheetJson = encode(flowsheet), objectCount = flowsheet.objects.size, updatedAt = clock.now()),
-        )
+        val json = encode(flowsheet)
+        val now = clock.now()
+        dao.update(e.copy(flowsheetJson = json, objectCount = flowsheet.objects.size, updatedAt = now))
+        // A backup copy every few minutes of editing (D105); a failure to write one never blocks the save.
+        runCatching { backupStore?.keep(id, e.name, json, now) }
+    }
+
+    override suspend fun backups(id: String): List<Backup> = backupStore?.list(id).orEmpty()
+
+    override suspend fun orphanBackups(): List<Backup> {
+        val store = backupStore ?: return emptyList()
+        val existing = dao.observeSummaries().first().map { it.id }.toSet()
+        return store.orphans(existing)
+    }
+
+    override suspend fun restoreBackup(backup: Backup): String? {
+        val fs = runCatching { FlowsheetJson.decodeFromString(Flowsheet.serializer(), backup.flowsheetJson) }.getOrNull() ?: return null
+        val stamp = java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault()).format(java.util.Date(backup.savedAt))
+        return create("${backup.name} (backup $stamp)", fs)
     }
 
     override suspend fun saveSolve(id: String, solve: StoredSolve) =

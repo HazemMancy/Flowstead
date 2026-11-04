@@ -62,6 +62,8 @@ data class Readiness(
             val solvable = flowsheet.copy(
                 objects = keep,
                 connections = flowsheet.connections.filter { it.fromObject in kept && it.toObject in kept },
+                // The engine never reads the flowsheet tools (D105); scenarios would make every solve's request large.
+                spreadsheet = null, watch = emptyList(), scenarios = emptyList(),
             )
             return Readiness(reason, solvable)
         }

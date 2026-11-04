@@ -490,7 +490,7 @@ private fun ReactionFields(fs: Flowsheet, r: Reaction, actions: EditorActions, o
 
 /** A number without units conversion (coefficients, orders, kinetic constants): blank means "not given". */
 @Composable
-internal fun PlainNumber(label: String, value: Double?, tag: String, unit: String? = null, hint: String? = null, onCommit: (Double?) -> Unit) {
+internal fun PlainNumber(label: String, value: Double?, tag: String, unit: String? = null, hint: String? = null, modifier: Modifier = Modifier, onCommit: (Double?) -> Unit) {
     val shown = value?.let { java.math.BigDecimal.valueOf(it).stripTrailingZeros().toPlainString() } ?: ""
     var text by remember(tag, value) { mutableStateOf(shown) }
     var error by remember(tag) { mutableStateOf(false) }
@@ -511,7 +511,7 @@ internal fun PlainNumber(label: String, value: Double?, tag: String, unit: Strin
         textStyle = NumberStyles.valueSpecified.copy(color = if (value != null) MaterialTheme.valueColors.specified else MaterialTheme.colorScheme.onSurface),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { commit() }),
-        modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) commit() }.testTag(tag),
+        modifier = modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) commit() }.testTag(tag),
     )
 }
 

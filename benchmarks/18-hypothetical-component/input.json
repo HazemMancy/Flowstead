@@ -1,6 +1,7 @@
 {
   "name": "Hypothetical component",
   "description": "PR. A hypothetical defined only by n-decane's NBP (447.3 K), MW (142.28) and SG (0.734), against the database n-decane in a C1/C2/C3 flash at 40 °C / 20 bara; the pure hypothetical's bubble point at 1 atm and its liquid density at 60 °F.",
+  "category": "Fluids and properties",
   "flowsheet": {
     "schemaVersion": 1,
     "propertyPackage": "Peng-Robinson (PR)",

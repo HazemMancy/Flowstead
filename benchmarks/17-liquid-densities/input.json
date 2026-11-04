@@ -1,6 +1,7 @@
 {
   "name": "Liquid densities",
   "description": "PR. Pure propane (−40 °C, 10 bar), n-hexane and water (25 °C, 1 atm) against NIST/IAPWS, and a cold C1/C2/C3 liquid carrying dissolved methane above its critical temperature (decision D32).",
+  "category": "Fluids and properties",
   "flowsheet": {
     "schemaVersion": 1,
     "propertyPackage": "Peng-Robinson (PR)",

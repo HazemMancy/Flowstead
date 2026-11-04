@@ -1,6 +1,7 @@
 {
   "name": "Single-phase gas",
   "description": "Lean natural gas well above its cricondentherm: one vapour phase. PR. 40 °C, 70 bara, 1000 kgmol/h.",
+  "category": "Basics",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": ["Nitrogen", "Carbon dioxide", "Methane", "Ethane", "Propane"],

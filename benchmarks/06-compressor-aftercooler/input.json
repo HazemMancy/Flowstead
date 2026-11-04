@@ -1,6 +1,7 @@
 {
   "name": "Compressor and aftercooler",
   "description": "Gas compressed from 5 to 15 bara (adiabatic, 75 %) then cooled to 40 °C with 0.3 bar ΔP (PR).",
+  "category": "Rotating and heat transfer",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": [

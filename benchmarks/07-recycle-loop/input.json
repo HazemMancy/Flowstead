@@ -1,6 +1,7 @@
 {
   "name": "Recycle loop",
   "description": "Feed gas mixed with recycled liquid, chilled to −20 °C and separated; half the liquid is recycled, half purged (PR).",
+  "category": "Recycles and logic",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": [

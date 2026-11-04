@@ -1,6 +1,7 @@
 {
   "name": "JT valve letdown",
   "description": "Lean gas from 70 bara, 40 °C let down to 20 bara across a valve (PR): isenthalpic, Joule-Thomson cooling.",
+  "category": "Basics",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": [

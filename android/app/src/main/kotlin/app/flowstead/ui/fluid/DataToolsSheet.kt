@@ -280,8 +280,8 @@ private fun RegressionTool(
     ((state as? ThermoState.Done)?.value as? VleRegressionResult)?.let { r ->
         val p = r.parameter
         Text(
-            if (p.a12 != null) "A12 = ${ValueFormat.number(p.a12, 2)} cal/mol, A21 = ${ValueFormat.number(p.a21 ?: 0.0, 2)} cal/mol" + (p.alpha12?.let { ", α = ${ValueFormat.number(it, 2)}" } ?: "")
-            else "kij = ${ValueFormat.number(p.kij, 5)}",
+            p.a12?.let { a12 -> "A12 = ${ValueFormat.number(a12, 2)} cal/mol, A21 = ${ValueFormat.number(p.a21 ?: 0.0, 2)} cal/mol" + (p.alpha12?.let { ", α = ${ValueFormat.number(it, 2)}" } ?: "") }
+                ?: "kij = ${ValueFormat.number(p.kij, 5)}",
             style = MaterialTheme.typography.titleSmall,
         )
         Text(

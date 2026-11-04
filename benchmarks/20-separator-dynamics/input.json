@@ -1,6 +1,7 @@
 {
   "name": "Separator under pressure and level control (dynamics)",
   "description": "Gas and condensate at 30 bara, 27 °C let down into a 5 m³, 3 m high separator at 20 bara. PIC-100 holds the separator's pressure on the gas valve, LIC-100 its level on the liquid valve; both act in dynamic runs. Open Dynamics and Run: at 30 s the feed rises to 33 bara and the controllers bring the separator back. PR.",
+  "category": "Dynamics",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": ["Methane", "Propane", "N-hexane"],

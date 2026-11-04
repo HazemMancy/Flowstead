@@ -240,6 +240,23 @@ private fun UnitsSection(state: SettingsUiState, vm: SettingsViewModel) {
     SettingsViewModel.EDITABLE_QUANTITIES.forEach { q ->
         UnitPicker(q, current.unitFor(q)) { vm.setUnit(q, it) }
     }
+    // The user's own named sets (D105).
+    state.settings.savedUnitSets.forEach { set ->
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(set.name + if (set.name == current.name) " (in use)" else "", Modifier.weight(1f))
+            TextButton(onClick = { vm.selectPreset(set) }, enabled = set != current) { Text("Use") }
+            TextButton(onClick = { vm.deleteUnitSet(set.name) }) { Text("Delete") }
+        }
+    }
+    var setName by rememberSaveable { mutableStateOf("") }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(setName, { setName = it }, label = { Text("Save these units as") }, singleLine = true, modifier = Modifier.weight(1f).testTag("unit_set_name"))
+        Button(
+            onClick = { vm.saveUnitSetAs(setName); setName = "" },
+            enabled = setName.isNotBlank() && setName.trim() != UnitSet.CUSTOM && UnitSet.PRESETS.none { it.name.equals(setName.trim(), true) },
+            modifier = Modifier.heightIn(min = 48.dp),
+        ) { Text("Save") }
+    }
 
     val patmKpa = ValueFormat.number(state.settings.defaultAtmosphericPressurePa / 1e3, 3)
     var patm by rememberSaveable(patmKpa) { mutableStateOf(patmKpa) }

@@ -138,6 +138,25 @@ data class FlowsheetUi(
     val compoundBasis: CompoundBasisUi? = null,
     val dynamicsOpen: Boolean = false,
     val dynamics: DynamicsUi? = null,
+    /** The flowsheet tools sheet (D105, D106) and its runs. */
+    val toolsOpen: Boolean = false,
+    val optimiser: ToolRunUi<app.flowstead.core.api.OptimiseResult>? = null,
+    val pidTest: ToolRunUi<PidTestUi>? = null,
+    val mcCabe: ToolRunUi<app.flowstead.core.api.BinaryDiagramResult>? = null,
+)
+
+/** A tool's run: working, its result, or why it failed. */
+data class ToolRunUi<T>(val running: Boolean = false, val result: T? = null, val error: String? = null)
+
+/** A PID step test (D105): the run, the measurement in % of span, the fitted model and the settings. */
+data class PidTestUi(
+    val controllerId: String,
+    val times: List<Double>,
+    val pvPercent: List<Double>,
+    val stepTime: Double,
+    val step: Double,
+    val model: app.flowstead.core.model.Fopdt?,
+    val settings: List<app.flowstead.core.model.PidSettings>,
 )
 
 /**
@@ -217,6 +236,10 @@ class FlowsheetViewModel @Inject constructor(
         val compoundBasis: CompoundBasisUi? = null,
         val dynamicsOpen: Boolean = false,
         val dynamics: DynamicsUi? = null,
+        val toolsOpen: Boolean = false,
+        val optimiser: ToolRunUi<app.flowstead.core.api.OptimiseResult>? = null,
+        val pidTest: ToolRunUi<PidTestUi>? = null,
+        val mcCabe: ToolRunUi<app.flowstead.core.api.BinaryDiagramResult>? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -270,6 +293,10 @@ class FlowsheetViewModel @Inject constructor(
                 caseStudiesOpen = l.caseStudiesOpen,
                 dynamicsOpen = l.dynamicsOpen,
                 dynamics = l.dynamics,
+                toolsOpen = l.toolsOpen,
+                optimiser = l.optimiser,
+                pidTest = l.pidTest,
+                mcCabe = l.mcCabe,
                 caseRun = l.caseRun,
                 pvtFor = l.pvtFor?.takeIf { id -> fs.objects.any { it.id == id } },
                 pvt = l.pvt?.copy(stale = l.pvtHash != null && l.pvtHash != fs.modelHash()),
@@ -557,6 +584,141 @@ class FlowsheetViewModel @Inject constructor(
             }
             local.update { it.copy(dynamics = next) }
         }
+    }
+
+    // ---- flowsheet tools (D105, D106)
+
+    fun openTools() = local.update { it.copy(toolsOpen = true, editingId = null) }
+    fun closeTools() = local.update { it.copy(toolsOpen = false) }
+
+    fun setSpreadsheet(sheet: app.flowstead.core.model.Spreadsheet) = edit(undoable = false) { it.copy(spreadsheet = sheet) }
+
+    /** Writes each exported cell's value (in the spec's display unit) into its specification. */
+    fun applySpreadsheet(values: Map<String, app.flowstead.core.model.CellValue>) = edit { fs ->
+        val sheet = fs.spreadsheet ?: return@edit fs
+        val units = (state.value as? FlowsheetUiState.Ready)?.ui?.unitSet ?: app.flowstead.core.units.UnitSet.SI
+        sheet.exports.fold(fs) { acc, e ->
+            val v = (values[e.cell] as? app.flowstead.core.model.CellValue.Number)?.value
+                ?: throw EditRejected("${e.cell} has no number to export")
+            val q = app.flowstead.core.model.SpecKey.quantity(e.key)
+            val u = units.unitFor(q)
+            FlowsheetEditing.setSpec(acc, e.objectId, e.key, Spec(u.toSi(v, UnitContext()), u.id))
+        }
+    }
+
+    fun toggleWatch(item: app.flowstead.core.model.WatchItem) = edit(undoable = false) { fs ->
+        fs.copy(watch = if (item in fs.watch) fs.watch - item else fs.watch + item)
+    }
+
+    fun saveScenario(name: String) {
+        val fs = current ?: return
+        val view = ResultView(currentSolve, fs.modelHash())
+        val s = app.flowstead.core.model.Scenarios.snapshot(fs, view, name.ifBlank { "Scenario ${fs.scenarios.size + 1}" }, System.currentTimeMillis())
+        edit(undoable = false) { it.copy(scenarios = it.scenarios + s) }
+        if (!s.solved) _messages.trySend("Saved without results: solve first to keep this scenario's numbers")
+    }
+    fun deleteScenario(index: Int) = edit(undoable = false) { it.copy(scenarios = it.scenarios.filterIndexed { i, _ -> i != index }) }
+    fun restoreScenario(index: Int) = edit { fs -> fs.scenarios.getOrNull(index)?.let { app.flowstead.core.model.Scenarios.restore(fs, it) } ?: fs }
+
+    fun runOptimiser(request: (Flowsheet) -> app.flowstead.core.api.OptimiseRequest) {
+        val fs = current ?: return
+        if (local.value.optimiser?.running == true) return
+        Specification.problems(fs).firstOrNull()?.let { _messages.trySend("Fix the flowsheet first: ${it.second}"); return }
+        local.update { it.copy(optimiser = ToolRunUi(running = true)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val next = if (url.isBlank()) ToolRunUi(error = "Set the engine address in Settings")
+            else when (val r = engine.optimise(url, secrets.apiKey(), request(Readiness.of(fs).solvable))) {
+                is EngineResult.Ok -> ToolRunUi(result = r.value)
+                is EngineResult.Failed -> ToolRunUi<app.flowstead.core.api.OptimiseResult>(error = "Not run: ${r.reason}")
+            }
+            local.update { it.copy(optimiser = next) }
+        }
+    }
+
+    /** Puts the optimum's values into the specifications it moved (one undoable change). */
+    fun applyOptimum(variables: List<app.flowstead.core.api.OptimiserVariable>, values: List<Double>) = edit { fs ->
+        variables.zip(values).fold(fs) { acc, (v, x) ->
+            val old = acc.obj(v.objectId)?.specs?.get(v.key) ?: return@fold acc
+            FlowsheetEditing.setSpec(acc, v.objectId, v.key, old.copy(si = x))
+        }
+    }
+
+    /**
+     * PID tuning (D105): an open-loop step test of [controllerId] by the engine's dynamic run, then a FOPDT fit and
+     * the textbook settings. A short first run reads the controller's starting output.
+     */
+    fun runStepTest(controllerId: String, step: Double, duration: Double) {
+        val fs = current ?: return
+        if (local.value.pidTest?.running == true) return
+        app.flowstead.core.model.Dynamics.problem(fs)?.let { _messages.trySend(it); return }
+        val controller = fs.obj(controllerId) ?: return
+        local.update { it.copy(pidTest = ToolRunUi(running = true)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val key = secrets.apiKey()
+            suspend fun run(req: app.flowstead.core.api.DynamicsRequest) = engine.dynamics(url, key, req)
+            fun trend(r: app.flowstead.core.api.DynamicsResult, k: String) = r.trends.firstOrNull { it.objectId == controllerId && it.key == k }?.values
+            val setup = app.flowstead.core.model.Dynamics.setup(fs)
+            val next: ToolRunUi<PidTestUi> = if (url.isBlank()) ToolRunUi(error = "Set the engine address in Settings") else {
+                val first = run(app.flowstead.core.model.Dynamics.request(fs).copy(duration = 2 * setup.step, events = emptyList()))
+                val op0 = (first as? EngineResult.Ok)?.value?.let { trend(it, "output")?.firstOrNull() }
+                if (op0 == null) ToolRunUi(error = (first as? EngineResult.Failed)?.reason ?: "The dynamic run gave no output for ${controller.tag}")
+                else {
+                    val stepTime = 5 * setup.step
+                    val s = if (op0 + step > 100) -kotlin.math.abs(step) else if (op0 + step < 0) kotlin.math.abs(step) else step
+                    when (val r = run(app.flowstead.core.model.PidTuning.stepTest(fs, controllerId, op0, s, stepTime, duration))) {
+                        is EngineResult.Failed -> ToolRunUi(error = "Not run: ${r.reason}")
+                        is EngineResult.Ok -> {
+                            val pv = trend(r.value, "controlledValue")
+                            val sp = trend(r.value, "target")?.firstOrNull()
+                            if (pv == null || sp == null) ToolRunUi(error = r.value.messages.firstOrNull()?.text ?: "The run gave no measurement for ${controller.tag}")
+                            else {
+                                val span = app.flowstead.core.model.PidTuning.span(fs, controller, sp)
+                                val pct = pv.map { it / span * 100 }
+                                val model = app.flowstead.core.model.PidTuning.fit(r.value.times, pct, stepTime, s)
+                                ToolRunUi(result = PidTestUi(controllerId, r.value.times, pct, stepTime, s, model,
+                                    model?.let { app.flowstead.core.model.PidTuning.settings(it) }.orEmpty()))
+                            }
+                        }
+                    }
+                }
+            }
+            local.update { it.copy(pidTest = next) }
+        }
+    }
+
+    /** Puts a rule's settings (and the action the process needs) into the controller's dynamic tuning. */
+    fun applyTuning(controllerId: String, settings: app.flowstead.core.model.PidSettings, model: app.flowstead.core.model.Fopdt) = edit { fs ->
+        listOf(
+            app.flowstead.core.model.DynamicKey.GAIN to Spec(settings.gain, ""),
+            app.flowstead.core.model.DynamicKey.INTEGRAL_TIME to Spec(settings.integralTime, "s"),
+            app.flowstead.core.model.DynamicKey.DERIVATIVE_TIME to Spec(settings.derivativeTime, "s"),
+            app.flowstead.core.model.DynamicKey.ACTION to Spec(app.flowstead.core.model.PidTuning.action(model).toDouble(), ""),
+        ).fold(fs) { acc, (k, v) -> FlowsheetEditing.setDynamicParameter(acc, controllerId, k, v) }
+    }
+
+    /** The engine's T–x–y of a pair at the column pressure, for McCabe–Thiele (D106). */
+    fun runMcCabe(first: String, second: String, pressure: Double) {
+        val fs = current ?: return
+        local.update { it.copy(mcCabe = ToolRunUi(running = true)) }
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val next = if (url.isBlank()) ToolRunUi(error = "Set the engine address in Settings")
+            else when (val r = engine.binaryDiagram(url, secrets.apiKey(), app.flowstead.core.api.BinaryDiagramRequest(fs, first, second, app.flowstead.core.api.BinaryDiagramKinds.TXY, pressure, 298.15, 60, false))) {
+                is EngineResult.Ok -> ToolRunUi(result = r.value)
+                is EngineResult.Failed -> ToolRunUi<app.flowstead.core.api.BinaryDiagramResult>(error = r.reason)
+            }
+            local.update { it.copy(mcCabe = next) }
+        }
+    }
+
+    /** The case as a Markdown report (D105). */
+    fun report(): String? {
+        val fs = current ?: return null
+        val ui = (state.value as? FlowsheetUiState.Ready)?.ui ?: return null
+        return app.flowstead.core.export.Report.markdown(ui.projectName, fs, ResultView(currentSolve, fs.modelHash()), ui.unitSet,
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ROOT).format(java.util.Date()), app.flowstead.BuildConfig.VERSION_NAME)
     }
 
     fun openCaseStudies() = local.update { it.copy(caseStudiesOpen = true, editingId = null) }

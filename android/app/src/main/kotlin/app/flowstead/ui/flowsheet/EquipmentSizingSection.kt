@@ -79,6 +79,15 @@ internal fun EquipmentSizingSection(fs: Flowsheet, obj: SimObject, results: Resu
             PlainNumber("System (foaming) factor", input.systemFactor, "${key}_sf", hint = "1.0 non-foaming") {
                 save(input.copy(systemFactor = it?.takeIf { v -> v > 0.3 && v <= 1.0 }))
             }
+            QuantityField("Weir height", input.weirHeight?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_hw", hint = "50 mm") {
+                save(input.copy(weirHeight = it?.si?.takeIf { v -> v > 0.015 && v < 0.15 }))
+            }
+            QuantityField("Hole diameter", input.holeDiameter?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_dh", hint = "5 mm") {
+                save(input.copy(holeDiameter = it?.si?.takeIf { v -> v > 0.001 && v < 0.025 }))
+            }
+            PlainNumber("Hole area, % of the active area", input.holeFraction?.let { it * 100 }, "${key}_ah", "%", hint = "10") {
+                save(input.copy(holeFraction = it?.takeIf { v -> v >= 4 && v <= 20 }?.div(100)))
+            }
         }
         obj.type == ObjectType.Tank -> {
             val time = unitSet.unitFor(Quantity.Time)

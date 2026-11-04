@@ -1,6 +1,7 @@
 {
   "name": "Conversion reactor",
   "description": "Methane burnt with 50 % excess air (PR): 10 mol/s at 25 °C, 1 atm; 90 % methane conversion, adiabatic.",
+  "category": "Reactors",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": [

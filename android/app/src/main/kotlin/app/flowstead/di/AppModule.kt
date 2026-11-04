@@ -70,6 +70,12 @@ object AppModule {
     @Singleton
     fun clock(): Clock = Clock { System.currentTimeMillis() }
 
+    /** Automatic project backups (D105), in the app's private files. */
+    @Provides
+    @Singleton
+    fun backups(@ApplicationContext context: Context): app.flowstead.data.BackupStore =
+        app.flowstead.data.FileBackupStore(java.io.File(context.filesDir, "backups"))
+
     @Provides
     @Singleton
     @Named("settings")

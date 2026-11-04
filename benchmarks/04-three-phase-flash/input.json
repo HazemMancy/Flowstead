@@ -1,6 +1,7 @@
 {
   "name": "Three-phase flash with water",
   "description": "Wet hydrocarbon feed at 40 °C, 20 bara into a 3-phase separator (PR): vapour, hydrocarbon liquid and free water.",
+  "category": "Basics",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": [

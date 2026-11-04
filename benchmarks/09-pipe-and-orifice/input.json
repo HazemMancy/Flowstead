@@ -1,6 +1,7 @@
 {
   "name": "Water line with orifice meter",
   "description": "10 kg/s water at 25 °C, 5 bara through 1 km of 100 mm ID steel pipe (ε = 0.0457 mm), then a 60 mm flange-tapped orifice plate (β = 0.6). IAPWS-IF97.",
+  "category": "Piping",
   "flowsheet": {
     "propertyPackage": "Steam Tables (IAPWS-IF97)",
     "compounds": [

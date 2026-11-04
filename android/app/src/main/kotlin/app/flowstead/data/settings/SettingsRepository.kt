@@ -32,6 +32,8 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Light,
     /** Atmospheric reference for gauge pressures in new projects, Pa (D9). */
     val defaultAtmosphericPressurePa: Double = StandardConditions.DEFAULT_PATM_PA,
+    /** The user's own named unit sets (D105), besides the presets. */
+    val savedUnitSets: List<UnitSet> = emptyList(),
 ) {
     /** What engine calls are sent to: [ON_DEVICE_ENGINE] or the remote URL; blank when none is set. */
     val engineTarget: String get() = if (engineMode == EngineMode.OnDevice) ON_DEVICE_ENGINE else engineUrl
@@ -44,6 +46,8 @@ interface SettingsRepository {
     suspend fun setUnitSet(unitSet: UnitSet)
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setDefaultAtmosphericPressure(pa: Double)
+    /** Replaces the user's named unit sets (D105). */
+    suspend fun setSavedUnitSets(sets: List<UnitSet>) = Unit
 }
 
 @Singleton
@@ -64,6 +68,8 @@ class DataStoreSettingsRepository @Inject constructor(
             themeMode = p[THEME]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.Light,
             defaultAtmosphericPressurePa = p[PATM]?.takeIf { it.isFinite() && it > 0 }
                 ?: StandardConditions.DEFAULT_PATM_PA,
+            savedUnitSets = p[SAVED_UNIT_SETS]?.let { runCatching { json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(UnitSet.serializer()), it) }.getOrNull() }
+                .orEmpty(),
         )
     }
 
@@ -83,6 +89,10 @@ class DataStoreSettingsRepository @Inject constructor(
         store.edit { it[THEME] = mode.name }
     }
 
+    override suspend fun setSavedUnitSets(sets: List<UnitSet>) {
+        store.edit { it[SAVED_UNIT_SETS] = json.encodeToString(kotlinx.serialization.builtins.ListSerializer(UnitSet.serializer()), sets) }
+    }
+
     override suspend fun setDefaultAtmosphericPressure(pa: Double) {
         require(pa.isFinite() && pa > 0) { "Atmospheric pressure must be positive" }
         store.edit { it[PATM] = pa }
@@ -94,6 +104,7 @@ class DataStoreSettingsRepository @Inject constructor(
         val UNIT_SET = stringPreferencesKey("unit_set")
         val THEME = stringPreferencesKey("theme_mode")
         val PATM = doublePreferencesKey("default_patm_pa")
+        val SAVED_UNIT_SETS = stringPreferencesKey("saved_unit_sets")
     }
 }
 

@@ -18,7 +18,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /** An example flowsheet: one of the repository's benchmark cases, solved and checked by CI on every engine change. */
-data class Example(val id: String, val name: String, val description: String)
+data class Example(val id: String, val name: String, val description: String, val category: String = "Other") {
+    /** Matches every word of [query] in the name, description or category (the sample library's search, D105). */
+    fun matches(query: String): Boolean {
+        val hay = "$name $description $category".lowercase()
+        return query.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }.all { it in hay }
+    }
+}
 
 /** A release's notes, newest first in [Help.releases]. */
 data class Release(val version: String, val notes: String)
@@ -122,7 +128,7 @@ object Help {
     val examples: List<Example> by lazy {
         index.filter { it.startsWith("examples/") }.mapNotNull { path ->
             val json = resource(path)?.let { runCatching { FlowsheetJson.parseToJsonElement(it).jsonObject }.getOrNull() } ?: return@mapNotNull null
-            Example(path.removePrefix("examples/").removeSuffix(".json"), json.text("name") ?: path, json.text("description").orEmpty())
+            Example(path.removePrefix("examples/").removeSuffix(".json"), json.text("name") ?: path, json.text("description").orEmpty(), json.text("category") ?: "Other")
         }
     }
 

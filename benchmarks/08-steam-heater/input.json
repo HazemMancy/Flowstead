@@ -1,6 +1,7 @@
 {
   "name": "Steam heater",
   "description": "Water (1 kg/s, 3 bara, 25 °C) heated to 120 °C in a counter-current exchanger by 0.2 kg/s of saturated steam at 5 bara (IAPWS-IF97).",
+  "category": "Rotating and heat transfer",
   "flowsheet": {
     "propertyPackage": "Steam Tables (IAPWS-IF97)",
     "compounds": [

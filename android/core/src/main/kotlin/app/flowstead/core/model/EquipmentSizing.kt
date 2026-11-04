@@ -110,6 +110,10 @@ data class EquipmentSizingInput(
     val downcomerFraction: Double? = null,
     val trayEfficiency: Double? = null,
     val systemFactor: Double? = null,
+    /** Column internals (D106): sieve-tray weir height (m), hole diameter (m), hole area over the active area. */
+    val weirHeight: Double? = null,
+    val holeDiameter: Double? = null,
+    val holeFraction: Double? = null,
 )
 
 /** One line of a sizing result: an SI value in [quantity], or a text. */
@@ -250,8 +254,24 @@ object EquipmentSizing {
                 val r = ColumnSizing.size(o.type, profile, ts, ff, dc, eff, input.systemFactor ?: 1.0)
                     ?: return EquipmentSizingResult(emptyList(), warnings = listOf("The solve has no stage properties for this column: solve again with this engine version."))
                 val worst = r.trays.first { it.stage == r.controllingStage }
-                EquipmentSizingResult(
+                // Internals (D106): the sieve trays rated at the rounded diameter.
+                val layout = TrayLayout(
+                    diameter = r.diameter, traySpacing = ts, downcomerFraction = dc, systemFactor = input.systemFactor ?: 1.0,
+                    weirHeight = input.weirHeight ?: 0.050, holeDiameter = input.holeDiameter ?: 0.005, holeFraction = input.holeFraction ?: 0.10,
+                )
+                val h = TrayHydraulics.rate(o.type, profile, layout)
+                val internals = h?.let { x ->
                     listOf(
+                        SizingLine("Weir length", x.weirLength, Quantity.Length),
+                        SizingLine("Highest flood at this diameter, %", x.trays.maxOf { it.percentFlood }, Quantity.Ratio),
+                        SizingLine("Largest tray pressure drop", x.trays.maxOf { it.pressureDrop }, Quantity.PressureDifference),
+                        SizingLine("Pressure drop over the trays", x.columnPressureDrop, Quantity.PressureDifference),
+                        SizingLine("Largest downcomer backup", x.trays.maxOf { it.downcomerBackup }, Quantity.Length),
+                        SizingLine("Shortest downcomer residence", x.trays.minOf { it.downcomerResidence }, Quantity.Time),
+                    )
+                }.orEmpty()
+                EquipmentSizingResult(
+                    internals.let { extra -> listOf(
                         SizingLine("Diameter required", r.requiredDiameter, Quantity.Length),
                         SizingLine("Diameter", r.diameter, Quantity.Length),
                         SizingLine("Controlling stage", r.controllingStage.toDouble(), Quantity.Count),
@@ -260,13 +280,16 @@ object EquipmentSizing {
                         SizingLine("Theoretical trays", r.trays.size.toDouble(), Quantity.Count),
                         SizingLine("Actual trays", r.actualTrays.toDouble(), Quantity.Count),
                         SizingLine("Height (tangent to tangent)", r.height, Quantity.Length),
-                    ),
+                    ) + extra },
                     notes = listOf(
                         "Fair's flooding correlation at ${"%.0f".format(ff * 100)} % of flood, ${"%.0f".format(ts * 1000)} mm tray spacing, " +
                             "${"%.0f".format(dc * 100)} % downcomer area, ${"%.0f".format(eff * 100)} % tray efficiency; " +
                             "${ColumnSizing.TOP_SPACE} m above the top tray and ${ColumnSizing.BOTTOM_SPACE} m below the bottom one.",
+                        "Internals: sieve trays at the rounded diameter, ${"%.0f".format(layout.weirHeight * 1000)} mm weir, " +
+                            "${"%.1f".format(layout.holeDiameter * 1000)} mm holes over ${"%.0f".format(layout.holeFraction * 100)} % of the active area " +
+                            "(Sinnott §11.13: Francis weir, dry plate with C0 0.84, residual head, downcomer backup).",
                     ),
-                    warnings = r.warnings,
+                    warnings = r.warnings + h?.warnings.orEmpty(),
                 )
             }
             else -> null

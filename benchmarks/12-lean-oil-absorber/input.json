@@ -1,6 +1,7 @@
 {
   "name": "Lean-oil absorber",
   "description": "100 kgmol/h natural gas at 30 °C, 40 bar meets 20 kgmol/h n-decane in a 10-tray absorber (PR).",
+  "category": "Columns",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": [

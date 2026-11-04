@@ -1,6 +1,7 @@
 {
   "name": "Gas let-down with control loops",
   "description": "Natural gas at 70 bara, 40 °C let down to 30 bara and heated to 30 °C. PIC-100 moves the valve's outlet pressure to hold the product at 30 bara; TIC-100 moves the heater's duty to hold it at 30 °C. The valve's Joule-Thomson cooling ties the loops together, so they are solved together. PR.",
+  "category": "Recycles and logic",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": ["Methane", "Ethane", "Propane"],

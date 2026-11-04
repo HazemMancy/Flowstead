@@ -34,6 +34,7 @@ Tolerances follow the brief: ±0.01 K on temperature, ±0.1 % relative elsewhere
 | 19-letdown-control-loops | PR, gas let down 70 → 30 bara and heated to 30 °C by two interacting controllers (PIC on the valve, TIC on the heater) | Both setpoints met; PIC output = its place in its range; isenthalpic valve; molar flow conserved (blocking) |
 | 20-separator-dynamics | PR, gas and condensate let down into a separator; PIC and LIC act in dynamic runs only (the example for Dynamics) | — (steady values; its dynamics are checked by DynamicsTests) |
 | 21-instrument-air-receiver | PR, dry air saturated with excess water in a mixer, into a vertical wet air receiver; carries PSV-100 (fire, blocked outlet) for Safety | Fire on the receiver sizes 1D2 as HYSYS, and water's latent heat matches IAPWS-IF97 within 10 % (`SafetyTests`, blocking) |
+| 22-compound-from-structure | PR, methylcyclohexane defined only by its SMILES (Joback groups, D104), pure at its bubble point and half vaporised with toluene | Boils at Joback's hand-calculated Tb (±1 K); the mixture boils between its components' boiling points (blocking) |
 
 To regenerate the provisional values after an intentional engine change:
 

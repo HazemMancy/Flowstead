@@ -1,6 +1,7 @@
 {
   "name": "Component splitter, air cooler, tank and Set",
   "description": "100 kgmol/h of gas condensate at 80 °C, 30 bara (PR). X-100 sends 98 % of the CO2 and 2 % of the methane overhead; AC-100 cools the rest to 45 °C (0.5 bar ΔP) into a 10 m³ tank; SET-1 holds E-101's outlet 5 °C above AC-100's.",
+  "category": "Recycles and logic",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": [

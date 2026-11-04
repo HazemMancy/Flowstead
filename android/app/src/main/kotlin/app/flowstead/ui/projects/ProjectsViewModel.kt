@@ -74,6 +74,23 @@ class ProjectsViewModel @Inject constructor(
 
     fun delete(id: String) = viewModelScope.launch { repository.delete(id) }
 
+    /** Backup recovery (D105): a project's kept copies ([projectId]), or the last copies of deleted projects (null). */
+    private val _backups = MutableStateFlow<BackupsUi?>(null)
+    val backups: StateFlow<BackupsUi?> = _backups
+
+    fun openBackups(projectId: String?) = viewModelScope.launch {
+        val list = if (projectId == null) repository.orphanBackups() else repository.backups(projectId)
+        _backups.value = BackupsUi(projectId, list)
+    }
+
+    fun closeBackups() { _backups.value = null }
+
+    fun restoreBackup(backup: app.flowstead.data.Backup) = viewModelScope.launch {
+        _backups.value = null
+        val id = repository.restoreBackup(backup)
+        if (id == null) _effects.send(ProjectsEffect.Message("That backup could not be read")) else _effects.send(ProjectsEffect.OpenProject(id))
+    }
+
     /** Imports a DWSIM file as a new project. The engine reads the file; the phone keeps the result. */
     fun import(uri: Uri) {
         if (importing.value) return
@@ -115,3 +132,6 @@ class ProjectsViewModel @Inject constructor(
             fileName.substringBeforeLast('.').takeIf { it.isNotBlank() && fileName.contains('.') } ?: fileName
     }
 }
+
+/** The backups listed: of one project, or ([projectId] null) of deleted ones. */
+data class BackupsUi(val projectId: String?, val backups: List<app.flowstead.data.Backup>)

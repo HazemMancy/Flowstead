@@ -1,6 +1,7 @@
 {
   "name": "Gas and two-phase lines",
   "description": "PR. Lean gas, 1000 kgmol/h at 40 °C / 70 bara, through 5 km of 8\" Sch 40; C1/C2/C3 two-phase at −40 °C / 30 bara, 100 kgmol/h, through 500 m of 3\" Sch 40 rising 10 m (Beggs & Brill). Velocities, ρv² and pressure gradients.",
+  "category": "Piping",
   "flowsheet": {
     "schemaVersion": 1,
     "propertyPackage": "Peng-Robinson (PR)",

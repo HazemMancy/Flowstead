@@ -1,6 +1,7 @@
 {
   "name": "Two-phase flash",
   "description": "C1/C2/C3 80/15/5 mol % at −40 °C and 30 bara, PR: vapour plus a hydrocarbon liquid (the engine spike case).",
+  "category": "Basics",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": ["Methane", "Ethane", "Propane"],

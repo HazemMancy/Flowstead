@@ -120,6 +120,10 @@ fun ProjectsScreen(
         onOpenSettings = onOpenSettings,
         onOpenAbout = onOpenAbout,
         onOpenHelp = onOpenHelp,
+        backups = viewModel.backups.collectAsStateWithLifecycle().value,
+        onBackups = viewModel::openBackups,
+        onRestoreBackup = viewModel::restoreBackup,
+        onCloseBackups = viewModel::closeBackups,
     )
 }
 
@@ -145,6 +149,10 @@ fun ProjectsContent(
     onOpenSettings: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
     onOpenHelp: () -> Unit = {},
+    backups: BackupsUi? = null,
+    onBackups: (String?) -> Unit = {},
+    onRestoreBackup: (app.flowstead.data.Backup) -> Unit = {},
+    onCloseBackups: () -> Unit = {},
 ) {
     var dialog by remember { mutableStateOf<ProjectDialog?>(null) }
 
@@ -199,7 +207,11 @@ fun ProjectsContent(
                         onRename = { dialog = ProjectDialog.Rename(p) },
                         onDuplicate = { onDuplicate(p.id) },
                         onDelete = { dialog = ProjectDialog.Delete(p) },
+                        onBackups = { onBackups(p.id) },
                     )
+                }
+                item {
+                    TextButton(onClick = { onBackups(null) }, modifier = Modifier.heightIn(min = 48.dp).testTag("recover_deleted")) { Text("Recover a deleted project") }
                 }
             }
         }
@@ -223,7 +235,7 @@ fun ProjectsContent(
         is ProjectDialog.Delete -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text("Delete “${d.project.name}”?") },
-            text = { Text("The flowsheet and its results are removed from this phone. This can’t be undone.") },
+            text = { Text("The flowsheet and its results are removed. Its last state is kept as a backup: “Recover a deleted project” brings it back.") },
             confirmButton = {
                 TextButton(onClick = { onDelete(d.project.id); dialog = null }, modifier = Modifier.testTag("confirm_delete")) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -232,6 +244,28 @@ fun ProjectsContent(
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
         null -> Unit
+    }
+
+    backups?.let { b ->
+        AlertDialog(
+            onDismissRequest = onCloseBackups,
+            title = { Text(if (b.projectId == null) "Deleted projects" else "Backups") },
+            text = {
+                if (b.backups.isEmpty()) Text(if (b.projectId == null) "No deleted project has a backup." else "No backup yet: one is kept every 10 minutes of editing.")
+                else LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag("backup_list")) {
+                    items(b.backups) { k ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(k.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(DateUtils.getRelativeTimeSpanString(k.savedAt).toString(), style = NumberStyles.tag, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = { onRestoreBackup(k) }) { Text("Open as a copy") }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = onCloseBackups) { Text("Close") } },
+        )
     }
 
     importReport?.let { r ->
@@ -280,6 +314,7 @@ private fun ProjectCard(
     onRename: () -> Unit,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
+    onBackups: () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
     val edited = DateUtils.getRelativeTimeSpanString(project.updatedAt).toString()
@@ -316,6 +351,7 @@ private fun ProjectCard(
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
                     DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; onDuplicate() })
+                    DropdownMenuItem(text = { Text("Backups") }, onClick = { menu = false; onBackups() }, modifier = Modifier.testTag("menu_backups"))
                     DropdownMenuItem(
                         text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                         onClick = { menu = false; onDelete() },

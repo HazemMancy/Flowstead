@@ -1,6 +1,7 @@
 {
   "name": "Instrument air: saturator and wet air receiver with its PSV",
   "description": "Dry compressed air (500 Nm³/h at 40 °C, 9 barg) is saturated with water in MX-100, more than it can hold, and settles in the wet air receiver V-100 (1.29 m × 1.84 m T/T, vertical, 0.3 m of condensate). Wet air leaves at the top (3) and condensate at the bottom (4). Open Safety: PSV-100, set at 10 barg, covers fire and a blocked outlet. The fire boils the receiver's water (API 521 wetted fire) and needs a 1D2 valve, as HYSYS gives. The blocked outlet relieves the whole feed, about 650 kg/h of wet air, and governs with a 1E2 valve. PR.",
+  "category": "Safety",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": ["Nitrogen", "Oxygen", "Argon", "Water"],

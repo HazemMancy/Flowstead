@@ -83,6 +83,7 @@ class FakeSettingsRepository(initial: AppSettings = AppSettings(engineMode = Eng
     override suspend fun setUnitSet(unitSet: UnitSet) = state.update { it.copy(unitSet = unitSet) }
     override suspend fun setThemeMode(mode: ThemeMode) = state.update { it.copy(themeMode = mode) }
     override suspend fun setDefaultAtmosphericPressure(pa: Double) = state.update { it.copy(defaultAtmosphericPressurePa = pa) }
+    override suspend fun setSavedUnitSets(sets: List<UnitSet>) = state.update { it.copy(savedUnitSets = sets) }
 }
 
 class FakeSecretStore : SecretStore {

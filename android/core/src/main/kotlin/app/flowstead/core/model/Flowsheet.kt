@@ -81,6 +81,16 @@ data class Flowsheet(
     val safety: SafetyStudy? = null,
     /** The dynamic run's setup (D86); not part of the model hash. */
     val dynamics: DynamicsSetup? = null,
+    /** Flowsheet tools (D105), none part of the model hash: the spreadsheet, the watch panel and saved scenarios. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val spreadsheet: Spreadsheet? = null,
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val watch: List<WatchItem> = emptyList(),
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val scenarios: List<Scenario> = emptyList(),
 ) {
     fun reaction(id: String): Reaction? = reactions.firstOrNull { it.id == id }
     fun hypothetical(name: String): Hypothetical? = hypotheticals.firstOrNull { it.name == name }

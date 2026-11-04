@@ -241,8 +241,14 @@ private fun bold(s: String): AnnotatedString = buildAnnotatedString {
     s.split("**").forEachIndexed { i, part -> if (i % 2 == 1) withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(part) } else append(part) }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun Examples(onOpen: (String) -> Unit) {
+    // The sample library (D105): search and filter by subject.
+    var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    var category by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val categories = Help.examples.map { it.category }.distinct()
+    val shown = Help.examples.filter { (category == null || it.category == category) && it.matches(query) }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Text(
@@ -250,7 +256,20 @@ private fun Examples(onOpen: (String) -> Unit) {
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp),
             )
         }
-        items(Help.examples, key = { it.id }) { e -> Row1(e.name, e.description) { onOpen(e.id) } }
+        item {
+            androidx.compose.material3.OutlinedTextField(
+                query, { query = it }, label = { Text("Search the examples") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("examples_search"),
+            )
+        }
+        item {
+            androidx.compose.foundation.layout.FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.FilterChip(selected = category == null, onClick = { category = null }, label = { Text("All") })
+                categories.forEach { c -> androidx.compose.material3.FilterChip(selected = category == c, onClick = { category = if (category == c) null else c }, label = { Text(c) }) }
+            }
+        }
+        if (shown.isEmpty()) item { Text("No example matches.", modifier = Modifier.padding(16.dp)) }
+        items(shown, key = { it.id }) { e -> Row1(e.name, e.description) { onOpen(e.id) } }
     }
 }
 

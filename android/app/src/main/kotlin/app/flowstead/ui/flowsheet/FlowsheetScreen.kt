@@ -159,6 +159,12 @@ fun FlowsheetScreen(
                                 modifier = Modifier.testTag("menu_safety"),
                             )
                             DropdownMenuItem(
+                                text = { Text("Tools: check, spreadsheet, optimiser, scenarios, PID, report") },
+                                enabled = ready != null,
+                                onClick = { menu = false; viewModel.openTools() },
+                                modifier = Modifier.testTag("menu_tools"),
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Case studies") },
                                 enabled = ready != null,
                                 onClick = { menu = false; viewModel.openCaseStudies() },
@@ -323,6 +329,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 )
             }
             ghost?.let { (type, root) -> PaletteGhost(type, root, canvasRect.topLeft, viewport.zoom) }
+            WatchPanel(ui, Modifier.align(Alignment.TopEnd).padding(8.dp))
         }
 
         SolveBar(ui, onSolve = vm::solve, onSolverActive = vm::setSolverActive, onCancelQueued = vm::cancelQueuedSolve, onIssues = { showIssues = true }, onResults = onOpenResults, onLog = onOpenLog)
@@ -365,6 +372,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             )
         }
     }
+    if (ui.toolsOpen) ToolsSheet(ui, vm)
     if (ui.caseStudiesOpen) {
         CaseStudySheet(
             fs = ui.flowsheet,

@@ -1,0 +1,31 @@
+{
+  "name": "A compound from its structure: methylcyclohexane by Joback",
+  "description": "Methylcyclohexane defined only by its SMILES (CC1CCCCC1): Flowstead splits it into Joback groups (one -CH3, five ring -CH2-, one ring >CH-) and the engine estimates its boiling point, critical constants and ideal-gas heat capacity. Stream 1 is the pure compound at its bubble point at 1 atm (Joback's Tb, 379.3 K; the measured one is 374.1 K); stream 2 is an equimolar mixture with toluene half vaporised at 1 atm, between the two boiling points. Open Fluid package → Compound and data tools to build your own. PR.",
+  "category": "Fluids and properties",
+  "flowsheet": {
+    "propertyPackage": "Peng-Robinson (PR)",
+    "compounds": ["MCH (by structure)", "Toluene"],
+    "hypotheticals": [ { "name": "MCH (by structure)", "smiles": "CC1CCCCC1" } ],
+    "objects": [
+      {
+        "id": "pure", "tag": "1", "type": "material_stream",
+        "specs": {
+          "pressure": { "si": 101325.0, "unit": "kPa" },
+          "vapourFraction": { "si": 0.0, "unit": "" },
+          "molarFlow": { "si": 1.0, "unit": "kgmol/h" }
+        },
+        "composition": { "MCH (by structure)": 1.0 }
+      },
+      {
+        "id": "mix", "tag": "2", "type": "material_stream",
+        "specs": {
+          "pressure": { "si": 101325.0, "unit": "kPa" },
+          "vapourFraction": { "si": 0.5, "unit": "" },
+          "molarFlow": { "si": 1.0, "unit": "kgmol/h" }
+        },
+        "composition": { "MCH (by structure)": 0.5, "Toluene": 0.5 }
+      }
+    ],
+    "connections": []
+  }
+}

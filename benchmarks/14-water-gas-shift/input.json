@@ -1,6 +1,7 @@
 {
   "name": "Water gas shift",
   "description": "Water-gas shift at 400 °C, 20 bar (PR): CO/H2O/CO2/H2 = 0.25/0.5/0.05/0.2, 10 mol/s. ERV-100 (equilibrium, K from Gibbs energies of formation) and GBR-100 (Gibbs minimisation) side by side, both isothermal.",
+  "category": "Reactors",
   "flowsheet": {
     "propertyPackage": "Peng-Robinson (PR)",
     "compounds": [

@@ -151,6 +151,21 @@ class SettingsViewModel @Inject constructor(
 
     fun selectPreset(preset: UnitSet) = viewModelScope.launch { settingsRepository.setUnitSet(preset) }
 
+    /** Keeps the current units as a named set of the user's own (D105); the same name replaces it. */
+    fun saveUnitSetAs(name: String) = viewModelScope.launch {
+        val n = name.trim()
+        if (n.isEmpty() || n == UnitSet.CUSTOM || UnitSet.PRESETS.any { it.name.equals(n, ignoreCase = true) }) return@launch
+        val s = settingsRepository.settings.first()
+        val named = s.unitSet.copy(name = n)
+        settingsRepository.setSavedUnitSets(s.savedUnitSets.filterNot { it.name == n } + named)
+        settingsRepository.setUnitSet(named)
+    }
+
+    fun deleteUnitSet(name: String) = viewModelScope.launch {
+        val s = settingsRepository.settings.first()
+        settingsRepository.setSavedUnitSets(s.savedUnitSets.filterNot { it.name == name })
+    }
+
     fun setUnit(quantity: Quantity, unit: EngUnit) = viewModelScope.launch {
         val current = settingsRepository.settings.first().unitSet
         settingsRepository.setUnitSet(current.with(quantity, unit))
