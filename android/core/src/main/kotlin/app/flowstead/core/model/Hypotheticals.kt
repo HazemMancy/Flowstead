@@ -34,6 +34,7 @@ data class Hypothetical(
     fun problem(): String? {
         if (name.isBlank()) return "Give the hypothetical a name"
         if (byStructure) {
+            if (molecularWeight != null || specificGravity != null) return "The structure fixes the molecular weight and density: leave them empty"
             jobackGroups?.let { g -> if (g.values.any { it < 0 } || g.keys.any { it !in 1..41 }) return "Joback groups are numbered 1 to 41, with counts of zero or more" }
         } else if (normalBoilingPoint == null && molecularWeight == null) return "Give the normal boiling point or the molecular weight"
         fun out(v: Double?, lo: Double, hi: Double) = v != null && !(v >= lo && v <= hi)

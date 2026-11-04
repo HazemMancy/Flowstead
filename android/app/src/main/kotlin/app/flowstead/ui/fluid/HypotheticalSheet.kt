@@ -81,7 +81,8 @@ fun HypotheticalSheet(
     var tc by remember { mutableStateOf(spec(initial?.criticalTemperature, unitSet.unitFor(Quantity.Temperature).id)) }
     var pc by remember { mutableStateOf(spec(initial?.criticalPressure, pressureUnit.id)) }
     var w by remember { mutableStateOf(spec(initial?.acentricFactor, Units.ratio.id)) }
-    fun current() = Hypothetical(name.trim(), nbp?.si, mw?.si, sg?.si, tc?.si, pc?.si, w?.si)
+    // A compound defined by structure (D104) keeps its SMILES or groups; what is typed here replaces Joback's estimates.
+    fun current() = Hypothetical(name.trim(), nbp?.si, mw?.si, sg?.si, tc?.si, pc?.si, w?.si, smiles = initial?.smiles, jobackGroups = initial?.jobackGroups)
     val problem = current().problem()
 
     // A button tap doesn't take focus from the field being typed in, so commit that field first.
@@ -97,6 +98,11 @@ fun HypotheticalSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(if (initial == null) "New hypothetical" else "Hypothetical ${initial.name}", style = MaterialTheme.typography.titleLarge)
+            if (initial?.byStructure == true) Text(
+                "Defined by its structure" + (initial.smiles?.let { " ($it)" } ?: " (Joback groups)") +
+                    ": the engine estimates everything by Joback; a boiling point or critical constant typed here replaces the estimate. Molecular weight and SG come from the structure.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 "A pseudo-component for a petroleum cut or an unknown compound. Give the normal boiling point or the " +
                     "molecular weight (both is better) and the specific gravity if you have it; DWSIM's petroleum " +

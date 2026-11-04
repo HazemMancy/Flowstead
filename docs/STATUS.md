@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-11-03_
+_Last updated: 2026-11-04_
 
 ## Works
 
@@ -164,6 +164,7 @@ _Last updated: 2026-11-03_
 - **Thermodynamics tools (D100):** Fluid package → Thermodynamics tools: binary T–x–y / P–x–y with the liquid–liquid region, ternary diagrams (grid of DWSIM three-phase flashes, tie lines), true critical point (Heidemann–Khalil), up to eight packages compared on one composition, property charts along T or P.
 - **3.1.1 (D102):** fire relief on a saturated gas with a liquid level (a wet air receiver) boils its condensate (wetted fire, 1D2 as HYSYS); the fire latent heat is taken from 5 % to 10 % vaporised, so dissolved gases no longer inflate it (14.6 → 2.04 MJ/kg for wet air at 13 bar); a vertical vessel's exposed area includes the top head.
 - **3.1.2 (D103):** example 21, instrument air: a saturator into the wet air receiver, with PSV-100 (fire 1D2 as HYSYS, blocked outlet) ready in Safety; a two-phase separator that condenses free water sends both liquids out of its liquid outlet (DWSIM vessel patch) instead of failing.
+- **3.2.0 (D104–D106):** compounds from structure (SMILES or Joback groups, DWSIM's Joback) and PubChem look-up; VLE regression of kij or NRTL/UNIQUAC parameters; catalytic (Langmuir–Hinshelwood) reactions in the PFR and CSTR; DWSIM's reaction finder; flowsheet tools (check, watch panel, spreadsheet, scenarios, optimiser, PID tuning from a step test, Markdown report); McCabe–Thiele; sieve-tray internals in the column sizing; named unit sets; searchable sample library (example 22); automatic project backups and recovery.
 - **D87:** a direct Install button (with the install permission) was tested as a pre-release and blocked by Play Protect, as in D74; releases keep Open Downloads.
 
 - **On-device engine:** since 3.0 DWSIM 10.2.12 (Mono 10.0.13, SkiaSharp 2.88.9): all 20 benchmarks on the CI emulator, debug and minified release builds. First verified with DWSIM 9.0.5: all 15 benchmarks converge and meet their reference values on the phone engine (DWSIM 9.0.5 under embedded Mono), from about 25 ms for a flash to about 3 s for the water-gas-shift Gibbs reactor. Earlier runs had crashed with a stack overflow (fixed: own 64 MB-stack thread) and then from loading the ARM64 base class library on the x86_64 emulator (fixed: the ABI follows the device's preference order).
@@ -183,6 +184,8 @@ _Last updated: 2026-11-03_
   - the support e-mail and a privacy-policy URL for the listing.
 
 ## Known limitations
+- Tray internals rate sieve trays only (no weeping or entrainment check, no packed columns): their correlations need curve fits not yet checked against a published worked example (D106).
+- DWSIM's reaction-finder rates are literature values as DWSIM tabulates them; its water–gas shift rate is inconsistent with Moe's equilibrium (D106).
 
 - Benchmarks 01 and 03 have only engine-provisional expected values (D6). They need desktop-DWSIM `.dwxmz` files and HYSYS numbers.
 - DWSIM file import leaves out objects Flowstead doesn't have (DWSIM's Tank, custom or CAPE-OPEN units, Plus units) with a warning, and a pipe's fixed-ΔP fitting. A DWSIM PID controller imports without its tuning (D98).

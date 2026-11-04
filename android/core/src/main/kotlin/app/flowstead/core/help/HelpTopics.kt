@@ -147,6 +147,35 @@ internal object HelpTopics {
             methods = listOf("D100"),
         ),
         HelpTopic(
+            "data-tools", THERMO, "Compounds from structure, PubChem and VLE regression",
+            """
+            **Fluid package → Compound and data tools**:
+            - **Compound from structure**: a SMILES string (CCCCCC, Cc1ccccc1, CCO…) or Joback group counts. Flowstead splits the structure into Joback's 41 groups and the engine estimates, with DWSIM's Joback method, the normal boiling point, critical temperature, pressure and volume, ideal-gas heat capacity and formation enthalpy and Gibbs energy; ω follows by Lee–Kesler, vapour pressure by Lee–Kesler and liquid density by Rackett. A known boiling point replaces Joback's, which is usually within a few per cent.
+            - **PubChem**: a name or CAS number is looked up on NCBI's PubChem (needs the internet) for the structure only; every property is still the engine's estimate.
+            - **VLE regression**: measured bubble points (x, optionally y, and T at a pressure or P at a temperature) fit the pair's kij (PR, SRK, PR/LK) or NRTL or UNIQUAC A12 and A21. The fit uses DWSIM's own bubble-point flashes; the deviations before and after are shown, and the parameters can be put in the fluid.
+            - **Reaction finder**: DWSIM's reaction finder suggests combustion, kinetic and catalytic reactions from its literature tables, with their Gibbs-energy equilibria. Its rates are as published: check them, and their equilibrium, before design use.
+            """.trimIndent(),
+            keywords = listOf("SMILES", "Joback", "structure", "PubChem", "CAS", "regression", "VLE", "NRTL", "UNIQUAC", "kij fit", "reaction finder"),
+            methods = listOf("D104", "D106"),
+        ),
+        HelpTopic(
+            "flowsheet-tools", ANALYSIS, "Flowsheet tools",
+            """
+            **⋮ → Tools**:
+            - **Check**: every problem in one list — what stops a solve, the engine's errors and warnings, streams that go nowhere, duplicate tags, unused reactions and components. Tap one to open the object.
+            - **Watch**: results kept on the canvas, updated after each solve.
+            - **Spreadsheet**: cells with numbers, text or formulas (=A1*2, =sum(A1:A5), sqrt, exp, ln, min, max…); =[K-100.power] imports a solved result in its display unit; a cell can be exported to a specification and applied.
+            - **Scenarios**: save the case with its key results, change it, save again, compare side by side, and restore one.
+            - **Optimiser**: moves up to six specifications within bounds to minimise or maximise a result or the sum of several, keeping other results within limits (bounded Nelder–Mead on full solves).
+            - **PID tuning**: an open-loop step test in the dynamic run, a first-order-plus-dead-time fit (Smith's two-point method) and SIMC, IMC, Ziegler–Nichols and Cohen–Coon settings, ready to use.
+            - **McCabe–Thiele**: a binary column stage by stage on the engine's T–x–y at the column pressure, with minimum stages and minimum reflux.
+            - **Report**: the case as Markdown to share.
+            **Settings → Units**: save your own unit sets by name. **Help → Examples**: search and filter the samples. **Projects → ⋮ → Backups**: a copy is kept every 10 minutes of editing; deleted projects can be recovered.
+            """.trimIndent(),
+            keywords = listOf("spreadsheet", "optimiser", "optimizer", "scenario", "watch", "PID", "tuning", "Ziegler", "report", "check", "unit set", "backup", "recover", "McCabe"),
+            methods = listOf("D105", "D106"),
+        ),
+        HelpTopic(
             "envelope", THERMO, "Phase envelope, quality lines and hydrates",
             """
             From any stream: the bubble and dew curves of its composition, the critical point, cricondenbar and cricondentherm, lines of constant vapour fraction, and the hydrate formation curve (van der Waals–Platteeuw) with or without an inhibitor (methanol, MEG, DEG or TEG) in the free water.

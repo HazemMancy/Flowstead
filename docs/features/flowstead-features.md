@@ -20,6 +20,8 @@ DWSIM desktop has some of these as separate tools; Flowstead builds them into th
 - **Tighter convergence.** Recycles converge to 1e-6 kg/s and 0.001 K (DWSIM's defaults: 0.01 kg/s and 0.1 K), with an overall mass-balance check on every solve.
 - **Line sizing.** Pipe sizes and schedules from ASME B36.10M / B36.19M, sizing criteria by service (velocity, ρv², API RP 14E erosional velocity, Mach) checked on every line.
 - **Project documents.** Equipment data sheets, the PFD on A3, and the heat and material balance, as PDF or Excel, with your title block.
+- **Compounds from structure and data fitting.** A component from its SMILES (or Joback groups, or a name looked up on PubChem) estimated by DWSIM's Joback method; kij or NRTL/UNIQUAC parameters fitted to measured VLE; DWSIM's reaction finder; catalytic (Langmuir–Hinshelwood) reactions.
+- **Flowsheet tools.** A flowsheet check, a watch panel, a spreadsheet on solved results, scenarios compared side by side, an optimiser over full solves, PID tuning from a step test in the dynamic run, McCabe–Thiele on the engine's equilibrium, sieve-tray internals, a Markdown report, named unit sets, a searchable sample library and automatic project backups.
 
 ## Works like HYSYS
 

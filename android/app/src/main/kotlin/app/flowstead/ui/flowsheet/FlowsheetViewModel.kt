@@ -653,6 +653,16 @@ class FlowsheetViewModel @Inject constructor(
         if (local.value.pidTest?.running == true) return
         app.flowstead.core.model.Dynamics.problem(fs)?.let { _messages.trySend(it); return }
         val controller = fs.obj(controllerId) ?: return
+        // The gain is in % of the measurement span the engine uses: for a level that is the vessel's height, so it
+        // must be known here too (or the controller's range), not guessed.
+        val params = app.flowstead.core.model.Dynamics.setup(fs).parameters
+        val ranged = params[controllerId]?.let { it[app.flowstead.core.model.DynamicKey.PV_MINIMUM] != null && it[app.flowstead.core.model.DynamicKey.PV_MAXIMUM] != null } == true
+        if (controller.refs[app.flowstead.core.model.AdjustKeys.CONTROLLED_PROPERTY] == "liquidLevel" && !ranged &&
+            params[controller.refs[app.flowstead.core.model.AdjustKeys.CONTROLLED_OBJECT]]?.get(app.flowstead.core.model.DynamicKey.HEIGHT) == null
+        ) {
+            _messages.trySend("Give the vessel's height (or ${controller.tag}'s measurement range) in Dynamics first: the tuning is in % of that span")
+            return
+        }
         local.update { it.copy(pidTest = ToolRunUi(running = true)) }
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget

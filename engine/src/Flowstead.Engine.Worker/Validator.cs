@@ -80,6 +80,8 @@ public static class Validator
             if (!fs.Compounds.Contains(n)) err($"Hypothetical '{n}' is not in the component list.");
             if (StructureCompounds.IsStructure(h))
             {
+                if (h.MolecularWeight is not null || h.SpecificGravity is not null)
+                    err($"Hypothetical '{n}': its structure fixes the molecular weight and density; leave the molecular weight and SG empty.");
                 try { StructureCompounds.Groups(h, []); }
                 catch (InvalidDataException e) { err($"Hypothetical '{n}': {e.Message}."); }
                 catch (Exception e) when (e is ArgumentException or FormatException or IndexOutOfRangeException) { err($"Hypothetical '{n}': the structure could not be read ({e.Message})."); }

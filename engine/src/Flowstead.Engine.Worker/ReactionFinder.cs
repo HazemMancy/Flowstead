@@ -38,6 +38,11 @@ public sealed partial class DwsimEngine
             if (s.Reaction is not { } r) continue;
             var converted = ToFlowstead(r, $"rf{++n}", out var note);
             if (converted is null) { if (note is not null) warnings.Add($"{s.DisplayName}: {note}"); continue; }
+            // Rates come from DWSIM's literature tables as published; they are not checked against the Gibbs-energy
+            // equilibrium (its water-gas shift's reverse term implies K ≈ 27.6 at 400 °C where Moe's correlation gives
+            // 11.8), so each rate suggestion says so.
+            if (converted.Type is ReactionType.Kinetic or ReactionType.Catalytic)
+                note = (note is null ? "" : note + "; ") + "a literature rate from DWSIM's tables: check it, and its equilibrium, against your data before design use";
             list.Add(new SuggestedReactionInfo(s.Category.ToString().ToLowerInvariant(), s.DisplayName, s.Equation ?? r.Equation ?? "", converted, note));
         }
         if (list.Count == 0) warnings.Add("DWSIM's reaction finder knows no reactions among these compounds.");

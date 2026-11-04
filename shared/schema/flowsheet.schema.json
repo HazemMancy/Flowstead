@@ -276,7 +276,9 @@
         "specificGravity": { "type": "number" },
         "criticalTemperature": { "type": "number" },
         "criticalPressure": { "type": "number" },
-        "acentricFactor": { "type": "number" }
+        "acentricFactor": { "type": "number" },
+        "smiles": { "type": "string", "description": "Defined by structure (D104): SMILES; Joback estimates the constants" },
+        "jobackGroups": { "type": "object", "description": "Defined by structure (D104): Joback group number (1–41) → count", "additionalProperties": { "type": "integer", "minimum": 0 } }
       }
     },
     "Reaction": {
@@ -299,7 +301,8 @@
           "enum": [
             "conversion",
             "equilibrium",
-            "kinetic"
+            "kinetic",
+            "catalytic"
           ]
         },
         "stoichiometry": {
