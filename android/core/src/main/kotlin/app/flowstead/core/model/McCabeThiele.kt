@@ -23,6 +23,8 @@ data class McCabeResult(
     /** From the pinch where the q-line meets the equilibrium curve. */
     val minimumReflux: Double?,
     val warnings: List<String>,
+    /** Where the rectifying line, the stripping line and the q-line meet (x, y); null below the minimum reflux. */
+    val intersection: Pair<Double, Double>? = null,
 )
 
 /**
@@ -99,7 +101,7 @@ object McCabeThiele {
         }
         if (stages.size >= 300) warnings += "More than 300 stages: the reflux is too close to the minimum."
         if (feed == 0) feed = stages.size
-        return McCabeResult(curve, stages, count, feed, minimumStages(curve, xD, xB), minimumReflux(curve, xD, zF, q), warnings)
+        return McCabeResult(curve, stages, count, feed, minimumStages(curve, xD, xB), minimumReflux(curve, xD, zF, q), warnings, xi to yi)
     }
 
     /**
@@ -142,7 +144,7 @@ object McCabeThiele {
         return (xD - yp) / (yp - xp)
     }
 
-    /** The diagram: equilibrium curve, the diagonal, both operating lines and the stage steps. */
+    /** The diagram: equilibrium curve, the diagonal, both operating lines (meeting on the q-line) and the stage steps. */
     fun plot(r: McCabeResult, xD: Double, xB: Double, reflux: Double, lightKey: String): Plot {
         // The staircase: across to each stage on the curve, then down to the next stage's vapour (the last to y = x).
         val steps = buildList {
@@ -150,11 +152,13 @@ object McCabeThiele {
             r.stages.forEachIndexed { i, st -> add(st.x to st.y); add(st.x to (r.stages.getOrNull(i + 1)?.y ?: st.x)) }
         }
         val icpt = xD / (reflux + 1)
-        val feed = r.stages.getOrNull(r.feedStage - 1)
+        // Both operating lines meet where the q-line crosses them.
+        val (xi, yi) = r.intersection ?: (xB to reflux / (reflux + 1) * xB + icpt)
         val series = listOfNotNull(
             PlotSeries("Equilibrium", r.equilibrium.map { it.first }, r.equilibrium.map { it.second }),
             PlotSeries("y = x", listOf(0.0, 1.0), listOf(0.0, 1.0), dashed = true),
-            PlotSeries("Rectifying line", listOf(feed?.x ?: xB, xD), listOf(reflux / (reflux + 1) * (feed?.x ?: xB) + icpt, xD), dashed = true),
+            PlotSeries("Rectifying line", listOf(xi, xD), listOf(yi, xD), dashed = true),
+            r.intersection?.let { PlotSeries("Stripping line", listOf(xB, xi), listOf(xB, yi), dashed = true) },
             PlotSeries("Stages", steps.map { it.first }, steps.map { it.second }),
         )
         return Plot("McCabe–Thiele, $lightKey", "x, liquid mole fraction of $lightKey", app.flowstead.core.units.Quantity.Fraction,

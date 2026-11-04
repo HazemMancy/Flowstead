@@ -115,6 +115,23 @@ class McCabeThieleTest {
         // Below the minimum reflux there is no column.
         assertTrue(McCabeThiele.solve(curve, 0.95, 0.05, 0.5, 1.0, 1.0)!!.stages.isEmpty())
     }
+
+    @Test
+    fun operatingLinesMeetOnTheQLine() {
+        // By hand, R = 3, xD = 0.95, zF = 0.5. A saturated liquid (q = 1): x = zF, y = (3·0.5 + 0.95)/4 = 0.6125.
+        val liquid = assertNotNull(McCabeThiele.solve(curve, 0.95, 0.05, 0.5, 1.0, 3.0)).intersection!!
+        assertEquals(0.5, liquid.first, 1e-12)
+        assertEquals(0.6125, liquid.second, 1e-12)
+        // A saturated vapour (q = 0): y = zF = 0.5, x = (0.5 − 0.95/4)/(3/4) = 0.35.
+        val vapour = assertNotNull(McCabeThiele.solve(curve, 0.95, 0.05, 0.5, 0.0, 3.0)).intersection!!
+        assertEquals(0.35, vapour.first, 1e-12)
+        assertEquals(0.5, vapour.second, 1e-12)
+        // The diagram draws the stripping line from the bottoms to that point.
+        val plot = McCabeThiele.plot(McCabeThiele.solve(curve, 0.95, 0.05, 0.5, 0.0, 3.0)!!, 0.95, 0.05, 3.0, "A")
+        val strip = plot.series.first { it.label == "Stripping line" }
+        assertEquals(listOf(0.05, 0.35), strip.x)
+        assertEquals(0.5, strip.y.last(), 1e-12)
+    }
 }
 
 class TrayHydraulicsTest {
