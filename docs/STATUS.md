@@ -176,6 +176,7 @@ _Last updated: 2026-11-05_
   - Hot water no longer goes through DWSIM's free-water flash.
   - A missing IPOPT can no longer crash the engine.
 - **3.2.1 overlapping text (D107):** phase-envelope point labels placed so they never overlap, the plot legend wraps, number-field labels stay on one line, and the PSV line's length and fittings fields each have their own row.
+- **Flowstead in the browser (D108):** the engine as WebAssembly in a Web Worker, published to https://hazemmancy.github.io/Flowstead/ by `web.yml`. Stream workbench (flash, phase properties, phase envelope). All 22 benchmarks pass in headless Chromium through the site itself; engine suite 260/260 with the browser patch. Safari/iPhone not yet tested.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).
