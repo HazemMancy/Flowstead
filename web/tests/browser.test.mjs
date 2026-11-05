@@ -98,6 +98,8 @@ try {
   for (const width of [360, 1280]) {
     const p = await browser.newPage({ viewport: { width, height: 900 } });
     const errs = [];
+    const hosts = new Set();
+    p.on('request', (r) => hosts.add(new URL(r.url()).host));
     p.on('pageerror', (e) => errs.push(e.message));
     await p.goto(base);
     await p.waitForFunction(() => window.flowsteadReady, null, { timeout: 600_000 });
@@ -112,6 +114,8 @@ try {
     if (Math.abs(vf - vf03) > 5e-5) problems.push(`vapour fraction shown ${vf}, benchmark 03 expects ${vf03}`);
     if (overflow > 0) problems.push(`page scrolls sideways by ${overflow} px`);
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    // The page promises that what the user enters never leaves the device: it may only fetch its own files.
+    if (hosts.size !== 1 || ![...hosts][0].startsWith('127.0.0.1')) problems.push(`requests to other hosts: ${[...hosts].join(', ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} workbench at ${width} px (vapour fraction ${vf})`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;

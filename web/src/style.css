@@ -1,3 +1,5 @@
+/* Inter (variable, latin subset), self-hosted so the page makes no request to a third party. SIL OFL 1.1: fonts/Inter-OFL-LICENSE.txt */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/inter-latin-wght-normal.woff2) format('woff2-variations'),url(fonts/inter-latin-wght-normal.woff2) format('woff2')}
 /* Flowstead web (D108): the portfolio's look (hazemmancy.github.io), so the two read as one site.
    SPDX-License-Identifier: GPL-3.0-or-later */
 :root{--radius:.5rem;--font:'Inter',system-ui,-apple-system,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;--nav-h:3.5rem}
