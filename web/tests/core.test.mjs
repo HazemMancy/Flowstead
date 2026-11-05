@@ -44,9 +44,33 @@ test('every benchmark passes the app\'s checks in the browser', () => {
 
 test('results workbook: a valid .xlsx (zip) from a stored solve', () => {
   const result = fs.readFileSync(new URL('../../shared/fixtures/solve-result-06.json', import.meta.url), 'utf8');
-  const bytes = core.resultsXlsx('Compressor', bench('06-compressor-aftercooler'), result, 1760000000000);
+  const fsj = bench('06-compressor-aftercooler');
+  const hash = core.modelHash(fsj);
+  const bytes = core.resultsXlsx('Compressor', fsj, result, hash, 1760000000000);
   assert.equal(String.fromCharCode(bytes[0] & 0xff, bytes[1] & 0xff), 'PK');
   assert.ok(bytes.length > 2000);
-  assert.match(core.resultsCsv('Compressor', bench('06-compressor-aftercooler'), result, 1760000000000), /Temperature/);
+  assert.match(core.resultsCsv('Compressor', fsj, result, hash, 1760000000000), /Temperature/);
   assert.equal(core.formatNumber(1250, 1), '1,250.0');
+});
+
+test('results exported after an edit say they are out of date (the solve-time hash is kept)', () => {
+  const result = fs.readFileSync(new URL('../../shared/fixtures/solve-result-06.json', import.meta.url), 'utf8');
+  const fsj = bench('06-compressor-aftercooler');
+  const solvedHash = core.modelHash(fsj);
+  const edited = JSON.parse(fsj); edited.objects[0].specs.temperature.si += 10; // a change the engine would solve differently
+  const editedJson = JSON.stringify(edited);
+  assert.notEqual(core.modelHash(editedJson), solvedHash);
+  const fresh = core.resultsCsv('Compressor', fsj, result, solvedHash, 1760000000000);
+  const stale = core.resultsCsv('Compressor', editedJson, result, solvedHash, 1760000000000);
+  assert.notEqual(stale, fresh, 'the stale export must differ (it carries the out-of-date note)');
+  assert.match(stale, /out of date|changed since|stale/i);
+});
+
+test('move keeps the exact position (no second snap), add puts a new object on the grid', () => {
+  let fsj = core.newFlowsheet('Peng-Robinson (PR)');
+  const r = JSON.parse(core.add(fsj, 'valve', 205, 97)); fsj = JSON.stringify(r.flowsheet);
+  const placed = JSON.parse(fsj).objects[0];
+  assert.equal(placed.x % 24, 0); assert.equal(placed.y % 24, 0); // the core's 24-unit grid
+  const moved = JSON.parse(core.move(fsj, r.id, 211.5, 93.25)).objects[0];
+  assert.equal(moved.x, 211.5); assert.equal(moved.y, 93.25);
 });

@@ -61,14 +61,18 @@ object FlowsteadCore {
     /** A new, empty flowsheet in the app's format. */
     fun newFlowsheet(propertyPackage: String): String = out(Flowsheet(propertyPackage = propertyPackage))
 
-    /** Adds an object of [typeId] at ([x], [y]) on the grid; returns {flowsheet, id}. */
+    /** Adds an object of [typeId] at ([x], [y]); the core puts it on its grid. Returns {flowsheet, id}. */
     fun add(flowsheetJson: String, typeId: String, x: Double, y: Double): String {
-        val (f, o) = FlowsheetEditing.add(fs(flowsheetJson), type(typeId), FlowsheetEditing.snap(x), FlowsheetEditing.snap(y))
+        val (f, o) = FlowsheetEditing.add(fs(flowsheetJson), type(typeId), x, y)
         return buildJsonObject { put("flowsheet", FlowsheetJson.parseToJsonElement(out(f))); put("id", o.id) }.toString()
     }
 
+    /**
+     * Moves an object to exactly ([x], [y]), as the app does: the canvas has already placed it on the grid and lined
+     * it up with its connections, which snapping again here would undo for nozzles off their symbol's centre.
+     */
     fun move(flowsheetJson: String, id: String, x: Double, y: Double): String =
-        out(FlowsheetEditing.move(fs(flowsheetJson), id, FlowsheetEditing.snap(x), FlowsheetEditing.snap(y)))
+        out(FlowsheetEditing.move(fs(flowsheetJson), id, x, y))
 
     fun rename(flowsheetJson: String, id: String, tag: String): String = out(FlowsheetEditing.rename(fs(flowsheetJson), id, tag))
 
@@ -111,20 +115,18 @@ object FlowsteadCore {
     /** SHA-256 of the solved part of the flowsheet: the same as the app computes (CanonicalJson.kt). */
     fun modelHash(flowsheetJson: String): String = fs(flowsheetJson).modelHash()
 
-    /** Results workbook (.xlsx bytes) for a solve, SI with °C and bara, as the app exports it. */
-    fun resultsXlsx(projectName: String, flowsheetJson: String, solveResultJson: String, solvedAtMillis: Double): ByteArray {
-        val f = fs(flowsheetJson)
-        val r = FlowsheetJson.decodeFromString(SolveResult.serializer(), solveResultJson)
-        val units = UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara)
-        return Xlsx.write(ResultsWorkbook.build(projectName, f, StoredSolve(r, f.modelHash(), solvedAtMillis.toLong()), units))
-    }
+    // [solvedModelHash] is the model hash taken when the solve ran (as the app's StoredSolve keeps it), not the current
+    // one: if the flowsheet changed since, the workbook says its results are out of date.
+    private fun sheets(projectName: String, flowsheetJson: String, solveResultJson: String, solvedModelHash: String, solvedAtMillis: Double) =
+        ResultsWorkbook.build(projectName, fs(flowsheetJson), StoredSolve(FlowsheetJson.decodeFromString(SolveResult.serializer(), solveResultJson),
+            solvedModelHash, solvedAtMillis.toLong()), UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara))
 
-    fun resultsCsv(projectName: String, flowsheetJson: String, solveResultJson: String, solvedAtMillis: Double): String {
-        val f = fs(flowsheetJson)
-        val r = FlowsheetJson.decodeFromString(SolveResult.serializer(), solveResultJson)
-        val units = UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara)
-        return Csv.write(ResultsWorkbook.build(projectName, f, StoredSolve(r, f.modelHash(), solvedAtMillis.toLong()), units))
-    }
+    /** Results workbook (.xlsx bytes) for a stored solve, SI with °C and bara, as the app exports it. */
+    fun resultsXlsx(projectName: String, flowsheetJson: String, solveResultJson: String, solvedModelHash: String, solvedAtMillis: Double): ByteArray =
+        Xlsx.write(sheets(projectName, flowsheetJson, solveResultJson, solvedModelHash, solvedAtMillis))
+
+    fun resultsCsv(projectName: String, flowsheetJson: String, solveResultJson: String, solvedModelHash: String, solvedAtMillis: Double): String =
+        Csv.write(sheets(projectName, flowsheetJson, solveResultJson, solvedModelHash, solvedAtMillis))
 
     /** "1,250.0": grouped thousands, '.' decimals, as on every app screen. */
     fun formatNumber(value: Double, decimals: Int): String = ValueFormat.number(value, decimals)
