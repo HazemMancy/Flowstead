@@ -1,0 +1,517 @@
+diff -ruN a/app/flowstead/core/compounds/PubChem.kt b/app/flowstead/core/compounds/PubChem.kt
+--- a/app/flowstead/core/compounds/PubChem.kt
++++ b/app/flowstead/core/compounds/PubChem.kt
+@@ -10,7 +10,7 @@
+ import kotlinx.serialization.json.jsonArray
+ import kotlinx.serialization.json.jsonObject
+ import kotlinx.serialization.json.jsonPrimitive
+-import java.net.URLEncoder
++import app.flowstead.core.compat.urlEncode
+ 
+ /** A compound found on PubChem: its structure for the Joback estimate (D104). Numbers here are PubChem's, not estimates. */
+ data class PubChemCompound(val cid: Long, val title: String, val formula: String, val molecularWeight: Double?, val smiles: String)
+@@ -27,7 +27,7 @@
+     private val PROPERTIES = listOf("Title", "MolecularFormula", "MolecularWeight", "SMILES", "IsomericSMILES", "CanonicalSMILES", "ConnectivitySMILES")
+ 
+     fun url(query: String): String {
+-        val q = URLEncoder.encode(query.trim(), "UTF-8").replace("+", "%20")
++        val q = urlEncode(query.trim()).replace("+", "%20")
+         return "$BASE/compound/name/$q/property/${PROPERTIES.joinToString(",")}/JSON"
+     }
+ 
+diff -ruN a/app/flowstead/core/export/DataSheetWorkbook.kt b/app/flowstead/core/export/DataSheetWorkbook.kt
+--- a/app/flowstead/core/export/DataSheetWorkbook.kt
++++ b/app/flowstead/core/export/DataSheetWorkbook.kt
+@@ -4,9 +4,7 @@
+  */
+ package app.flowstead.core.export
+ 
+-import java.io.ByteArrayOutputStream
+-import java.util.zip.ZipEntry
+-import java.util.zip.ZipOutputStream
++import app.flowstead.core.compat.ZipWriter
+ import kotlin.math.ceil
+ import kotlin.math.max
+ 
+@@ -23,14 +21,10 @@
+     fun write(sheets: List<DataSheet>, logo: Logo?): ByteArray {
+         require(sheets.isNotEmpty()) { "No data sheets" }
+         val names = uniqueNames(sheets.map { it.tag })
+-        val out = ByteArrayOutputStream()
+-        ZipOutputStream(out).use { zip ->
+-            fun put(path: String, bytes: ByteArray) {
+-                zip.putNextEntry(ZipEntry(path))
+-                zip.write(bytes)
+-                zip.closeEntry()
+-            }
+-            fun put(path: String, xml: String) = put(path, xml.toByteArray(Charsets.UTF_8))
++        val zip = ZipWriter()
++        run {
++            fun put(path: String, bytes: ByteArray) = zip.put(path, bytes)
++            fun put(path: String, xml: String) = zip.put(path, xml)
+             put("[Content_Types].xml", contentTypes(sheets.size, logo != null))
+             put("_rels/.rels", ROOT_RELS)
+             put("docProps/app.xml", APP_PROPS)
+@@ -48,7 +42,7 @@
+             }
+             if (logo != null) put("xl/media/logo.png", logo.png)
+         }
+-        return out.toByteArray()
++        return zip.finish()
+     }
+ 
+     // Cell styles (indices into cellXfs in STYLES).
+@@ -71,7 +65,7 @@
+     private class Layout(val s: DataSheet, val logo: Logo?) {
+         val values = max(3, s.sections.maxOfOrNull { if (it.columns.size == 1 && it.columns.single().isBlank()) 1 else it.columns.size } ?: 1)
+         val last = 2 + values // index of the last column
+-        val cells = sortedMapOf<Int, MutableMap<Int, Cell>>()
++        val cells = mutableMapOf<Int, MutableMap<Int, Cell>>() // iterated in row order (was a SortedMap)
+         val heights = mutableMapOf<Int, Double>()
+         val merges = mutableListOf<String>()
+         var row = 1
+@@ -195,11 +189,11 @@
+             append("""<col min="3" max="3" width="12" customWidth="1"/>""")
+             append("""<col min="4" max="${last + 1}" width="${if (values <= 3) 18 else 15}" customWidth="1"/>""")
+             append("</cols><sheetData>")
+-            for ((r, row) in cells) {
++            for ((r, row) in cells.entries.sortedBy { it.key }.map { it.key to it.value }) {
+                 append("""<row r="$r"""")
+                 heights[r]?.let { append(""" ht="$it" customHeight="1"""") }
+                 append(">")
+-                for ((c, cell) in row.toSortedMap()) {
++                for ((c, cell) in row.entries.sortedBy { it.key }.map { it.key to it.value }) {
+                     val ref = Xlsx.column(c) + r
+                     when {
+                         cell.number != null -> append("""<c r="$ref" s="${cell.style}"><v>${ResultsWorkbook.plain(cell.number)}</v></c>""")
+diff -ruN a/app/flowstead/core/export/DataSheets.kt b/app/flowstead/core/export/DataSheets.kt
+--- a/app/flowstead/core/export/DataSheets.kt
++++ b/app/flowstead/core/export/DataSheets.kt
+@@ -35,9 +35,7 @@
+ import app.flowstead.core.units.UnitContext
+ import app.flowstead.core.units.UnitSet
+ import app.flowstead.core.units.Units
+-import java.time.Instant
+-import java.time.ZoneOffset
+-import java.time.format.DateTimeFormatter
++import app.flowstead.core.compat.utcMinute
+ 
+ /**
+  * One equipment data sheet, laid out as an engineering contractor's: a title block, numbered lines in
+@@ -147,7 +145,7 @@
+ 
+         private fun status(solve: StoredSolve?): String {
+             val r = solve?.result ?: return "Not solved"
+-            val at = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").format(Instant.ofEpochMilli(solve.solvedAtMillis).atOffset(ZoneOffset.UTC))
++            val at = utcMinute(solve.solvedAtMillis)
+             val s = r.status.name.lowercase().replaceFirstChar { it.uppercase() }
+             return "$s, $at" + if (view.stale) " (out of date)" else ""
+         }
+diff -ruN a/app/flowstead/core/export/ResultsWorkbook.kt b/app/flowstead/core/export/ResultsWorkbook.kt
+--- a/app/flowstead/core/export/ResultsWorkbook.kt
++++ b/app/flowstead/core/export/ResultsWorkbook.kt
+@@ -18,11 +18,9 @@
+ import app.flowstead.core.units.Quantity
+ import app.flowstead.core.units.UnitContext
+ import app.flowstead.core.units.UnitSet
+-import java.math.BigDecimal
+-import java.math.MathContext
+-import java.time.Instant
+-import java.time.ZoneOffset
+-import java.time.format.DateTimeFormatter
++import app.flowstead.core.compat.Dec
++import app.flowstead.core.compat.Rounding
++import app.flowstead.core.compat.utcIsoLocal
+ 
+ sealed interface Cell {
+     data class Text(val text: String) : Cell
+@@ -61,7 +59,7 @@
+         add(listOf(t("Site / location"), t(info.site)))
+         add(listOf(t("Prepared / Checked / Approved"), t(listOf(info.preparedBy, info.checkedBy, info.approvedBy).joinToString(" / "))))
+         add(listOf(t("Software"), t("Flowstead" + (if (appVersion.isBlank()) "" else " $appVersion"))))
+-        add(listOf(t("Solved at (UTC)"), t(DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(Instant.ofEpochMilli(solve.solvedAtMillis).atOffset(ZoneOffset.UTC).withNano(0)))))
++        add(listOf(t("Solved at (UTC)"), t(utcIsoLocal(solve.solvedAtMillis.let { it - it.mod(1000L) }))))
+         add(listOf(t("Status"), t(r.status.name.lowercase())))
+         add(listOf(t("Engine"), t("Flowstead engine ${r.engineVersion}, powered by DWSIM ${r.dwsimVersion}")))
+         add(listOf(t("Units"), t(units.name)))
+@@ -130,7 +128,7 @@
+ 
+     /** Up to 10 significant figures, never in exponent form, so spreadsheets read it as a plain number. */
+     fun plain(value: Double): String =
+-        BigDecimal(value).round(MathContext(10)).stripTrailingZeros().toPlainString().let { if (it == "-0") "0" else it }
++        Dec.exact(value).round(10, Rounding.HALF_UP).stripTrailingZeros().toPlainString().let { if (it == "-0") "0" else it }
+ }
+ 
+ object Csv {
+diff -ruN a/app/flowstead/core/export/Xlsx.kt b/app/flowstead/core/export/Xlsx.kt
+--- a/app/flowstead/core/export/Xlsx.kt
++++ b/app/flowstead/core/export/Xlsx.kt
+@@ -4,9 +4,7 @@
+  */
+ package app.flowstead.core.export
+ 
+-import java.io.ByteArrayOutputStream
+-import java.util.zip.ZipEntry
+-import java.util.zip.ZipOutputStream
++import app.flowstead.core.compat.ZipWriter
+ 
+ /**
+  * A minimal Office Open XML (.xlsx) writer: inline strings and numbers, one plain style,
+@@ -16,13 +14,9 @@
+     fun write(sheets: List<Sheet>): ByteArray {
+         require(sheets.isNotEmpty()) { "A workbook needs at least one sheet" }
+         val names = uniqueNames(sheets.map { it.name })
+-        val out = ByteArrayOutputStream()
+-        ZipOutputStream(out).use { zip ->
+-            fun put(path: String, xml: String) {
+-                zip.putNextEntry(ZipEntry(path))
+-                zip.write(xml.toByteArray(Charsets.UTF_8))
+-                zip.closeEntry()
+-            }
++        val zip = ZipWriter()
++        run {
++            fun put(path: String, xml: String) = zip.put(path, xml)
+             put("[Content_Types].xml", contentTypes(sheets.size))
+             put("_rels/.rels", ROOT_RELS)
+             put("xl/workbook.xml", workbook(names))
+@@ -30,7 +24,7 @@
+             put("xl/styles.xml", STYLES)
+             sheets.forEachIndexed { i, s -> put("xl/worksheets/sheet${i + 1}.xml", sheet(s)) }
+         }
+-        return out.toByteArray()
++        return zip.finish()
+     }
+ 
+     /** Excel column letters: 0 → A, 25 → Z, 26 → AA. */
+diff -ruN a/app/flowstead/core/format/ValueFormat.kt b/app/flowstead/core/format/ValueFormat.kt
+--- a/app/flowstead/core/format/ValueFormat.kt
++++ b/app/flowstead/core/format/ValueFormat.kt
+@@ -6,8 +6,8 @@
+ 
+ import app.flowstead.core.units.EngUnit
+ import app.flowstead.core.units.UnitContext
+-import java.math.BigDecimal
+-import java.math.RoundingMode
++import app.flowstead.core.compat.Dec
++import app.flowstead.core.compat.Rounding
+ 
+ /** The dash shown wherever the engine did not return a value. Never replaced by a guess. */
+ const val MISSING = "—"
+@@ -20,7 +20,7 @@
+ object ValueFormat {
+     fun number(value: Double, decimals: Int): String {
+         if (!value.isFinite()) return MISSING
+-        val bd = BigDecimal.valueOf(value).setScale(decimals, RoundingMode.HALF_EVEN)
++        val bd = Dec.shortest(value).setScale(decimals, Rounding.HALF_EVEN)
+         val negative = bd.signum() < 0
+         val plain = bd.abs().toPlainString()
+         val intPart = plain.substringBefore('.')
+diff -ruN a/app/flowstead/core/help/Help.kt b/app/flowstead/core/help/Help.kt
+--- a/app/flowstead/core/help/Help.kt
++++ b/app/flowstead/core/help/Help.kt
+@@ -4,6 +4,8 @@
+  */
+ package app.flowstead.core.help
+ 
++import app.flowstead.core.compat.jfmt
++
+ import app.flowstead.core.model.DataLibrary
+ import app.flowstead.core.model.Flowsheet
+ import app.flowstead.core.model.FlowsheetJson
+@@ -42,7 +44,7 @@
+     const val DWSIM = "https://dwsim.org"
+ 
+     private fun resource(path: String): String? =
+-        Help::class.java.getResourceAsStream("/help/$path")?.use { it.readBytes().decodeToString() }
++        app.flowstead.core.compat.Resources.read("help/$path")
+ 
+     private val index: List<String> by lazy { resource("index.txt")?.lines()?.filter { it.isNotBlank() }.orEmpty() }
+ 
+@@ -81,7 +83,7 @@
+                 "## Mist eliminators (Souders–Brown K, vertical flow, near atmospheric)\n" +
+                     MistEliminator.entries.joinToString("\n") { "- ${it.label}: K ${it.k} m/s" + if (it.padThickness > 0) ", element ${it.padThickness} m" else "" } +
+                     "\n## K pressure factor (GPSA)\n" + listOf(0.0, 300.0, 600.0, 900.0, 1500.0).joinToString("\n") {
+-                        "- $it psig: × ${"%.2f".format(SeparatorSizing.pressureFactor(it * 6894.757 + 101325.0))}"
++                        "- $it psig: × ${"%.2f".jfmt(SeparatorSizing.pressureFactor(it * 6894.757 + 101325.0))}"
+                     } +
+                     "\n## Inlet devices (largest inlet momentum ρv²)\n" + InletDevice.entries.joinToString("\n") { "- ${it.label}: ${it.maxMomentum.toInt()} Pa" } +
+                     "\n## Outlets\n- Gas outlet: ρv² ≤ ${SeparatorSizing.GAS_OUTLET_MOMENTUM.toInt()} Pa\n- Liquid outlets: ≤ ${SeparatorSizing.LIQUID_OUTLET_VELOCITY} m/s" +
+@@ -97,8 +99,8 @@
+                 listOf("FL", "xT", "valve", "Cv")),
+             HelpTopic("lib_pipes", LIBRARY, "Pipe sizes (ASME B36.10M / B36.19M)",
+                 "Inside diameters, mm, for the common schedules.\n" + PipeSizes.ALL.joinToString("\n") { s ->
+-                    "- NPS ${s.nps} (DN ${s.dn}, OD ${"%.1f".format(s.outsideDiameterM * 1000)}): " +
+-                        s.schedules.joinToString(", ") { "${it.label} ${"%.1f".format(s.insideDiameterM(it) * 1000)}" }
++                    "- NPS ${s.nps} (DN ${s.dn}, OD ${"%.1f".jfmt(s.outsideDiameterM * 1000)}): " +
++                        s.schedules.joinToString(", ") { "${it.label} ${"%.1f".jfmt(s.insideDiameterM(it) * 1000)}" }
+                 },
+                 listOf("pipe", "schedule", "NPS", "DN", "inside diameter")),
+             HelpTopic("lib_utilities", LIBRARY, "Utility temperatures",
+diff -ruN a/app/flowstead/core/model/EquipmentSizing.kt b/app/flowstead/core/model/EquipmentSizing.kt
+--- a/app/flowstead/core/model/EquipmentSizing.kt
++++ b/app/flowstead/core/model/EquipmentSizing.kt
+@@ -4,6 +4,8 @@
+  */
+ package app.flowstead.core.model
+ 
++import app.flowstead.core.compat.jfmt
++
+ import app.flowstead.core.units.Quantity
+ import kotlinx.serialization.Serializable
+ import kotlin.math.PI
+@@ -218,7 +220,7 @@
+                 val motor = DataLibrary.motor(rated)
+                 val lines = mutableListOf(
+                     SizingLine(if (o.type == ObjectType.Expander) "Shaft power delivered" else "Shaft power", w, Quantity.Power),
+-                    SizingLine("Margin", text = "${"%.0f".format(margin * 100)} %" + if (input.margin == null) (if (o.type == ObjectType.Pump) " (API 610)" else " (API 617)") else ""),
++                    SizingLine("Margin", text = "${"%.0f".jfmt(margin * 100)} %" + if (input.margin == null) (if (o.type == ObjectType.Pump) " (API 610)" else " (API 617)") else ""),
+                     SizingLine(if (o.type == ObjectType.Expander) "Generator at least" else "Driver at least", rated, Quantity.Power),
+                 )
+                 lines += if (motor != null) SizingLine(if (o.type == ObjectType.Expander) "Standard generator (IEC 60072)" else "Standard motor (IEC 60072)", motor, Quantity.Power)
+@@ -241,7 +243,7 @@
+                         SizingLine("Diameter (H = 1.5 D)", d, Quantity.Length),
+                         SizingLine("Height", 1.5 * d, Quantity.Length),
+                     ),
+-                    notes = listOf("Residence time ${"%.0f".format(time / 60)} min, filled to ${"%.0f".format(fill * 100)} %" +
++                    notes = listOf("Residence time ${"%.0f".jfmt(time / 60)} min, filled to ${"%.0f".jfmt(fill * 100)} %" +
+                         if (input.residenceTime == null || input.fillFraction == null) " (data library: 10 min, 85 %)." else "."),
+                 )
+             }
+@@ -282,11 +284,11 @@
+                         SizingLine("Height (tangent to tangent)", r.height, Quantity.Length),
+                     ) + extra },
+                     notes = listOf(
+-                        "Fair's flooding correlation at ${"%.0f".format(ff * 100)} % of flood, ${"%.0f".format(ts * 1000)} mm tray spacing, " +
+-                            "${"%.0f".format(dc * 100)} % downcomer area, ${"%.0f".format(eff * 100)} % tray efficiency; " +
++                        "Fair's flooding correlation at ${"%.0f".jfmt(ff * 100)} % of flood, ${"%.0f".jfmt(ts * 1000)} mm tray spacing, " +
++                            "${"%.0f".jfmt(dc * 100)} % downcomer area, ${"%.0f".jfmt(eff * 100)} % tray efficiency; " +
+                             "${ColumnSizing.TOP_SPACE} m above the top tray and ${ColumnSizing.BOTTOM_SPACE} m below the bottom one.",
+-                        "Internals: sieve trays at the rounded diameter, ${"%.0f".format(layout.weirHeight * 1000)} mm weir, " +
+-                            "${"%.1f".format(layout.holeDiameter * 1000)} mm holes over ${"%.0f".format(layout.holeFraction * 100)} % of the active area " +
++                        "Internals: sieve trays at the rounded diameter, ${"%.0f".jfmt(layout.weirHeight * 1000)} mm weir, " +
++                            "${"%.1f".jfmt(layout.holeDiameter * 1000)} mm holes over ${"%.0f".jfmt(layout.holeFraction * 100)} % of the active area " +
+                             "(Sinnott §11.13: Francis weir, dry plate with C0 0.84, residual head, downcomer backup).",
+                     ),
+                     warnings = r.warnings + h?.warnings.orEmpty(),
+@@ -296,7 +298,7 @@
+         }
+     }
+ 
+-    private fun fmtC(k: Double) = "%.0f".format(k - 273.15)
++    private fun fmtC(k: Double) = "%.0f".jfmt(k - 273.15)
+ 
+     private fun exchanger(
+         q: Double, hotIn: Double, hotOut: Double, coldIn: Double, coldOut: Double, input: EquipmentSizingInput,
+@@ -328,10 +330,10 @@
+         lines += SizingLine("U" + if (input.u == null) " (${service?.label}, typical)" else "", u, Quantity.HeatTransferCoefficient)
+         val f = shellsF?.second ?: 1.0
+         val area = q / (u * f * lm)
+-        lines += SizingLine(if (type == ObjectType.AirCooler) "Bare-tube area" else "Heat-transfer area", area, null, text = "%.1f m²".format(area))
++        lines += SizingLine(if (type == ObjectType.AirCooler) "Bare-tube area" else "Heat-transfer area", area, null, text = "%.1f m²".jfmt(area))
+         if (input.u == null && service != null) {
+             lines += SizingLine("Area over the service's U range", null, null,
+-                text = "%.1f – %.1f m²".format(q / (service.high * f * lm), q / (service.low * f * lm)))
++                text = "%.1f – %.1f m²".jfmt(q / (service.high * f * lm), q / (service.low * f * lm)))
+         }
+         if (type == ObjectType.HeatExchanger && shellsF != null && area / shellsF.first > 1000) {
+             warnings += "Over 1000 m² a shell: split into parallel shells."
+diff -ruN a/app/flowstead/core/model/FlowsheetEditing.kt b/app/flowstead/core/model/FlowsheetEditing.kt
+--- a/app/flowstead/core/model/FlowsheetEditing.kt
++++ b/app/flowstead/core/model/FlowsheetEditing.kt
+@@ -4,10 +4,11 @@
+  */
+ package app.flowstead.core.model
+ 
++import kotlin.math.roundToLong
++
+ import app.flowstead.core.api.DepressuringResult
+ import app.flowstead.core.api.ReliefResult
+ 
+-import java.util.UUID
+ 
+ /** Why an edit was refused, in words the user sees. */
+ class EditRejected(message: String) : IllegalArgumentException(message)
+@@ -23,7 +24,7 @@
+ object FlowsheetEditing {
+     const val GRID = 24.0
+ 
+-    fun snap(v: Double): Double = Math.round(v / GRID) * GRID
++    fun snap(v: Double): Double = (v / GRID).roundToLong() * GRID
+ 
+     fun nextTag(fs: Flowsheet, type: ObjectType): String {
+         val tags = fs.objects.map { it.tag }.toSet()
+@@ -519,7 +520,7 @@
+         return Ports.of(unit.type).firstOrNull { p -> p.side == side && p.kind == kind && fs.streamAt(unitId, p) == null }
+     }
+ 
+-    fun newId(): String = UUID.randomUUID().toString()
++    fun newId(): String = app.flowstead.core.compat.randomUuid()
+ 
+     private fun update(fs: Flowsheet, id: String, f: (SimObject) -> SimObject): Flowsheet {
+         if (fs.objects.none { it.id == id }) throw EditRejected("That object no longer exists")
+diff -ruN a/app/flowstead/core/model/LineSizing.kt b/app/flowstead/core/model/LineSizing.kt
+--- a/app/flowstead/core/model/LineSizing.kt
++++ b/app/flowstead/core/model/LineSizing.kt
+@@ -122,7 +122,7 @@
+     }
+ 
+     private const val SINGLE_PHASE = 1e-6
+-    private fun trim(v: Double) = if (v == Math.floor(v)) v.toLong().toString() else v.toString()
++    private fun trim(v: Double) = if (v == kotlin.math.floor(v)) v.toLong().toString() else v.toString()
+     private val LineService.serialName: String get() = when (this) {
+         LineService.Gas -> "gas"
+         LineService.Liquid -> "liquid"
+diff -ruN a/app/flowstead/core/model/Plots.kt b/app/flowstead/core/model/Plots.kt
+--- a/app/flowstead/core/model/Plots.kt
++++ b/app/flowstead/core/model/Plots.kt
+@@ -4,6 +4,8 @@
+  */
+ package app.flowstead.core.model
+ 
++import app.flowstead.core.compat.jfmt
++
+ import app.flowstead.core.api.PhaseEnvelope
+ import app.flowstead.core.api.ProfileKeys
+ import app.flowstead.core.units.Quantity
+@@ -81,7 +83,7 @@
+         if (envelope.isEmpty()) return null
+         // Quality lines (D52) dotted, then the hydrate curve (D52), each only where the engine traced it.
+         val series = envelope +
+-            env.qualityLines.mapNotNull { ok(PlotSeries("VF ${"%.2f".format(java.util.Locale.ROOT, it.quality).trimEnd('0').trimEnd('.')}", it.temperature, it.pressure, dashed = true)) } +
++            env.qualityLines.mapNotNull { ok(PlotSeries("VF ${"%.2f".jfmt(it.quality).trimEnd('0').trimEnd('.')}", it.temperature, it.pressure, dashed = true)) } +
+             listOfNotNull(
+                 ok(PlotSeries("Hydrate formation", env.hydrateTemperature, env.hydratePressure)),
+                 ok(PlotSeries("Hydrate, inhibited", env.inhibitedHydrateTemperature, env.inhibitedHydratePressure, dashed = true)),
+diff -ruN a/app/flowstead/core/model/Results.kt b/app/flowstead/core/model/Results.kt
+--- a/app/flowstead/core/model/Results.kt
++++ b/app/flowstead/core/model/Results.kt
+@@ -368,8 +368,9 @@
+ 
+ private fun hashOf(solved: Flowsheet, positions: Boolean): String {
+     val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) })
+-    val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), fs)
+-    return java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
++    // Java's spelling of every Double, so the browser computes the app's hash (CanonicalJson.kt).
++    val json = app.flowstead.core.compat.canonical(FlowsheetJson, Flowsheet.serializer(), fs)
++    return app.flowstead.core.compat.Sha256.hex(json.encodeToByteArray())
+ }
+ 
+ /**
+diff -ruN a/app/flowstead/core/model/Safety.kt b/app/flowstead/core/model/Safety.kt
+--- a/app/flowstead/core/model/Safety.kt
++++ b/app/flowstead/core/model/Safety.kt
+@@ -141,11 +141,11 @@
+     fun network(sections: List<PipeSection>): Pair<VesselGeometry, Double?>? {
+         val ok = sections.filter { it.insideDiameter > 0 && it.length > 0 }
+         if (ok.isEmpty()) return null
+-        val volume = ok.sumOf { Math.PI * it.insideDiameter * it.insideDiameter / 4 * it.length }
+-        val surface = ok.sumOf { Math.PI * it.insideDiameter * it.length }
++        val volume = ok.sumOf { kotlin.math.PI * it.insideDiameter * it.insideDiameter / 4 * it.length }
++        val surface = ok.sumOf { kotlin.math.PI * it.insideDiameter * it.length }
+         val d = 4 * volume / surface
+-        val wall = if (ok.all { it.wallThickness != null }) ok.sumOf { it.wallThickness!! * Math.PI * it.insideDiameter * it.length } / surface else null
+-        return VesselGeometry(d, surface / (Math.PI * d), pipe = true) to wall
++        val wall = if (ok.all { it.wallThickness != null }) ok.sumOf { it.wallThickness!! * kotlin.math.PI * it.insideDiameter * it.length } / surface else null
++        return VesselGeometry(d, surface / (kotlin.math.PI * d), pipe = true) to wall
+     }
+ 
+     /** The sections a pressurization case fills: its pipe segments (by their size) and its typed sections. */
+diff -ruN a/app/flowstead/core/model/SeparatorSizing.kt b/app/flowstead/core/model/SeparatorSizing.kt
+--- a/app/flowstead/core/model/SeparatorSizing.kt
++++ b/app/flowstead/core/model/SeparatorSizing.kt
+@@ -4,6 +4,8 @@
+  */
+ package app.flowstead.core.model
+ 
++import app.flowstead.core.compat.jfmt
++
+ import kotlinx.serialization.SerialName
+ import kotlinx.serialization.Serializable
+ import kotlin.math.PI
+@@ -277,7 +279,7 @@
+                 length = roundUp(1.5 * d, 0.05)
+                 notes += "Height raised to 1.5 × D, the least for a vertical vessel."
+             }
+-            if (length / d > 6) warnings += "H/D ${"%.1f".format(length / d)} is above 6: a horizontal vessel will be shorter."
++            if (length / d > 6) warnings += "H/D ${"%.1f".jfmt(length / d)} is above 6: a horizontal vessel will be shorter."
+             SeparatorSizingResult(
+                 false, water, d, length, k, vMax, if (qg > 0) qg / a else 0.0, levels, nozzles, meArea, liquidVolume, notes, warnings,
+             )
+@@ -322,7 +324,7 @@
+             }
+             d += STEP
+         }
+-        warnings += "No diameter up to 6 m meets every limit at L/D ${"%.1f".format(ld)}."
++        warnings += "No diameter up to 6 m meets every limit at L/D ${"%.1f".jfmt(ld)}."
+         val d6 = 6.0
+         return SeparatorSizingResult(true, water, d6, ld * d6, k, vMax, if (qg > 0) qg / segment(max(0.2 * d6, 0.3), d6) else 0.0,
+             emptyList(), nozzles, meArea, liquidVolume, notes, warnings)
+diff -ruN a/app/flowstead/core/model/Specification.kt b/app/flowstead/core/model/Specification.kt
+--- a/app/flowstead/core/model/Specification.kt
++++ b/app/flowstead/core/model/Specification.kt
+@@ -4,6 +4,8 @@
+  */
+ package app.flowstead.core.model
+ 
++import app.flowstead.core.compat.jfmt
++
+ import app.flowstead.core.units.Quantity
+ 
+ /** Method choices stored in SimObject.refs. Same strings as the engine's ChoiceKeys. */
+@@ -382,7 +384,7 @@
+         if (o.composition.isEmpty()) return "Enter the composition"
+         val sum = o.composition.filterKeys { it in fs.compounds }.values.sum()
+         if (sum <= 0) return "Composition is all zero"
+-        if (kotlin.math.abs(sum - 1.0) > COMPOSITION_TOLERANCE) return "Fractions add up to %.6f, not 1".format(java.util.Locale.ROOT, sum)
++        if (kotlin.math.abs(sum - 1.0) > COMPOSITION_TOLERANCE) return "Fractions add up to %.6f, not 1".jfmt(sum)
+         return null
+     }
+ 
+@@ -544,7 +546,7 @@
+         }
+     }
+ 
+-    private fun rpm(v: Double) = if (v == Math.rint(v)) v.toLong().toString() else v.toString()
++    private fun rpm(v: Double) = if (v == kotlin.math.round(v)) v.toLong().toString() else v.toString()
+ 
+     private fun pointsProblem(o: SimObject, p: List<CurvePoint>): String? {
+         return when {
+diff -ruN a/app/flowstead/core/model/Spreadsheet.kt b/app/flowstead/core/model/Spreadsheet.kt
+--- a/app/flowstead/core/model/Spreadsheet.kt
++++ b/app/flowstead/core/model/Spreadsheet.kt
+@@ -142,7 +142,7 @@
+                 val word = s.substring(start, i)
+                 skip()
+                 if (i < s.length && s[i] == '(') { i++; return function(word.lowercase()) }
+-                if (word.lowercase() == "pi") return Math.PI
++                if (word.lowercase() == "pi") return kotlin.math.PI
+                 if (CELL.matches(word.uppercase())) return cell(word.uppercase())
+                 throw FormulaError("unknown name '$word'")
+             }
+diff -ruN a/app/flowstead/core/model/ThermoPlots.kt b/app/flowstead/core/model/ThermoPlots.kt
+--- a/app/flowstead/core/model/ThermoPlots.kt
++++ b/app/flowstead/core/model/ThermoPlots.kt
+@@ -4,6 +4,8 @@
+  */
+ package app.flowstead.core.model
+ 
++import kotlin.math.roundToLong
++
+ import app.flowstead.core.api.BinaryDiagramKinds
+ import app.flowstead.core.api.BinaryDiagramResult
+ import app.flowstead.core.api.Phases
+@@ -71,12 +73,12 @@
+         val s = z.sum().takeIf { it > 0 } ?: 1.0
+         val a = z[0] / s
+         val c = z[2] / s
+-        return (c + a / 2) to (a * Math.sqrt(3.0) / 2)
++        return (c + a / 2) to (a * kotlin.math.sqrt(3.0) / 2)
+     }
+ 
+     /** The two-liquid points' tie lines (liquid 1 to liquid 2), each once. */
+     fun tieLines(r: TernaryResult): List<Pair<List<Double>, List<Double>>> =
+         r.points.filter { it.liquid1 != null && it.liquid2 != null && (it.liquid2Fraction ?: 0.0) in 1e-6..(1 - 1e-6) }
+             .map { it.liquid1!! to it.liquid2!! }
+-            .distinctBy { (a, b) -> a.map { Math.round(it * 1000) } + b.map { Math.round(it * 1000) } }
++            .distinctBy { (a, b) -> a.map { (it * 1000).roundToLong() } + b.map { (it * 1000).roundToLong() } }
+ }
