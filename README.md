@@ -5,6 +5,8 @@ Developed by Hazem ElMancy.
 
 **Steady-state and dynamic process simulation, in your pocket.**
 
+**No Android? [Use Flowstead in your browser →](https://hazemmancy.github.io/Flowstead/)** The same DWSIM engine, running on your device as WebAssembly (`web/`, D108).
+
 Flowstead is an Android app for building, solving and checking process
 flowsheets on a phone: flashes, separators, compressor and cooler trains, valve
 letdowns, pipelines, recycle loops, columns and reactors, in steady state and,
@@ -42,6 +44,7 @@ In short:
 ```
 engine/        .NET 10 service wrapping DWSIM (Linux, Docker)
 android/       Kotlin + Jetpack Compose app
+web/           Flowstead in the browser (engine as WebAssembly, GitHub Pages)
 shared/        OpenAPI spec and flowsheet JSON schema
 benchmarks/    reference cases + expected results
 docs/          plan, decisions, status, reports
