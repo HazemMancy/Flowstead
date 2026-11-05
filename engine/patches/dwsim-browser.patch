@@ -1,0 +1,213 @@
+diff --git a/engine/DWSIM.Automation/Automation.cs b/engine/DWSIM.Automation/Automation.cs
+index c93ed27..9085b41 100644
+--- a/engine/DWSIM.Automation/Automation.cs
++++ b/engine/DWSIM.Automation/Automation.cs
+@@ -392,7 +392,7 @@ namespace DWSIM.Automation
+         {
+ 
+             var version = Assembly.GetExecutingAssembly().GetName().Version;
+-            var date = File.GetLastWriteTimeUtc(Assembly.GetExecutingAssembly().Location).ToString();
++            var date = (OperatingSystem.IsBrowser() ? "" : File.GetLastWriteTimeUtc(Assembly.GetExecutingAssembly().Location).ToString());
+ 
+             return String.Format("DWSIM version {0} ({1})", version, date);
+ 
+@@ -402,13 +402,13 @@ namespace DWSIM.Automation
+         {
+             var directories = new List<string>
+             {
+-                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+-                Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "extenders"),
+-                Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "ppacks"),
+-                Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "unitops"),
+-                Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "plugins"),
+-                Directory.GetParent(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)).FullName,
+-                Path.Combine(Directory.GetParent(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)).FullName, "extenders"),
++                (OperatingSystem.IsBrowser() ? "/dwsim" : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)),
++                Path.Combine((OperatingSystem.IsBrowser() ? "/dwsim" : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)), "extenders"),
++                Path.Combine((OperatingSystem.IsBrowser() ? "/dwsim" : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)), "ppacks"),
++                Path.Combine((OperatingSystem.IsBrowser() ? "/dwsim" : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)), "unitops"),
++                Path.Combine((OperatingSystem.IsBrowser() ? "/dwsim" : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)), "plugins"),
++                Directory.GetParent((OperatingSystem.IsBrowser() ? "/dwsim" : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location))).FullName,
++                Path.Combine(Directory.GetParent((OperatingSystem.IsBrowser() ? "/dwsim" : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location))).FullName, "extenders"),
+                 Directory.GetCurrentDirectory(),
+                 Path.Combine(Directory.GetCurrentDirectory(), "extenders")
+             };
+@@ -416,7 +416,7 @@ namespace DWSIM.Automation
+             // the avalonia folder holds .NET 8+ builds; a .NET Framework process that loaded them
+             // would bind their dependencies to the framework facades and fail
+             if (Environment.Version.Major >= 5)
+-                directories.Insert(1, Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "avalonia"));
++                directories.Insert(1, Path.Combine((OperatingSystem.IsBrowser() ? "/dwsim" : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)), "avalonia"));
+ 
+             foreach (var dir in directories)
+             {
+diff --git a/engine/DWSIM.Automation/Flowsheet2.cs b/engine/DWSIM.Automation/Flowsheet2.cs
+index f9d036f..84f076c 100644
+--- a/engine/DWSIM.Automation/Flowsheet2.cs
++++ b/engine/DWSIM.Automation/Flowsheet2.cs
+@@ -451,8 +451,9 @@ namespace DWSIM.Automation
+ 
+             try
+             {
+-                st.Start(TaskScheduler.Default);
+-                st.Wait();
++                // The browser (WebAssembly) has no thread pool to wait on: run the solve on this thread.
++                if (OperatingSystem.IsBrowser()) st.RunSynchronously();
++                else { st.Start(TaskScheduler.Default); st.Wait(); }
+                 return st.Result;
+             }
+             catch (AggregateException aex)
+diff --git a/engine/DWSIM.Drawing.SkiaSharp/GraphicsSurface/DesignSurface.vb b/engine/DWSIM.Drawing.SkiaSharp/GraphicsSurface/DesignSurface.vb
+index ec29e3e..19e0c96 100644
+--- a/engine/DWSIM.Drawing.SkiaSharp/GraphicsSurface/DesignSurface.vb
++++ b/engine/DWSIM.Drawing.SkiaSharp/GraphicsSurface/DesignSurface.vb
+@@ -155,6 +155,8 @@ Public Class GraphicsSurface
+     Public Sub New()
+ 
+         Dim assm = Me.GetType.Assembly
++        ' In the browser there is no native Skia; a headless surface never draws, so skip the fonts.
++        If OperatingSystem.IsBrowser() Then GoTo SkipTypefaces
+         If RegularTypeFace Is Nothing Then
+             Using filestr As IO.Stream = assm.GetManifestResourceStream("DWSIM.Drawing.SkiaSharp.Asap-Regular.ttf")
+                 RegularTypeFace = SKTypeface.FromStream(filestr)
+@@ -175,6 +177,7 @@ Public Class GraphicsSurface
+                 BoldItalicTypeFace = SKTypeface.FromStream(filestr)
+             End Using
+         End If
++SkipTypefaces:
+         RegularFonts = New List(Of String)
+         BoldFonts = New List(Of String)
+         ItalicFonts = New List(Of String)
+diff --git a/engine/DWSIM.FlowsheetBase/FlowsheetBase.vb b/engine/DWSIM.FlowsheetBase/FlowsheetBase.vb
+index 75f5975..4a87cd8 100644
+--- a/engine/DWSIM.FlowsheetBase/FlowsheetBase.vb
++++ b/engine/DWSIM.FlowsheetBase/FlowsheetBase.vb
+@@ -4816,10 +4816,10 @@ Label_00CC:
+         Next
+ 
+         Dim directories = New List(Of String)({
+-                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+-                Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "extenders"),
+-                Directory.GetParent(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)).FullName,
+-                Path.Combine(Directory.GetParent(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)).FullName, "extenders"),
++                If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)),
++                Path.Combine(If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)), "extenders"),
++                Directory.GetParent(If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location))).FullName,
++                Path.Combine(Directory.GetParent(If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location))).FullName, "extenders"),
+                 Directory.GetCurrentDirectory(),
+                 Path.Combine(Directory.GetCurrentDirectory(), "extenders")
+             })
+diff --git a/engine/DWSIM.GlobalSettings/Settings.vb b/engine/DWSIM.GlobalSettings/Settings.vb
+index c725748..0ad988f 100644
+--- a/engine/DWSIM.GlobalSettings/Settings.vb
++++ b/engine/DWSIM.GlobalSettings/Settings.vb
+@@ -280,7 +280,7 @@ Public Class Settings
+             If loaded.Count <> 1 Then Return
+             Dim host = loaded(0)
+             If host.IsDynamic OrElse String.IsNullOrEmpty(host.Location) Then Return
+-            If String.Equals(Path.GetDirectoryName(host.Location), Path.GetDirectoryName(GetType(Settings).Assembly.Location),
++            If String.Equals(If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(host.Location)), If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(GetType(Settings).Assembly.Location)),
+                              StringComparison.OrdinalIgnoreCase) Then Return
+             Dim isInit = host.GetType("Python.Runtime.PythonEngine")?.GetProperty("IsInitialized", BindingFlags.Public Or BindingFlags.Static)
+             If isInit Is Nothing OrElse Not CBool(isInit.GetValue(Nothing)) Then Return
+diff --git a/engine/DWSIM.SharedClasses/Misc/Utilities.vb b/engine/DWSIM.SharedClasses/Misc/Utilities.vb
+index dc62428..8d9f489 100644
+--- a/engine/DWSIM.SharedClasses/Misc/Utilities.vb
++++ b/engine/DWSIM.SharedClasses/Misc/Utilities.vb
+@@ -618,7 +618,7 @@ Public Class Utility
+ 
+         euos.AddRange(PreloadedUnitOperations)
+ 
+-        Dim ppath As String = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly.Location), "unitops")
++        Dim ppath As String = Path.Combine(If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetExecutingAssembly.Location)), "unitops")
+         If Directory.Exists(ppath) Then
+             Dim otheruos As String() = Directory.GetFiles(ppath, "*.dll", SearchOption.TopDirectoryOnly)
+             For Each fpath In otheruos
+@@ -687,7 +687,7 @@ Public Class Utility
+ 
+         ppacks.AddRange(PreloadedPropertyPackages)
+ 
+-        Dim thermoceos As String = Path.GetDirectoryName(Assembly.GetAssembly(New SystemsOfUnits.SI().GetType()).Location) + Path.DirectorySeparatorChar + "DWSIM.Thermodynamics.ThermoC.dll"
++        Dim thermoceos As String = If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetAssembly(New SystemsOfUnits.SI().GetType()).Location)) + Path.DirectorySeparatorChar + "DWSIM.Thermodynamics.ThermoC.dll"
+         If File.Exists(thermoceos) Then
+             Dim tca = Assembly.LoadFrom(thermoceos)
+             Dim pplist As List(Of Interfaces.IPropertyPackage) = GetPropertyPackages(tca)
+@@ -696,7 +696,7 @@ Public Class Utility
+             Next
+         End If
+ 
+-        Dim ppath As String = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(New SystemsOfUnits.SI().GetType()).Location), "ppacks")
++        Dim ppath As String = Path.Combine(If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetAssembly(New SystemsOfUnits.SI().GetType()).Location)), "ppacks")
+         If Directory.Exists(ppath) Then
+             Try
+                 Dim otherpps As String() = Directory.GetFiles(ppath, "*.dll", SearchOption.TopDirectoryOnly)
+@@ -734,13 +734,13 @@ Public Class Utility
+ 
+         Dim ppacks As New List(Of Assembly)
+ 
+-        Dim thermoceos As String = Path.GetDirectoryName(Assembly.GetExecutingAssembly.Location) + Path.DirectorySeparatorChar + "DWSIM.Thermodynamics.ThermoC.dll"
++        Dim thermoceos As String = If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetExecutingAssembly.Location)) + Path.DirectorySeparatorChar + "DWSIM.Thermodynamics.ThermoC.dll"
+         If File.Exists(thermoceos) Then
+             Dim tca = Assembly.LoadFrom(thermoceos)
+             ppacks.Add(tca)
+         End If
+ 
+-        Dim ppath As String = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly.Location), "ppacks")
++        Dim ppath As String = Path.Combine(If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetExecutingAssembly.Location)), "ppacks")
+         If Directory.Exists(ppath) Then
+             Try
+                 Dim otherpps As String() = Directory.GetFiles(ppath, "*.dll", SearchOption.TopDirectoryOnly)
+@@ -827,7 +827,7 @@ Public Class Utility
+     End Function
+ 
+     Public Shared Property DwsimRootDirectoryProvider As Func(Of String) = Function() As String
+-                                                                               Return Path.GetDirectoryName(GetType(Utility).Assembly.Location)
++                                                                               Return If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(GetType(Utility).Assembly.Location))
+                                                                            End Function
+ 
+     Public Shared Function GetDwsimRootDirectory() As String
+diff --git a/engine/DWSIM.SharedClasses/Scripting/IronPythonHost.vb b/engine/DWSIM.SharedClasses/Scripting/IronPythonHost.vb
+index 37f205d..6857bbe 100644
+--- a/engine/DWSIM.SharedClasses/Scripting/IronPythonHost.vb
++++ b/engine/DWSIM.SharedClasses/Scripting/IronPythonHost.vb
+@@ -116,7 +116,7 @@ Namespace Scripting
+             End Try
+ 
+             Try
+-                Dim here = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
++                Dim here = If(OperatingSystem.IsBrowser(), "/dwsim", Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location))
+                 If Not String.IsNullOrEmpty(here) AndAlso Not folders.Contains(here) Then folders.Add(here)
+             Catch ex As Exception
+             End Try
+diff --git a/engine/DWSIM.SharedClasses/TaskHelper/TaskHelper.vb b/engine/DWSIM.SharedClasses/TaskHelper/TaskHelper.vb
+index 01bbe8c..2ddc0b0 100644
+--- a/engine/DWSIM.SharedClasses/TaskHelper/TaskHelper.vb
++++ b/engine/DWSIM.SharedClasses/TaskHelper/TaskHelper.vb
+@@ -2,14 +2,27 @@
+ 
+     Public Shared Function Run(action As Action) As Task
+ 
++        If OperatingSystem.IsBrowser() Then Return RunInline(action)
+         Return Task.Run(action)
+ 
+     End Function
+ 
+     Public Shared Function Run(action As Action, ct As Threading.CancellationToken) As Task
+ 
++        If OperatingSystem.IsBrowser() Then Return RunInline(action)
+         Return Task.Run(action, ct)
+ 
+     End Function
+ 
++    ' WebAssembly in the browser has no thread pool, so callers that wait on the task would throw.
++    ' Run the work on the calling thread and hand back a finished task.
++    Private Shared Function RunInline(action As Action) As Task
++        Try
++            action()
++            Return Task.CompletedTask
++        Catch ex As Exception
++            Return Task.FromException(ex)
++        End Try
++    End Function
++
+ End Class
