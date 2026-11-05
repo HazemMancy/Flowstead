@@ -1,0 +1,17 @@
+{
+  "name": "flowstead-web",
+  "private": true,
+  "description": "Flowstead in the browser: the DWSIM engine as WebAssembly, served from GitHub Pages (D108).",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "test:units": "node --test tests/units.test.mjs",
+    "test:browser": "node tests/browser.test.mjs"
+  },
+  "dependencies": {
+    "brotli-dec-wasm": "2.3.2"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
