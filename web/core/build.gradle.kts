@@ -26,6 +26,17 @@ val patchCore = tasks.register<Exec>("patchCore") {
     commandLine("patch", "--batch", "--forward", "--fuzz=0", "-p1", "-i", patch.absolutePath)
 }
 
+// The app's canvas code (D110), copied unchanged: its symbols (Icons.kt) and its geometry (sizes, ports, routes, snapping,
+// hit-testing). They draw through a small stand-in for Compose's drawing API (src/composeShim) that paints on a browser
+// canvas. If the app's files start using more of Compose than the stand-in has, this build fails instead of drifting.
+val appCanvasSrc = layout.buildDirectory.dir("app-src")
+val copyAppCanvas = tasks.register<Sync>("copyAppCanvas") {
+    from(repo.resolve("android/app/src/main/kotlin")) {
+        include("app/flowstead/ui/flowsheet/Icons.kt", "app/flowstead/ui/flowsheet/CanvasGeometry.kt")
+    }
+    into(appCanvasSrc)
+}
+
 kotlin {
     // JVM too: the app's own core tests run against this copy there, and every browser replacement is checked
     // against the Java API it replaces.
@@ -49,7 +60,9 @@ kotlin {
         jvmMain { kotlin.srcDir("src/jvmCompat/kotlin") }
         jsMain {
             kotlin.srcDir("src/jsCompat/kotlin")
-            kotlin.srcDir("src/jsApi/kotlin") // FlowsteadCore: the API the web app calls
+            kotlin.srcDir("src/jsApi/kotlin") // FlowsteadCore and FlowsheetView: the API the web app calls
+            kotlin.srcDir("src/composeShim/kotlin")
+            kotlin.srcDir(copyAppCanvas.map { appCanvasSrc.get() })
         }
         commonTest {
             kotlin.srcDir(layout.buildDirectory.dir("generated/testData"))

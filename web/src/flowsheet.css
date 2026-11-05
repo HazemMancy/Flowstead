@@ -1,0 +1,53 @@
+/* Flowstead web — flowsheet page (D110). SPDX-License-Identifier: GPL-3.0-or-later */
+.fs-page{height:100dvh;min-height:0;overflow:hidden}
+.fs-page footer{padding:.5rem 0;font-size:.68rem}
+.fs-main{flex:1;min-height:0;display:flex;flex-direction:column;padding:0;position:relative}
+.fs-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;padding:.45rem .75rem;border-bottom:1px solid var(--border);background:var(--bg-card)}
+.fs-name{width:11rem!important;font-weight:600}
+.fs-select{width:auto!important;max-width:12rem}
+.fs-group{display:inline-flex;gap:.25rem}
+.fs-status{display:inline-flex;align-items:center;gap:.4rem;font-size:.72rem;color:var(--muted);margin-left:auto;min-width:0}
+.fs-status #statusText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:18rem}
+.fs-status .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex-shrink:0}
+.fs-status.ready .dot{background:var(--ok)} .fs-status.failed .dot{background:var(--err)}
+.fs-body{flex:1;min-height:0;display:grid;grid-template-columns:13.5rem minmax(0,1fr)}
+.fs-palette{border-right:1px solid var(--border);background:var(--bg-card);overflow:auto;padding:.6rem;display:flex;flex-direction:column;gap:.6rem}
+.fs-groups{display:flex;flex-wrap:wrap;gap:.25rem}
+.chip{font-size:.68rem;padding:.2rem .55rem;border-radius:999px;border:1px solid var(--border);background:none;cursor:pointer;color:var(--muted)}
+.chip[aria-selected="true"]{background:var(--primary-bg);border-color:var(--primary);color:var(--fg)}
+.fs-items{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(5.6rem,1fr));gap:.35rem}
+.tile{width:100%;display:flex;flex-direction:column;align-items:center;gap:.15rem;padding:.4rem .25rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);cursor:grab;font-size:.66rem;line-height:1.2;text-align:center;touch-action:pan-x pan-y;user-select:none;-webkit-user-select:none}
+.tile:hover{border-color:var(--primary)} .tile[disabled]{opacity:.45;cursor:not-allowed} .tile small{color:var(--muted);font-size:.6rem}
+.tile canvas{pointer-events:none}
+.fs-hint{font-size:.66rem;color:var(--muted)}
+.fs-stage{position:relative;min-width:0;min-height:0;background:var(--bg)}
+#canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:default}
+#canvas:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+.fs-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:var(--muted);font-size:.85rem;text-align:center;padding:2rem}
+.fs-empty[hidden]{display:none}
+.fs-inspector{position:absolute;right:.75rem;top:.75rem;width:min(20rem,calc(100% - 1.5rem));max-height:calc(100% - 1.5rem);overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.fs-inspector[hidden],.fs-solve[hidden]{display:none}
+.fs-insp-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem} .fs-insp-head h2{margin:0}
+.fs-desc{font-size:.75rem;color:var(--muted);margin-top:.5rem}
+.fs-inspector .actions{margin-top:.6rem}
+.fs-inspector table.props td{text-align:right} .fs-inspector table.props td.unit{text-align:left;font-family:var(--font)}
+.fs-solve{position:absolute;left:14.25rem;bottom:.75rem;width:min(26rem,calc(100% - 15rem));max-height:40%;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:5}
+.fs-solve .msgs{margin:.5rem 0 0} .fs-solve .msgs .info{border-color:color-mix(in srgb,var(--ok) 50%,transparent);color:var(--ok)}
+.fs-ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:50;opacity:.85}
+.fs-toast{position:fixed;left:50%;bottom:1.5rem;transform:translateX(-50%);z-index:60;max-width:min(32rem,calc(100% - 2rem));background:var(--bg-card);border:1px solid color-mix(in srgb,var(--err) 50%,transparent);color:var(--fg);padding:.6rem .9rem;border-radius:var(--radius);font-size:.8rem;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.fs-toast[hidden]{display:none}
+/* Phone: the palette is a strip under the canvas, as in the app. */
+@media(max-width:760px){
+  .fs-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+  .fs-palette{order:2;border-right:none;border-top:1px solid var(--border);padding:.4rem .5rem;gap:.35rem;overflow:hidden}
+  .fs-groups{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .chip{flex-shrink:0}
+  .fs-items{display:flex;overflow-x:auto;gap:.3rem;scrollbar-width:thin}
+  .fs-items li{flex:0 0 4.8rem}
+  .fs-hint{display:none}
+  .fs-name{width:7.5rem!important} .fs-select{max-width:8.5rem}
+  .fs-status{margin-left:0;flex-basis:100%}
+  .fs-solve{left:.75rem;width:calc(100% - 1.5rem);bottom:9rem}
+  .fs-inspector{top:auto;bottom:.75rem;max-height:55%}
+  .fs-page footer{display:none}
+}
