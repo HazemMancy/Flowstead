@@ -1,0 +1,76 @@
+name: web
+
+# Flowstead in the browser (D108): builds the WebAssembly engine and the web app, runs every
+# benchmark in headless Chromium through the site itself, and publishes web/dist to GitHub Pages
+# (https://hazemmancy.github.io/Flowstead/) from main.
+
+on:
+  push:
+    branches: [main]
+    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", ".github/workflows/web.yml"]
+  pull_request:
+    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", ".github/workflows/web.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: WebAssembly build tools
+        run: dotnet workload install wasm-tools
+      - name: Cache the DWSIM build
+        uses: actions/cache@v4
+        with:
+          path: engine/dwsim-bin
+          key: dwsim-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/patches/**', 'engine/native/ipopt_stub.c') }}
+      - name: Build the pinned DWSIM from source
+        run: engine/scripts/fetch-dwsim.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install web dependencies
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Unit conversions against shared/units/test-vectors.json
+        working-directory: web
+        run: npm run test:units
+      - name: Build the engine for the browser and assemble the site
+        run: engine/scripts/build-web.sh
+      - name: Benchmarks and workbench in headless Chromium
+        working-directory: web
+        run: npm run test:browser
+      - name: Upload the site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build-test
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
