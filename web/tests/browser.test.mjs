@@ -3,7 +3,9 @@
 // Serves web/dist, starts the engine in headless Chromium through the site's own worker, and:
 //   1. solves every case in benchmarks/ and checks it against expected.json with the rules of
 //      engine/tests/Flowstead.Engine.Tests/BenchmarkTests.cs (abs/rel tolerance, minus/plus, blocking references);
-//   2. drives the workbench like a user (example → Flash → Phase envelope) at phone and desktop width.
+//   2. drives the workbench like a user (example → Flash → Phase envelope) at phone and desktop width;
+//   3. drives the flowsheet (D110) like a user: an example solved and read back from the canvas's inspector, and a
+//      flowsheet drawn by hand (palette, wire from a port, move, undo, kept across a reload), at phone and desktop width.
 //
 //   node tests/browser.test.mjs [case-name ...]
 import http from 'node:http';
@@ -16,7 +18,7 @@ const dist = path.resolve(here, '../dist');
 const benchDir = path.resolve(here, '../../benchmarks');
 const only = process.argv.slice(2);
 
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm' };
 const server = http.createServer((req, res) => {
   const p = path.join(dist, decodeURIComponent(new URL(req.url, 'http://x').pathname));
   const file = fs.existsSync(p) && fs.statSync(p).isDirectory() ? path.join(p, 'index.html') : p;
@@ -117,6 +119,68 @@ try {
     // The page promises that what the user enters never leaves the device: it may only fetch its own files.
     if (hosts.size !== 1 || ![...hosts][0].startsWith('127.0.0.1')) problems.push(`requests to other hosts: ${[...hosts].join(', ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} workbench at ${width} px (vapour fraction ${vf})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 3. the flowsheet, as a user ----------
+  const exp06 = JSON.parse(fs.readFileSync(path.join(benchDir, '06-compressor-aftercooler', 'expected.json'), 'utf8')).checks;
+  const want = (p) => exp06.find((c) => c.path === p).expected;
+  for (const width of [360, 1280]) {
+    const p = await browser.newPage({ viewport: { width, height: 800 } });
+    const errs = [], hosts = new Set(), problems = [];
+    p.on('request', (r) => hosts.add(new URL(r.url()).host));
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '06-compressor-aftercooler');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    await p.click('#solveBtn');
+    await p.waitForFunction(() => /Converged/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
+    // Read results back as a user does: select the object (here through the screen-reader list), read the inspector.
+    const read = async (id, label) => {
+      await p.evaluate((id) => document.querySelector(`#objects [data-id="${id}"]`).click(), id);
+      const row = p.locator('#inspResults tr', { has: p.locator('th', { hasText: label }) }).first();
+      return { value: Number((await row.locator('td').first().textContent()).replace(/,/g, '')), unit: await row.locator('td.unit').textContent() };
+    };
+    const t = await read('dis', 'Temperature');
+    const tWant = want('objects.dis.properties.temperature') - 273.15; // K → °C by hand
+    if (t.unit !== '°C' || Math.abs(t.value - tWant) > 0.05) problems.push(`DISCHARGE temperature shown ${t.value} ${t.unit}, benchmark 06 expects ${tWant.toFixed(3)} °C`);
+    const pw = await read('k', 'Power');
+    const pwWant = want('objects.k.properties.power');
+    const pwSi = pw.unit === 'kW' ? pw.value * 1e3 : pw.unit === 'W' ? pw.value : NaN;
+    if (!(Math.abs(pwSi - pwWant) <= 0.01 * pwWant)) problems.push(`K-100 power shown ${pw.value} ${pw.unit}, benchmark 06 expects ${pwWant} W`);
+    if (width === 1280) {
+      // Drawn by hand: a valve from the palette, a product stream wired from its outlet, the valve moved, then undone.
+      await p.click('#newBtn');
+      await p.click('.tile[data-type="valve"]');
+      const st = await p.evaluate(() => { const { view, project, core } = window.flowsteadFlowsheet;
+        const v = JSON.parse(project.flowsheet).objects[0], t = JSON.parse(core.objectTypes()).find((x) => x.id === 'valve');
+        return { x: v.x, y: v.y, w: t.width, ox: view.offsetX, oy: view.offsetY, z: view.zoom }; });
+      const box = await p.locator('#canvas').boundingBox();
+      const at = (x, y) => [box.x + st.ox + x * st.z, box.y + st.oy + y * st.z];
+      const drag = async ([x0, y0], dx, dy) => { await p.mouse.move(x0, y0); await p.mouse.down(); await p.mouse.move(x0 + dx / 2, y0 + dy / 2, { steps: 4 }); await p.mouse.move(x0 + dx, y0 + dy, { steps: 4 }); await p.mouse.up(); };
+      await drag(at(st.x + st.w / 2, st.y), 150, 0);
+      const sheet = async () => p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
+      let f = await sheet();
+      if (f.objects.length !== 2 || f.connections.length !== 1) problems.push(`wire from the outlet: ${f.objects.length} objects, ${f.connections.length} connections`);
+      await drag(at(st.x, st.y - 4), 36, 96);
+      f = await sheet();
+      const moved = f.objects.find((o) => o.type === 'valve');
+      if (moved.x === st.x && moved.y === st.y) problems.push('the valve did not move');
+      await p.keyboard.press('Control+z');
+      f = await sheet();
+      if (f.objects.find((o) => o.type === 'valve').x !== st.x) problems.push('undo did not put the valve back');
+      await p.reload();
+      await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+      if ((await sheet()).objects.length !== 2) problems.push('the flowsheet was not kept across a reload');
+    }
+    const overflow = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    if (overflow > 0) problems.push(`page scrolls sideways by ${overflow} px`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    if (hosts.size !== 1 || ![...hosts][0].startsWith('127.0.0.1')) problems.push(`requests to other hosts: ${[...hosts].join(', ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} flowsheet at ${width} px (DISCHARGE ${t.value} ${t.unit}, K-100 ${pw.value} ${pw.unit})`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();

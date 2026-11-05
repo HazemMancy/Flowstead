@@ -7,9 +7,9 @@ name: web
 on:
   push:
     branches: [main]
-    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", "android/core/**", "docs/DECISIONS.md", "docs/release-notes/**", ".github/workflows/web.yml"]
+    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", "android/core/**", "android/app/src/main/kotlin/app/flowstead/ui/flowsheet/**", "docs/DECISIONS.md", "docs/release-notes/**", ".github/workflows/web.yml"]
   pull_request:
-    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", "android/core/**", "docs/DECISIONS.md", "docs/release-notes/**", ".github/workflows/web.yml"]
+    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", "android/core/**", "android/app/src/main/kotlin/app/flowstead/ui/flowsheet/**", "docs/DECISIONS.md", "docs/release-notes/**", ".github/workflows/web.yml"]
   workflow_dispatch:
 
 permissions:

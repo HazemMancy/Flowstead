@@ -9,10 +9,11 @@ device. There is no server, and nothing the user types leaves the browser. See `
 
 | Path | What |
 |---|---|
-| `src/` | The site: `index.html`, `app.js` (workbench), `engine.js` + `engine-worker.js` (engine in a worker), `units.js`, `style.css` |
+| `src/` | The site: `flowsheet.html` + `flowsheet.js` (flowsheet, D110), `index.html`, `app.js` (stream workbench), `engine.js` + `engine-worker.js` (engine in a worker), `units.js`, `style.css` |
 | `tests/units.test.mjs` | Web unit conversions against `shared/units/test-vectors.json` |
-| `tests/browser.test.mjs` | Every benchmark through the built site in headless Chromium, and the workbench at 360 and 1280 px |
-| `core/` | The app's Kotlin core for the browser (D109): built from `android/core` plus `core/patches/core-web.patch`, `android/` is never edited |
+| `tests/browser.test.mjs` | Every benchmark through the built site in headless Chromium; the workbench and the flowsheet at 360 and 1280 px |
+| `tests/core.test.mjs` | The web core and the canvas from plain JavaScript |
+| `core/` | The app's Kotlin core for the browser (D109): built from `android/core` plus `core/patches/core-web.patch`, and the app's canvas code (`Icons.kt`, `CanvasGeometry.kt`) on `core/src/composeShim` (D110); `android/` is never edited |
 | `../engine/web/` | The WebAssembly build of the engine |
 | `../engine/patches/dwsim-browser.patch` | DWSIM changes for one-threaded WebAssembly, all behind `OperatingSystem.IsBrowser()` |
 
@@ -33,6 +34,14 @@ engine/scripts/build-web.sh            # builds DWSIM if needed, then web/dist
 In the repository's settings, **Pages → Build and deployment → Source** must be **GitHub Actions**.
 
 ## Release notes
+
+**Web 1.1**
+- Flowsheet: https://hazemmancy.github.io/Flowstead/flowsheet.html. The app's palette and its PFD symbols, drawn by
+  the app's own code. Add streams and units, drag from a port to draw a stream, move, pan and zoom, undo and redo.
+- Open any of the 22 examples, solve it in the browser, and read every result of a stream or unit in the inspector.
+  Status badges and stream colours as in the app; results marked out of date after a change.
+- Save and open flowsheets in the app's format; the current one is kept in the browser.
+- Not yet: editing specs and compositions (next release).
 
 **Web 1.0 (2026-11-05)**
 - Flowstead runs in the browser: the DWSIM engine loads on the device (about 38 MB the first time, cached after).

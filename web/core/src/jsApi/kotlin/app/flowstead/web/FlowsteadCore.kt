@@ -9,7 +9,14 @@ package app.flowstead.web
 
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.compat.Resources
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import app.flowstead.core.export.Csv
+import app.flowstead.core.help.AutoLayout
+import app.flowstead.core.model.Readiness
+import app.flowstead.core.model.displayName
+import app.flowstead.ui.flowsheet.drawNozzles
+import app.flowstead.ui.flowsheet.drawUnitIcon
 import app.flowstead.core.export.ResultsWorkbook
 import app.flowstead.core.export.Xlsx
 import app.flowstead.core.format.ValueFormat
@@ -51,12 +58,52 @@ object FlowsteadCore {
     /** Every object type the palette offers: id (as in project files), category, symbol size and ports. */
     fun objectTypes(): String = buildJsonArray {
         for (t in ObjectType.entries) add(buildJsonObject {
-            put("id", serialName(t)); put("name", t.name); put("category", t.category.label)
+            put("id", serialName(t)); put("name", t.name); put("label", t.displayName()); put("category", t.category.label)
             put("available", t.available); put("isStream", t.isStream)
             val (w, h) = Symbols.size(t); put("width", w); put("height", h)
             putJsonArray("ports") { Ports.of(t).forEach { add(portJson(it)) } }
         })
     }.toString()
+
+    /**
+     * Draws [typeId]'s symbol as the app's palette and canvas do (Icons.kt), centred in a [width] × [height] box on
+     * [ctx] (a CanvasRenderingContext2D), scaled to fit with its nozzles.
+     */
+    fun drawSymbol(ctx: dynamic, typeId: String, width: Double, height: Double, dark: Boolean) {
+        val t = type(typeId)
+        val (sw, sh) = Symbols.size(t)
+        val k = (minOf(width / (sw * 1.15), height / (sh * 1.15))).toFloat()
+        val d = CanvasDrawScope(ctx, Size(width.toFloat(), height.toFloat()))
+        val p = CanvasColors(dark).palette
+        ctx.save()
+        ctx.translate(width / 2, height / 2)
+        ctx.scale(k, k)
+        val s = Size(sw.toFloat(), sh.toFloat())
+        if (!t.isStream) d.drawNozzles(t, Offset.Zero, s, p, strokeWidth = 2f)
+        d.drawUnitIcon(t, Offset.Zero, s, p, strokeWidth = 2f)
+        ctx.restore()
+    }
+
+    /** An example's flowsheet laid out left to right as a PFD, as the app opens examples (AutoLayout). */
+    fun layout(flowsheetJson: String): String = out(AutoLayout.layout(fs(flowsheetJson)))
+
+    /**
+     * What the app checks before it solves: {blocking: [..], notReady: {id: reason}, anyReady, solvable, modelHash}.
+     * The engine gets only [solvable], the objects that are ready (D83); [modelHash] is of the whole flowsheet, as the
+     * app stores it with the result.
+     */
+    fun prepareSolve(flowsheetJson: String): String {
+        val f = fs(flowsheetJson)
+        val r = Readiness.of(f)
+        return buildJsonObject {
+            putJsonArray("blocking") { Specification.blocking(f).forEach { add(JsonPrimitive(it.second)) } }
+            putJsonArray("problems") { Specification.problems(f).forEach { add(JsonPrimitive(it.second)) } }
+            put("notReady", JsonObject(r.notReady.mapValues { JsonPrimitive(it.value) }))
+            put("anyReady", r.anyReady)
+            put("solvable", FlowsheetJson.parseToJsonElement(out(r.solvable)))
+            put("modelHash", f.modelHash())
+        }.toString()
+    }
 
     /** A new, empty flowsheet in the app's format. */
     fun newFlowsheet(propertyPackage: String): String = out(Flowsheet(propertyPackage = propertyPackage))
