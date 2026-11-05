@@ -12,6 +12,7 @@ device. There is no server, and nothing the user types leaves the browser. See `
 | `src/` | The site: `index.html`, `app.js` (workbench), `engine.js` + `engine-worker.js` (engine in a worker), `units.js`, `style.css` |
 | `tests/units.test.mjs` | Web unit conversions against `shared/units/test-vectors.json` |
 | `tests/browser.test.mjs` | Every benchmark through the built site in headless Chromium, and the workbench at 360 and 1280 px |
+| `core/` | The app's Kotlin core for the browser (D109): built from `android/core` plus `core/patches/core-web.patch`, `android/` is never edited |
 | `../engine/web/` | The WebAssembly build of the engine |
 | `../engine/patches/dwsim-browser.patch` | DWSIM changes for one-threaded WebAssembly, all behind `OperatingSystem.IsBrowser()` |
 
@@ -21,6 +22,8 @@ Needs the .NET 10 SDK with the WebAssembly tools (`dotnet workload install wasm-
 
 ```sh
 (cd web && npm ci)
+(cd web/core && ./gradlew jvmTest jsNodeTest jsNodeProductionLibraryDistribution)   # JDK 17+; the app's core tests on the copy
+(cd web && npm run test:core)
 engine/scripts/build-web.sh            # builds DWSIM if needed, then web/dist
 (cd web && npm run test:units && npm run test:browser)
 (cd web/dist && python3 -m http.server 8000)   # http://localhost:8000/

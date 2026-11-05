@@ -7,9 +7,9 @@ name: web
 on:
   push:
     branches: [main]
-    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", ".github/workflows/web.yml"]
+    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", "android/core/**", "docs/DECISIONS.md", "docs/release-notes/**", ".github/workflows/web.yml"]
   pull_request:
-    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", ".github/workflows/web.yml"]
+    paths: ["engine/**", "web/**", "shared/**", "benchmarks/**", "android/core/**", "docs/DECISIONS.md", "docs/release-notes/**", ".github/workflows/web.yml"]
   workflow_dispatch:
 
 permissions:
@@ -50,6 +50,17 @@ jobs:
       - name: Unit conversions against shared/units/test-vectors.json
         working-directory: web
         run: npm run test:units
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Web core (D109) - the app's core tests on the JVM, the browser build and its tests in Node
+        working-directory: web/core
+        run: ./gradlew --no-daemon jvmTest jsNodeTest jsNodeProductionLibraryDistribution
+      - name: Web core from plain JavaScript
+        working-directory: web
+        run: npm run test:core
       - name: Build the engine for the browser and assemble the site
         run: engine/scripts/build-web.sh
       - name: Benchmarks and workbench in headless Chromium

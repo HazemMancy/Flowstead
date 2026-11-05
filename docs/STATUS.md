@@ -177,6 +177,7 @@ _Last updated: 2026-11-05_
   - A missing IPOPT can no longer crash the engine.
 - **3.2.1 overlapping text (D107):** phase-envelope point labels placed so they never overlap, the plot legend wraps, number-field labels stay on one line, and the PSV line's length and fittings fields each have their own row.
 - **Flowstead in the browser (D108):** the engine as WebAssembly in a Web Worker, published to https://hazemmancy.github.io/Flowstead/ by `web.yml`. Stream workbench (flash, phase properties, phase envelope). All 22 benchmarks pass in headless Chromium through the site itself; engine suite 260/260 with the browser patch. Safari/iPhone not yet tested.
+- **Web core (D109):** the app's Kotlin core built for the browser from a copy of `android/core` plus `web/core/patches/core-web.patch` (`android/` unchanged); the app's 196 core tests pass on it, every replacement matches the Java API it replaces, and the browser reproduces the JVM's outputs and model hashes. Exposed as `FlowsteadCore` for the web flowsheet (Phase 2).
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).
