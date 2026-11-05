@@ -64,6 +64,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.flowstead.core.api.MessageLevel
 import app.flowstead.core.api.ObjectStatus
@@ -1100,7 +1101,8 @@ fun QuantityField(
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            label = { Text(label) },
+            // One line: a wrapped label runs over the field's border (D107).
+            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             placeholder = { Text(hint ?: "—") },
             isError = error != null,
             supportingText = error?.let { { Text(it) } },

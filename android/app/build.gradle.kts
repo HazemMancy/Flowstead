@@ -34,8 +34,8 @@ android {
         applicationId = "app.flowstead"
         minSdk = 26
         targetSdk = 37
-        versionCode = 40
-        versionName = "3.2.0"
+        versionCode = 41
+        versionName = "3.2.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "LOCAL_ENGINE", localEngine.toString())
         // Test builds only (-PdirectInstall): the update popup's Install button installs the download itself, which

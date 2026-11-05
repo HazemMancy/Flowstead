@@ -442,14 +442,9 @@ private fun LineFields(line: ReliefLine?, key: String, unitSet: UnitSet, ctx: Un
         }
     }
     val lu = unitSet.unitFor(Quantity.Length)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Column(Modifier.weight(1f)) {
-            QuantityField("Length", Spec(line.length, lu.id), Quantity.Length, lu, ctx, "${key}_len") { it?.let { s -> onChange(line.copy(length = s.si)) } }
-        }
-        Column(Modifier.weight(1f)) {
-            QuantityField("Fittings (equivalent length)", Spec(line.fittingsLength, lu.id), Quantity.Length, lu, ctx, "${key}_fit", hint = "0") { onChange(line.copy(fittingsLength = it?.si ?: 0.0)) }
-        }
-    }
+    // One field per row: side by side, "Fittings (equivalent length)" wrapped onto the field's border (D107).
+    QuantityField("Length", Spec(line.length, lu.id), Quantity.Length, lu, ctx, "${key}_len") { it?.let { s -> onChange(line.copy(length = s.si)) } }
+    QuantityField("Fittings (equivalent length)", Spec(line.fittingsLength, lu.id), Quantity.Length, lu, ctx, "${key}_fit", hint = "0") { onChange(line.copy(fittingsLength = it?.si ?: 0.0)) }
 }
 
 // ------------------------------------------------------------------ depressuring

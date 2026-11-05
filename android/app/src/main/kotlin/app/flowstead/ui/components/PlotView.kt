@@ -11,6 +11,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +53,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import app.flowstead.core.format.ValueFormat
+import app.flowstead.core.model.LabelPlacer
 import app.flowstead.core.model.Plot
 import app.flowstead.core.model.Plots
 import app.flowstead.core.units.EngUnit
@@ -78,6 +81,7 @@ fun PlotsSection(plots: List<Plot>, unitSet: UnitSet, ctx: UnitContext, stale: B
  * A line plot in the user's units with round-numbered axes. Touch or drag on it to read the nearest point of each
  * line; the values shown are the engine's points, never interpolated.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlotView(plot: Plot, unitSet: UnitSet, ctx: UnitContext, stale: Boolean = false, modifier: Modifier = Modifier) {
     val xu = unitSet.unitFor(plot.xQuantity)
@@ -168,18 +172,22 @@ fun PlotView(plot: Plot, unitSet: UnitSet, ctx: UnitContext, stale: Boolean = fa
                     style = Stroke(width = 4f, pathEffect = if (s.dashed) PathEffect.dashPathEffect(floatArrayOf(14f, 8f)) else null),
                 )
             }
-            for (m in plot.markers) {
-                val o = Offset(px(xs(m.x)), py(ys(m.y)))
-                drawCircle(markerColour, 7f, o)
-                val text = measurer.measure(m.label, label)
-                val x = (o.x + 8f).coerceAtMost(size.width - text.size.width)
-                drawText(text, topLeft = Offset(x, o.y - text.size.height - 2f))
-            }
+            // Labels are placed so close points (critical point, cricondenbar) never print over each other (D107).
+            val dots = plot.markers.map { m -> Offset(px(xs(m.x)), py(ys(m.y))) }
+            val texts = plot.markers.map { m -> measurer.measure(m.label, label) }
+            val boxes = LabelPlacer.place(
+                dots.map { it.x.toDouble() to it.y.toDouble() },
+                texts.map { it.size.width.toDouble() to it.size.height.toDouble() },
+                size.width.toDouble(), size.height.toDouble(), gap = 3.dp.toPx().toDouble(), dot = 7.0,
+            )
+            dots.forEach { drawCircle(markerColour, 7f, it) }
+            texts.forEachIndexed { i, text -> drawText(text, topLeft = Offset(boxes[i].left.toFloat(), boxes[i].top.toFloat())) }
 
             for ((i, s, k) in picks) drawCircle(colours[i % colours.size], 9f, Offset(px(xs(s.x[k])), py(ys(s.y[k]))))
             touch?.let { t -> drawLine(axis, Offset(t.x.coerceIn(left, left + w), top), Offset(t.x.coerceIn(left, left + w), top + h), 1.5f) }
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        // The legend wraps: an envelope carries up to eight lines, more than one row holds on a phone (D107).
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             plot.series.forEachIndexed { i, s ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(width = 14.dp, height = 3.dp).background(colours[i % colours.size]))

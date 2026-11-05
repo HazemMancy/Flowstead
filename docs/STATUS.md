@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-11-04_
+_Last updated: 2026-11-05_
 
 ## Works
 
@@ -175,6 +175,7 @@ _Last updated: 2026-11-04_
 - **Engine fixes (D28):**
   - Hot water no longer goes through DWSIM's free-water flash.
   - A missing IPOPT can no longer crash the engine.
+- **3.2.1 overlapping text (D107):** phase-envelope point labels placed so they never overlap, the plot legend wraps, number-field labels stay on one line, and the PSV line's length and fittings fields each have their own row.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).

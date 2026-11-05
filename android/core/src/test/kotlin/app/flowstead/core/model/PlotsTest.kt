@@ -70,3 +70,36 @@ class PlotsTest {
         assertEquals(Quantity.Fraction, plot.yQuantity)
     }
 }
+
+class LabelPlacerTest {
+    private fun noClashes(boxes: List<LabelBox>) {
+        for (i in boxes.indices) for (j in i + 1 until boxes.size) assertEquals(0.0, boxes[i].overlap(boxes[j]), "labels $i and $j overlap")
+    }
+
+    @Test
+    fun nearbyEnvelopePointsGetSeparateLabels() {
+        // The owner's screenshot: critical point and cricondenbar a few pixels apart near the right edge,
+        // the cricondentherm just below them.
+        val points = listOf(700.0 to 120.0, 708.0 to 118.0, 740.0 to 150.0, 800.0 to 40.0)
+        val sizes = listOf(110.0 to 24.0, 120.0 to 24.0, 140.0 to 24.0, 100.0 to 24.0)
+        val boxes = LabelPlacer.place(points, sizes, 860.0, 440.0, gap = 4.0, dot = 4.0)
+        noClashes(boxes)
+        boxes.forEachIndexed { i, b ->
+            assertTrue(b.left >= 0 && b.right <= 860.0 && b.top >= 0 && b.bottom <= 440.0, "label $i off the canvas: $b")
+            points.forEach { (x, y) -> assertEquals(0.0, b.overlap(LabelBox(x - 4, y - 4, 8.0, 8.0)), "label $i covers the dot at $x, $y") }
+        }
+    }
+
+    @Test
+    fun aLonePointKeepsItsLabelAboveRight() {
+        val b = LabelPlacer.place(listOf(100.0 to 100.0), listOf(50.0 to 20.0), 400.0, 300.0, gap = 4.0, dot = 4.0).single()
+        assertEquals(LabelBox(104.0, 76.0, 50.0, 20.0), b)
+    }
+
+    @Test
+    fun manyPointsOnOneSpotStillDoNotOverlap() {
+        val points = List(5) { 200.0 to 150.0 }
+        val sizes = List(5) { 80.0 to 20.0 }
+        noClashes(LabelPlacer.place(points, sizes, 600.0, 400.0, gap = 4.0, dot = 4.0))
+    }
+}

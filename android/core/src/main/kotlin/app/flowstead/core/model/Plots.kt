@@ -121,3 +121,65 @@ object Plots {
         return (0..n).map { i -> (first + i * step).let { v -> if (abs(v) < step * 1e-9) 0.0 else v } }
     }
 }
+
+/** A label's box on the canvas, in pixels (y down). */
+data class LabelBox(val left: Double, val top: Double, val width: Double, val height: Double) {
+    val right get() = left + width
+    val bottom get() = top + height
+    fun overlap(o: LabelBox): Double {
+        val w = minOf(right, o.right) - maxOf(left, o.left)
+        val h = minOf(bottom, o.bottom) - maxOf(top, o.top)
+        return if (w > 0 && h > 0) w * h else 0.0
+    }
+}
+
+/**
+ * Where to draw each marker's label so no two overlap, none covers another marker's dot, and all stay on the
+ * canvas (D107). Points close together (a critical point beside the cricondenbar) otherwise print on top of each
+ * other. Each label tries the eight places around its point, then the same places stepped further out, and takes
+ * the first with no clash, or the one that clashes least. [points] are the dots' centres, [sizes] each label's
+ * width and height, all in pixels.
+ */
+object LabelPlacer {
+    fun place(
+        points: List<Pair<Double, Double>>,
+        sizes: List<Pair<Double, Double>>,
+        canvasWidth: Double,
+        canvasHeight: Double,
+        gap: Double,
+        dot: Double,
+    ): List<LabelBox> {
+        require(points.size == sizes.size)
+        val dots = points.map { (x, y) -> LabelBox(x - dot, y - dot, 2 * dot, 2 * dot) }
+        val placed = mutableListOf<LabelBox>()
+        points.forEachIndexed { i, (x, y) ->
+            val (w, h) = sizes[i]
+            fun candidates(step: Int): List<LabelBox> {
+                val s = step * (h + gap)
+                return listOf(
+                    LabelBox(x + gap, y - h - gap - s, w, h), // above right
+                    LabelBox(x + gap, y + gap + s, w, h), // below right
+                    LabelBox(x - gap - w, y - h - gap - s, w, h), // above left
+                    LabelBox(x - gap - w, y + gap + s, w, h), // below left
+                    LabelBox(x + dot + gap, y - h / 2 - s, w, h), // right
+                    LabelBox(x - dot - gap - w, y - h / 2 - s, w, h), // left
+                    LabelBox(x - w / 2, y - dot - gap - h - s, w, h), // above
+                    LabelBox(x - w / 2, y + dot + gap + s, w, h), // below
+                )
+            }
+            fun cost(b: LabelBox): Double {
+                val outside = (maxOf(0.0, -b.left) + maxOf(0.0, b.right - canvasWidth)) * h +
+                    (maxOf(0.0, -b.top) + maxOf(0.0, b.bottom - canvasHeight)) * w
+                return placed.sumOf { it.overlap(b) } + dots.sumOf { it.overlap(b) } + outside * 4
+            }
+            val all = (0..4).flatMap(::candidates)
+            val best = all.firstOrNull { cost(it) == 0.0 } ?: all.minBy(::cost)
+            // Pull a label that still sticks out back onto the canvas.
+            placed += best.copy(
+                left = best.left.coerceIn(0.0, maxOf(0.0, canvasWidth - w)),
+                top = best.top.coerceIn(0.0, maxOf(0.0, canvasHeight - h)),
+            )
+        }
+        return placed
+    }
+}
