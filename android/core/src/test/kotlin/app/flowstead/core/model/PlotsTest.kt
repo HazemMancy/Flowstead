@@ -102,4 +102,11 @@ class LabelPlacerTest {
         val sizes = List(5) { 80.0 to 20.0 }
         noClashes(LabelPlacer.place(points, sizes, 600.0, 400.0, gap = 4.0, dot = 4.0))
     }
+
+    @Test
+    fun aSmallGapStillLeavesTheLabelBesideItsOwnDot() {
+        // A low-density screen: a 3 px gap beside a 7 px dot.
+        val b = LabelPlacer.place(listOf(100.0 to 100.0), listOf(50.0 to 20.0), 400.0, 300.0, gap = 3.0, dot = 7.0).single()
+        assertEquals(LabelBox(107.0, 73.0, 50.0, 20.0), b)
+    }
 }

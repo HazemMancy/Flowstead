@@ -151,20 +151,22 @@ object LabelPlacer {
     ): List<LabelBox> {
         require(points.size == sizes.size)
         val dots = points.map { (x, y) -> LabelBox(x - dot, y - dot, 2 * dot, 2 * dot) }
+        // A gap smaller than the dot's radius would put every corner place over the label's own dot.
+        val g = maxOf(gap, dot)
         val placed = mutableListOf<LabelBox>()
         points.forEachIndexed { i, (x, y) ->
             val (w, h) = sizes[i]
             fun candidates(step: Int): List<LabelBox> {
-                val s = step * (h + gap)
+                val s = step * (h + g)
                 return listOf(
-                    LabelBox(x + gap, y - h - gap - s, w, h), // above right
-                    LabelBox(x + gap, y + gap + s, w, h), // below right
-                    LabelBox(x - gap - w, y - h - gap - s, w, h), // above left
-                    LabelBox(x - gap - w, y + gap + s, w, h), // below left
-                    LabelBox(x + dot + gap, y - h / 2 - s, w, h), // right
-                    LabelBox(x - dot - gap - w, y - h / 2 - s, w, h), // left
-                    LabelBox(x - w / 2, y - dot - gap - h - s, w, h), // above
-                    LabelBox(x - w / 2, y + dot + gap + s, w, h), // below
+                    LabelBox(x + g, y - h - g - s, w, h), // above right
+                    LabelBox(x + g, y + g + s, w, h), // below right
+                    LabelBox(x - g - w, y - h - g - s, w, h), // above left
+                    LabelBox(x - g - w, y + g + s, w, h), // below left
+                    LabelBox(x + dot + g, y - h / 2 - s, w, h), // right
+                    LabelBox(x - dot - g - w, y - h / 2 - s, w, h), // left
+                    LabelBox(x - w / 2, y - dot - g - h - s, w, h), // above
+                    LabelBox(x - w / 2, y + dot + g + s, w, h), // below
                 )
             }
             fun cost(b: LabelBox): Double {
