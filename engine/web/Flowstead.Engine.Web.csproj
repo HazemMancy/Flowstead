@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <!-- Flowstead engine for the browser (D108): the same Contracts + Worker sources and the same
+       DWSIM build as the server and the phone, compiled for WebAssembly. Not part of
+       Flowstead.Engine.sln; built by engine/scripts/build-web.sh. SPDX-License-Identifier: GPL-3.0-or-later -->
+  <PropertyGroup>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- DWSIM loads types by reflection: trimming would remove what it needs. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <!-- DWSIM creates en-US cultures. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <WasmEnableWebcil>true</WasmEnableWebcil>
+    <CompressionEnabled>true</CompressionEnabled>
+    <!-- No debugger in the shipped engine: with it the .NET interpreter runs DWSIM's start-up about 4× slower. -->
+    <DebugType>none</DebugType>
+    <DebuggerSupport>false</DebuggerSupport>
+    <WasmDebugLevel>0</WasmDebugLevel>
+    <NoWarn>$(NoWarn);CS8632;CS0618;CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../src/Flowstead.Engine.Contracts/**/*.cs" Exclude="../src/Flowstead.Engine.Contracts/obj/**;../src/Flowstead.Engine.Contracts/bin/**" LinkBase="Contracts" />
+    <Compile Include="../src/Flowstead.Engine.Worker/**/*.cs" Exclude="../src/Flowstead.Engine.Worker/Program.cs;../src/Flowstead.Engine.Worker/obj/**;../src/Flowstead.Engine.Worker/bin/**" LinkBase="Worker" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Every DWSIM assembly goes into the bundle: in the browser there is no folder to load them from. -->
+    <Reference Include="$(DwsimBin)/*.dll" Private="true" />
+    <WasmFilesToIncludeInFileSystem Include="$(DwsimBin)/addcomps/**/*" TargetPath="dwsim/addcomps/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
