@@ -9,7 +9,7 @@ device. There is no server, and nothing the user types leaves the browser. See `
 
 | Path | What |
 |---|---|
-| `src/` | The site: `flowsheet.html` + `flowsheet.js` (flowsheet, D110), `index.html`, `app.js` (stream workbench), `engine.js` + `engine-worker.js` (engine in a worker), `units.js`, `style.css` |
+| `src/` | The site: `flowsheet.html` + `flowsheet.js` (flowsheet, D110), `tools.js` + `report.js` (the app's tools, D112), `index.html`, `app.js` (stream workbench), `engine.js` + `engine-worker.js` (engine in a worker), `units.js`, `style.css` |
 | `tests/units.test.mjs` | Web unit conversions against `shared/units/test-vectors.json` |
 | `tests/browser.test.mjs` | Every benchmark through the built site in headless Chromium; the workbench and the flowsheet at 360 and 1280 px |
 | `tests/core.test.mjs` | The web core and the canvas from plain JavaScript |
@@ -34,6 +34,15 @@ engine/scripts/build-web.sh            # builds DWSIM if needed, then web/dist
 In the repository's settings, **Pages → Build and deployment → Source** must be **GitHub Actions**.
 
 ## Release notes
+
+**Web 1.3**
+- Stream Analysis tab: phase envelope (quality lines, hydrate curve, inhibitor), PVT laboratory (saturation, CCE, CVD,
+  differential liberation, separator test) and distillation curves with product properties.
+- Tools: case studies (one or two variables), the optimiser, and safety analysis: relief valves (API 520/521/526),
+  depressuring (blowdown) and pipeline pressurization.
+- Basis: black oils from well-test data.
+- Not yet in the browser: dynamics and PID tuning, spreadsheet, scenarios, the Fluid package's thermodynamics and data
+  tools, data sheets, DWSIM files.
 
 **Web 1.2**
 - Basis: choose the property package and the components (search DWSIM's databases), as HYSYS's basis manager.

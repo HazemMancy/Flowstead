@@ -262,3 +262,47 @@ test('"New stream" on a port that already has one replaces it', () => {
   assert.equal(out.length, 1);
   assert.notEqual(out[0].toObject, 'lp');
 });
+
+// ---------- tools (D112) ----------
+const { Tools, SafetyForms } = await import(lib);
+const tools = Tools.getInstance(), safety = SafetyForms.getInstance();
+
+test('a black oil from well-test data: API → SG (141.5 / (API + 131.5)), added as a component with the Black Oil package', () => {
+  let r = JSON.parse(tools.saveBlackOil(core.newFlowsheet(null), 'Oil-1', 35, 0.75, 100, 20));
+  const f = r.flowsheet;
+  assert.equal(f.propertyPackage, 'Black Oil');
+  assert.deepEqual(f.compounds, ['Oil-1']);
+  assert.ok(Math.abs(f.blackOils[0].oilSpecificGravity - 141.5 / 166.5) < 1e-12);
+  assert.equal(f.blackOils[0].waterCut, 0.2);
+  assert.match(tools.saveBlackOil(core.newFlowsheet(null), 'Oil-1', 35, 0.4, 100, 0), /gas specific gravity/);
+});
+
+test('case study points: each one the flowsheet with the varied specification set (in SI) and the problems first', () => {
+  const fsj = bench('06-compressor-aftercooler');
+  const study = (from) => JSON.stringify({ objectId: 'k', specKey: 'outletPressure', from: { value: from, unit: 'bara' }, to: { value: '20', unit: 'bara' }, steps: '2', outputs: [{ objectId: 'dis', key: 'temperature' }] });
+  const r = JSON.parse(tools.caseStudyPoints(fsj, study('10')));
+  assert.deepEqual(r.points.map((f) => f.objects.find((o) => o.id === 'k').specs.outletPressure.si), [1e6, 1.5e6, 2e6]);
+  assert.match(tools.caseStudyPoints(fsj, study('20')), /two different values/);
+});
+
+test('safety forms: a relief valve set up from the flowsheet, edited by field path in display units, then deleted', () => {
+  let fsj = bench('21-instrument-air-receiver');
+  const set = (id, a) => { const r = JSON.parse(safety.apply(fsj, null, '', 'relief', id, JSON.stringify(a))); assert.ok(r.flowsheet, JSON.stringify(r)); fsj = JSON.stringify(r.flowsheet); return r.flowsheet; };
+  let f = set('psv100', { op: 'set', path: 'setPressure', value: '11', unit: 'barg' });
+  const atm = f.atmosphericPressurePa;
+  assert.ok(Math.abs(f.safety.devices[0].setPressure - (11e5 + atm)) < 1e-6); // 11 barg = 11 bar above the flowsheet's atmosphere
+  f = set('psv100', { op: 'set', path: 'scenarios.1.massFlow', value: '650', unit: 'kg/h' });
+  assert.ok(Math.abs(f.safety.devices[0].scenarios[1].massFlow - 650 / 3600) < 1e-12);
+  f = set('psv100', { op: 'set', path: 'backPressure', value: '', unit: 'bara', blank: 101325 });
+  assert.equal(f.safety.devices[0].backPressure, 101325);
+  f = set('psv100', { op: 'lineSize', path: 'inletLine', value: '2' });
+  assert.ok(Math.abs(f.safety.devices[0].inletLine.insideDiameter - 0.0525) < 2e-4, `${f.safety.devices[0].inletLine.insideDiameter}`); // NPS 2 Sch 40: 52.5 mm ID (ASME B36.10M)
+  f = set('psv100', { op: 'addScenario', value: 'thermalExpansion' });
+  assert.equal(f.safety.devices[0].scenarios.at(-1).kind, 'thermalExpansion');
+  const items = JSON.parse(safety.form(fsj, null, '', 'relief', 'psv100')).items;
+  assert.ok(items.some((i) => i.path === 'vessel.diameter'));
+  const c = JSON.parse(safety.create(fsj, null, '', 'depressuring'));
+  assert.equal(c.flowsheet.safety.depressuring[0].vessel.diameter, 1.29, 'a new blowdown starts from the PSV\'s vessel dimensions');
+  f = set('psv100', { op: 'delete' });
+  assert.equal(f.safety.devices.length, 0);
+});

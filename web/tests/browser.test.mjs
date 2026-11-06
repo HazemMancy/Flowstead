@@ -8,7 +8,12 @@
 //      flowsheet drawn by hand (palette, wire from a port, move, undo, kept across a reload), at phone and desktop width;
 //   4. builds benchmark 05 from an empty flowsheet the way a HYSYS user would (D111): Basis (package and components),
 //      the feed's worksheet, a valve connected and specified from its worksheet, solve, and the product's temperature
-//      read from its worksheet against benchmark 05's expected value.
+//      read from its worksheet against benchmark 05's expected value;
+//   5. the app's tools (D112) through the page, each against an independent answer: a case study on benchmark 06 (its
+//      15 bara point is the benchmark's discharge temperature), the optimiser (compressor power is least at the lowest
+//      outlet pressure allowed), example 21's PSV (fire needs API 526 D with water's latent heat, IAPWS 1.85–2.15 MJ/kg;
+//      the blocked outlet governs, 1E2), depressuring (the sized orifice meets API 521's 15 minutes), pipeline
+//      pressurization (the sized orifice meets its 1 h target) and the stream analysis tools on benchmark 03.
 //
 //   node tests/browser.test.mjs [case-name ...]
 import http from 'node:http';
@@ -241,6 +246,96 @@ try {
     if (Math.abs(t - want) > 0.05) problems.push(`product temperature ${t} °C, benchmark 05 expects ${want.toFixed(3)} °C`);
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} benchmark 05 built through the Basis and worksheets (product ${t} °C)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 5. the app's tools ----------
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    const solve = async (example) => {
+      await p.selectOption('#examples', example);
+      await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+      await p.click('#solveBtn');
+      await p.waitForFunction(() => /Converged|Status|Not solved/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
+      await p.click('#solveClose');
+    };
+    const done = (sel) => p.waitForFunction((s) => (document.querySelector(s)?.textContent ?? '') && !document.querySelector(`${s} .busy`), sel, { timeout: 900_000 });
+    const text = async (sel) => (await p.textContent(sel)).replace(/\s+/g, ' ');
+    const num = (s) => Number(s.replace(/,/g, ''));
+
+    // Stream analysis on benchmark 03's feed: an envelope with its critical point, a CCE with a saturation pressure, the curves.
+    await solve('03-two-phase-flash');
+    await p.evaluate(() => document.querySelector('#objects [data-id="feed"]').click());
+    await p.click('#tabAnalysis');
+    await p.click('#an_env'); await done('#an_env_out');
+    if (!(await p.$('#an_env_out svg')) || !/Critical point/.test(await text('#an_env_out'))) problems.push(`envelope: ${await text('#an_env_out')}`);
+    await p.click('#an_pvt'); await done('#an_pvt_out');
+    if (!/(Bubble|Dew) point/.test(await text('#an_pvt_out')) || !(await p.$('#an_pvt_out table.rp-table'))) problems.push(`PVT: ${(await text('#an_pvt_out')).slice(0, 200)}`);
+    await p.click('#an_pet'); await done('#an_pet_out');
+    if (!/TBP/.test(await text('#an_pet_out'))) problems.push(`distillation: ${(await text('#an_pet_out')).slice(0, 200)}`);
+
+    // Case study on benchmark 06: K-100 outlet 10 → 20 bara in 2 steps; the 15 bara point is the benchmark itself.
+    await solve('06-compressor-aftercooler');
+    await p.click('#toolsBtn');
+    await p.selectOption('[data-p="v1.objectId"]', 'k'); await p.selectOption('[data-p="v1.key"]', 'outletPressure');
+    await p.fill('[data-p="from"]', '10'); await p.fill('[data-p="to"]', '20'); await p.fill('[data-p="steps"]', '2'); await p.press('[data-p="steps"]', 'Tab');
+    await p.selectOption('[data-p="outputs.0.objectId"]', 'dis'); await p.selectOption('[data-p="outputs.0.key"]', 'temperature');
+    await p.click('#cs_run'); await done('#cs_out');
+    const row15 = await p.$$eval('#cs_out table.rp-table tbody tr', (rows) => rows.map((r) => [...r.cells].map((c) => c.textContent)).find((c) => Number(c[0]) === 15));
+    const t15 = row15 && num(row15[1]), want15 = exp06.find((c) => c.path === 'objects.dis.properties.temperature').expected - 273.15;
+    if (!(Math.abs(t15 - want15) <= 0.01)) problems.push(`case study at 15 bara: DISCHARGE ${t15} °C, benchmark 06 expects ${want15.toFixed(3)} °C`);
+    const kept = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).caseStudies?.[0]?.results?.x?.length);
+    if (kept !== 3) problems.push(`the case study and its 3 points were not kept with the flowsheet (${kept})`);
+
+    // Optimiser: minimise K-100's power with its outlet between 12 and 18 bara: the least compression, 12 bara.
+    await p.click('[data-tab="opt"]');
+    await p.selectOption('[data-p="variables.0.objectId"]', 'k'); await p.selectOption('[data-p="variables.0.key"]', 'outletPressure');
+    await p.fill('[data-p="variables.0.min"]', '12'); await p.press('[data-p="variables.0.min"]', 'Tab');
+    await p.fill('[data-p="variables.0.max"]', '18'); await p.press('[data-p="variables.0.max"]', 'Tab');
+    await p.selectOption('[data-p="objective.0.objectId"]', 'k'); await p.selectOption('[data-p="objective.0.key"]', 'power');
+    await p.click('#op_run'); await done('#op_out');
+    const popt = await p.$$eval('#op_out table.rp-kv tr', (rows) => rows.map((r) => [...r.children].map((c) => c.textContent)).find((c) => /Outlet pressure/.test(c[0])));
+    if (!popt || Math.abs(num(popt[1]) - 12) > 0.05) problems.push(`optimiser: outlet ${popt?.[1]} bara, expected the 12 bara bound`);
+    await p.click('#op_apply');
+    const applied = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === 'k').specs.outletPressure.si);
+    if (Math.abs(applied - 12e5) > 5e3) problems.push(`the optimum put in the flowsheet is ${applied} Pa`);
+    await p.click('#toolsClose');
+
+    // Example 21's PSV-100, as the owner's HYSYS case (D102): fire needs a D orifice on boiling water; blocked outlet governs.
+    await solve('21-instrument-air-receiver');
+    await p.click('#toolsBtn'); await p.click('[data-tab="relief"]');
+    await p.click('#sf_form [data-run]'); await done('#sf_out');
+    const relief = await text('#sf_out');
+    const fireArea = num((relief.match(/Fire\s*[\d.,]+ kg\/h.*?needs ([\d.,]+) mm²/) ?? [])[1] ?? 'NaN');
+    const latent = num((relief.match(/latent heat ([\d.,]+) kJ\/kg/) ?? [])[1] ?? 'NaN');
+    if (!(fireArea > 0 && fireArea <= 71.0)) problems.push(`fire case needs ${fireArea} mm², more than API 526 D (71.0 mm²)`);
+    if (!(latent >= 1850 && latent <= 2150)) problems.push(`fire case latent heat ${latent} kJ/kg, water at 13 bara is 1,850–2,150 (IAPWS-IF97)`);
+    if (!/orifice E · valve 1E2/.test(relief) || !/governed by Blocked outlet/.test(relief)) problems.push(`PSV-100: ${relief.slice(0, 200)}`);
+    // Depressuring V-100 through an orifice Flowstead sizes: the target is met at API 521's 15 minutes.
+    await p.click('[data-tab="depressuring"]'); await p.click('[data-new]');
+    await p.click('#sf_form [data-run]'); await done('#sf_out');
+    const bd = await text('#sf_out');
+    const tbd = num((bd.match(/reached after ([\d.,]+) min/) ?? [])[1] ?? 'NaN');
+    if (!/\(sized\)/.test(bd) || !(tbd > 0 && tbd <= 15.05)) problems.push(`depressuring: ${bd.slice(0, 160)}`);
+    await p.click('#toolsClose');
+
+    // Pipeline pressurization of example 16's lines through an orifice sized for 1 h.
+    await solve('16-gas-and-two-phase-lines');
+    await p.click('#toolsBtn'); await p.click('[data-tab="pressurization"]'); await p.click('[data-new]');
+    await p.click('#sf_form [data-run]'); await done('#sf_out');
+    const pz = await text('#sf_out');
+    const tpz = num((pz.match(/reached after ([\d.,]+) min/) ?? [])[1] ?? 'NaN');
+    if (!(tpz > 50 && tpz <= 61)) problems.push(`pressurization: ${pz.slice(0, 160)}`);
+    await p.click('#toolsClose');
+
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} tools (case study ${t15} °C at 15 bara, optimum ${popt?.[1]} bara, fire ${fireArea} mm² at ${latent} kJ/kg, blowdown ${tbd} min, fill ${tpz} min)`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();
