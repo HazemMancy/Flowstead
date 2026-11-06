@@ -53,6 +53,7 @@
       <button type="button" class="btn btn-sm" id="saveBtn" title="Save as a Flowstead flowsheet (.json)">Save</button>
       <input type="file" id="openFile" accept=".json,application/json" hidden />
     </span>
+    <button type="button" class="btn btn-sm" id="basisBtn" title="Property package and components">Basis</button>
     <span class="fs-group">
       <button type="button" class="btn btn-sm" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
       <button type="button" class="btn btn-sm" id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
@@ -77,16 +78,23 @@
       <section class="fs-inspector card" id="inspector" hidden aria-labelledby="inspTitle">
         <div class="fs-insp-head">
           <h2 id="inspTitle"><span id="inspType"></span></h2>
-          <button type="button" class="icon-btn" id="inspClose" aria-label="Close">✕</button>
+          <button type="button" class="icon-btn" id="inspClose" aria-label="Close the worksheet">✕</button>
         </div>
-        <label for="inspTag">Tag</label>
-        <input type="text" id="inspTag" autocomplete="off" spellcheck="false" />
+        <div class="fs-tagrow">
+          <label for="inspTag">Tag</label>
+          <input type="text" id="inspTag" autocomplete="off" spellcheck="false" />
+        </div>
         <p class="fs-desc" id="inspDesc"></p>
+        <div class="fs-tabs" role="tablist" aria-label="Worksheet">
+          <button type="button" role="tab" id="tabDesign" aria-controls="inspForm" aria-selected="true">Design</button>
+          <button type="button" role="tab" id="tabResults" aria-controls="inspResults" aria-selected="false">Worksheet</button>
+        </div>
+        <form id="inspForm" class="fs-form" role="tabpanel" aria-labelledby="tabDesign" novalidate></form>
+        <div id="inspResults" role="tabpanel" aria-labelledby="tabResults" hidden></div>
         <div class="actions">
           <button type="button" class="btn btn-sm" id="tableBtn">Show table</button>
           <button type="button" class="btn btn-sm" id="deleteBtn">Delete</button>
         </div>
-        <div id="inspResults"></div>
       </section>
     </div>
   </div>
@@ -95,6 +103,19 @@
     <div class="fs-insp-head"><h2 id="solveTitle">Solve</h2><button type="button" class="icon-btn" id="solveClose" aria-label="Close">✕</button></div>
     <ul class="msgs" id="solveMsgs"></ul>
   </section>
+
+  <dialog class="fs-dialog card" id="basisDlg" aria-labelledby="basisTitle">
+    <div class="fs-insp-head"><h2 id="basisTitle">Basis</h2><button type="button" class="icon-btn" id="basisClose" aria-label="Close">✕</button></div>
+    <p class="fs-desc">The fluid every stream uses: a property package and its components, as HYSYS's basis manager.</p>
+    <label for="pkgSel">Property package</label>
+    <select id="pkgSel"></select>
+    <p class="meta" id="pkgNote"></p>
+    <h3>Components <span id="compCount"></span></h3>
+    <ul class="fs-comps" id="compList"></ul>
+    <label for="compSearch">Add a component</label>
+    <input type="search" id="compSearch" placeholder="Search DWSIM's databases: methane, CO2, nC4, water…" autocomplete="off" aria-controls="compResults" />
+    <ul class="search-results" id="compResults" aria-label="Matching components"></ul>
+  </dialog>
 
   <ul class="sr-only" id="objects" aria-label="Objects on the flowsheet"></ul>
   <div class="sr-only" aria-live="polite" id="announce"></div>

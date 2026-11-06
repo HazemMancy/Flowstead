@@ -48,6 +48,31 @@
   .fs-name{width:7.5rem!important} .fs-select{max-width:8.5rem}
   .fs-status{margin-left:0;flex-basis:100%}
   .fs-solve{left:.75rem;width:calc(100% - 1.5rem);bottom:9rem}
-  .fs-inspector{top:auto;bottom:.75rem;max-height:55%}
+  .fs-inspector{top:auto;bottom:.5rem;max-height:72%}
   .fs-page footer{display:none}
 }
+/* Worksheet (D111) */
+.fs-inspector{width:min(23rem,calc(100% - 1.5rem))}
+.fs-tagrow{margin-top:.4rem}
+.fs-tabs{display:flex;gap:.25rem;margin:.6rem 0 .4rem;border-bottom:1px solid var(--border)}
+.fs-tabs button{background:none;border:none;border-bottom:2px solid transparent;padding:.35rem .6rem;font-size:.78rem;font-weight:600;color:var(--muted);cursor:pointer}
+.fs-tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--primary)}
+.fs-form h3{margin:.9rem 0 .35rem}
+.fs-form .field{margin-top:.55rem}
+.fs-form .row{grid-template-columns:minmax(0,1fr) 6.5rem}
+.fs-spec.given input{color:var(--primary);font-weight:600}
+.fs-note{font-size:.74rem;color:var(--muted);margin-top:.45rem}
+.fs-note.warn{color:var(--warn)}
+.fs-seg{display:flex;flex-wrap:wrap;gap:0;margin-top:.55rem;border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);overflow:hidden}
+.fs-seg button{flex:1;min-width:0;padding:.35rem .4rem;font-size:.72rem;border:none;border-right:1px solid var(--border);background:none;cursor:pointer;color:var(--muted)}
+.fs-seg button:last-child{border-right:none}
+.fs-seg button[aria-checked="true"]{background:var(--primary-bg);color:var(--fg);font-weight:600}
+.fs-switch label{display:flex;gap:.4rem;align-items:center;font-size:.8rem;color:var(--fg)}
+.fs-compo td:first-child label{font-size:.8rem;color:var(--fg);margin:0}
+.fs-compo input{color:var(--primary)}
+.fs-dialog{margin:auto;width:min(30rem,calc(100% - 2rem));max-height:calc(100dvh - 2rem);overflow:auto;color:var(--fg);padding:1.1rem 1.2rem}
+.fs-dialog::backdrop{background:rgba(0,0,0,.5)}
+.fs-dialog select{margin-bottom:.25rem}
+.fs-comps{list-style:none;display:flex;flex-direction:column;gap:.25rem;margin-bottom:.75rem}
+.fs-comps li{display:flex;align-items:center;gap:.5rem;font-size:.82rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:calc(var(--radius) - 2px)}
+.fs-comps li span{flex:1} .fs-comps li small{color:var(--muted);font-size:.7rem} .fs-comps li.empty{color:var(--muted);border-style:dashed}

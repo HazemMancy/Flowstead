@@ -5,7 +5,10 @@
 //      engine/tests/Flowstead.Engine.Tests/BenchmarkTests.cs (abs/rel tolerance, minus/plus, blocking references);
 //   2. drives the workbench like a user (example → Flash → Phase envelope) at phone and desktop width;
 //   3. drives the flowsheet (D110) like a user: an example solved and read back from the canvas's inspector, and a
-//      flowsheet drawn by hand (palette, wire from a port, move, undo, kept across a reload), at phone and desktop width.
+//      flowsheet drawn by hand (palette, wire from a port, move, undo, kept across a reload), at phone and desktop width;
+//   4. builds benchmark 05 from an empty flowsheet the way a HYSYS user would (D111): Basis (package and components),
+//      the feed's worksheet, a valve connected and specified from its worksheet, solve, and the product's temperature
+//      read from its worksheet against benchmark 05's expected value.
 //
 //   node tests/browser.test.mjs [case-name ...]
 import http from 'node:http';
@@ -181,6 +184,58 @@ try {
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     if (hosts.size !== 1 || ![...hosts][0].startsWith('127.0.0.1')) problems.push(`requests to other hosts: ${[...hosts].join(', ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} flowsheet at ${width} px (DISCHARGE ${t.value} ${t.unit}, K-100 ${pw.value} ${pw.unit})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4. benchmark 05 built from nothing through the Basis and the worksheets ----------
+  {
+    const exp05 = JSON.parse(fs.readFileSync(path.join(benchDir, '05-jt-valve-letdown', 'expected.json'), 'utf8')).checks;
+    const in05 = JSON.parse(fs.readFileSync(path.join(benchDir, '05-jt-valve-letdown', 'input.json'), 'utf8')).flowsheet;
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.click('#newBtn');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    await p.click('#basisBtn');
+    await p.waitForFunction(() => !document.getElementById('pkgSel').disabled, null, { timeout: 60_000 });
+    await p.selectOption('#pkgSel', in05.propertyPackage);
+    for (const c of in05.compounds) {
+      await p.fill('#compSearch', c);
+      await p.click(`#compResults [data-add="${c}"]`, { timeout: 30_000 });
+    }
+    await p.click('#basisClose');
+    const spec = async (key, value, unit) => {
+      const f = p.locator(`#inspForm input[data-spec="${key}"]`);
+      if (unit) await p.locator(`#inspForm select[data-unit="${key}"]`).selectOption(unit);
+      await f.fill(String(value)); await f.press('Enter');
+    };
+    const hp = in05.objects.find((o) => o.id === 'hp');
+    await p.click('.tile[data-type="material_stream"]');
+    await spec('temperature', 40, 'C'); await spec('pressure', 70, 'bara'); await spec('molarFlow', 1000, 'kgmol/h');
+    for (const [c, x] of Object.entries(hp.composition)) { const f = p.locator(`#inspForm [data-x="${c}"]`); await f.fill(String(x)); await f.press('Enter'); }
+    const feedTag = await p.inputValue('#inspTag');
+    await p.click('.tile[data-type="valve"]');
+    await spec('outletPressure', 20, 'bara');
+    const portSelect = (side) => p.locator('#inspForm .field', { has: p.locator('label', { hasText: `(${side})` }) }).locator('select');
+    await portSelect('in').selectOption({ label: feedTag });
+    await portSelect('out').selectOption('__new');
+    await p.click('#solveBtn');
+    await p.waitForFunction(() => /Converged|Status|Not solved|Fix|Nothing/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
+    const head = await p.textContent('#solveMsgs li');
+    if (!/Converged/.test(head)) problems.push(`solve: ${await p.textContent('#solveMsgs')}`);
+    const product = await p.evaluate(() => { const f = JSON.parse(window.flowsteadFlowsheet.project.flowsheet); return f.connections.find((c) => f.objects.find((o) => o.id === c.fromObject).type === 'valve').toObject; });
+    await p.evaluate((id) => document.querySelector(`#objects [data-id="${id}"]`).click(), product);
+    await p.click('#tabResults');
+    const row = p.locator('#inspResults tr', { has: p.locator('th', { hasText: 'Temperature' }) }).first();
+    const t = Number((await row.locator('td').first().textContent()).replace(/,/g, ''));
+    const want = exp05.find((c) => c.path === 'objects.lp.properties.temperature').expected - 273.15; // K → °C by hand
+    if (Math.abs(t - want) > 0.05) problems.push(`product temperature ${t} °C, benchmark 05 expects ${want.toFixed(3)} °C`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} benchmark 05 built through the Basis and worksheets (product ${t} °C)`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();

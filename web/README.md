@@ -35,6 +35,14 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.2**
+- Basis: choose the property package and the components (search DWSIM's databases), as HYSYS's basis manager.
+- Tap a stream or a unit to open its worksheet: the app's fields for that type (feed conditions, flow and composition;
+  valve, pump, compressor, heater and cooler, exchanger, splitter, pipe, orifice, columns, Set, Adjust, controller),
+  its connections, and its results in a Worksheet tab. You can now build and solve a flowsheet from nothing.
+- Not yet in the browser: reactions, PSV relief cases, performance curves and pipe sections (kept and solved when
+  they come from the app); mass and volume composition bases.
+
 **Web 1.1**
 - Flowsheet: https://hazemmancy.github.io/Flowstead/flowsheet.html. The app's palette and its PFD symbols, drawn by
   the app's own code. Add streams and units, drag from a port to draw a stream, move, pan and zoom, undo and redo.

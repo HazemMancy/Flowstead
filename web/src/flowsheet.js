@@ -11,8 +11,9 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets } = await import('./core/flowstead-core.mjs');
 const core = FlowsteadCore.getInstance();
+const sheets = Worksheets.getInstance();
 const view = new FlowsheetView();
 const types = JSON.parse(core.objectTypes());
 const typeById = new Map(types.map((t) => [t.id, t]));
@@ -269,23 +270,148 @@ function select(id) {
   renderInspector();
   draw();
 }
+// The worksheet (D111): Worksheets.form builds it with the app's fields per type; changes go back through
+// Worksheets.apply, which uses the app's FlowsheetEditing. Only what the page itself must remember lives here.
+const ui = { tab: 'design', chosen: {}, basis: {} };
 function renderInspector() {
   const id = view.selectedId;
   const o = id && objects().find((x) => x.id === id);
   $('inspector').hidden = !o;
   if (!o) return;
-  $('inspType').textContent = typeById.get(o.type)?.label ?? o.type;
+  const form = JSON.parse(sheets.form(project.flowsheet, id));
+  $('inspType').textContent = `${form.typeLabel}`;
   if (document.activeElement !== $('inspTag')) $('inspTag').value = o.tag;
   $('inspDesc').textContent = view.describe(id);
   $('tableBtn').textContent = view.hasTable(id) ? 'Hide table' : 'Show table';
+  $('tabDesign').setAttribute('aria-selected', ui.tab === 'design'); $('tabResults').setAttribute('aria-selected', ui.tab === 'results');
+  $('inspForm').hidden = ui.tab !== 'design'; $('inspResults').hidden = ui.tab !== 'results';
+  // Keep the field the user is in: re-render only when focus is outside the form.
+  if (!$('inspForm').contains(document.activeElement) || $('inspForm').dataset.id !== id) {
+    $('inspForm').dataset.id = id;
+    $('inspForm').innerHTML = form.items.map((it, i) => item(it, i, id)).join('');
+    $('inspForm')._items = form.items;
+    const t = $('inspForm').querySelector('.fs-compo'); if (t) compositionSum(t);
+  }
   const rows = JSON.parse(view.summary(id));
   const msgs = JSON.parse(view.messages(id));
   const solved = project.solve && rows.some((r) => r.value !== '—');
   $('inspResults').innerHTML = (msgs.length ? `<ul class="msgs">${msgs.map((m) => `<li class="${esc(m.level)}">${esc(m.text)}</li>`).join('')}</ul>` : '') +
     (solved ? `<div class="table-wrap"><table class="props"><caption class="sr-only">Results for ${esc(o.tag)}${view.stale ? ' (out of date)' : ''}</caption><tbody>${
       rows.map((r) => `<tr><th scope="row">${esc(r.label)}</th><td>${esc(r.value)}</td><td class="unit">${esc(r.unit)}</td></tr>`).join('')}</tbody></table></div>` +
-      (view.stale ? '<p class="meta">Results are out of date: the flowsheet changed since the last solve.</p>' : '') : '');
+      (view.stale ? '<p class="meta">Results are out of date: the flowsheet changed since the last solve.</p>' : '')
+      : '<p class="placeholder">No results yet: complete the worksheet and press Solve.</p>');
 }
+const fid = (id, k) => `f_${id}_${k}`.replace(/[^\w-]/g, '_');
+function specHtml(f, i, id, extra = '') {
+  const inputId = fid(id, f.key);
+  return `<div class="field fs-spec${f.specified ? ' given' : ''}"><label for="${inputId}">${esc(f.label)}</label>
+    <div class="row"><input type="text" inputmode="decimal" id="${inputId}" data-i="${i}" data-spec="${esc(f.key)}"${extra} value="${esc(f.value)}" placeholder="${esc(f.hint ?? '—')}" autocomplete="off" />
+    <select data-i="${i}" data-unit="${esc(f.key)}"${extra} aria-label="${esc(f.label)} unit">${f.units.map((u) => `<option value="${esc(u.id)}"${u.id === f.unit ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('')}</select></div></div>`;
+}
+function item(it, i, id) {
+  switch (it.kind) {
+    case 'note': return `<p class="fs-note">${esc(it.text)}</p>`;
+    case 'label': return `<h3>${esc(it.text)}</h3>`;
+    case 'spec': return specHtml(it, i, id);
+    case 'exclusive': {
+      const key = `${id}:${it.choices[0].key}`;
+      const chosen = ui.chosen[key] ?? it.chosen;
+      const c = it.choices.find((x) => x.key === chosen) ?? it.choices[0];
+      const picker = it.style === 'select'
+        ? `<div class="field"><label for="${fid(id, 'x' + i)}">${esc(it.label ?? 'Specification')}</label><select id="${fid(id, 'x' + i)}" data-i="${i}" data-pick="${esc(key)}">${it.choices.map((x) => `<option value="${esc(x.key)}"${x.key === c.key ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>`
+        : `<div class="fs-seg" role="radiogroup" aria-label="Specify one of">${it.choices.map((x) => `<button type="button" role="radio" aria-checked="${x.key === c.key}" data-i="${i}" data-pick="${esc(key)}" data-key="${esc(x.key)}">${esc(x.label)}</button>`).join('')}</div>`;
+      const comp = it.component && /(Fraction|Recovery)$/.test(c.key)
+        ? `<div class="field"><label for="${fid(id, 'c' + i)}">Component</label><select id="${fid(id, 'c' + i)}" data-i="${i}" data-component="1"><option value="">Choose…</option>${it.component.options.map((x) => `<option${x === it.component.value ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></div>` : '';
+      return picker + comp + specHtml(c.field, i, id, ` data-choice="${esc(c.key)}"`);
+    }
+    case 'choice': {
+      const sid = fid(id, 'ch' + i);
+      const has = it.options.some((o) => o.id === it.value);
+      return `<div class="field"><label for="${sid}">${esc(it.label)}</label><select id="${sid}" data-i="${i}" data-choice-op="1">${has ? '' : `<option value="" selected>${esc(it.placeholder)}</option>`}${
+        it.options.map((o) => `<option value="${esc(o.id)}"${o.id === it.value ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select></div>`;
+    }
+    case 'switch': return `<div class="field fs-switch"><label><input type="checkbox" data-i="${i}" data-switch="1"${it.checked ? ' checked' : ''}${it.disabled ? ' disabled' : ''} /> ${esc(it.label)}</label><p class="fs-note">${esc(it.hint)}</p></div>`;
+    case 'composition': {
+      if (!it.compounds.length) return `<p class="fs-note warn">No components yet. <button type="button" class="btn btn-sm" data-open-basis="1">Open the Basis</button> to choose them.</p>`;
+      const basis = it.bases.find((b) => b.id === (ui.basis[id] ?? 'MoleFraction')) ?? it.bases[0];
+      const shown = it.compounds.map((c) => ({ name: c.name, text: c.mole === undefined ? '' : String(+(c.mole * basis.total).toPrecision(10)) }));
+      return `<div class="field"><label for="${fid(id, 'basis')}">Basis</label><select id="${fid(id, 'basis')}" data-i="${i}" data-basis="1">${it.bases.map((b) => `<option value="${b.id}"${b.id === basis.id ? ' selected' : ''}>${esc(b.label)}</option>`).join('')}</select></div>
+        <table class="comp fs-compo" data-i="${i}"><tbody>${shown.map((c) => `<tr><td><label for="${fid(id, 'x_' + c.name)}">${esc(c.name)}</label></td><td><input type="text" inputmode="decimal" id="${fid(id, 'x_' + c.name)}" data-i="${i}" data-x="${esc(c.name)}" value="${esc(c.text)}" placeholder="0" autocomplete="off" /></td></tr>`).join('')}</tbody></table>
+        <div class="total" id="${fid(id, 'sum')}"></div>`;
+    }
+    default: return '';
+  }
+}
+function itemOf(el) { return $('inspForm')._items[Number(el.dataset.i)]; }
+function change(action) {
+  const r = JSON.parse(sheets.apply(project.flowsheet, JSON.stringify({ id: view.selectedId, ...action })));
+  if (r.error) { toast(r.error); renderInspectorForce(); return; }
+  commit(JSON.stringify(r.flowsheet), 'Updated');
+  renderInspectorForce();
+}
+function renderInspectorForce() { $('inspForm').dataset.id = ''; const a = document.activeElement?.id; renderInspector(); if (a && $(a)) $(a).focus(); }
+function compositionSum(table) {
+  const it = itemOf(table), id = view.selectedId;
+  const basis = it.bases.find((b) => b.id === (ui.basis[id] ?? 'MoleFraction')) ?? it.bases[0];
+  const vals = [...table.querySelectorAll('[data-x]')].map((x) => x.value.trim().replace(',', '.'));
+  const bad = vals.some((v) => v !== '' && !(Number(v) >= 0));
+  const sum = vals.reduce((a, v) => a + (Number(v) || 0), 0);
+  const ok = !bad && Math.abs(sum - basis.total) <= it.tolerance * basis.total;
+  const el = $(fid(id, 'sum'));
+  el.className = `total${ok ? '' : ' bad'}`;
+  el.innerHTML = `<span>${bad ? 'Check the values: numbers ≥ 0 only' : `Sum = <b>${core.formatNumber(sum, 6)}</b>`}</span>${!ok && !bad && sum > 0 ? '<button type="button" class="btn btn-sm" data-normalise="1">Normalise</button>' : ''}`;
+}
+function compositionAction(table, op) {
+  const values = Object.fromEntries([...table.querySelectorAll('[data-x]')].map((x) => [x.dataset.x, x.value]));
+  change({ op, basis: ui.basis[view.selectedId] ?? 'MoleFraction', values });
+}
+$('inspForm').addEventListener('submit', (e) => e.preventDefault());
+$('inspForm').addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.dataset.spec !== undefined) {
+    const it = itemOf(el);
+    const field = el.dataset.choice ? it.choices.find((c) => c.key === el.dataset.choice).field : it;
+    const unit = el.closest('.row').querySelector('select').value;
+    return change(field.group ? { op: 'exclusive', key: field.key, group: field.group, value: el.value, unit } : { op: 'spec', key: field.key, value: el.value, unit });
+  }
+  if (el.dataset.unit !== undefined) {
+    const input = el.closest('.row').querySelector('input');
+    // No value yet: the unit is only how the next value will be read. A value: re-expressed, same physical size.
+    if (input.value.trim() === '') return;
+    return change({ op: 'unit', key: el.dataset.unit, unit: el.value });
+  }
+  if (el.dataset.pick) { ui.chosen[el.dataset.pick] = el.value; return renderInspectorForce(); }
+  if (el.dataset.component) { const it = itemOf(el); return change({ op: 'ref', key: it.component.ref, value: el.value }); }
+  if (el.dataset.choiceOp) {
+    const it = itemOf(el);
+    if (el.value === it.value || el.value === '') return;
+    const op = it.op;
+    if (op.op === 'ref') {
+      const refs = { [op.key]: el.value === op.unsetIf ? null : el.value };
+      for (const k of op.clears ?? []) refs[k] = null;
+      return change({ op: 'refs', refs });
+    }
+    if (op.op === 'valveType') return change({ op: 'valveType', value: el.value });
+    if (op.op === 'pipeSize') return change({ op: 'pipeSize', nps: op.nps ?? el.value, schedule: op.nps ? el.value : op.schedule });
+    if (op.op === 'connect') return change({ ...op, value: el.value });
+  }
+  if (el.dataset.switch) return change({ op: 'ref', key: itemOf(el).key, value: el.checked ? '' : 'off' });
+  if (el.dataset.basis) { ui.basis[view.selectedId] = el.value; return renderInspectorForce(); }
+  if (el.dataset.x !== undefined) return compositionAction(el.closest('table'), 'composition');
+});
+$('inspForm').addEventListener('input', (e) => { if (e.target.dataset.x !== undefined) compositionSum(e.target.closest('table')); });
+$('inspForm').addEventListener('click', (e) => {
+  const seg = e.target.closest('[data-pick][data-key]');
+  if (seg) { ui.chosen[seg.dataset.pick] = seg.dataset.key; renderInspectorForce(); return $(fid(view.selectedId, seg.dataset.key))?.focus(); }
+  if (e.target.closest('[data-normalise]')) return compositionAction($('inspForm').querySelector('.fs-compo'), 'normalise');
+  if (e.target.closest('[data-open-basis]')) openBasis();
+});
+$('inspForm').addEventListener('keydown', (e) => {
+  // Enter commits the field, as the app's Done key.
+  if (e.key === 'Enter' && e.target.matches('input[type=text]')) { e.preventDefault(); e.target.dispatchEvent(new Event('change', { bubbles: true })); }
+});
+for (const [tab, name] of [['tabDesign', 'design'], ['tabResults', 'results']]) $(tab).addEventListener('click', () => { ui.tab = name; renderInspectorForce(); });
+
 $('inspClose').addEventListener('click', () => select(null));
 $('inspTag').addEventListener('change', () => {
   const id = view.selectedId; if (!id) return;
@@ -359,11 +485,73 @@ $('examples').addEventListener('change', async () => {
   announce(`Opened example ${ex.name}`);
 });
 
+// ---------- basis: property package and components (Worksheets.basis, setPropertyPackage, add/removeCompound) ----------
+let packages = null;
+function openBasis() { renderBasis(); $('basisDlg').showModal(); $('compSearch').focus(); }
+$('basisBtn').addEventListener('click', openBasis);
+$('basisClose').addEventListener('click', () => $('basisDlg').close());
+function renderBasis() {
+  const b = JSON.parse(sheets.basis(project.flowsheet));
+  const opt = (p) => `<option value="${esc(p.name)}"${p.name === b.propertyPackage ? ' selected' : ''}>${esc(p.name)}</option>`;
+  if (packages) {
+    const checked = packages.filter((p) => p.mvp), other = packages.filter((p) => !p.mvp);
+    const known = packages.some((p) => p.name === b.propertyPackage);
+    $('pkgSel').innerHTML = (known || !b.propertyPackage ? '' : `<option selected>${esc(b.propertyPackage)}</option>`) +
+      `<optgroup label="Checked in Flowstead">${checked.map(opt).join('')}</optgroup>` + (other.length ? `<optgroup label="Other DWSIM packages">${other.map(opt).join('')}</optgroup>` : '');
+    $('pkgSel').disabled = false; $('compSearch').disabled = false;
+    $('pkgNote').textContent = '';
+  } else {
+    $('pkgSel').innerHTML = `<option>${esc(b.propertyPackage || '—')}</option>`; $('pkgSel').disabled = true; $('compSearch').disabled = true;
+    $('pkgNote').textContent = 'The package list and the component search come from the engine, which is still loading.';
+  }
+  $('compCount').textContent = `(${b.compounds.length})`;
+  $('compList').innerHTML = b.compounds.length ? b.compounds.map((c) => `<li><span>${esc(c)}</span>${b.usedBy[c] ? `<small>in ${b.usedBy[c]} stream${b.usedBy[c] > 1 ? 's' : ''}</small>` : ''}<button type="button" class="btn btn-sm" data-remove="${esc(c)}" aria-label="Remove ${esc(c)}">Remove</button></li>`).join('')
+    : '<li class="empty">No components yet: search below.</li>';
+}
+$('pkgSel').addEventListener('change', () => { const r = JSON.parse(sheets.setPropertyPackage(project.flowsheet, $('pkgSel').value)); if (r.flowsheet) commit(JSON.stringify(r.flowsheet), `Package ${$('pkgSel').value}`); renderBasis(); });
+$('compList').addEventListener('click', (e) => {
+  const name = e.target.closest('[data-remove]')?.dataset.remove; if (!name) return;
+  const used = JSON.parse(sheets.basis(project.flowsheet)).usedBy[name];
+  const r = JSON.parse(sheets.removeCompound(project.flowsheet, name));
+  if (r.error) return toast(r.error);
+  commit(JSON.stringify(r.flowsheet), `Removed ${name}`);
+  if (used) toast(`Removed ${name} from ${used} stream composition(s); check that they still add up to 1`);
+  renderBasis(); renderInspectorForce();
+});
+let searchTimer = 0, searchSeq = 0;
+$('compSearch').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = $('compSearch').value.trim();
+  if (!q) { $('compResults').innerHTML = ''; return; }
+  searchTimer = setTimeout(async () => {
+    const seq = ++searchSeq;
+    try {
+      const { result } = await engine.call('searchCompounds', { query: q, limit: 12 });
+      if (seq !== searchSeq) return;
+      const have = new Set(JSON.parse(sheets.basis(project.flowsheet)).compounds);
+      $('compResults').innerHTML = result.length
+        ? result.map((c) => `<li><button type="button" data-add="${esc(c.name)}"${have.has(c.name) ? ' disabled' : ''}><span>${esc(c.name)}${have.has(c.name) ? ' (added)' : ''}</span><small>${esc(c.formula || '')} · ${c.molecularWeight ? core.formatNumber(c.molecularWeight, 2) : '—'} kg/kmol</small></button></li>`).join('')
+        : '<li class="empty" style="padding:.4rem .6rem">No match in DWSIM’s databases.</li>';
+    } catch (e) { $('compResults').innerHTML = `<li class="empty" style="padding:.4rem .6rem">${esc(e.message)}</li>`; }
+  }, 250);
+});
+$('compResults').addEventListener('click', (e) => {
+  const name = e.target.closest('[data-add]')?.dataset.add; if (!name) return;
+  const r = JSON.parse(sheets.addCompound(project.flowsheet, name));
+  if (r.error) return toast(r.error);
+  commit(JSON.stringify(r.flowsheet), `Added ${name}`);
+  $('compSearch').value = ''; $('compResults').innerHTML = ''; $('compSearch').focus();
+  renderBasis(); renderInspectorForce();
+});
+
 // ---------- solve ----------
 let engineState = 'loading', busy = false;
 const engine = startEngine((s) => {
   if (s.type === 'status') setStatus('loading', s.total ? `Engine ${Math.round((100 * s.loaded) / Math.max(s.total, 1))} %` : s.text);
-  else if (s.type === 'ready') { engineState = 'ready'; setStatus('ready', `DWSIM ${s.dwsimVersion} ready`); }
+  else if (s.type === 'ready') {
+    engineState = 'ready'; setStatus('ready', `DWSIM ${s.dwsimVersion} ready`);
+    engine.call('propertyPackages', null).then(({ result }) => { packages = result; if ($('basisDlg').open) renderBasis(); }).catch(() => {});
+  }
   else if (s.type === 'failed') { engineState = 'failed'; setStatus('failed', 'Engine failed to start'); toast(s.error); }
   $('solveBtn').disabled = engineState !== 'ready' || busy;
 });

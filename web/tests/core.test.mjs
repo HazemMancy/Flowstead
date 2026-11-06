@@ -189,3 +189,67 @@ test('a property table on the canvas: shown with the app\'s defaults, moved, hid
   fsj = JSON.stringify(JSON.parse(v.toggleTable('out')).flowsheet);
   assert.equal(JSON.parse(fsj).tables?.length ?? 0, 0);
 });
+
+// ---------- worksheets and basis (D111): the app's ObjectEditor fields, applied with FlowsheetEditing ----------
+const { Worksheets } = await import(lib);
+const sheets = Worksheets.getInstance();
+const applyOk = (fsj, a) => { const r = JSON.parse(sheets.apply(fsj, JSON.stringify(a))); assert.ok(r.flowsheet, JSON.stringify(r)); return JSON.stringify(r.flowsheet); };
+
+test('every object of every example has a worksheet', () => {
+  for (const n of fs.readdirSync(new URL('../../benchmarks/', import.meta.url)).filter((d) => fs.existsSync(new URL(`../../benchmarks/${d}/input.json`, import.meta.url)))) {
+    const fsj = bench(n);
+    for (const o of JSON.parse(fsj).objects) {
+      const f = JSON.parse(sheets.form(fsj, o.id));
+      assert.ok(f.items.length > 0, `${n}/${o.tag}: empty worksheet`);
+    }
+  }
+});
+
+test('a feed worksheet: conditions, flow and composition entered in display units are stored in SI (hand conversion)', () => {
+  let fsj = core.newFlowsheet('Peng-Robinson (PR)');
+  fsj = JSON.stringify(JSON.parse(sheets.addCompound(fsj, 'Methane')).flowsheet);
+  fsj = JSON.stringify(JSON.parse(sheets.addCompound(fsj, 'Ethane')).flowsheet);
+  assert.match(sheets.addCompound(fsj, 'Methane'), /already in the list/);
+  const r = JSON.parse(core.add(fsj, 'material_stream', 0, 0)); fsj = JSON.stringify(r.flowsheet); const id = r.id;
+  const form = JSON.parse(sheets.form(fsj, id));
+  assert.deepEqual(form.items.filter((i) => i.kind === 'spec').map((i) => i.key), ['temperature', 'pressure', 'vapourFraction', 'massEnthalpy', 'molarFlow', 'massFlow']);
+  fsj = applyOk(fsj, { id, op: 'spec', key: 'temperature', value: '-40', unit: 'C' });
+  fsj = applyOk(fsj, { id, op: 'spec', key: 'pressure', value: '30', unit: 'bara' });
+  fsj = applyOk(fsj, { id, op: 'spec', key: 'molarFlow', value: '100', unit: 'kgmol/h' });
+  fsj = applyOk(fsj, { id, op: 'composition', basis: 'MolePercent', values: { Methane: '80', Ethane: '15' } });
+  let o = JSON.parse(fsj).objects[0];
+  assert.ok(Math.abs(o.specs.temperature.si - 233.15) < 1e-9);  // −40 °C = 233.15 K
+  assert.equal(o.specs.pressure.si, 3e6);                       // 30 bara = 3,000,000 Pa
+  assert.ok(Math.abs(o.specs.molarFlow.si - 100 / 3.6) < 1e-9); // 100 kgmol/h = 27.78 mol/s
+  assert.ok(Math.abs(o.composition.Methane - 0.8) < 1e-12);
+  fsj = applyOk(fsj, { id, op: 'normalise', basis: 'MolePercent', values: { Methane: '80', Ethane: '15' } });
+  o = JSON.parse(fsj).objects[0];
+  assert.ok(Math.abs(o.composition.Methane - 0.8 / 0.95) < 1e-12);
+  // The value is shown back in the unit it was typed in, and a unit change keeps the physical value.
+  assert.equal(JSON.parse(sheets.form(fsj, id)).items.find((i) => i.key === 'temperature').value, '-40.00');
+  fsj = applyOk(fsj, { id, op: 'unit', key: 'temperature', unit: 'K' });
+  assert.ok(Math.abs(JSON.parse(fsj).objects[0].specs.temperature.si - 233.15) < 1e-9);
+  assert.match(sheets.apply(fsj, JSON.stringify({ id, op: 'spec', key: 'pressure', value: 'abc', unit: 'bara' })), /Not a number/);
+  // Removing a component takes it out of the stream too.
+  fsj = JSON.stringify(JSON.parse(sheets.removeCompound(fsj, 'Ethane')).flowsheet);
+  assert.equal(JSON.parse(fsj).objects[0].composition.Ethane, undefined);
+});
+
+test('a valve worksheet: one of outlet pressure or drop, and its ports connected from the list', () => {
+  let fsj = bench('05-jt-valve-letdown');
+  const f = JSON.parse(sheets.form(fsj, 'v'));
+  const ex = f.items.find((i) => i.kind === 'exclusive');
+  assert.deepEqual(ex.choices.map((c) => c.key), ['outletPressure', 'pressureDrop']);
+  assert.equal(ex.chosen, 'outletPressure');
+  fsj = applyOk(fsj, { id: 'v', op: 'exclusive', key: 'pressureDrop', group: ['outletPressure', 'pressureDrop'], value: '50', unit: 'dbar' });
+  const v = JSON.parse(fsj).objects.find((o) => o.id === 'v');
+  assert.equal(v.specs.outletPressure, undefined, 'the other spec of the group is cleared');
+  assert.equal(v.specs.pressureDrop.si, 5e6);
+  // Disconnect the outlet, then attach a new stream there from the port's list.
+  fsj = applyOk(fsj, { id: 'v', op: 'connect', side: 'Outlet', kind: 'Material', index: 0, value: '__disconnect' });
+  assert.equal(JSON.parse(fsj).connections.length, 1);
+  fsj = applyOk(fsj, { id: 'v', op: 'connect', side: 'Outlet', kind: 'Material', index: 0, value: '__new' });
+  assert.equal(JSON.parse(fsj).connections.length, 2);
+  const sp = JSON.parse(sheets.setPropertyPackage(fsj, 'Soave-Redlich-Kwong (SRK)')).flowsheet;
+  assert.equal(sp.propertyPackage, 'Soave-Redlich-Kwong (SRK)');
+});
