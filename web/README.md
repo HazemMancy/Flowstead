@@ -35,6 +35,13 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.5**
+- Basis → Hypothetical components: add a pseudo-component from its normal boiling point or molecular weight (and
+  specific gravity if known), as in HYSYS and the Android app. **Estimate** shows the constants DWSIM's correlations
+  give it, marked "est."; typed critical constants replace the estimates. Edit or remove it like any component.
+- Stream compositions in any basis: mole, mass or liquid volume, as fractions or percent. Mass and volume use the
+  engine's molecular weights and liquid densities, and are kept as typed until they add up (or you press Normalise).
+
 **Web 1.4.1**
 - Basis → Black oils: every field now has its own label (name, oil API gravity, gas SG, GOR, water cut) with a
   short hint, and the window says what a black oil is for: a crude known only from its well test, added to the

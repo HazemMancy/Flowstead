@@ -101,3 +101,5 @@
 .ex-item h3{margin:0 0 .2rem;color:var(--fg);text-transform:none;letter-spacing:0;font-size:.85rem}
 .ex-item select{margin-top:.3rem}
 .ex-info{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));gap:.1rem .6rem}
+.fs-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
+.fs-sub{font-size:.85rem;margin:.9rem 0 .2rem}

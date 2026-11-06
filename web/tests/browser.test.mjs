@@ -251,6 +251,63 @@ try {
     await p.close();
   }
 
+  // ---------- 4c. a hypothetical component and a mass % composition, through the Basis and the worksheet (D116) ----------
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '05-jt-valve-letdown');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    await p.click('#basisBtn');
+    // n-decane as a pseudo-component, as the engine's own test: NBP 447.3 K (174.15 °C), MW 142.28, SG 0.734.
+    await p.fill('#hy_name', 'C10*');
+    await p.fill('#hy_nbp', '174.15');
+    await p.fill('#hy_mw', '142.28');
+    await p.fill('#hy_sg', '0.734');
+    await p.click('#hy_estimate');
+    await p.waitForFunction(() => { const o = document.getElementById('hy_out'); return o && o.textContent && !o.querySelector('.busy'); }, null, { timeout: 300_000 });
+    const row = async (label) => {
+      const r = p.locator('#hy_out tr', { has: p.locator('th', { hasText: label }) }).first();
+      return { label: await r.locator('th').textContent(), value: Number((await r.locator('td').first().textContent()).replace(/,/g, '')) };
+    };
+    const tc = await row('Critical temperature'), pc = await row('Critical pressure');
+    // NIST n-decane: Tc 617.7 K (344.55 °C), Pc 21.1 bar; Riazi–Daubert within 1 % and 5 %, as the engine's test.
+    if (!(tc.value >= 611 - 273.15 && tc.value <= 624 - 273.15)) problems.push(`Tc ${tc.value} °C, n-decane 344.55 °C`);
+    if (!(pc.value >= 20.0 && pc.value <= 22.2)) problems.push(`Pc ${pc.value} bara, n-decane 21.1 bar`);
+    if (!/est\./.test(tc.label)) problems.push('Tc not marked as estimated');
+    if (/est\./.test((await row('Molecular weight')).label)) problems.push('a typed molecular weight marked as estimated');
+    await p.click('#hy_save');
+    const f = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
+    if (!f.compounds.includes('C10*') || !(f.hypotheticals ?? []).some((h) => h.name === 'C10*' && Math.abs(h.normalBoilingPoint - 447.3) < 1e-9)) problems.push('hypothetical not stored (NBP 447.3 K)');
+    if (!/Hypo/.test(await p.textContent('#compList'))) problems.push('not tagged as a hypothetical in the components');
+    await p.click('#basisClose');
+    // The feed in mass %: methane 50, C10* 50; the engine's molecular weights turn it into mole fractions.
+    await p.evaluate(() => document.querySelector('#objects [data-id="hp"]').click());
+    await p.selectOption(`[data-basis]`, 'MassPercent');
+    await p.waitForSelector('[data-x="C10*"]', { timeout: 300_000 });
+    for (const c of ['Nitrogen', 'Carbon dioxide', 'Ethane', 'Propane']) await p.fill(`[data-x="${c}"]`, '');
+    await p.fill('[data-x="Methane"]', '50');
+    await p.fill('[data-x="C10*"]', '50');
+    await p.press('[data-x="C10*"]', 'Tab');
+    await p.waitForTimeout(300);
+    const x = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === 'hp').composition);
+    // By hand with NIST methane 16.0425 and the typed 142.28: (50/16.0425) / (50/16.0425 + 50/142.28) = 0.89867.
+    const want = (50 / 16.0425) / (50 / 16.0425 + 50 / 142.28);
+    if (!(Math.abs((x.Methane ?? 0) - want) < 5e-4) || Math.abs((x.Methane ?? 0) + (x['C10*'] ?? 0) - 1) > 1e-9) problems.push(`mole fractions ${JSON.stringify(x)}, expected methane ${want.toFixed(5)}`);
+    const shown = Number(await p.inputValue('[data-x="Methane"]'));
+    if (Math.abs(shown - 50) > 1e-3) problems.push(`mass % shown back as ${shown}`);
+    await p.selectOption(`[data-basis]`, 'MolePercent');
+    const molePct = Number(await p.inputValue('[data-x="Methane"]'));
+    if (Math.abs(molePct - 100 * (x.Methane ?? 0)) > 1e-6) problems.push(`mole % ${molePct}`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} hypothetical C10* (Tc ${tc.value} °C, Pc ${pc.value} bara) and a mass % feed (methane x = ${(x.Methane ?? 0).toFixed(5)})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4b. a black oil through the Basis's labelled fields, on a phone ----------
   {
     const p = await browser.newPage({ viewport: { width: 390, height: 844 } });
