@@ -251,6 +251,39 @@ try {
     await p.close();
   }
 
+  // ---------- 4b. a black oil through the Basis's labelled fields, on a phone ----------
+  {
+    const p = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.click('#newBtn');
+    await p.click('#basisBtn');
+    await p.locator('#blackOils').getByLabel('Name', { exact: true }).fill('Crude A');
+    await p.locator('#blackOils').getByLabel('Oil API gravity').fill('32');
+    await p.locator('#blackOils').getByLabel('Gas SG (air = 1)').fill('0.8');
+    await p.locator('#blackOils').getByLabel('GOR, Sm³/m³').fill('120');
+    await p.locator('#blackOils').getByLabel('Water cut, %').fill('10');
+    await p.click('#bo_save');
+    const f = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
+    const b = (f.blackOils ?? []).find((x) => x.name === 'Crude A');
+    if (!b) problems.push('black oil not saved');
+    else {
+      if (!f.compounds.includes('Crude A')) problems.push('black oil not added to the components');
+      // API 32 → SG 141.5/(131.5 + 32) = 0.86544 by hand; the other three are stored as typed (cut as a fraction).
+      if (Math.abs(b.oilSpecificGravity - 141.5 / 163.5) > 1e-9) problems.push(`oil SG ${b.oilSpecificGravity}`);
+      if (b.gasSpecificGravity !== 0.8 || b.gasOilRatio !== 120 || Math.abs(b.waterCut - 0.1) > 1e-12) problems.push(`stored ${JSON.stringify(b)}`);
+    }
+    const wide = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    if (wide) problems.push('the page scrolls sideways on a phone');
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} black oil saved through the labelled Basis fields`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 5. the app's tools ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
