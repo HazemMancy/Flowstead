@@ -272,7 +272,7 @@ function select(id) {
 }
 // The worksheet (D111): Worksheets.form builds it with the app's fields per type; changes go back through
 // Worksheets.apply, which uses the app's FlowsheetEditing. Only what the page itself must remember lives here.
-const ui = { tab: 'design', chosen: {}, basis: {} };
+const ui = { tab: 'design', chosen: {}, basis: {}, units: {} };
 function renderInspector() {
   const id = view.selectedId;
   const o = id && objects().find((x) => x.id === id);
@@ -304,6 +304,9 @@ function renderInspector() {
 const fid = (id, k) => `f_${id}_${k}`.replace(/[^\w-]/g, '_');
 function specHtml(f, i, id, extra = '') {
   const inputId = fid(id, f.key);
+  // A unit picked for a field still blank (kept in ui.units) wins over the default until a value is stored.
+  const picked = !f.specified && ui.units[`${id}:${f.key}`];
+  if (picked && f.units.some((u) => u.id === picked)) f = { ...f, unit: picked };
   return `<div class="field fs-spec${f.specified ? ' given' : ''}"><label for="${inputId}">${esc(f.label)}</label>
     <div class="row"><input type="text" inputmode="decimal" id="${inputId}" data-i="${i}" data-spec="${esc(f.key)}"${extra} value="${esc(f.value)}" placeholder="${esc(f.hint ?? '—')}" autocomplete="off" />
     <select data-i="${i}" data-unit="${esc(f.key)}"${extra} aria-label="${esc(f.label)} unit">${f.units.map((u) => `<option value="${esc(u.id)}"${u.id === f.unit ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('')}</select></div></div>`;
@@ -376,8 +379,9 @@ $('inspForm').addEventListener('change', (e) => {
   }
   if (el.dataset.unit !== undefined) {
     const input = el.closest('.row').querySelector('input');
-    // No value yet: the unit is only how the next value will be read. A value: re-expressed, same physical size.
-    if (input.value.trim() === '') return;
+    // No value yet: the unit is only how the next value will be read, so the page keeps it until one is typed.
+    // A value: re-expressed, same physical size.
+    if (input.value.trim() === '') { ui.units[`${view.selectedId}:${el.dataset.unit}`] = el.value; return; }
     return change({ op: 'unit', key: el.dataset.unit, unit: el.value });
   }
   if (el.dataset.pick) { ui.chosen[el.dataset.pick] = el.value; return renderInspectorForce(); }

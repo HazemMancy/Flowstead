@@ -154,9 +154,11 @@ object Worksheets {
                 val port = port(f, id, a)
                 when (val v = s("value")) {
                     NEW_STREAM -> {
-                        val unit = f.obj(id)!!
+                        // A port takes one stream: a new one replaces what is attached.
+                        val freed = if (f.streamAt(id, port) != null) FlowsheetEditing.disconnectPort(f, id, port) else f
+                        val unit = freed.obj(id)!!
                         val (x, y) = FlowsheetEditing.newStreamPosition(unit, port)
-                        FlowsheetEditing.connectNewStream(f, id, port, x, y).first
+                        FlowsheetEditing.connectNewStream(freed, id, port, x, y).first
                     }
                     DISCONNECT -> FlowsheetEditing.disconnectPort(f, id, port)
                     else -> {

@@ -215,7 +215,12 @@ try {
     };
     const hp = in05.objects.find((o) => o.id === 'hp');
     await p.click('.tile[data-type="material_stream"]');
-    await spec('temperature', 40, 'C'); await spec('pressure', 70, 'bara'); await spec('molarFlow', 1000, 'kgmol/h');
+    // A unit picked on a still-blank field is kept while other fields are edited: 104 °F = 40 °C (hand conversion).
+    await p.locator('#inspForm select[data-unit="temperature"]').selectOption('F');
+    await spec('pressure', 70, 'bara');
+    await spec('temperature', 104); await spec('molarFlow', 1000, 'kgmol/h');
+    const tIn = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects[0].specs.temperature.si);
+    if (Math.abs(tIn - 313.15) > 1e-6) problems.push(`104 °F typed after another field was stored as ${tIn} K, not 313.15 K`);
     for (const [c, x] of Object.entries(hp.composition)) { const f = p.locator(`#inspForm [data-x="${c}"]`); await f.fill(String(x)); await f.press('Enter'); }
     const feedTag = await p.inputValue('#inspTag');
     await p.click('.tile[data-type="valve"]');

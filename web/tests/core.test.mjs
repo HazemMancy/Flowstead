@@ -253,3 +253,12 @@ test('a valve worksheet: one of outlet pressure or drop, and its ports connected
   const sp = JSON.parse(sheets.setPropertyPackage(fsj, 'Soave-Redlich-Kwong (SRK)')).flowsheet;
   assert.equal(sp.propertyPackage, 'Soave-Redlich-Kwong (SRK)');
 });
+
+test('"New stream" on a port that already has one replaces it', () => {
+  let fsj = bench('05-jt-valve-letdown');
+  fsj = applyOk(fsj, { id: 'v', op: 'connect', side: 'Outlet', kind: 'Material', index: 0, value: '__new' });
+  const f = JSON.parse(fsj);
+  const out = f.connections.filter((c) => c.fromObject === 'v');
+  assert.equal(out.length, 1);
+  assert.notEqual(out[0].toObject, 'lp');
+});
