@@ -2,7 +2,11 @@
 // Starts the engine worker and turns its messages into promises. One request at a time reaches
 // DWSIM (it keeps process-wide state, D12); the worker queues the rest in order.
 export function startEngine(onStatus = () => {}) {
-  const worker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
+  const url = new URL('./engine-worker.js', import.meta.url);
+  // For tests: run the engine in a given language (?engineCulture=ar-EG), as a device set to it would.
+  const culture = new URLSearchParams(self.location.search).get('engineCulture');
+  if (culture) url.searchParams.set('engineCulture', culture);
+  const worker = new Worker(url, { type: 'module' });
   let nextId = 1;
   const pending = new Map();
   let readyResolve, readyReject;

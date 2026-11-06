@@ -95,3 +95,9 @@
 .rp-plot{margin-top:.8rem} .rp-plot figcaption{font-size:.78rem;font-weight:600;margin-bottom:.25rem}
 .fs-inspector .rp-plot svg{max-width:100%}
 .fs-inspector.wide{width:min(40rem,calc(100% - 1.5rem))}
+/* Export (D114) */
+.ex-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.6rem;margin-top:.5rem}
+.ex-item{border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .7rem}
+.ex-item h3{margin:0 0 .2rem;color:var(--fg);text-transform:none;letter-spacing:0;font-size:.85rem}
+.ex-item select{margin-top:.3rem}
+.ex-info{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));gap:.1rem .6rem}

@@ -83,7 +83,7 @@ internal class CanvasColors(dark: Boolean) {
 }
 
 /** °C and bara, the rest SI: the units the web app shows, as the results workbook it exports. */
-internal val displayUnits: UnitSet = UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara)
+internal val displayUnits: UnitSet = UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara).copy(name = "SI (°C, bara)")
 
 @JsExport
 class FlowsheetView {
@@ -98,6 +98,8 @@ class FlowsheetView {
     private var vp = Viewport()
 
     var selectedId: String? = null
+    /** Drawing for print (the PFD, D114): no grid, no selection, no status badges, as the app's PfdPdf. */
+    var print: Boolean = false
     private var dragging: Pair<String, Offset>? = null
     private var dragStart: Offset = Offset.Zero
     private var wireFrom: Pair<String, Port>? = null
@@ -348,7 +350,7 @@ class FlowsheetView {
         ctx.clearRect(0, 0, width, height)
         val k = vp.zoom
         // Grid (skipped when zoomed far out, where it would only be noise).
-        if (vp.zoom >= 0.6f) {
+        if (vp.zoom >= 0.6f && !print) {
             val step = 24f * k
             var x = vp.offset.x.mod(step)
             while (x < width) {
@@ -375,7 +377,7 @@ class FlowsheetView {
         for (o in fs.objects) {
             val at = positionOf(o)
             val s = CanvasGeometry.size(o.type)
-            if (o.id == selectedId) {
+            if (o.id == selectedId && !print) {
                 val b = CanvasGeometry.bounds(o, at).inflate(6f)
                 drawRoundRect(colors.secondary, b.topLeft, b.size, CornerRadius(10f), style = Stroke(2.5f))
             }
@@ -404,7 +406,7 @@ class FlowsheetView {
                     else -> null
                 }
             }
-            if (badge != null) {
+            if (badge != null && !print) {
                 val b = CanvasGeometry.bounds(o, at)
                 drawCircle(badge, 4.5f, Offset(b.left - 7f, b.top - 7f))
             }
