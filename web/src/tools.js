@@ -323,13 +323,14 @@ export function initTools(app) {
 
   function blackOilSection(container, onChange) {
     const oils = JSON.parse(Tools.blackOils(app.project().flowsheet));
+    const fld = (id, label, value, hint) => `<div class="field"><label for="${id}">${label}</label><input type="text"${id === 'bo_name' ? '' : ' inputmode="decimal"'} id="${id}" value="${value}"/>${hint ? `<p class="fs-note">${hint}</p>` : ''}</div>`;
     container.innerHTML = `<h3>Black oils</h3>
-      <p class="fs-note">A reservoir fluid from its well-test data. The Black Oil package gives the solution gas, oil formation volume factor and density by Standing's correlations (Vasquez–Beggs above the bubble point) and the viscosity by Beggs–Robinson.</p>
+      <p class="fs-note">Use this when you only have well-test data for a crude, not its composition. Enter the four test values below and the oil is added to the components as one pseudo-component; give it a fraction in a stream like any other component. The Black Oil package then gives the solution gas, oil formation volume factor and density by Standing's correlations (Vasquez–Beggs above the bubble point) and the viscosity by Beggs–Robinson.</p>
       ${oils.map((b) => `<p class="fs-note">${esc(b.name)}: API ${b.api.toFixed(1)}, gas SG ${b.gasSpecificGravity.toFixed(3)}, GOR ${b.gasOilRatio.toFixed(1)} Sm³/m³, water cut ${(b.waterCut * 100).toFixed(1)} %</p>`).join('')}
-      <div class="row2"><input type="text" id="bo_name" value="Oil-${oils.length + 1}" aria-label="Black oil name"/><input type="text" inputmode="decimal" id="bo_api" value="35" aria-label="Oil API gravity" placeholder="API"/></div>
-      <div class="row3"><input type="text" inputmode="decimal" id="bo_sg" value="0.75" aria-label="Gas specific gravity (air = 1)"/><input type="text" inputmode="decimal" id="bo_gor" value="100" aria-label="GOR, Sm³/m³"/><input type="text" inputmode="decimal" id="bo_cut" value="0" aria-label="Water cut, %"/></div>
-      <p class="fs-note">Name · API gravity · gas SG (air = 1) · GOR, Sm³/m³ · water cut, %</p>
-      <button type="button" class="btn btn-sm" id="bo_save">Add or update the black oil</button>`;
+      ${fld('bo_name', 'Name', `Oil-${oils.length + 1}`, 'Use an existing name to update that oil.')}
+      <div class="row2">${fld('bo_api', 'Oil API gravity', '35', 'Stock-tank oil; 10 = water.')}${fld('bo_sg', 'Gas SG (air = 1)', '0.75', 'Separator gas.')}</div>
+      <div class="row2">${fld('bo_gor', 'GOR, Sm³/m³', '100', 'Gas per stock-tank oil; 1 Sm³/m³ = 5.615 scf/STB.')}${fld('bo_cut', 'Water cut, %', '0', 'Water in the produced liquid.')}</div>
+      <button type="button" class="btn btn-sm" id="bo_save" style="margin-top:.6rem">Add to components / update</button>`;
     container.querySelector('#bo_save').onclick = () => {
       const n = (id) => Number(container.querySelector(id).value.replace(',', '.'));
       const r = JSON.parse(Tools.saveBlackOil(app.project().flowsheet, container.querySelector('#bo_name').value, n('#bo_api'), n('#bo_sg'), n('#bo_gor'), n('#bo_cut')));

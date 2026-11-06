@@ -35,6 +35,11 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.4.1**
+- Basis → Black oils: every field now has its own label (name, oil API gravity, gas SG, GOR, water cut) with a
+  short hint, and the window says what a black oil is for: a crude known only from its well test, added to the
+  components as one pseudo-component.
+
 **Web 1.4**
 - Export: the PFD (A3 with the title block, as PDF or SVG), the heat and material balance and equipment data sheets
   (PDF or Excel), results (Excel, CSV), the project report, and DWSIM files (.dwxmz). Open now reads DWSIM files too.
