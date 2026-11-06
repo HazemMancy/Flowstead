@@ -49,12 +49,13 @@
     <select id="examples" class="fs-select"><option value="">Examples…</option></select>
     <span class="fs-group">
       <button type="button" class="btn btn-sm" id="newBtn" title="New flowsheet">New</button>
-      <button type="button" class="btn btn-sm" id="openBtn" title="Open a Flowstead flowsheet (.json)">Open</button>
+      <button type="button" class="btn btn-sm" id="openBtn" title="Open a Flowstead flowsheet (.json) or a DWSIM file (.dwxmz, .dwxml)">Open</button>
       <button type="button" class="btn btn-sm" id="saveBtn" title="Save as a Flowstead flowsheet (.json)">Save</button>
-      <input type="file" id="openFile" accept=".json,application/json" hidden />
+      <input type="file" id="openFile" accept=".json,application/json,.dwxmz,.dwxml" hidden />
     </span>
     <button type="button" class="btn btn-sm" id="basisBtn" title="Property package and components">Basis</button>
     <button type="button" class="btn btn-sm" id="toolsBtn" title="Case studies, optimiser and safety analysis">Tools</button>
+    <button type="button" class="btn btn-sm" id="exportBtn" title="PFD, heat and material balance, data sheets, results, DWSIM file">Export</button>
     <span class="fs-group">
       <button type="button" class="btn btn-sm" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
       <button type="button" class="btn btn-sm" id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
@@ -131,6 +132,28 @@
       <button type="button" role="tab" data-tab="pressurization">Pressurization</button>
     </div>
     <div id="toolsBody" class="fs-form"></div>
+  </dialog>
+
+  <dialog class="fs-dialog fs-tools card" id="exportDlg" aria-labelledby="exportTitle">
+    <div class="fs-insp-head"><h2 id="exportTitle">Export</h2><button type="button" class="icon-btn" id="exportClose" aria-label="Close">✕</button></div>
+    <p class="fs-note">The app's project documents. Printable documents open on a page of their own: print it, or save it as PDF.</p>
+    <p class="fs-note warn" id="exportNote" aria-live="polite"></p>
+    <div class="ex-grid">
+      <div class="ex-item"><h3>Process flow diagram</h3><p class="fs-note">A3 landscape with the title block, as the app's PFD.</p>
+        <div class="actions"><button type="button" class="btn btn-sm btn-primary" id="pfdPrint">PDF (print)</button><button type="button" class="btn btn-sm" id="pfdSvg">SVG drawing</button></div></div>
+      <div class="ex-item"><h3>Heat and material balance</h3><p class="fs-note">Every stream's conditions, flows and composition, energy streams and duties.</p>
+        <div class="actions"><button type="button" class="btn btn-sm btn-primary" id="hmbPrint">PDF (print)</button><button type="button" class="btn btn-sm" id="hmbXlsx">Excel</button></div></div>
+      <div class="ex-item"><h3>Equipment data sheets</h3><label for="dsTarget" class="sr-only">Equipment</label><select id="dsTarget"></select>
+        <div class="actions"><button type="button" class="btn btn-sm btn-primary" id="dsPrint">PDF (print)</button><button type="button" class="btn btn-sm" id="dsXlsx">Excel</button></div></div>
+      <div class="ex-item"><h3>Results</h3><p class="fs-note">Every value the engine returned, in °C, bara and SI.</p>
+        <div class="actions"><button type="button" class="btn btn-sm" id="resXlsx">Excel</button><button type="button" class="btn btn-sm" id="resCsv">CSV</button><button type="button" class="btn btn-sm" id="reportMd">Report (Markdown)</button></div></div>
+      <div class="ex-item"><h3>DWSIM file</h3><p class="fs-note">The flowsheet as a .dwxmz for DWSIM. To bring one in, use Open.</p>
+        <div class="actions"><button type="button" class="btn btn-sm" id="dwsimExport">DWSIM file (.dwxmz)</button></div></div>
+    </div>
+    <h3>Project information (title blocks)</h3>
+    <div class="ex-info">
+      <div class="field"><label for="di_company">Company</label><input type="text" id="di_company" data-info="company" autocomplete="off"/></div><div class="field"><label for="di_project">Project</label><input type="text" id="di_project" data-info="project" autocomplete="off"/></div><div class="field"><label for="di_projectNumber">Project No.</label><input type="text" id="di_projectNumber" data-info="projectNumber" autocomplete="off"/></div><div class="field"><label for="di_client">Client</label><input type="text" id="di_client" data-info="client" autocomplete="off"/></div><div class="field"><label for="di_site">Site / location</label><input type="text" id="di_site" data-info="site" autocomplete="off"/></div><div class="field"><label for="di_preparedBy">Prepared</label><input type="text" id="di_preparedBy" data-info="preparedBy" autocomplete="off"/></div><div class="field"><label for="di_checkedBy">Checked</label><input type="text" id="di_checkedBy" data-info="checkedBy" autocomplete="off"/></div><div class="field"><label for="di_approvedBy">Approved</label><input type="text" id="di_approvedBy" data-info="approvedBy" autocomplete="off"/></div><div class="field"><label for="di_pfdNumber">PFD doc. No.</label><input type="text" id="di_pfdNumber" data-info="pfdNumber" autocomplete="off"/></div><div class="field"><label for="di_hmbNumber">H&amp;MB doc. No.</label><input type="text" id="di_hmbNumber" data-info="hmbNumber" autocomplete="off"/></div><div class="field"><label for="di_revision">Revision</label><input type="text" id="di_revision" data-info="revision" autocomplete="off"/></div>
+    </div>
   </dialog>
 
   <ul class="sr-only" id="objects" aria-label="Objects on the flowsheet"></ul>

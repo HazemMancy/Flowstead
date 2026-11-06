@@ -182,6 +182,7 @@ _Last updated: 2026-11-05_
 - **Web Basis and worksheets (D111):** property package and components (DWSIM search); a tap on any stream or unit opens its worksheet with the app's fields per type, connections and results. Benchmark 05 built from nothing in the browser matches its expected outlet temperature. Not yet: reactions, PSV cases, curves, pipe sections, mass/volume composition bases.
 - **Web tools (D112):** stream Analysis tab (phase envelope, PVT lab, distillation curves); Tools window (case study, optimiser, relief valves, depressuring, pipeline pressurization); black oils in the Basis. Each checked through the page against an independent answer (benchmark 06, the owner's HYSYS PSV case, API 521's 15 minutes, IAPWS latent heat). Next: dynamics and PID tuning, Fluid package tools, data sheets, DWSIM files.
 - **Web engine in any language (D113):** the browser engine runs invariant, so a device in Arabic (the owner's tablet) no longer stops DWSIM loading; tested under ar-EG.
+- **Web documents (D114):** Export window: PFD (A3, vector, title block), heat and material balance and data sheets (print/PDF and Excel, the app's sheets), results (Excel, CSV), report (Markdown), DWSIM file export and import; project information for the title blocks. Checked against benchmark 06, with a DWSIM round trip.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).

@@ -9,7 +9,7 @@ device. There is no server, and nothing the user types leaves the browser. See `
 
 | Path | What |
 |---|---|
-| `src/` | The site: `flowsheet.html` + `flowsheet.js` (flowsheet, D110), `tools.js` + `report.js` (the app's tools, D112), `index.html`, `app.js` (stream workbench), `engine.js` + `engine-worker.js` (engine in a worker), `units.js`, `style.css` |
+| `src/` | The site: `flowsheet.html` + `flowsheet.js` (flowsheet, D110), `tools.js` + `report.js` (the app's tools, D112), `documents.js` + `svgcontext.js` (documents, D114), `index.html`, `app.js` (stream workbench), `engine.js` + `engine-worker.js` (engine in a worker), `units.js`, `style.css` |
 | `tests/units.test.mjs` | Web unit conversions against `shared/units/test-vectors.json` |
 | `tests/browser.test.mjs` | Every benchmark through the built site in headless Chromium; the workbench and the flowsheet at 360 and 1280 px |
 | `tests/core.test.mjs` | The web core and the canvas from plain JavaScript |
@@ -34,6 +34,11 @@ engine/scripts/build-web.sh            # builds DWSIM if needed, then web/dist
 In the repository's settings, **Pages → Build and deployment → Source** must be **GitHub Actions**.
 
 ## Release notes
+
+**Web 1.4**
+- Export: the PFD (A3 with the title block, as PDF or SVG), the heat and material balance and equipment data sheets
+  (PDF or Excel), results (Excel, CSV), the project report, and DWSIM files (.dwxmz). Open now reads DWSIM files too.
+- Project information (company, client, numbers, people) for the documents' title blocks.
 
 **Web 1.3.1**
 - Fixed: on a phone or tablet set to Arabic (and other languages whose numbers are written differently) the engine

@@ -363,6 +363,65 @@ try {
     if (!ok) failed++;
     await p.close();
   }
+
+  // ---------- 7. documents (D114): PFD, H&MB, data sheets, results, report, and a DWSIM file round trip ----------
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+    const p = await ctx.newPage();
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    const solveNow = async () => {
+      const before = await p.evaluate(() => window.flowsteadFlowsheet.project.solve?.at ?? 0);
+      await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+      await p.click('#solveBtn');
+      await p.waitForFunction((t) => (window.flowsteadFlowsheet.project.solve?.at ?? 0) > t, before, { timeout: 120_000 });
+      await p.click('#solveClose');
+    };
+    await p.selectOption('#examples', '06-compressor-aftercooler');
+    await solveNow();
+    const tDis = (want('objects.dis.properties.temperature') - 273.15).toFixed(2); // K → °C by hand, as printed (2 decimals)
+    await p.click('#exportBtn');
+    await p.fill('#di_company', 'Example Co.'); await p.press('#di_company', 'Tab');
+    const printed = async (btn) => {
+      const [w] = await Promise.all([p.waitForEvent('popup'), p.click(btn)]);
+      await w.waitForLoadState(); await w.evaluate(() => { window.print = () => {}; });
+      const t = (await w.textContent('body')).replace(/\s+/g, ' ');
+      const svg = await w.$('svg .x, .draw svg');
+      await w.close();
+      return { t, svg: !!svg };
+    };
+    const pfd = await printed('#pfdPrint');
+    if (!pfd.svg || !/PROCESS FLOW DIAGRAM/.test(pfd.t) || !['SUCTION', 'K-100', 'DISCHARGE', 'E-100', 'COOLED'].every((x) => pfd.t.includes(x)) || !pfd.t.includes('Example Co.'))
+      problems.push(`PFD: ${pfd.t.slice(0, 200)}`);
+    const hmb = await printed('#hmbPrint');
+    if (!/HEAT AND MATERIAL BALANCE/.test(hmb.t) || !hmb.t.includes(tDis)) problems.push(`H&MB does not show DISCHARGE at ${tDis} °C`);
+    const ds = await printed('#dsPrint');
+    if (!/TAG: K-100/.test(ds.t) || !/TAG: E-100/.test(ds.t)) problems.push(`data sheets: ${ds.t.slice(0, 160)}`);
+    const dl = async (btn) => { const [d] = await Promise.all([p.waitForEvent('download', { timeout: 120_000 }), p.click(btn)]); return { name: d.suggestedFilename(), buf: fs.readFileSync(await d.path()) }; };
+    for (const [btn, magic] of [['#hmbXlsx', 'PK'], ['#dsXlsx', 'PK'], ['#resXlsx', 'PK'], ['#pfdSvg', '<s'], ['#reportMd', '# ']]) {
+      const f = await dl(btn);
+      if (f.buf.subarray(0, 2).toString() !== magic) problems.push(`${btn}: ${f.name} is not what it says (${f.buf.subarray(0, 8).toString()})`);
+    }
+    const csv = (await dl('#resCsv')).buf.toString();
+    if (!csv.includes(tDis)) problems.push(`results CSV has no DISCHARGE temperature ${tDis}`);
+    // DWSIM round trip: export, open the file again, solve: the same discharge temperature.
+    const dw = await dl('#dwsimExport');
+    await p.click('#exportClose');
+    const file = path.join(fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'fs-')), 'roundtrip.dwxmz');
+    fs.writeFileSync(file, dw.buf);
+    await p.setInputFiles('#openFile', file);
+    await p.waitForFunction(() => /Imported/.test(document.querySelector('.fs-toast')?.textContent ?? ''), null, { timeout: 120_000 });
+    await solveNow();
+    const back = await p.evaluate(() => { const pr = window.flowsteadFlowsheet.project; const f = JSON.parse(pr.flowsheet); const dis = f.objects.find((o) => o.tag === 'DISCHARGE'); return pr.solve?.result?.objects?.[dis?.id]?.properties?.temperature; });
+    if (!(Math.abs(back - want('objects.dis.properties.temperature')) <= 0.05)) problems.push(`DWSIM round trip: DISCHARGE ${back} K, benchmark 06 expects ${want('objects.dis.properties.temperature')} K`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} documents (PFD, H&MB at ${tDis} °C, data sheets, workbooks, CSV, report, DWSIM round trip ${back?.toFixed?.(2)} K)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await ctx.close();
+  }
 } finally {
   await browser.close();
   server.close();

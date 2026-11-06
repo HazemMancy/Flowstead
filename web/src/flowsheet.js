@@ -6,13 +6,14 @@
 // is one the engine returned (CLAUDE.md).
 import { startEngine } from './engine.js';
 import { initTools } from './tools.js';
+import { initDocuments, importDwsim } from './documents.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents } = await import('./core/flowstead-core.mjs');
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
 const view = new FlowsheetView();
@@ -480,6 +481,17 @@ $('openFile').addEventListener('change', async () => {
   const f = $('openFile').files[0]; $('openFile').value = '';
   if (!f) return;
   try {
+    if (/\.dwxm[lz]$/i.test(f.name)) {
+      // A DWSIM file: the engine reads it, as the app's Import DWSIM file (D114).
+      toast('Reading the DWSIM file with the engine…');
+      await engine.ready;
+      const r = await importDwsim(engine, f);
+      const json = JSON.stringify(r.flowsheet);
+      view.setFlowsheet(json);
+      replace(f.name.replace(/\.dwxm[lz]$/i, ''), json);
+      toast(r.warnings?.length ? `Imported. Not carried over: ${r.warnings.join(' · ')}` : 'Imported the DWSIM file.');
+      return;
+    }
     const j = JSON.parse(await f.text());
     // A Flowstead flowsheet, or a benchmark/example file ({name, flowsheet}).
     const sheet = j.flowsheet && typeof j.flowsheet === 'object' ? j.flowsheet : j;
@@ -617,6 +629,10 @@ const tools = initTools({
   ready: () => engine.ready,
 });
 $('toolsBtn').addEventListener('click', () => tools.openTools());
+const documents = initDocuments({
+  $, Documents: Documents.getInstance(), FlowsheetView, core, engine,
+  project: () => project, commit: (json, message) => commit(json, message), toast, ready: () => engine.ready,
+});
 
 // ---------- misc ----------
 $('undoBtn').addEventListener('click', () => step(undo, redo));
