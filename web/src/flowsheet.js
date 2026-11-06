@@ -5,13 +5,14 @@
 // and keeps the project. Solving uses the DWSIM engine in a worker, as the stream workbench does. Every number shown
 // is one the engine returned (CLAUDE.md).
 import { startEngine } from './engine.js';
+import { initTools } from './tools.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms } = await import('./core/flowstead-core.mjs');
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
 const view = new FlowsheetView();
@@ -283,8 +284,23 @@ function renderInspector() {
   if (document.activeElement !== $('inspTag')) $('inspTag').value = o.tag;
   $('inspDesc').textContent = view.describe(id);
   $('tableBtn').textContent = view.hasTable(id) ? 'Hide table' : 'Show table';
-  $('tabDesign').setAttribute('aria-selected', ui.tab === 'design'); $('tabResults').setAttribute('aria-selected', ui.tab === 'results');
-  $('inspForm').hidden = ui.tab !== 'design'; $('inspResults').hidden = ui.tab !== 'results';
+  const isStream = o.type === 'material_stream';
+  if (!isStream && ui.tab === 'analysis') ui.tab = 'design';
+  $('tabAnalysis').hidden = !isStream;
+  $('inspector').classList.toggle('wide', ui.tab === 'analysis');
+  $('tabDesign').setAttribute('aria-selected', ui.tab === 'design'); $('tabResults').setAttribute('aria-selected', ui.tab === 'results'); $('tabAnalysis').setAttribute('aria-selected', ui.tab === 'analysis');
+  $('inspForm').hidden = ui.tab !== 'design'; $('inspResults').hidden = ui.tab !== 'results'; $('inspAnalysis').hidden = ui.tab !== 'analysis';
+  if (ui.tab === 'analysis') {
+    const hash = core.modelHash(project.flowsheet);
+    if ($('inspAnalysis').dataset.id !== id) { $('inspAnalysis').dataset.id = id; tools.streamAnalysis($('inspAnalysis'), id); }
+    else if ($('inspAnalysis').dataset.hash !== hash) {
+      // The flowsheet changed since these ran: say so on every result shown (a new run replaces the note).
+      for (const out of $('inspAnalysis').querySelectorAll('[id$="_out"]')) {
+        if (out.innerHTML.trim() && !out.querySelector('.stale')) out.insertAdjacentHTML('afterbegin', '<p class="rp-note warn stale">⚠ Out of date: the flowsheet changed since this ran. Run it again.</p>');
+      }
+    }
+    $('inspAnalysis').dataset.hash = hash;
+  }
   // Keep the field the user is in: re-render only when focus is outside the form.
   if (!$('inspForm').contains(document.activeElement) || $('inspForm').dataset.id !== id) {
     $('inspForm').dataset.id = id;
@@ -414,7 +430,7 @@ $('inspForm').addEventListener('keydown', (e) => {
   // Enter commits the field, as the app's Done key.
   if (e.key === 'Enter' && e.target.matches('input[type=text]')) { e.preventDefault(); e.target.dispatchEvent(new Event('change', { bubbles: true })); }
 });
-for (const [tab, name] of [['tabDesign', 'design'], ['tabResults', 'results']]) $(tab).addEventListener('click', () => { ui.tab = name; renderInspectorForce(); });
+for (const [tab, name] of [['tabDesign', 'design'], ['tabResults', 'results'], ['tabAnalysis', 'analysis']]) $(tab).addEventListener('click', () => { ui.tab = name; renderInspectorForce(); });
 
 $('inspClose').addEventListener('click', () => select(null));
 $('inspTag').addEventListener('change', () => {
@@ -508,6 +524,7 @@ function renderBasis() {
     $('pkgSel').innerHTML = `<option>${esc(b.propertyPackage || '—')}</option>`; $('pkgSel').disabled = true; $('compSearch').disabled = true;
     $('pkgNote').textContent = 'The package list and the component search come from the engine, which is still loading.';
   }
+  tools.blackOilSection($('blackOils'), renderBasis);
   $('compCount').textContent = `(${b.compounds.length})`;
   $('compList').innerHTML = b.compounds.length ? b.compounds.map((c) => `<li><span>${esc(c)}</span>${b.usedBy[c] ? `<small>in ${b.usedBy[c]} stream${b.usedBy[c] > 1 ? 's' : ''}</small>` : ''}<button type="button" class="btn btn-sm" data-remove="${esc(c)}" aria-label="Remove ${esc(c)}">Remove</button></li>`).join('')
     : '<li class="empty">No components yet: search below.</li>';
@@ -592,6 +609,14 @@ function showSolve(level, lines, msgs = []) {
     msgs.map((m) => `<li class="${esc(m.level)}">${esc(m.text)}</li>`).join('');
 }
 $('solveClose').addEventListener('click', () => { $('solvePanel').hidden = true; });
+
+// ---------- tools (D112) ----------
+const tools = initTools({
+  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), engine,
+  project: () => project, commit: (json, message) => commit(json, message), toast,
+  ready: () => engine.ready,
+});
+$('toolsBtn').addEventListener('click', () => tools.openTools());
 
 // ---------- misc ----------
 $('undoBtn').addEventListener('click', () => step(undo, redo));

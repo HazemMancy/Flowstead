@@ -54,6 +54,7 @@
       <input type="file" id="openFile" accept=".json,application/json" hidden />
     </span>
     <button type="button" class="btn btn-sm" id="basisBtn" title="Property package and components">Basis</button>
+    <button type="button" class="btn btn-sm" id="toolsBtn" title="Case studies, optimiser and safety analysis">Tools</button>
     <span class="fs-group">
       <button type="button" class="btn btn-sm" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
       <button type="button" class="btn btn-sm" id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
@@ -88,9 +89,11 @@
         <div class="fs-tabs" role="tablist" aria-label="Worksheet">
           <button type="button" role="tab" id="tabDesign" aria-controls="inspForm" aria-selected="true">Design</button>
           <button type="button" role="tab" id="tabResults" aria-controls="inspResults" aria-selected="false">Worksheet</button>
+          <button type="button" role="tab" id="tabAnalysis" aria-controls="inspAnalysis" aria-selected="false" hidden>Analysis</button>
         </div>
         <form id="inspForm" class="fs-form" role="tabpanel" aria-labelledby="tabDesign" novalidate></form>
         <div id="inspResults" role="tabpanel" aria-labelledby="tabResults" hidden></div>
+        <div id="inspAnalysis" class="fs-form" role="tabpanel" aria-labelledby="tabAnalysis" hidden></div>
         <div class="actions">
           <button type="button" class="btn btn-sm" id="tableBtn">Show table</button>
           <button type="button" class="btn btn-sm" id="deleteBtn">Delete</button>
@@ -115,6 +118,19 @@
     <label for="compSearch">Add a component</label>
     <input type="search" id="compSearch" placeholder="Search DWSIM's databases: methane, CO2, nC4, water…" autocomplete="off" aria-controls="compResults" />
     <ul class="search-results" id="compResults" aria-label="Matching components"></ul>
+    <div id="blackOils" class="fs-form"></div>
+  </dialog>
+
+  <dialog class="fs-dialog fs-tools card" id="toolsDlg" aria-labelledby="toolsTitle">
+    <div class="fs-insp-head"><h2 id="toolsTitle">Tools</h2><button type="button" class="icon-btn" id="toolsClose" aria-label="Close">✕</button></div>
+    <div class="fs-tabs" role="tablist" id="toolsTabs" aria-label="Tools">
+      <button type="button" role="tab" data-tab="case">Case study</button>
+      <button type="button" role="tab" data-tab="opt">Optimiser</button>
+      <button type="button" role="tab" data-tab="relief">Relief valves</button>
+      <button type="button" role="tab" data-tab="depressuring">Depressuring</button>
+      <button type="button" role="tab" data-tab="pressurization">Pressurization</button>
+    </div>
+    <div id="toolsBody" class="fs-form"></div>
   </dialog>
 
   <ul class="sr-only" id="objects" aria-label="Objects on the flowsheet"></ul>
