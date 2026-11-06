@@ -345,6 +345,24 @@ try {
     if (problems.length) failed++;
     await p.close();
   }
+
+  // ---------- 6. a device in Arabic (owner's tablet): the engine starts and solves benchmark 03 to its numbers ----------
+  {
+    const p = await browser.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + '?engineCulture=ar-EG');
+    await p.waitForFunction(() => window.flowsteadReady || document.getElementById('status').classList.contains('failed'), null, { timeout: 600_000 });
+    const status = await p.textContent('#statusText');
+    const input = JSON.parse(fs.readFileSync(path.join(benchDir, '03-two-phase-flash', 'input.json'), 'utf8'));
+    const vf = /ready|running/i.test(status) ? await p.evaluate(async (f) => {
+      const e = (await import('./engine.js')).startEngine(); await e.ready; return (await e.call('solve', f)).result.objects.feed.properties.vapourFraction;
+    }, input.flowsheet) : NaN;
+    const ok = Math.abs(vf - vf03) <= 1e-6 && !errs.length;
+    console.log(`${ok ? 'ok  ' : 'FAIL'} engine in Arabic (ar-EG): ${status.trim()}; benchmark 03 vapour fraction ${vf}`);
+    if (!ok) failed++;
+    await p.close();
+  }
 } finally {
   await browser.close();
   server.close();

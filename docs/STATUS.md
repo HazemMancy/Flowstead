@@ -181,6 +181,7 @@ _Last updated: 2026-11-05_
 - **Web flowsheet (D110):** https://hazemmancy.github.io/Flowstead/flowsheet.html: the app's palette and PFD symbols (its `Icons.kt` and `CanvasGeometry.kt`, copied unchanged and drawn on a browser canvas), place, wire, move, pan and zoom, undo, examples, open/save, browser storage, solve with readiness, badges and an inspector with the engine's results. Checked in Node and in headless Chromium at 360 and 1280 px against benchmark 06. Next: unit editors (Phase 3).
 - **Web Basis and worksheets (D111):** property package and components (DWSIM search); a tap on any stream or unit opens its worksheet with the app's fields per type, connections and results. Benchmark 05 built from nothing in the browser matches its expected outlet temperature. Not yet: reactions, PSV cases, curves, pipe sections, mass/volume composition bases.
 - **Web tools (D112):** stream Analysis tab (phase envelope, PVT lab, distillation curves); Tools window (case study, optimiser, relief valves, depressuring, pipeline pressurization); black oils in the Basis. Each checked through the page against an independent answer (benchmark 06, the owner's HYSYS PSV case, API 521's 15 minutes, IAPWS latent heat). Next: dynamics and PID tuning, Fluid package tools, data sheets, DWSIM files.
+- **Web engine in any language (D113):** the browser engine runs invariant, so a device in Arabic (the owner's tablet) no longer stops DWSIM loading; tested under ar-EG.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).

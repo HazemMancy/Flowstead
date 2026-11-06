@@ -37,6 +37,9 @@ async function fetchCompressed(type, defaultUri) {
 async function start() {
   const t0 = performance.now();
   const { getAssemblyExports, getConfig } = await dotnet
+    // The device's language, as a browser gives it (and as tests set it with ?engineCulture=); the engine itself then
+    // works in the invariant culture (engine/web/Program.cs), so no language can break DWSIM's number parsing.
+    .withApplicationCulture(new URL(self.location.href).searchParams.get('engineCulture') || self.navigator.language || 'en-US')
     .withResourceLoader(loadCompressed)
     .withConfig({ disableIntegrityCheck: false })
     .create();

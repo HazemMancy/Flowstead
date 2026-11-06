@@ -35,6 +35,11 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.3.1**
+- Fixed: on a phone or tablet set to Arabic (and other languages whose numbers are written differently) the engine
+  failed to start ("Error Converting '-0.0044' to type 'Double'"). The engine now reads numbers the same way in
+  every language.
+
 **Web 1.3**
 - Stream Analysis tab: phase envelope (quality lines, hydrate curve, inhibitor), PVT laboratory (saturation, CCE, CVD,
   differential liberation, separator test) and distillation curves with product properties.
