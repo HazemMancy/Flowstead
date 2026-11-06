@@ -1,16 +1,16 @@
 // Flowstead web — the app's tools in the browser (D112): stream analysis (phase envelope, PVT laboratory, distillation
-// curves), case studies, the optimiser, safety analysis (relief valves, depressuring, pipeline pressurization) and
-// black oils. web/core builds every engine request and every report with the app's own code; this file collects the
+// curves), case studies, the optimiser, safety analysis (relief valves, depressuring, pipeline pressurization), black
+// oils and hypothetical components. web/core builds every engine request and every report with the app's own code; this file collects the
 // inputs, calls the engine worker and lays the reports out. Every number shown is one the engine returned.
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { esc, renderReport } from './report.js';
 
 /**
  * [app]: {$, Tools, Safety, engine, project() → {flowsheet, solve}, commit(json, message), toast(text), ready() → Promise}
- * Returns {streamAnalysis(container, id), openTools(tab), blackOilSection(container)}.
+ * Returns {streamAnalysis(container, id), openTools(tab), blackOilSection(container), hypotheticalSection(container)}.
  */
 export function initTools(app) {
-  const { $, Tools, Safety, engine } = app;
+  const { $, Tools, Safety, Fluids, engine } = app;
   const solveArgs = () => { const s = app.project().solve; return [s ? JSON.stringify(s.result) : null, s?.modelHash ?? '']; };
   const err = (text) => `<p class="rp-note error">${esc(text)}</p>`;
   const busy = (text) => `<p class="rp-note busy">${esc(text)}</p>`;
@@ -340,5 +340,45 @@ export function initTools(app) {
     };
   }
 
-  return { streamAnalysis, openTools, blackOilSection };
+  // ---------- hypothetical components in the Basis (the app's HypotheticalSheet, D44) ----------
+
+  let hypoEditing = null; // name of the hypothetical in the form, or null for a new one
+  function hypotheticalSection(container, onChange) {
+    const h = JSON.parse(Fluids.hypotheticals(app.project().flowsheet));
+    const cur = h.hypotheticals.find((x) => x.name === hypoEditing);
+    if (hypoEditing && !cur) hypoEditing = null;
+    const val = (k) => cur?.values[k] ?? '';
+    const field = (f) => `<div class="field"><label for="hy_${f.key}">${esc(f.label)}${f.symbol ? `, ${esc(f.symbol)}` : ''}</label><input type="text" inputmode="decimal" id="hy_${f.key}" value="${esc(val(f.key))}" autocomplete="off"/>${f.hint ? `<p class="fs-note">${esc(f.hint)}</p>` : ''}</div>`;
+    const [nbp, mw, sg, tc, pc, w] = h.fields;
+    container.innerHTML = `<h3>Hypothetical components (${h.hypotheticals.length})</h3>
+      <p class="fs-note">A pseudo-component, as in HYSYS: give the normal boiling point or the molecular weight, and the specific gravity if known. DWSIM's petroleum correlations estimate the rest; critical constants typed here replace the estimates. It joins the components like any other.</p>
+      ${h.hypotheticals.length ? `<ul class="fs-comps">${h.hypotheticals.map((x) => `<li><span>${esc(x.name)} <small>Hypo</small></span><button type="button" class="btn btn-sm" data-hy-edit="${esc(x.name)}" aria-label="Edit ${esc(x.name)}">Edit</button></li>`).join('')}</ul>` : ''}
+      <h4 class="fs-sub">${cur ? `Hypothetical ${esc(cur.name)}` : 'New hypothetical'}</h4>
+      ${cur?.byStructure ? '<p class="fs-note">Defined by its molecular structure in the Android app: Joback estimates everything; a boiling point or critical constant typed here replaces the estimate.</p>' : ''}
+      <div class="field"><label for="hy_name">Name</label><input type="text" id="hy_name" maxlength="32" placeholder="e.g. C7+ or NBP_150" value="${esc(cur?.name ?? '')}"${cur ? ' readonly' : ''} autocomplete="off"/></div>
+      <div class="row2">${field(nbp)}${field(mw)}</div>
+      ${field(sg)}
+      <p class="fs-note"><b>Override the estimates (optional)</b></p>
+      <div class="row2">${field(tc)}${field(pc)}</div>
+      ${field(w)}
+      <div class="fs-actions"><button type="button" class="btn btn-sm" id="hy_estimate">Estimate</button><button type="button" class="btn btn-sm btn-primary" id="hy_save">${cur ? 'Save' : 'Add to components'}</button>${cur ? '<button type="button" class="btn btn-sm" id="hy_new">New hypothetical</button>' : ''}</div>
+      <div id="hy_out" aria-live="polite"></div>`;
+    const input = () => JSON.stringify(Object.fromEntries(['name', ...h.fields.map((f) => f.key)].map((k) => [k, container.querySelector('#hy_' + k).value])));
+    container.querySelector('#hy_estimate').onclick = () => {
+      const req = JSON.parse(Fluids.estimateRequest(app.project().flowsheet, input()));
+      run(req, container.querySelector('#hy_out'), 'Estimating', (result) => Fluids.estimateReport(app.project().flowsheet, JSON.stringify(result)));
+    };
+    container.querySelector('#hy_save').onclick = () => {
+      const name = container.querySelector('#hy_name').value.trim();
+      const r = JSON.parse(Fluids.saveHypothetical(app.project().flowsheet, input()));
+      if (r.error) return app.toast(r.error);
+      app.commit(JSON.stringify(r.flowsheet), cur ? `Saved ${name}` : `Added ${name} to the components`);
+      hypoEditing = name;
+      onChange();
+    };
+    container.querySelector('#hy_new')?.addEventListener('click', () => { hypoEditing = null; hypotheticalSection(container, onChange); });
+    container.querySelectorAll('[data-hy-edit]').forEach((b) => { b.onclick = () => { hypoEditing = b.dataset.hyEdit; hypotheticalSection(container, onChange); }; });
+  }
+
+  return { streamAnalysis, openTools, blackOilSection, hypotheticalSection };
 }

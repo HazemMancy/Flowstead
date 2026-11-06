@@ -144,7 +144,7 @@ object Worksheets {
                     val t = v.jsonPrimitive.content.trim().replace(',', '.')
                     if (t.isEmpty()) null else c to (t.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: throw EditRejected("$c: numbers ≥ 0 only"))
                 }.toMap()
-                val mole = entered.mapValues { it.value / basis.total }
+                val mole = Fluids.toMole(basis, entered, a["basisData"]?.takeIf { it !is kotlinx.serialization.json.JsonNull })
                 if (s("op") == "normalise") {
                     if (mole.values.sum() <= 0) throw EditRejected("Nothing to normalise")
                     FlowsheetEditing.setComposition(f, id, FlowsheetEditing.normalise(mole))
@@ -190,6 +190,8 @@ object Worksheets {
             put("propertyPackage", f.propertyPackage ?: "")
             putJsonArray("compounds") { f.compounds.forEach { add(JsonPrimitive(it)) } }
             putJsonObject("usedBy") { f.compounds.forEach { c -> put(c, f.objects.count { c in it.composition }) } }
+            putJsonArray("hypotheticals") { f.hypotheticals.forEach { add(JsonPrimitive(it.name)) } }
+            putJsonArray("blackOils") { f.blackOils.forEach { add(JsonPrimitive(it.name)) } }
         }.toString()
     }
 
@@ -368,7 +370,7 @@ private class Form(val fs: Flowsheet, val obj: SimObject, val ctx: UnitContext) 
         label("Composition")
         items += buildJsonObject {
             put("kind", "composition")
-            putJsonArray("bases") { listOf(CompositionBasis.MoleFraction, CompositionBasis.MolePercent).forEach { b -> addJsonObject { put("id", b.name); put("label", b.label); put("total", b.total) } } }
+            putJsonArray("bases") { CompositionBasis.entries.forEach { b -> addJsonObject { put("id", b.name); put("label", b.label); put("total", b.total); put("needsEngineData", b.needsEngineData) } } }
             put("tolerance", Specification.COMPOSITION_TOLERANCE)
             putJsonArray("compounds") {
                 fs.compounds.forEach { c -> addJsonObject { put("name", c); obj.composition[c]?.let { put("mole", it) } } }

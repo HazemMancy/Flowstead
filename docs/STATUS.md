@@ -184,6 +184,7 @@ _Last updated: 2026-11-05_
 - **Web engine in any language (D113):** the browser engine runs invariant, so a device in Arabic (the owner's tablet) no longer stops DWSIM loading; tested under ar-EG.
 - **Web documents (D114):** Export window: PFD (A3, vector, title block), heat and material balance and data sheets (print/PDF and Excel, the app's sheets), results (Excel, CSV), report (Markdown), DWSIM file export and import; project information for the title blocks. Checked against benchmark 06, with a DWSIM round trip.
 - **Web black-oil form (D115):** the Basis black-oil fields are labelled one by one with hints, as the app's Black oil sheet; tested on a phone viewport (API 32 → SG 141.5/163.5 by hand).
+- **Web hypotheticals and composition bases (D116):** the Basis adds, estimates and edits hypothetical components (the app's HypotheticalSheet); feed compositions in all six bases of the app's CompositionBasis, mass and volume from the engine's compoundBasis. Checked: n-decane as C10* (Tc, Pc against NIST), a 50/50 mass % feed against a hand calculation.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).

@@ -306,3 +306,60 @@ test('safety forms: a relief valve set up from the flowsheet, edited by field pa
   f = set('psv100', { op: 'delete' });
   assert.equal(f.safety.devices.length, 0);
 });
+
+const { Fluids } = await import(lib);
+const fluids = Fluids.getInstance();
+
+test('hypothetical components: typed in display units, stored in SI, added to the components (D116)', () => {
+  const f0 = bench('03-two-phase-flash');
+  const form = JSON.parse(fluids.hypotheticals(f0));
+  assert.deepEqual(form.fields.map((f) => f.key), ['nbp', 'mw', 'sg', 'tc', 'pc', 'w']);
+  assert.equal(form.fields.find((f) => f.key === 'nbp').unit, 'C');
+  assert.equal(form.fields.find((f) => f.key === 'pc').unit, 'bara');
+  // Neither boiling point nor molecular weight: refused with the app's message.
+  assert.match(JSON.parse(fluids.saveHypothetical(f0, JSON.stringify({ name: 'C7+', sg: '0.75' }))).error, /boiling point or the molecular weight/);
+  assert.match(JSON.parse(fluids.estimateRequest(f0, JSON.stringify({ name: 'C7+', nbp: '2000' }))).error, /between 150 and 1500 K/);
+  const r = JSON.parse(fluids.saveHypothetical(f0, JSON.stringify({ name: 'C7+', nbp: '150', mw: '', sg: '0,78', tc: '', pc: '25', w: '' })));
+  const h = r.flowsheet.hypotheticals.find((x) => x.name === 'C7+');
+  assert.ok(Math.abs(h.normalBoilingPoint - 423.15) < 1e-9); // 150 °C + 273.15 by hand
+  assert.equal(h.specificGravity, 0.78); // a decimal comma is read as a point
+  assert.ok(Math.abs(h.criticalPressure - 25e5) < 1e-6); // 25 bara = 2.5 MPa
+  assert.equal(h.molecularWeight ?? null, null);
+  assert.ok(r.flowsheet.compounds.includes('C7+'));
+  const f1 = JSON.stringify(r.flowsheet);
+  assert.equal(JSON.parse(fluids.hypotheticals(f1)).hypotheticals[0].values.nbp, '150'); // shown back as typed
+  const req = JSON.parse(fluids.estimateRequest(f1, JSON.stringify({ name: 'C7+', nbp: '150' })));
+  assert.equal(req.method, 'estimateHypotheticals');
+  assert.equal(req.params[0].name, 'C7+');
+  assert.ok(JSON.parse(sheets.basis(f1)).hypotheticals.includes('C7+'));
+  // Removed from the components, the hypothetical goes with it (the app's setCompounds).
+  assert.equal((JSON.parse(sheets.removeCompound(f1, 'C7+')).flowsheet.hypotheticals ?? []).length, 0);
+});
+
+test('composition in mass and liquid-volume bases, stored as mole fractions (D116)', () => {
+  // Two compounds, mole fractions 0.5/0.5, MW 16 and 30, liquid density 300 and 356 kg/m³ (made up for the hand check).
+  const f = JSON.parse(bench('03-two-phase-flash'));
+  const feed = f.objects.find((o) => o.composition && Object.keys(o.composition).length);
+  const [a, b] = f.compounds;
+  f.compounds = [a, b];
+  for (const o of f.objects) if (o.composition && Object.keys(o.composition).length) o.composition = { [a]: 0.5, [b]: 0.5 };
+  const fj = JSON.stringify(f);
+  const data = JSON.stringify([{ name: a, molecularWeight: 16, stdLiquidDensity: 300 }, { name: b, molecularWeight: 30, stdLiquidDensity: 356 }]);
+  const mass = JSON.parse(fluids.compositionIn(fj, feed.id, 'MassPercent', data)).values;
+  assert.ok(Math.abs(mass[a] - 100 * 8 / 23) < 1e-9, `${mass[a]}`); // 0.5·16 / (0.5·16 + 0.5·30) = 8/23
+  const vol = JSON.parse(fluids.compositionIn(fj, feed.id, 'VolumeFraction', data)).values;
+  const va = 16 / 300, vb = 30 / 356;
+  assert.ok(Math.abs(vol[a] - va / (va + vb)) < 1e-9);
+  assert.deepEqual(JSON.parse(fluids.compositionIn(fj, feed.id, 'MassFraction', JSON.stringify([{ name: a, molecularWeight: 16 }]))).missing, [b]);
+  // 60 mass % / 40 mass % typed: mole fractions (60/16) / (60/16 + 40/30) by hand.
+  const r = JSON.parse(sheets.apply(fj, JSON.stringify({ id: feed.id, op: 'composition', basis: 'MassPercent', values: { [a]: '60', [b]: '40' }, basisData: JSON.parse(data) })));
+  const x = r.flowsheet.objects.find((o) => o.id === feed.id).composition;
+  const xa = (60 / 16) / (60 / 16 + 40 / 30);
+  assert.ok(Math.abs(x[a] - xa) < 1e-12 && Math.abs(x[b] - (1 - xa)) < 1e-12, JSON.stringify(x));
+  // Without the engine's data, a mass entry is refused rather than guessed.
+  assert.match(JSON.parse(sheets.apply(fj, JSON.stringify({ id: feed.id, op: 'composition', basis: 'MassFraction', values: { [a]: '1' } }))).error, /molecular weight/);
+  // Mole % still divides by 100 and keeps an unnormalised sum as typed.
+  const m = JSON.parse(sheets.apply(fj, JSON.stringify({ id: feed.id, op: 'composition', basis: 'MolePercent', values: { [a]: '30', [b]: '60' } }))).flowsheet.objects.find((o) => o.id === feed.id).composition;
+  assert.ok(Math.abs(m[a] - 0.3) < 1e-12 && Math.abs(m[b] - 0.6) < 1e-12);
+  assert.equal(JSON.parse(sheets.form(fj, feed.id)).items.find((i) => i.kind === 'composition').bases.length, 6);
+});

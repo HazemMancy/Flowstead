@@ -13,7 +13,8 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids } = await import('./core/flowstead-core.mjs');
+const fluids = Fluids.getInstance();
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
 const view = new FlowsheetView();
@@ -354,10 +355,21 @@ function item(it, i, id) {
     case 'composition': {
       if (!it.compounds.length) return `<p class="fs-note warn">No components yet. <button type="button" class="btn btn-sm" data-open-basis="1">Open the Basis</button> to choose them.</p>`;
       const basis = it.bases.find((b) => b.id === (ui.basis[id] ?? 'MoleFraction')) ?? it.bases[0];
-      const shown = it.compounds.map((c) => ({ name: c.name, text: c.mole === undefined ? '' : String(+(c.mole * basis.total).toPrecision(10)) }));
-      return `<div class="field"><label for="${fid(id, 'basis')}">Basis</label><select id="${fid(id, 'basis')}" data-i="${i}" data-basis="1">${it.bases.map((b) => `<option value="${b.id}"${b.id === basis.id ? ' selected' : ''}>${esc(b.label)}</option>`).join('')}</select></div>
-        <table class="comp fs-compo" data-i="${i}"><tbody>${shown.map((c) => `<tr><td><label for="${fid(id, 'x_' + c.name)}">${esc(c.name)}</label></td><td><input type="text" inputmode="decimal" id="${fid(id, 'x_' + c.name)}" data-i="${i}" data-x="${esc(c.name)}" value="${esc(c.text)}" placeholder="0" autocomplete="off" /></td></tr>`).join('')}</tbody></table>
-        <div class="total" id="${fid(id, 'sum')}"></div>`;
+      const select = `<div class="field"><label for="${fid(id, 'basis')}">Basis</label><select id="${fid(id, 'basis')}" data-i="${i}" data-basis="1">${it.bases.map((b) => `<option value="${b.id}"${b.id === basis.id ? ' selected' : ''}>${esc(b.label)}</option>`).join('')}</select></div>`;
+      // Mass and volume need each compound's molecular weight and liquid density at 60 °F, from the engine (D78).
+      let data = null;
+      if (basis.needsEngineData) {
+        const d = compoundData();
+        const problem = d.error ? `${d.error}. Mole fractions still work without it.` : !d.list ? 'Getting molecular weights and liquid densities from the engine…' : null;
+        if (problem) return select + `<p class="fs-note${d.error ? ' warn' : ''}">${esc(problem)}</p>`;
+        data = d.list;
+      }
+      const r = JSON.parse(fluids.compositionIn(project.flowsheet, id, basis.id, JSON.stringify(data)));
+      if (r.missing) return select + `<p class="fs-note warn">The engine has no ${basis.id.startsWith('Volume') ? 'liquid density' : 'molecular weight'} for ${esc(r.missing.join(', '))}: use another basis.</p>`;
+      const shown = it.compounds.map((c) => ({ name: c.name, text: r.values[c.name] === undefined ? '' : String(+r.values[c.name].toPrecision(basis.needsEngineData ? 6 : 10)) }));
+      const pct = basis.total === 100 ? ' %' : '';
+      return select + `<table class="comp fs-compo" data-i="${i}"><tbody>${shown.map((c) => `<tr><td><label for="${fid(id, 'x_' + c.name)}">${esc(c.name)}${pct}</label></td><td><input type="text" inputmode="decimal" id="${fid(id, 'x_' + c.name)}" data-i="${i}" data-x="${esc(c.name)}" value="${esc(c.text)}" placeholder="0" autocomplete="off" /></td></tr>`).join('')}</tbody></table>
+        <div class="total" id="${fid(id, 'sum')}"></div>${basis.needsEngineData ? '<p class="fs-note">Stored as mole fractions, as the engine takes them; mass and volume entries are normalised, since only their ratios define the mixture.</p>' : ''}`;
     }
     default: return '';
   }
@@ -379,11 +391,27 @@ function compositionSum(table) {
   const ok = !bad && Math.abs(sum - basis.total) <= it.tolerance * basis.total;
   const el = $(fid(id, 'sum'));
   el.className = `total${ok ? '' : ' bad'}`;
-  el.innerHTML = `<span>${bad ? 'Check the values: numbers ≥ 0 only' : `Sum = <b>${core.formatNumber(sum, 6)}</b>`}</span>${!ok && !bad && sum > 0 ? '<button type="button" class="btn btn-sm" data-normalise="1">Normalise</button>' : ''}`;
+  el.innerHTML = `<span>${bad ? 'Check the values: numbers ≥ 0 only' : `Sum = <b>${core.formatNumber(sum, 6)}</b>`}${!ok && !bad && basis.needsEngineData ? ` · kept until it adds up to ${basis.total}` : ''}</span>${!ok && !bad && sum > 0 ? '<button type="button" class="btn btn-sm" data-normalise="1">Normalise</button>' : ''}`;
+  return ok;
 }
 function compositionAction(table, op) {
   const values = Object.fromEntries([...table.querySelectorAll('[data-x]')].map((x) => [x.dataset.x, x.value]));
-  change({ op, basis: ui.basis[view.selectedId] ?? 'MoleFraction', values });
+  const basis = ui.basis[view.selectedId] ?? 'MoleFraction';
+  change({ op, basis, values, basisData: /^(Mass|Volume)/.test(basis) ? compoundData().list : null });
+}
+// The fluid's molecular weights and liquid densities from the engine (compoundBasis), asked once per fluid, as the app.
+let compound = { key: '', list: null, error: '' };
+function fluidKey() { const f = JSON.parse(project.flowsheet); return JSON.stringify([f.propertyPackage, f.compounds, f.hypotheticals, f.blackOils]); }
+function compoundData() {
+  const key = fluidKey();
+  if (compound.key === key) return compound;
+  compound = { key, list: null, error: '' };
+  const f = JSON.parse(project.flowsheet);
+  engine.ready.then(() => engine.call('compoundBasis', { ...f, objects: [], connections: [] }))
+    .then(({ result }) => { if (compound.key === key) compound.list = result; })
+    .catch((e) => { if (compound.key === key) compound.error = `No compound data from the engine: ${errorText(e)}`; })
+    .finally(() => { if (compound.key === key) renderInspectorForce(); });
+  return compound;
 }
 $('inspForm').addEventListener('submit', (e) => e.preventDefault());
 $('inspForm').addEventListener('change', (e) => {
@@ -418,7 +446,14 @@ $('inspForm').addEventListener('change', (e) => {
   }
   if (el.dataset.switch) return change({ op: 'ref', key: itemOf(el).key, value: el.checked ? '' : 'off' });
   if (el.dataset.basis) { ui.basis[view.selectedId] = el.value; return renderInspectorForce(); }
-  if (el.dataset.x !== undefined) return compositionAction(el.closest('table'), 'composition');
+  if (el.dataset.x !== undefined) {
+    // Mass and volume are stored as mole fractions, which needs the whole entry: keep what is typed until it adds up
+    // (or the user presses Normalise), rather than rescaling the other fields under the user's hands.
+    const table = el.closest('table'), it = itemOf(table);
+    const basis = it.bases.find((b) => b.id === (ui.basis[view.selectedId] ?? 'MoleFraction')) ?? it.bases[0];
+    if (basis.needsEngineData && !compositionSum(table)) return;
+    return compositionAction(table, 'composition');
+  }
 });
 $('inspForm').addEventListener('input', (e) => { if (e.target.dataset.x !== undefined) compositionSum(e.target.closest('table')); });
 $('inspForm').addEventListener('click', (e) => {
@@ -536,9 +571,10 @@ function renderBasis() {
     $('pkgSel').innerHTML = `<option>${esc(b.propertyPackage || '—')}</option>`; $('pkgSel').disabled = true; $('compSearch').disabled = true;
     $('pkgNote').textContent = 'The package list and the component search come from the engine, which is still loading.';
   }
+  tools.hypotheticalSection($('hypos'), renderBasis);
   tools.blackOilSection($('blackOils'), renderBasis);
   $('compCount').textContent = `(${b.compounds.length})`;
-  $('compList').innerHTML = b.compounds.length ? b.compounds.map((c) => `<li><span>${esc(c)}</span>${b.usedBy[c] ? `<small>in ${b.usedBy[c]} stream${b.usedBy[c] > 1 ? 's' : ''}</small>` : ''}<button type="button" class="btn btn-sm" data-remove="${esc(c)}" aria-label="Remove ${esc(c)}">Remove</button></li>`).join('')
+  $('compList').innerHTML = b.compounds.length ? b.compounds.map((c) => `<li><span>${esc(c)}${b.hypotheticals.includes(c) ? ' <small>Hypo</small>' : b.blackOils.includes(c) ? ' <small>Black oil</small>' : ''}</span>${b.usedBy[c] ? `<small>in ${b.usedBy[c]} stream${b.usedBy[c] > 1 ? 's' : ''}</small>` : ''}<button type="button" class="btn btn-sm" data-remove="${esc(c)}" aria-label="Remove ${esc(c)}">Remove</button></li>`).join('')
     : '<li class="empty">No components yet: search below.</li>';
 }
 $('pkgSel').addEventListener('change', () => { const r = JSON.parse(sheets.setPropertyPackage(project.flowsheet, $('pkgSel').value)); if (r.flowsheet) commit(JSON.stringify(r.flowsheet), `Package ${$('pkgSel').value}`); renderBasis(); });
@@ -624,7 +660,7 @@ $('solveClose').addEventListener('click', () => { $('solvePanel').hidden = true;
 
 // ---------- tools (D112) ----------
 const tools = initTools({
-  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), engine,
+  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Fluids: fluids, engine,
   project: () => project, commit: (json, message) => commit(json, message), toast,
   ready: () => engine.ready,
 });
