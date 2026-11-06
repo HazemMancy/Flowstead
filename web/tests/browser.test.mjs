@@ -279,6 +279,11 @@ try {
     if (!/(Bubble|Dew) point/.test(await text('#an_pvt_out')) || !(await p.$('#an_pvt_out table.rp-table'))) problems.push(`PVT: ${(await text('#an_pvt_out')).slice(0, 200)}`);
     await p.click('#an_pet'); await done('#an_pet_out');
     if (!/TBP/.test(await text('#an_pet_out'))) problems.push(`distillation: ${(await text('#an_pet_out')).slice(0, 200)}`);
+    // An edit to the stream marks the analyses shown as out of date.
+    await p.click('#tabDesign');
+    const tIn = p.locator('#inspForm input[data-spec="temperature"]'); await tIn.fill('-35'); await tIn.press('Enter');
+    await p.click('#tabAnalysis');
+    if (await p.locator('#inspAnalysis .stale').count() !== 3) problems.push('analyses not marked out of date after the stream changed');
 
     // Case study on benchmark 06: K-100 outlet 10 → 20 bara in 2 steps; the 15 bara point is the benchmark itself.
     await solve('06-compressor-aftercooler');

@@ -290,7 +290,17 @@ function renderInspector() {
   $('inspector').classList.toggle('wide', ui.tab === 'analysis');
   $('tabDesign').setAttribute('aria-selected', ui.tab === 'design'); $('tabResults').setAttribute('aria-selected', ui.tab === 'results'); $('tabAnalysis').setAttribute('aria-selected', ui.tab === 'analysis');
   $('inspForm').hidden = ui.tab !== 'design'; $('inspResults').hidden = ui.tab !== 'results'; $('inspAnalysis').hidden = ui.tab !== 'analysis';
-  if (ui.tab === 'analysis' && $('inspAnalysis').dataset.id !== id) { $('inspAnalysis').dataset.id = id; tools.streamAnalysis($('inspAnalysis'), id); }
+  if (ui.tab === 'analysis') {
+    const hash = core.modelHash(project.flowsheet);
+    if ($('inspAnalysis').dataset.id !== id) { $('inspAnalysis').dataset.id = id; tools.streamAnalysis($('inspAnalysis'), id); }
+    else if ($('inspAnalysis').dataset.hash !== hash) {
+      // The flowsheet changed since these ran: say so on every result shown (a new run replaces the note).
+      for (const out of $('inspAnalysis').querySelectorAll('[id$="_out"]')) {
+        if (out.innerHTML.trim() && !out.querySelector('.stale')) out.insertAdjacentHTML('afterbegin', '<p class="rp-note warn stale">⚠ Out of date: the flowsheet changed since this ran. Run it again.</p>');
+      }
+    }
+    $('inspAnalysis').dataset.hash = hash;
+  }
   // Keep the field the user is in: re-render only when focus is outside the form.
   if (!$('inspForm').contains(document.activeElement) || $('inspForm').dataset.id !== id) {
     $('inspForm').dataset.id = id;
