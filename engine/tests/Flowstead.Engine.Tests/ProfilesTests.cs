@@ -442,4 +442,38 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
         Assert.False(env.WaterFree);
         Assert.Empty(env.WaterDewTemperature);
     }
+
+    // ---- D119: inhibited water that freezes before hydrates form ----
+
+    [Theory]
+    [InlineData(0.02)]
+    [InlineData(0.20)]
+    public async Task InhibitedWaterFreezesAndBelowThatTheInhibitorDoesNotLowerHydrates(double w)
+    {
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane"] };
+        // Methane at 6 bar: hydrates form near −25 °C, from ice.
+        var env = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope",
+            new PhaseEnvelopeRequest(fs, new() { ["Methane"] = 1.0 }, Hydrates: true, Pressure: 6e5, Temperature: 311.15,
+                Inhibitor: HydrateInhibitors.Methanol, InhibitorWeightFraction: w), Json.Options));
+        var tf = env.InhibitedWaterFreezingTemperature!.Value;
+        output.WriteLine($"{w:P0} methanol: freezes at {tf - 273.15:0.00} °C; hydrate {env.HydrateTemperatureAtPressure - 273.15:0.00} °C, inhibited {env.InhibitedHydrateTemperatureAtPressure - 273.15:0.00} °C | " + string.Join(" | ", env.Warnings));
+        if (w < 0.05)
+        {
+            // Dilute limit, independent of the activity model: ΔT = K_f·m, water's cryoscopic constant 1.853 K·kg/mol.
+            var m = w * 1000 / 32.042 / (1 - w);
+            Assert.Equal(273.15 - 1.853 * m, tf, 0.15);
+        }
+        else
+        {
+            // CRC Handbook (Concentrative properties of aqueous solutions): 20 wt % methanol freezes near −15.0 °C.
+            // DWSIM's NRTL water activity (fitted to vapour–liquid data well above 0 °C) puts it 4.0 K warmer, at
+            // −11.0 °C; an ideal solution would give −13.0 °C. Warmer is the safe side: the app says the inhibitor stops
+            // working sooner than it does, and the warning says the measured value is colder.
+            Assert.InRange(tf - 273.15, -15.0, -10.5);
+        }
+        // The hydrate point is below the freezing point: the water there is ice, so the inhibitor changes nothing.
+        Assert.True(env.HydrateTemperatureAtPressure < tf);
+        Assert.Equal(env.HydrateTemperatureAtPressure!.Value, env.InhibitedHydrateTemperatureAtPressure!.Value, 0.01);
+        Assert.Contains(env.Warnings, x => x.Contains("freezes below") && x.Contains("leaves out freezing"));
+    }
 }

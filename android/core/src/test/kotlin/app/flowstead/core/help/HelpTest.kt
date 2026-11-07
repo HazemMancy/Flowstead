@@ -56,7 +56,7 @@ class HelpTest {
     @Test
     fun releasesAreNewestFirst() {
         val versions = Help.releases.map { it.version }
-        assertTrue("3.0.2" in versions && "3.1.0" in versions && "3.1.1" in versions && "3.1.2" in versions && "3.2.0" in versions && "3.2.1" in versions && "3.2.2" in versions && "3.2.3" in versions)
-        assertEquals("3.2.3", versions.first())
+        assertTrue("3.0.2" in versions && "3.1.0" in versions && "3.1.1" in versions && "3.1.2" in versions && "3.2.0" in versions && "3.2.1" in versions && "3.2.2" in versions && "3.2.3" in versions && "3.2.4" in versions)
+        assertEquals("3.2.4", versions.first())
     }
 }

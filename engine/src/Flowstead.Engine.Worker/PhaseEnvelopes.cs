@@ -79,7 +79,7 @@ public static class PhaseEnvelopes
         double? hAt = null;
         string? hAtS = null;
         List<double> hti = [], hpi = [];
-        double? depression = null, required = null, hAtInhibited = null;
+        double? depression = null, required = null, hAtInhibited = null, freezing = null;
         if (req.Hydrates)
         {
             if (!Hydrates.HasFormers(compounds.Where((c, i) => z[i] > 0)))
@@ -105,6 +105,9 @@ public static class PhaseEnvelopes
                 if (inhibitor is not null && req.InhibitorWeightFraction > 0)
                 {
                     var w = req.InhibitorWeightFraction;
+                    // Below its freezing point the inhibited water turns to ice and hydrates form from the ice: there the
+                    // inhibitor does not lower them (D119).
+                    freezing = Hydrates.FreezingTemperature((t, p2) => lnWaterActivity!(w, t, p2), req.Pressure is { } pf && pf > 0 ? pf : 101325);
                     for (var i = 0; i < hp.Count; i++)
                         if (Inhibited(w, hp[i], i > 0 && hti.Count > 0 ? hti[^1] : ht[i] - 10) is { } h) { hti.Add(h.T); hpi.Add(hp[i]); }
                     if (hAt is { } th0 && req.Pressure is { } at0 && Inhibited(w, at0, null) is { } hi)
@@ -136,10 +139,14 @@ public static class PhaseEnvelopes
                     }
                     if (required is null && th > ts) warnings.Add($"Hydrates: no {dose} strength up to 85 wt % keeps this stream out of hydrates.");
                 }
+                var frozen = freezing is { } tf && hAtInhibited is { } tiAt && tiAt <= tf + 0.05;
                 warnings.Add(inhibitor is null || depression is null
                     ? "Hydrates: free water assumed present, with no inhibitor or salt (van der Waals–Platteeuw, Munck et al. 1988)."
                     : $"Hydrates: free water assumed present (van der Waals–Platteeuw, Munck et al. 1988) with {req.InhibitorWeightFraction:P0} {inhibitor} in it, " +
-                      $"through the water's activity (DWSIM NRTL): {depression:0.#} K lower (GPSA correlation: {HydrateInhibitors.Depression(inhibitor, req.InhibitorWeightFraction):0.#} K); no salt.");
+                      $"through the water's activity (DWSIM NRTL): {depression:0.#} K lower (GPSA correlation: {HydrateInhibitors.Depression(inhibitor, req.InhibitorWeightFraction):0.#} K" +
+                      (frozen ? ", which leaves out freezing" : "") + "); no salt." +
+                      (freezing is { } tf2 ? $" This water freezes below {tf2 - 273.15:0.#} °C (DWSIM NRTL; measured freezing points of inhibited water are a few K colder, " +
+                                                    "e.g. −15 °C at 20 wt % methanol against −11 °C here); colder than that, hydrates form from the ice and the inhibitor does not lower them." : ""));
             }
         }
 
@@ -149,7 +156,7 @@ public static class PhaseEnvelopes
             HydrateTemperature = ht, HydratePressure = hp, HydrateStructure = hs,
             HydrateTemperatureAtPressure = hAt, HydrateStructureAtPressure = hAtS,
             InhibitedHydrateTemperature = hti, InhibitedHydratePressure = hpi, InhibitedHydrateTemperatureAtPressure = hAtInhibited,
-            HydrateDepression = depression, RequiredInhibitorFraction = required,
+            HydrateDepression = depression, RequiredInhibitorFraction = required, InhibitedWaterFreezingTemperature = freezing,
             BubbleTemperature = bt, BubblePressure = bp, DewTemperature = dt, DewPressure = dp,
             CriticalTemperature = tc, CriticalPressure = pc,
             CricondenbarTemperature = bar?.T, CricondenbarPressure = bar?.P,

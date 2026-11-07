@@ -35,6 +35,12 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.5.3**
+- Phase envelope: when the hydrate curve and the water dew line stretch the axes so much that a narrow envelope (a lean
+  gas) looks like a line, a second plot shows the envelope close up.
+- Hydrate inhibitor: the freezing point of the inhibited water is given. Below it hydrates form from ice and the
+  inhibitor does not lower them, which the window now says instead of "0 K lower".
+
 **Web 1.5.2**
 - Phase envelope of a stream with water in it (a wet gas): the envelope is now the hydrocarbons' on a water-free basis,
   so it closes with its critical point, cricondenbar and cricondentherm, as HYSYS users read a wet gas. The water dew

@@ -98,6 +98,28 @@ object Plots {
         return Plot("Phase envelope", "Temperature", Quantity.Temperature, "Pressure", Quantity.Pressure, series, markers)
     }
 
+    /**
+     * The envelope alone, close up (D119): its curves, quality lines and special points, without the hydrate curve or
+     * the water dew line, and the stream only if it falls inside. Offered when those other curves stretch the axes so far
+     * that the envelope fills less than a third of the full plot's area, as a lean gas's narrow envelope does; null
+     * otherwise.
+     */
+    fun envelopeCloseUp(env: PhaseEnvelope, streamTemperature: Double? = null, streamPressure: Double? = null): Plot? {
+        val full = envelope(env, streamTemperature, streamPressure) ?: return null
+        val basis = if (env.waterFree) " (water-free)" else ""
+        val curves = full.series.filter { it.label.startsWith("Bubble point") || it.label.startsWith("Dew point") || it.label.startsWith("VF ") }
+        val special = full.markers.filter { it.label != "This stream" }
+        val xs = curves.flatMap { it.x } + special.map { it.x }
+        val ys = curves.flatMap { it.y } + special.map { it.y }
+        val allX = full.series.flatMap { it.x } + full.markers.map { it.x }
+        val allY = full.series.flatMap { it.y } + full.markers.map { it.y }
+        fun span(v: List<Double>) = (v.maxOrNull() ?: 0.0) - (v.minOrNull() ?: 0.0)
+        val area = span(xs) * span(ys)
+        if (!(area > 0) || area * 3 > span(allX) * span(allY)) return null
+        val inside = full.markers.filter { it.label == "This stream" && it.x in xs.min()..xs.max() && it.y in ys.min()..ys.max() }
+        return full.copy(title = "Phase envelope$basis, close up", series = curves, markers = special + inside)
+    }
+
     private fun point(label: String, x: Double?, y: Double?) =
         if (x != null && y != null && x.isFinite() && y.isFinite()) PlotMarker(label, x, y) else null
 

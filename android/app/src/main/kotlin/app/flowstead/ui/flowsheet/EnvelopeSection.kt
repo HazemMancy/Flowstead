@@ -36,6 +36,7 @@ import androidx.compose.material3.OutlinedTextField
 import app.flowstead.core.api.HydrateInhibitors
 import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.DisplayValue
+import app.flowstead.core.model.EnvelopeNotes
 import app.flowstead.core.model.Plots
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SimObject
@@ -69,6 +70,8 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
         val plot = Plots.envelope(env, si("temperature"), si("pressure"))
         if (plot == null) Text("DWSIM traced no bubble or dew curve for this composition.", style = MaterialTheme.typography.bodySmall)
         else PlotView(plot, unitSet, ctx, stale = state?.stale == true)
+        // A narrow envelope squeezed by the hydrate curve and the water dew line, close up (D119).
+        Plots.envelopeCloseUp(env, si("temperature"), si("pressure"))?.let { PlotView(it, unitSet, ctx, stale = state?.stale == true) }
         val t = unitSet.unitFor(Quantity.Temperature)
         val p = unitSet.unitFor(Quantity.Pressure)
         @Composable
@@ -88,26 +91,12 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
                     modifier = Modifier.testTag("hydrate_temperature"),
                 )
             }
-            // A wet gas (D118): where its free water drops out, against the stream's own temperature.
-            env.waterDewTemperatureAtPressure?.let { tw ->
-                val ts = si("temperature")
-                Text(
-                    "Water dew point at this stream's pressure: ${ValueFormat.number(t.fromSi(tw, ctx), t.decimals)} ${t.symbol}" +
-                        when {
-                            ts == null -> ""
-                            ts < tw -> ". The stream is colder: it carries free (liquid) water."
-                            else -> ". The stream is warmer: no free water."
-                        },
-                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("water_dew_point"),
-                )
+            // A wet gas (D118): where its free water drops out; what the inhibitor does, and where its water freezes (D119).
+            val tFmt = { k: Double -> "${ValueFormat.number(t.fromSi(k, ctx), t.decimals)} ${t.symbol}" }
+            EnvelopeNotes.waterDew(env, si("temperature"), tFmt)?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("water_dew_point"))
             }
-            env.hydrateDepression?.let { d ->
-                Text(
-                    "With the inhibitor in the water, hydrates form ${ValueFormat.number(d, 1)} K lower" +
-                        (env.inhibitedHydrateTemperatureAtPressure?.let { ti -> ", below ${ValueFormat.number(t.fromSi(ti, ctx), t.decimals)} ${t.symbol} at this stream's pressure" } ?: "") + " (dashed curve).",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
+            EnvelopeNotes.inhibitor(env, tFmt)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("inhibitor_effect")) }
             env.requiredInhibitorFraction?.let { w ->
                 val what = HydrateInhibitors.label(lastInhibitor ?: HydrateInhibitors.METHANOL)
                 Text(

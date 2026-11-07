@@ -331,6 +331,8 @@ public sealed record PhaseEnvelope
     public double? HydrateDepression { get; init; }
     /// <summary>With the stream's temperature: the weight fraction of the inhibitor (methanol if none chosen) its free water needs to stay out of hydrates (0 when it is already warmer).</summary>
     public double? RequiredInhibitorFraction { get; init; }
+    /// <summary>D119: the temperature (K) below which the free water with the inhibitor freezes, at the stream's pressure; hydrates form from ice below it.</summary>
+    public double? InhibitedWaterFreezingTemperature { get; init; }
     /// <summary>
     /// D118: with water in a mostly non-aqueous fluid, the bubble and dew curves, special points and quality lines are
     /// the water-free fluid's (the hydrocarbon envelope), and the water dew line is given separately: the temperature

@@ -132,6 +132,8 @@ data class PhaseEnvelope(
     val hydrateDepression: Double? = null,
     /** Weight fraction of the inhibitor (methanol if none chosen) the stream's free water needs; 0 when it is warm enough. */
     val requiredInhibitorFraction: Double? = null,
+    /** D119: below this temperature (K) the inhibited free water freezes at the stream's pressure; hydrates then form from ice. */
+    val inhibitedWaterFreezingTemperature: Double? = null,
     /**
      * D118: the stream has water but is mostly not water, so the curves, special points and quality lines are the
      * water-free fluid's (the hydrocarbon envelope), and [waterDewTemperature] at [waterDewPressure] is where liquid
