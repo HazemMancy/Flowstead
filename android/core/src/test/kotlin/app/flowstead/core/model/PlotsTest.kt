@@ -57,6 +57,10 @@ class PlotsTest {
             hydrateTemperature = listOf(280.0, 290.0), hydratePressure = listOf(2e6, 8e6),
         ))!!
         assertEquals(listOf("Bubble point", "Dew point", "VF 0.5", "Hydrate formation"), full.series.map { it.label })
+        // A wet gas (D118): the envelope is labelled water-free and the water dew line is its own series.
+        val wet = Plots.envelope(env.copy(waterFree = true, waterDewTemperature = listOf(300.0, 330.0), waterDewPressure = listOf(1e5, 6e5)))!!
+        assertEquals(listOf("Bubble point (water-free)", "Dew point (water-free)", "Water dew point"), wet.series.map { it.label })
+        assertEquals(listOf(330.0), wet.series.last().x.drop(1))
     }
 
     @Test

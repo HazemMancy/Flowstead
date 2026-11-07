@@ -74,9 +74,11 @@ object Plots {
     /** P–T phase envelope with its special points and, when given, the stream's own state. */
     fun envelope(env: PhaseEnvelope, streamTemperature: Double? = null, streamPressure: Double? = null): Plot? {
         fun ok(s: PlotSeries) = s.takeIf { it.x.size >= 2 && it.x.size == it.y.size }
+        // A wet gas's envelope is the water-free fluid's, with the water dew line drawn on its own (D118).
+        val basis = if (env.waterFree) " (water-free)" else ""
         val envelope = listOfNotNull(
-            ok(PlotSeries("Bubble point", env.bubbleTemperature, env.bubblePressure)),
-            ok(PlotSeries("Dew point", env.dewTemperature, env.dewPressure, dashed = true)),
+            ok(PlotSeries("Bubble point$basis", env.bubbleTemperature, env.bubblePressure)),
+            ok(PlotSeries("Dew point$basis", env.dewTemperature, env.dewPressure, dashed = true)),
         )
         if (envelope.isEmpty()) return null
         // Quality lines (D52) dotted, then the hydrate curve (D52), each only where the engine traced it.
@@ -85,7 +87,8 @@ object Plots {
             listOfNotNull(
                 ok(PlotSeries("Hydrate formation", env.hydrateTemperature, env.hydratePressure)),
                 ok(PlotSeries("Hydrate, inhibited", env.inhibitedHydrateTemperature, env.inhibitedHydratePressure, dashed = true)),
-            )
+            ) +
+            listOfNotNull(ok(PlotSeries("Water dew point", env.waterDewTemperature, env.waterDewPressure)))
         val markers = listOfNotNull(
             point("Critical point", env.criticalTemperature, env.criticalPressure),
             point("Cricondenbar", env.cricondenbarTemperature, env.cricondenbarPressure),

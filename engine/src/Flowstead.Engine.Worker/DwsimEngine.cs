@@ -479,7 +479,18 @@ public sealed partial class DwsimEngine
     {
         var (pp, ms) = SingleStream(req.Flowsheet, req.Composition);
         var lnAw = req.Hydrates && req.Pressure is not null || req.Inhibitor is not null ? WaterActivity(req.Inhibitor ?? HydrateInhibitors.Methanol) : null;
-        return PhaseEnvelopes.Read(pp, ms, req.Flowsheet.Compounds.ToArray(), req, lnAw);
+        var compounds = req.Flowsheet.Compounds.ToArray();
+        // A wet gas or oil (D118): DWSIM's two-phase envelope routine follows the water dew line instead of the
+        // hydrocarbons' dew curve and never closes. The envelope is traced on the water-free fluid, as a wet gas is
+        // read in HYSYS, and the water dew line is found separately with the wet stream's own fugacities.
+        var z = ms.GetOverallComposition();
+        var w = Array.FindIndex(compounds, c => c.Equals(PhaseEnvelopes.Water, StringComparison.OrdinalIgnoreCase));
+        if (w < 0 || !(z[w] > 0) || z[w] >= PhaseEnvelopes.MaxWaterForDryEnvelope)
+            return PhaseEnvelopes.Read(pp, ms, compounds, req, lnAw);
+        var dry = req.Composition.Where(c => !c.Key.Equals(compounds[w], StringComparison.OrdinalIgnoreCase)).ToDictionary();
+        var (dpp, dms) = SingleStream(req.Flowsheet, dry);
+        var env = PhaseEnvelopes.Read(dpp, dms, compounds, req, lnAw);
+        return PhaseEnvelopes.WithWaterDew(env, pp, z, w, req.Pressure);
     }
 
     /// <summary>

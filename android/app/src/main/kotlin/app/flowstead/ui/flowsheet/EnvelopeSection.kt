@@ -88,6 +88,19 @@ internal fun EnvelopeSection(obj: SimObject, results: ResultView, state: Envelop
                     modifier = Modifier.testTag("hydrate_temperature"),
                 )
             }
+            // A wet gas (D118): where its free water drops out, against the stream's own temperature.
+            env.waterDewTemperatureAtPressure?.let { tw ->
+                val ts = si("temperature")
+                Text(
+                    "Water dew point at this stream's pressure: ${ValueFormat.number(t.fromSi(tw, ctx), t.decimals)} ${t.symbol}" +
+                        when {
+                            ts == null -> ""
+                            ts < tw -> ". The stream is colder: it carries free (liquid) water."
+                            else -> ". The stream is warmer: no free water."
+                        },
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("water_dew_point"),
+                )
+            }
             env.hydrateDepression?.let { d ->
                 Text(
                     "With the inhibitor in the water, hydrates form ${ValueFormat.number(d, 1)} K lower" +

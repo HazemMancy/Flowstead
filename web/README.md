@@ -35,6 +35,12 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.5.2**
+- Phase envelope of a stream with water in it (a wet gas): the envelope is now the hydrocarbons' on a water-free basis,
+  so it closes with its critical point, cricondenbar and cricondentherm, as HYSYS users read a wet gas. The water dew
+  line is drawn as its own curve, with the water dew point at the stream's pressure and whether the stream carries free
+  water (checked against IAPWS-IF97 and the GPSA water-content correlation).
+
 **Web 1.5.1**
 - Phase envelope: when DWSIM traces the bubble and dew curves as two pieces that never meet (some rich gases and
   condensates), the envelope says so and shows no critical point, cricondenbar or cricondentherm, instead of

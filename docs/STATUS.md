@@ -186,6 +186,7 @@ _Last updated: 2026-11-05_
 - **Web black-oil form (D115):** the Basis black-oil fields are labelled one by one with hints, as the app's Black oil sheet; tested on a phone viewport (API 32 → SG 141.5/163.5 by hand).
 - **Web hypotheticals and composition bases (D116):** the Basis adds, estimates and edits hypothetical components (the app's HypotheticalSheet); feed compositions in all six bases of the app's CompositionBasis, mass and volume from the engine's compoundBasis. Checked: n-decane as C10* (Tc, Pc against NIST), a 50/50 mass % feed against a hand calculation.
 - **Phase envelopes (D117, app 3.2.2, Web 1.5.1):** an envelope DWSIM traced in two pieces reports no critical point, cricondenbar or cricondentherm and says so; quality-line points are each checked with a P-T flash. Engine tests 262/262.
+- **Wet-gas phase envelopes (D118, app 3.2.3, Web 1.5.2):** with water in a mostly non-aqueous stream, the envelope is traced on a water-free basis and closes; the water dew line (DWSIM's databank vapour pressure and the gas's fugacities) is drawn separately, with the water dew point at the stream's pressure. Within 0.4 K of IAPWS-IF97 up to 5 bar and 0.3 K of the GPSA (Bukacek) water content at 30 and 70 bar.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).

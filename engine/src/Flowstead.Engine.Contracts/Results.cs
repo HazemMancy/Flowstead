@@ -331,6 +331,16 @@ public sealed record PhaseEnvelope
     public double? HydrateDepression { get; init; }
     /// <summary>With the stream's temperature: the weight fraction of the inhibitor (methanol if none chosen) its free water needs to stay out of hydrates (0 when it is already warmer).</summary>
     public double? RequiredInhibitorFraction { get; init; }
+    /// <summary>
+    /// D118: with water in a mostly non-aqueous fluid, the bubble and dew curves, special points and quality lines are
+    /// the water-free fluid's (the hydrocarbon envelope), and the water dew line is given separately: the temperature
+    /// at each pressure where liquid water first drops out of the stream (K, Pa).
+    /// </summary>
+    public bool WaterFree { get; init; }
+    public List<double> WaterDewTemperature { get; init; } = [];
+    public List<double> WaterDewPressure { get; init; } = [];
+    /// <summary>The water dew temperature at the requested pressure (D118).</summary>
+    public double? WaterDewTemperatureAtPressure { get; init; }
     public List<string> Warnings { get; init; } = [];
 }
 

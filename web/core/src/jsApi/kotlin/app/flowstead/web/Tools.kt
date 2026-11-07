@@ -237,6 +237,15 @@ object Tools {
         env.hydrateTemperatureAtPressure?.let { th ->
             rep.note("Hydrates (${env.hydrateStructureAtPressure ?: "?"}) form below ${rep.withUnit(th, Quantity.Temperature)} at this stream's pressure", "warn")
         }
+        // A wet gas (D118): where its free water drops out, against the stream's own temperature.
+        env.waterDewTemperatureAtPressure?.let { tw ->
+            val ts = property(f, r, solvedHash, id, "temperature")
+            rep.note("Water dew point at this stream's pressure: ${rep.withUnit(tw, Quantity.Temperature)}" + when {
+                ts == null -> ""
+                ts < tw -> ". The stream is colder: it carries free (liquid) water."
+                else -> ". The stream is warmer: no free water."
+            })
+        }
         env.hydrateDepression?.let { dT ->
             rep.note("With the inhibitor in the water, hydrates form ${ValueFormat.number(dT, 1)} K lower" +
                 (env.inhibitedHydrateTemperatureAtPressure?.let { ti -> ", below ${rep.withUnit(ti, Quantity.Temperature)} at this stream's pressure" } ?: "") + " (dashed curve).")

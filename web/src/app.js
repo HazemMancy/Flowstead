@@ -245,9 +245,11 @@ $('envelope').addEventListener('click', async () => {
 function renderEnvelope(env, input, ms) {
   const T = (k) => (k - 273.15), P = (pa) => pa / 1e5;
   const series = [
-    { name: 'Bubble point', t: env.bubbleTemperature, p: env.bubblePressure, color: 'var(--liq)' },
-    { name: 'Dew point', t: env.dewTemperature, p: env.dewPressure, color: 'var(--vap)' },
+    { name: 'Bubble point' + (env.waterFree ? ' (water-free)' : ''), t: env.bubbleTemperature, p: env.bubblePressure, color: 'var(--liq)' },
+    { name: 'Dew point' + (env.waterFree ? ' (water-free)' : ''), t: env.dewTemperature, p: env.dewPressure, color: 'var(--vap)' },
     { name: 'Hydrate', t: env.hydrateTemperature, p: env.hydratePressure, color: 'var(--primary)', dash: '5 4' },
+    // A wet gas (D118): the envelope is the water-free fluid's; the water dew line is its own curve.
+    { name: 'Water dew point', t: env.waterDewTemperature, p: env.waterDewPressure, color: 'var(--err)', dash: '2 3' },
   ].filter((s) => Array.isArray(s.t) && s.t.length > 1);
   const pts = series.flatMap((s) => s.t.map((t, i) => [T(t), P(s.p[i])])).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
   const marks = [
@@ -277,6 +279,7 @@ function renderEnvelope(env, input, ms) {
     env.criticalTemperature && `Critical point ${T(env.criticalTemperature).toFixed(2)} °C, ${P(env.criticalPressure).toFixed(3)} bara`,
     env.cricondenbarPressure && `cricondenbar ${P(env.cricondenbarPressure).toFixed(3)} bara at ${T(env.cricondenbarTemperature).toFixed(2)} °C`,
     env.cricondenthermTemperature && `cricondentherm ${T(env.cricondenthermTemperature).toFixed(2)} °C at ${P(env.cricondenthermPressure).toFixed(3)} bara`,
+    env.waterDewTemperatureAtPressure && `water dew point ${T(env.waterDewTemperatureAtPressure).toFixed(2)} °C at your pressure (${input.T < env.waterDewTemperatureAtPressure ? 'your stream is colder: it carries free water' : 'your stream is warmer: no free water'})`,
   ].filter(Boolean).join(' · ');
   $('env-body').innerHTML = `
     <div class="plot"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Phase envelope: pressure against temperature. ${esc(summary)}">
