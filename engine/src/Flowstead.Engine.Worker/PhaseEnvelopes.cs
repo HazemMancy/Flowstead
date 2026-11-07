@@ -12,7 +12,8 @@ namespace Flowstead.Engine.Worker;
 /// Reads DWSIM's <c>DW_ReturnPhaseEnvelope</c> (D50): item 0/1 the bubble curve (T, P), 5/6 the dew curve, 15 the
 /// critical points (or DWSIM's critical-point solver when the routine leaves them empty), only the first continuous
 /// pass of each curve. Points DWSIM could not converge come back as zeros or NaN and are dropped, never filled in.
-/// The cricondenbar and cricondentherm are the highest pressure and temperature on either curve.
+/// The cricondenbar and cricondentherm are the highest pressure and temperature on either curve, when the curves meet
+/// (D117); quality-line points are each checked with a P-T flash.
 /// </summary>
 public static class PhaseEnvelopes
 {
@@ -50,11 +51,23 @@ public static class PhaseEnvelopes
             if (t > 0 && p > 0 && double.IsFinite(t) && double.IsFinite(p)) { (tc, pc) = (t, p); break; }
         }
         var all = bt.Zip(bp).Concat(dt.Zip(dp)).ToList();
-        (double T, double P)? bar = all.Count > 0 ? all.MaxBy(x => x.Second) : null;
-        (double T, double P)? therm = all.Count > 0 ? all.MaxBy(x => x.First) : null;
+        (double T, double P)? highest = all.Count > 0 ? all.MaxBy(x => x.Second) : null;
+        // DWSIM can trace the two curves as separate pieces that never meet (D117): for a rich gas its bubble curve
+        // stops at a false "critical point" while the dew curve carries on far above it. The critical point,
+        // cricondenbar and cricondentherm of such a trace are not this fluid's, so none of them is reported.
+        var closed = Closed(bt, bp, dt, dp);
+        if (!closed)
+        {
+            (tc, pc) = (null, null);
+            warnings.Add("DWSIM's envelope did not close: its bubble and dew curves do not meet, so the critical point, " +
+                         "cricondenbar and cricondentherm of this fluid are not known from it and are not shown. The curves are " +
+                         "drawn as DWSIM traced them; check a dew or bubble point with a flash or the PVT laboratory.");
+        }
+        (double T, double P)? bar = closed ? highest : null;
+        (double T, double P)? therm = closed && all.Count > 0 ? all.MaxBy(x => x.First) : null;
         var z = ms.GetOverallComposition();
         var lines = new List<QualityLine>();
-        var top = pc ?? bar?.P;
+        var top = pc ?? highest?.P;
         foreach (var q in (req.Qualities ?? []).Where(q => q > 0 && q < 1).Distinct().Order())
         {
             if (Quality(pp, z, q, all, top) is { } line) lines.Add(line);
@@ -74,7 +87,7 @@ public static class PhaseEnvelopes
             else
             {
                 // 0.1 MPa up to 1.2 × the cricondenbar (at least 10 MPa, at most 50 MPa), evenly in log P.
-                var pMax = Math.Clamp((bar?.P ?? 1e7) * 1.2, 1e7, 5e7);
+                var pMax = Math.Clamp((highest?.P ?? 1e7) * 1.2, 1e7, 5e7);
                 double? guess = null;
                 for (var i = 0; i <= 30; i++)
                 {
@@ -165,6 +178,11 @@ public static class PhaseEnvelopes
                 var ti = Convert.ToDouble(r[4]);
                 var v = Convert.ToDouble(r[1]);
                 if (!double.IsFinite(ti) || ti <= 0 || Math.Abs(v - q) > 1e-3 || (t.Count > 0 && Math.Abs(ti - t[^1]) > 40)) break;
+                // Near the critical point DWSIM's P-V flash can give up and hand back its starting temperature with the
+                // vapour fraction asked for (D117). A P-T flash at the returned point must give that vapour fraction.
+                var check = (object[])pp.FlashBase.Flash_PT(z, pi, ti, pp);
+                var vCheck = Convert.ToDouble(check[1]);
+                if (!double.IsFinite(vCheck) || Math.Abs(vCheck - q) > 0.02) break;
                 t.Add(ti); p.Add(pi);
                 guess = ti;
             }
@@ -174,6 +192,22 @@ public static class PhaseEnvelopes
             }
         }
         return t.Count >= 2 ? new QualityLine(q, t, p) : null;
+    }
+
+    /// <summary>
+    /// Whether the bubble and dew curves meet: an end of the bubble curve lies on the dew curve, within 5 K and 5 % of
+    /// its pressure (at least 2 bar). With a curve missing there is nothing to judge, and the trace is taken as is.
+    /// </summary>
+    internal static bool Closed(List<double> bt, List<double> bp, List<double> dt, List<double> dp)
+    {
+        if (bt.Count < 2 || dt.Count < 2) return true;
+        foreach (var i in new[] { 0, bt.Count - 1, bp.IndexOf(bp.Max()) })
+        {
+            var tol = Math.Max(0.05 * bp[i], 2e5);
+            for (var j = 0; j < dt.Count; j++)
+                if (Math.Abs(dt[j] - bt[i]) <= 5 && Math.Abs(dp[j] - bp[i]) <= tol) return true;
+        }
+        return false;
     }
 
     private static (List<double> T, List<double> P) Curve(object[] raw, int ti, int pi)
