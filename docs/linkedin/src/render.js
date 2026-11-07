@@ -10,6 +10,8 @@ const path = require('path');
     ['cover.html', 'cover-4200x700.png', 1200, 200, 3.5],
     ['featured.html', 'featured-1200x627.png', 1200, 627, 1],
     ['featured.html', 'featured-2400x1254.png', 1200, 627, 2],
+    ['role-three-ways.html', 'role-three-ways-1200x627.png', 1200, 627, 1],
+    ['role-built-to-check.html', 'role-built-to-check-1200x627.png', 1200, 627, 1],
     ['post-pocket.html', 'post-pocket-1200x1500.png', 1200, 1500, 1],
     ['post-dwsim10.html', 'post-dwsim10-1200x1500.png', 1200, 1500, 1],
     ['post-310.html', 'post-310-1200x1500.png', 1200, 1500, 1],
