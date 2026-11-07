@@ -1,18 +1,19 @@
 # LinkedIn: Experience, role "Founder, Flowstead"
 
-Paste into the role's **Highlights** box (limit 2,000 characters; this is 1530). LinkedIn shows URLs in this box as plain text, so also add the three links as **Media → Add link** (titles below), which show as clickable cards.
+Paste into the role's **Highlights** box (limit 2,000 characters; this is 1723). LinkedIn shows URLs in this box as plain text, so also add the three links as **Media → Add link** (titles below), which show as clickable cards.
 
 ```text
-Founder of Flowstead, a free, open-source process simulator for process engineers, on Android and in the browser. I defined the product, set the engineering rules, checked results against HYSYS and released it.
+Founder of Flowstead, a free, open-source steady-state and dynamic process simulator for process engineers, on Android and in the browser. I defined the product, set the engineering rules, checked results against HYSYS and released it.
 
 Use it
 • Android app (signed APKs): https://github.com/HazemMancy/Flowstead/releases
 • Web, stream workbench (flash, phase envelope, hydrates, PVT): https://hazemmancy.github.io/Flowstead/
-• Web, flowsheet (draw, solve, export PFD and H&MB): https://hazemmancy.github.io/Flowstead/flowsheet.html
+• Web, flowsheet (draw, solve, run dynamics, export PFD and H&MB): https://hazemmancy.github.io/Flowstead/flowsheet.html
 • Source code (GPL-3.0): https://github.com/HazemMancy/Flowstead
 
 What it does
-• Steady-state and dynamic flowsheets: separators, compressor and cooler trains, valves, pipelines, columns, reactors, recycles, PID control.
+• Steady-state flowsheets: separators, compressor and cooler trains, valves, pipelines, columns, reactors and recycles.
+• Dynamic simulation: run a solved flowsheet through time with PID controllers (level, pressure, temperature, flow), step the feed, a valve or a setpoint, and read the trends.
 • Relief and safety: PSV sizing (API 520/526), relief scenarios and depressuring (API 521), inlet-loss and back-pressure checks.
 • Phase envelopes with hydrate curves and wet-gas water dew lines, a PVT laboratory, pump and compressor curves, valve, line and separator sizing.
 • Data sheets, PFD and heat and material balances as PDF or Excel.
@@ -30,6 +31,7 @@ A screening and checking tool: confirm design results against your project's app
 | Upload | File | Title | Description |
 |---|---|---|---|
 | Image | `featured-1200x627.png` | Flowstead | Open-source process simulator for Android and the web |
+| Image | `role-dynamics-1200x627.png` | Steady state and dynamic simulation | Separator pressure control after a feed step: the engine's own result |
 | Image | `role-three-ways-1200x627.png` | One simulator, three ways to open it | Android app, web stream workbench, web flowsheet |
 | Image | `role-built-to-check-1200x627.png` | Built so every number can be checked | DWSIM engine, tested against references, GPL-3.0 |
 | Link | https://github.com/HazemMancy/Flowstead/releases | Flowstead for Android | Signed APKs on GitHub Releases |
