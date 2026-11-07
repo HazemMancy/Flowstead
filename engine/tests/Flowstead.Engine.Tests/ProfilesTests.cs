@@ -246,4 +246,80 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
         Assert.True(env.HydrateTemperature.Count > 10);
         Assert.True(env.HydrateTemperature[^1] > env.HydrateTemperature[0]);
     }
+
+    // ---- D117: an envelope that did not close, and quality lines checked point by point ----
+
+    private static (Flowsheet Fs, Dictionary<string, double> X) Condensate(string hypo, double mw, double sg, double plus, Dictionary<string, double> rest)
+    {
+        var x = new Dictionary<string, double>(rest) { [hypo] = plus };
+        var fs = new Flowsheet
+        {
+            PropertyPackage = "Peng-Robinson (PR)", Compounds = x.Keys.ToList(),
+            Hypotheticals = [new Hypothetical { Name = hypo, MolecularWeight = mw, SpecificGravity = sg }],
+        };
+        return (fs, x);
+    }
+
+    /// <summary>DWSIM's P-T flash of the fluid: its vapour fraction at (t, p).</summary>
+    private async Task<double> VapourFraction(Flowsheet fs, Dictionary<string, double> x, double t, double p)
+    {
+        var s = new SimObject
+        {
+            Id = "s", Tag = "S", Type = ObjectType.MaterialStream, Composition = x,
+            Specs = new() { [SpecKeys.Temperature] = new(t, "K"), [SpecKeys.Pressure] = new(p, "Pa"), [SpecKeys.MolarFlow] = new(1, "mol/s") },
+        };
+        var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs with { Objects = [s] }, Json.Options));
+        return r.Objects["s"].Properties["vapourFraction"];
+    }
+
+    [Fact]
+    public async Task AnEnvelopeThatDidNotCloseReportsNoCriticalPointOrCricondenbar()
+    {
+        // A rich condensate with 2.5 % C7+ (MW 120, SG 0.77): DWSIM traces the bubble curve to a stop near 106 bar at
+        // -49 °C and the dew curve separately; before D117 that stop was reported as the critical point and cricondenbar.
+        var (fs, x) = Condensate("C7+", 120, 0.77, 0.025, new() { ["Nitrogen"] = 0.01, ["Carbon dioxide"] = 0.02, ["Methane"] = 0.80, ["Ethane"] = 0.07, ["Propane"] = 0.04, ["N-butane"] = 0.02, ["N-pentane"] = 0.015 });
+        var env = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope", new PhaseEnvelopeRequest(fs, x, [0.5]), Json.Options));
+        output.WriteLine($"bubble {env.BubbleTemperature.Count} dew {env.DewTemperature.Count}; crit {env.CriticalTemperature}; bar {env.CricondenbarPressure}; " + string.Join(" | ", env.Warnings));
+        Assert.True(env.BubbleTemperature.Count > 5 && env.DewTemperature.Count > 5);
+        Assert.Null(env.CriticalTemperature); Assert.Null(env.CriticalPressure);
+        Assert.Null(env.CricondenbarPressure); Assert.Null(env.CricondenthermTemperature);
+        Assert.Contains(env.Warnings, w => w.Contains("did not close"));
+        // Independent check that the trace is incomplete: a P-T flash at 40 °C and 150 bar, above every pressure on the
+        // traced curves, still finds two phases, so the envelope goes higher and no traced point is the cricondenbar.
+        var highest = env.BubblePressure.Concat(env.DewPressure).Max();
+        Assert.True(150e5 > highest);
+        var v = await VapourFraction(fs, x, 313.15, 150e5);
+        output.WriteLine($"P-T flash at 40 °C, 150 bar: vapour fraction {v}; highest traced {highest / 1e5:0.0} bar");
+        Assert.InRange(v, 1e-4, 1 - 1e-4);
+    }
+
+    [Fact]
+    public async Task AClosedEnvelopeKeepsItsCricondenbarAndEveryQualityPointIsAFlash()
+    {
+        // A natural gas with 1 % C6+ (MW 90, SG 0.71): DWSIM closes the envelope at the critical point.
+        var (fs, x) = Condensate("C6+", 90, 0.71, 0.01, new() { ["Nitrogen"] = 0.01, ["Carbon dioxide"] = 0.02, ["Methane"] = 0.84, ["Ethane"] = 0.06, ["Propane"] = 0.03, ["N-butane"] = 0.02, ["N-pentane"] = 0.01 });
+        var q = new List<double> { 0.1, 0.25, 0.5, 0.75, 0.9 };
+        var env = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope", new PhaseEnvelopeRequest(fs, x, q), Json.Options));
+        output.WriteLine($"crit {env.CriticalTemperature} K {env.CriticalPressure} Pa; bar {env.CricondenbarPressure} Pa at {env.CricondenbarTemperature} K; " +
+                         string.Join("; ", env.QualityLines.Select(l => $"{l.Quality}: {l.Temperature.Count} pts")) + " | " + string.Join(" | ", env.Warnings));
+        Assert.NotNull(env.CriticalTemperature);
+        Assert.NotNull(env.CricondenbarPressure);
+        Assert.DoesNotContain(env.Warnings, w => w.Contains("did not close"));
+        // The cricondenbar is the top of the two-phase region: P-T flashes at its temperature find two phases 2 % below
+        // it and one phase 2 % above it.
+        var (tb, pb) = (env.CricondenbarTemperature!.Value, env.CricondenbarPressure!.Value);
+        var below = await VapourFraction(fs, x, tb, pb * 0.98);
+        var above = await VapourFraction(fs, x, tb, pb * 1.02);
+        output.WriteLine($"at the cricondenbar temperature: vapour fraction {below} at -2 %, {above} at +2 %");
+        Assert.InRange(below, 1e-4, 1 - 1e-4);
+        Assert.True(above < 1e-6 || above > 1 - 1e-6);
+        // No quality point is DWSIM's give-up value, methane's critical temperature (190.56 K, NIST), and each line
+        // stays within the envelope's temperature range.
+        var tMin = env.BubbleTemperature.Min() - 1;
+        foreach (var l in env.QualityLines)
+        {
+            Assert.DoesNotContain(l.Temperature, t => Math.Abs(t - 190.56) < 0.2);
+            Assert.All(l.Temperature, t => Assert.InRange(t, tMin, env.CricondenthermTemperature!.Value + 1));
+        }
+    }
 }

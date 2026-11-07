@@ -35,6 +35,13 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.5.1**
+- Phase envelope: when DWSIM traces the bubble and dew curves as two pieces that never meet (some rich gases and
+  condensates), the envelope says so and shows no critical point, cricondenbar or cricondentherm, instead of
+  reporting the end of the bubble curve as both.
+- Vapour-fraction lines: every point is checked with a second flash, so a line no longer jumps across the plot near
+  the critical point.
+
 **Web 1.5**
 - Basis → Hypothetical components: add a pseudo-component from its normal boiling point or molecular weight (and
   specific gravity if known), as in HYSYS and the Android app. **Estimate** shows the constants DWSIM's correlations

@@ -185,6 +185,7 @@ _Last updated: 2026-11-05_
 - **Web documents (D114):** Export window: PFD (A3, vector, title block), heat and material balance and data sheets (print/PDF and Excel, the app's sheets), results (Excel, CSV), report (Markdown), DWSIM file export and import; project information for the title blocks. Checked against benchmark 06, with a DWSIM round trip.
 - **Web black-oil form (D115):** the Basis black-oil fields are labelled one by one with hints, as the app's Black oil sheet; tested on a phone viewport (API 32 → SG 141.5/163.5 by hand).
 - **Web hypotheticals and composition bases (D116):** the Basis adds, estimates and edits hypothetical components (the app's HypotheticalSheet); feed compositions in all six bases of the app's CompositionBasis, mass and volume from the engine's compoundBasis. Checked: n-decane as C10* (Tc, Pc against NIST), a 50/50 mass % feed against a hand calculation.
+- **Phase envelopes (D117, app 3.2.2, Web 1.5.1):** an envelope DWSIM traced in two pieces reports no critical point, cricondenbar or cricondentherm and says so; quality-line points are each checked with a P-T flash. Engine tests 262/262.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).
