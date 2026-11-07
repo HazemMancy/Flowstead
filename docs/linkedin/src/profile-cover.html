@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- Personal LinkedIn profile banner, 4:1 (rendered 1584x396). The profile photo covers the bottom-left and the edit button the
+     top-right, so the text sits right of centre. Render: node src/render.js -->
+<html><head><meta charset="utf-8"><script src="mark.js"></script><style>
+@font-face{font-family:Inter;font-weight:700;src:url(../../../android/app/src/main/res/font/inter_bold.ttf)}
+@font-face{font-family:Inter;font-weight:600;src:url(../../../android/app/src/main/res/font/inter_semibold.ttf)}
+@font-face{font-family:Inter;font-weight:500;src:url(../../../android/app/src/main/res/font/inter_medium.ttf)}
+html,body{margin:0;width:792px;height:198px;overflow:hidden;background:#02172C}
+.wrap{position:relative;width:792px;height:198px;background:radial-gradient(ellipse 60% 130% at 62% 40%,#062B5C 0%,#031D3D 50%,#02142A 90%)}
+.flow{position:absolute;inset:0}
+.t1{position:absolute;left:290px;top:30px;font:700 29px/1.1 Inter;color:#fff;letter-spacing:-.5px}
+.t2{position:absolute;left:290px;top:68px;width:440px;font:500 12.5px/1.4 Inter;color:#C9D6E2}
+.rule{position:absolute;left:290px;top:114px;width:36px;height:2px;background:#14D3CF}
+.mark{position:absolute;left:290px;top:128px}
+.c1{position:absolute;left:342px;top:126px;font:700 17px/1 Inter;color:#fff;letter-spacing:-.2px}
+.c1 span{color:#14D3CF}
+.c2{position:absolute;left:342px;top:150px;width:420px;font:500 12px/1.35 Inter;color:#C9D6E2}
+</style></head><body><div class="wrap">
+<svg class="flow" width="792" height="198" viewBox="0 0 792 198" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <g opacity="0.30" stroke="#5A9FF2" stroke-width="1.6">
+    <path d="M0 120H34"/><circle cx="48" cy="120" r="14"/><path d="M39 123q4.5-8 9 0t9 0"/>
+    <path d="M62 120H112"/><path d="M106 115l6 5-6 5"/>
+    <rect x="116" y="78" width="26" height="72" rx="13"/><path d="M129 78V52H165"/><path d="M159 47l6 5-6 5"/>
+    <path d="M129 150V160H168"/><circle cx="182" cy="156" r="12"/>
+    <path d="M200 120H236"/><rect x="236" y="106" width="18" height="28" rx="3"/>
+  </g>
+</svg>
+<div class="t1">Oil &amp; Gas Process Engineer</div>
+<div class="t2">Concept, FEED and detailed engineering for onshore and offshore oil and gas facilities</div>
+<div class="rule"></div>
+<svg class="mark" width="44" height="33" viewBox="10 9.5 151 114" id="mk"></svg>
+<div class="c1">Creator of Flow<span>stead</span></div>
+<div class="c2">Steady-state and dynamic simulation, Android and web</div>
+</div>
+<script>document.getElementById('mk').innerHTML = flowsteadMark(BLUE_OUTLET);</script></body></html>
