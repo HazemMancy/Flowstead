@@ -289,6 +289,11 @@ try {
     if (!(await p.evaluate(() => window.flowsteadFlowsheet.view.stale))) problems.push('on Hold the flowsheet solved by itself');
     if (!(await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).solverActive !== true))) problems.push('Hold was not saved');
 
+    // Undo and redo do not change the mode: two undos reach a state written while the solver was Active.
+    await p.click('#undoBtn'); await p.click('#undoBtn');
+    if (await p.getAttribute('#modeBtn', 'aria-pressed') !== 'false') problems.push('undo switched the solver back to Active');
+    await p.click('#redoBtn'); await p.click('#redoBtn');
+    if (await p.getAttribute('#modeBtn', 'aria-pressed') !== 'false') problems.push('redo changed the solver mode');
     // Pressing Solve still works on Hold.
     await p.click('#solveBtn');
     await p.waitForFunction(() => !window.flowsteadFlowsheet.view.stale, null, { timeout: 120_000 });

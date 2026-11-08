@@ -71,8 +71,10 @@ function tryEdit(fn, message) {
 const errorText = (e) => String(e?.message ?? e).replace(/^.*EditRejected:\s*/, '');
 function step(from, to) {
   if (!from.length) return;
+  const mode = core.solverActive(project.flowsheet);
   to.push(project.flowsheet);
-  project.flowsheet = from.pop();
+  // Hold or Active is a setting of the case, not an edit: undo and redo restore the model and leave the mode as it is.
+  project.flowsheet = core.setSolverActive(from.pop(), mode);
   view.setFlowsheet(project.flowsheet);
   persist(); refresh(); queueSolve();
 }
