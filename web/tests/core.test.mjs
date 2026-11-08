@@ -363,3 +363,68 @@ test('composition in mass and liquid-volume bases, stored as mole fractions (D11
   assert.ok(Math.abs(m[a] - 0.3) < 1e-12 && Math.abs(m[b] - 0.6) < 1e-12);
   assert.equal(JSON.parse(sheets.form(fj, feed.id)).items.find((i) => i.kind === 'composition').bases.length, 6);
 });
+
+// ---------- solver mode, table editor and copying streams (D120) ----------
+test('Hold or Active is saved with the flowsheet and is not part of the solved model (D120)', () => {
+  const f = core.layout(bench('06-compressor-aftercooler'));
+  assert.equal(core.solverActive(f), false);
+  const on = core.setSolverActive(f, true);
+  assert.equal(core.solverActive(on), true);
+  assert.equal(core.modelHash(on), core.modelHash(f), 'the mode must not make a stored solve look out of date');
+  assert.equal(core.solverActive(core.setSolverActive(on, false)), false);
+});
+
+test('the table on the flowsheet shows exactly the properties ticked (D120)', () => {
+  const v = new FlowsheetView();
+  v.setFlowsheet(core.layout(bench('06-compressor-aftercooler')));
+  const opt = JSON.parse(v.tableOptions('out'));
+  assert.equal(opt.shown, false);
+  assert.deepEqual(opt.keys.filter((k) => k.on).map((k) => k.key), ['temperature', 'pressure', 'vapourFraction', 'molarFlow', 'massFlow']);
+  for (const k of ['massEnthalpy', 'density', 'viscosity', 'bubblePointTemperature']) assert.ok(opt.keys.some((x) => x.key === k), `${k} can be picked`);
+  let fsj = JSON.stringify(JSON.parse(v.setTable('out', JSON.stringify(['density', 'temperature', 'massEnthalpy', 'notAProperty']))).flowsheet);
+  assert.deepEqual(JSON.parse(fsj).tables[0].keys, ['density', 'temperature', 'massEnthalpy']); // unknown keys are dropped
+  v.setFlowsheet(fsj);
+  assert.equal(JSON.parse(v.tableOptions('out')).shown, true);
+  assert.deepEqual(JSON.parse(v.tableOptions('out')).keys.filter((k) => k.on).map((k) => k.key).sort(), ['density', 'massEnthalpy', 'temperature']);
+  v.fit(1200, 800); v.draw(recorder(), 1200, 800);
+  fsj = JSON.stringify(JSON.parse(v.setTable('out', '[]')).flowsheet);
+  assert.equal(JSON.parse(fsj).tables?.length ?? 0, 0);
+});
+
+test('copy a stream, and define a feed from another stream (D120)', () => {
+  const result = fs.readFileSync(new URL('../../shared/fixtures/solve-result-06.json', import.meta.url), 'utf8');
+  const fsj = core.layout(bench('06-compressor-aftercooler'));
+  const v = new FlowsheetView(); v.setFlowsheet(fsj);
+  v.setSolve(result, core.modelHash(fsj), 1760000000000);
+  const calc = 'out', feed = 'suc';
+  assert.equal(v.isFeed(feed), true); assert.equal(v.isFeed(calc), false);
+  // A calculated stream cannot take values, so it offers no sources; a feed offers every other stream.
+  assert.deepEqual(JSON.parse(v.copySources(calc)), []);
+  assert.deepEqual(JSON.parse(v.copySources(feed)).map((s) => s.id).sort(), JSON.parse(fsj).objects.filter((o) => o.type === 'material_stream' && o.id !== feed).map((o) => o.id).sort());
+  // The calculated stream gives what the engine returned: 40 °C, 14.7 bara (hand conversion of 313.15 K, 1.47 MPa).
+  const items = JSON.parse(v.copyItems(calc));
+  const val = (k) => Number(items.find((i) => i.key === k).value.split(' ')[0].replace(/,/g, ''));
+  assert.equal(val('temperature'), 40); assert.equal(val('pressure'), 14.7);
+  assert.ok(items.some((i) => i.key === 'composition'));
+  // Duplicating the calculated stream makes a new feed with those solved values and its composition.
+  const d = JSON.parse(v.duplicate(calc));
+  const copy = d.flowsheet.objects.find((o) => o.id === d.id);
+  assert.ok(Math.abs(copy.specs.temperature.si - 313.15) < 1e-6, `${copy.specs.temperature.si}`);
+  assert.ok(Math.abs(copy.specs.pressure.si - 1.47e6) < 1, `${copy.specs.pressure.si}`);
+  const sum = Object.values(copy.composition).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - 1) < 1e-6, `composition sums to ${sum}`);
+  // Define a feed from another stream: only the ticked items change.
+  v.setFlowsheet(JSON.stringify(d.flowsheet));
+  const before = JSON.parse(JSON.stringify(d.flowsheet.objects.find((o) => o.id === feed)));
+  const r = JSON.parse(v.copyFrom(feed, d.id, JSON.stringify(['temperature'])));
+  const after = r.flowsheet.objects.find((o) => o.id === feed);
+  assert.ok(Math.abs(after.specs.temperature.si - 313.15) < 1e-6);
+  assert.deepEqual(after.composition, before.composition, 'composition was not ticked, so it stays');
+  // As the app: copied conditions replace the stream's conditions as a set, so it is never left with a mix of old and new.
+  assert.equal(after.specs.pressure, undefined);
+  assert.equal(after.specs.molarFlow?.si, before.specs.molarFlow?.si, 'the flow was not ticked');
+  // Copying into a calculated stream is refused, not applied.
+  assert.match(JSON.parse(v.copyFrom(calc, feed, JSON.stringify(['temperature']))).error, /calculated/);
+  // Only feeds can be duplicated whole; a unit cannot.
+  assert.ok(JSON.parse(v.duplicate(JSON.parse(fsj).objects.find((o) => o.type !== 'material_stream').id)).error);
+});

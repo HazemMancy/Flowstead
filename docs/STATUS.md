@@ -188,6 +188,7 @@ _Last updated: 2026-11-05_
 - **Phase envelopes (D117, app 3.2.2, Web 1.5.1):** an envelope DWSIM traced in two pieces reports no critical point, cricondenbar or cricondentherm and says so; quality-line points are each checked with a P-T flash. Engine tests 262/262.
 - **Wet-gas phase envelopes (D118, app 3.2.3, Web 1.5.2):** with water in a mostly non-aqueous stream, the envelope is traced on a water-free basis and closes; the water dew line (DWSIM's databank vapour pressure and the gas's fugacities) is drawn separately, with the water dew point at the stream's pressure. Within 0.4 K of IAPWS-IF97 up to 5 bar and 0.3 K of the GPSA (Bukacek) water content at 30 and 70 bar.
 - **Envelope close-up and inhibited-water freezing (D119, app 3.2.4, Web 1.5.3):** a close-up plot of a narrow envelope squeezed by the hydrate and water dew curves; the freezing point of the inhibited water (DWSIM NRTL), below which hydrates form from ice and the inhibitor does nothing. The freezing point matches the dilute limit (K_f) within 0.02 K at 2 wt % methanol, and is 4 K warmer than the CRC value at 20 wt % (the safe side, stated in the warning).
+- **Web flowsheet (D120, Web 1.6):** Hold/Active solver as the app; Duplicate and Copy-from for streams; the property table shows any properties you tick; the worksheet's title and close button stay in view while it scrolls; the site header and footer are a darker frame around the flowsheet window. Tested in core (24) and in the browser.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).

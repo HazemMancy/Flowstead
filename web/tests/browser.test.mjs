@@ -251,6 +251,103 @@ try {
     await p.close();
   }
 
+  // ---------- 4d. Hold and Active, the table editor, copying streams, the frozen header and the framed page (D120) ----------
+  {
+    const exp05 = JSON.parse(fs.readFileSync(path.join(benchDir, '05-jt-valve-letdown', 'expected.json'), 'utf8')).checks;
+    const want = exp05.find((c) => c.path === 'objects.lp.properties.temperature').expected - 273.15; // K → °C by hand
+    const p = await browser.newPage({ viewport: { width: 1280, height: 520 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '05-jt-valve-letdown');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    const pick = (id) => p.evaluate((i) => document.querySelector(`#objects [data-id="${i}"]`).click(), id);
+    const productT = async () => {
+      await pick('lp'); await p.click('#tabResults');
+      const row = p.locator('#inspResults tr', { has: p.locator('th', { hasText: 'Temperature' }) }).first();
+      return Number((await row.locator('td').first().textContent()).replace(/,/g, ''));
+    };
+    // Hold is the default: nothing is solved until asked.
+    if (await p.getAttribute('#modeBtn', 'aria-pressed') !== 'false' || (await p.textContent('#modeText')) !== 'Hold') problems.push('the solver does not start on Hold');
+    // Active solves by itself, and the answer is benchmark 05's.
+    await p.click('#modeBtn');
+    await p.waitForFunction(() => /Active · Converged/.test(document.getElementById('statusText').textContent), null, { timeout: 120_000 });
+    const t1 = await productT();
+    if (Math.abs(t1 - want) > 0.05) problems.push(`Active solve: product ${t1} °C, benchmark 05 expects ${want.toFixed(3)} °C`);
+    // A change to the feed solves again without pressing Solve: 100 bara in gives a different product temperature (a JT valve).
+    await pick('hp'); await p.click('#tabDesign');
+    const pIn = p.locator('#inspForm input[data-spec="pressure"]'); await pIn.fill('90'); await pIn.press('Enter');
+    await p.waitForFunction(() => { const w = window.flowsteadFlowsheet; return !w.view.stale && w.project.solve; }, null, { timeout: 120_000 });
+    const t2 = await productT();
+    if (!(Math.abs(t2 - t1) > 0.3)) problems.push(`Active did not re-solve after a feed change (${t1} → ${t2} °C)`);
+    // Hold again: an edit leaves the results out of date and nothing solves.
+    await p.click('#modeBtn');
+    await pick('hp'); await p.click('#tabDesign');
+    const pIn2 = p.locator('#inspForm input[data-spec="pressure"]'); await pIn2.fill('80'); await pIn2.press('Enter');
+    await p.waitForTimeout(2500);
+    if (!(await p.evaluate(() => window.flowsteadFlowsheet.view.stale))) problems.push('on Hold the flowsheet solved by itself');
+    if (!(await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).solverActive !== true))) problems.push('Hold was not saved');
+
+    // Undo and redo do not change the mode: two undos reach a state written while the solver was Active.
+    await p.click('#undoBtn'); await p.click('#undoBtn');
+    if (await p.getAttribute('#modeBtn', 'aria-pressed') !== 'false') problems.push('undo switched the solver back to Active');
+    await p.click('#redoBtn'); await p.click('#redoBtn');
+    if (await p.getAttribute('#modeBtn', 'aria-pressed') !== 'false') problems.push('redo changed the solver mode');
+    // Pressing Solve still works on Hold.
+    await p.click('#solveBtn');
+    await p.waitForFunction(() => !window.flowsteadFlowsheet.view.stale, null, { timeout: 120_000 });
+
+    // The table editor: tick exactly what to show.
+    await pick('lp');
+    await p.click('#tableBtn');
+    await p.click('#tableNone');
+    await p.check('#tableKeys input[data-key="density"]'); await p.check('#tableKeys input[data-key="temperature"]');
+    await p.click('#tableApply');
+    const keys = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).tables?.[0]?.keys);
+    if (JSON.stringify(keys) !== JSON.stringify(['temperature', 'density'])) problems.push(`table keys ${JSON.stringify(keys)}`);
+    if ((await p.textContent('#tableBtn')) !== 'Edit table') problems.push('the table button does not offer Edit once a table is shown');
+    await p.click('#tableBtn'); await p.click('#tableRemove');
+    if ((await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).tables?.length ?? 0)) !== 0) problems.push('Remove table left the table');
+
+    // Duplicate the feed, then define it from the calculated product (its solved T and composition).
+    await pick('hp');
+    const before = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.length);
+    await p.click('#dupBtn');
+    const dup = await p.evaluate(() => { const f = JSON.parse(window.flowsteadFlowsheet.project.flowsheet), hp = f.objects.find((o) => o.id === 'hp'); const n = f.objects[f.objects.length - 1]; return { count: f.objects.length, same: JSON.stringify(n.specs) === JSON.stringify(hp.specs) && JSON.stringify(n.composition) === JSON.stringify(hp.composition), selected: window.flowsteadFlowsheet.view.selectedId === n.id }; });
+    if (dup.count !== before + 1 || !dup.same || !dup.selected) problems.push(`duplicate: ${JSON.stringify(dup)}`);
+    // Adding the copy changed the model, so the product's results are out of date: solve, then copy from them.
+    await p.click('#solveBtn');
+    await p.waitForFunction(() => !window.flowsteadFlowsheet.view.stale, null, { timeout: 120_000 });
+    await p.click('#copyBtn');
+    await p.check('#copySources input[value="lp"]');
+    await p.uncheck('#copyItems input[data-key="composition"]');
+    await p.click('#copyApply');
+    const copied = await p.evaluate(() => { const f = JSON.parse(window.flowsteadFlowsheet.project.flowsheet); return f.objects[f.objects.length - 1].specs.temperature?.si; });
+    const lpT = await p.evaluate(() => { const r = window.flowsteadFlowsheet.project.solve?.result; return r?.objects?.lp?.properties?.temperature; });
+    if (lpT === undefined || Math.abs(copied - lpT) > 1e-6) problems.push(`copied temperature ${copied} K, the product's solved ${lpT} K`);
+
+    // The title and the close button stay in view while the worksheet scrolls (a short window forces scrolling).
+    await pick('hp'); await p.click('#tabDesign');
+    await p.evaluate(() => { document.getElementById('inspector').scrollTop = 400; });
+    const box = await p.evaluate(() => { const i = document.getElementById('inspector').getBoundingClientRect(), c = document.getElementById('inspClose').getBoundingClientRect(), t = document.getElementById('inspType').getBoundingClientRect(); const el = document.getElementById('inspector'); return { scrolled: el.scrollTop, scrollable: el.scrollHeight > el.clientHeight, closeInside: c.top >= i.top - 1 && c.bottom <= i.top + 80, titleInside: t.top >= i.top - 1 && t.bottom <= i.top + 80 }; });
+    if (!box.scrollable || box.scrolled < 50) problems.push(`the worksheet did not scroll (${JSON.stringify(box)})`);
+    if (!box.closeInside || !box.titleInside) problems.push(`the title or close button scrolled away: ${JSON.stringify(box)}`);
+
+    // The page's header and footer are a frame around the flowsheet, and the flowsheet is a window inside it.
+    for (const theme of ['dark', 'light']) {
+      await p.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+      const f = await p.evaluate(() => { const bg = (s) => getComputedStyle(document.querySelector(s)).backgroundColor, m = getComputedStyle(document.querySelector('main')); return { header: bg('header'), footer: bg('footer'), main: bg('main'), radius: m.borderRadius, border: m.borderTopWidth, headerPos: getComputedStyle(document.querySelector('header')).position }; });
+      if (f.header === f.main || f.footer === f.main) problems.push(`${theme}: the header or footer looks the same as the flowsheet (${JSON.stringify(f)})`);
+      if (f.radius === '0px' || f.border === '0px') problems.push(`${theme}: the flowsheet is not framed`);
+    }
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} Hold/Active, table editor, copy and duplicate, frozen header, framed page (D120)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4c. a hypothetical component and a mass % composition, through the Basis and the worksheet (D116) ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
