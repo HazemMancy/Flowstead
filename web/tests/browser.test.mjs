@@ -348,6 +348,144 @@ try {
     await p.close();
   }
 
+  // ---------- 4f. Enter to the next field, a component menu, units for a hypothetical's constants, a unit set (D121) ----------
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '05-jt-valve-letdown');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    const stored = (fn) => p.evaluate(fn);
+
+    // Enter commits a field and moves to the next one: temperature → pressure, and down the composition.
+    await p.evaluate(() => document.querySelector('#objects [data-id="hp"]').click());
+    await p.click('#tabDesign');
+    const t = p.locator('#inspForm input[data-spec="temperature"]');
+    await t.fill('41'); await t.press('Enter');
+    const next = await p.evaluate(() => document.activeElement.dataset.spec);
+    if (next !== 'pressure') problems.push(`Enter in temperature moved to "${next}", not pressure`);
+    const t41 = await stored(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === 'hp').specs.temperature.si);
+    if (Math.abs(t41 - 314.15) > 1e-6) problems.push(`Enter did not commit the temperature (${t41} K)`);
+    const comps = p.locator('#inspForm [data-x]');
+    await comps.nth(0).focus(); await comps.nth(0).press('Enter');
+    if (!(await p.evaluate(() => document.activeElement.dataset.x === document.querySelectorAll('#inspForm [data-x]')[1].dataset.x))) problems.push('Enter in a composition cell did not move to the next cell');
+    await comps.nth(1).press('Shift+Enter');
+    if (!(await p.evaluate(() => document.activeElement.dataset.x === document.querySelectorAll('#inspForm [data-x]')[0].dataset.x))) problems.push('Shift+Enter did not move back');
+
+    // The Basis: a component from a menu, and the browse list.
+    await p.click('#basisBtn');
+    await p.waitForFunction(() => !document.getElementById('compPick').disabled, null, { timeout: 60_000 });
+    const before = await stored(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).compounds.length);
+    await p.selectOption('#compPick', 'Ethylene');
+    await p.waitForFunction((n) => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).compounds.length === n + 1, before, { timeout: 30_000 });
+    if (!(await stored(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).compounds.some((c) => /^ethylene$/i.test(c))))) problems.push('the menu did not add Ethylene');
+    await p.click('#compBrowse');
+    await p.waitForSelector('#browseList [data-add]', { timeout: 60_000 });
+    const all = await p.locator('#browseList [data-add]').count();
+    await p.fill('#browseFilter', 'toluene');
+    await p.waitForFunction(() => [...document.querySelectorAll('#browseList [data-add]')].some((b) => /^toluene$/i.test(b.dataset.add)) && document.querySelectorAll('#browseList [data-add]').length < 60, null, { timeout: 30_000 });
+    if (all < 50) problems.push(`the browse list showed only ${all} components`);
+    await p.locator('#browseList [data-add]', { hasText: /^Toluene/ }).first().click();
+    if (!(await stored(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).compounds.some((c) => /toluene/i.test(c))))) problems.push('Browse did not add the compound');
+    await p.click('#browseClose');
+
+    // A hypothetical's critical temperature typed in °F: 600 °F = 588.706 K (hand conversion).
+    await p.fill('#hy_name', 'HYPT'); await p.fill('#hy_nbp', '100'); await p.selectOption('#hy_nbp_u', 'C'); await p.fill('#hy_sg', '0.75');
+    await p.fill('#hy_tc', '600'); await p.selectOption('#hy_tc_u', 'F');
+    await p.fill('#hy_tc', '600'); // typed in °F
+    await p.fill('#hy_pc', '500'); await p.selectOption('#hy_pc_u', 'psia'); await p.fill('#hy_pc', '500');
+    await p.click('#hy_save');
+    const hy = await stored(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).hypotheticals.find((h) => h.name === 'HYPT'));
+    if (!hy || Math.abs(hy.criticalTemperature - 588.7056) > 0.01) problems.push(`Tc typed as 600 °F stored as ${hy?.criticalTemperature} K, expected 588.706`);
+    if (!hy || Math.abs(hy.criticalPressure - 500 * 6894.757293168361) > 5) problems.push(`Pc typed as 500 psia stored as ${hy?.criticalPressure} Pa`);
+    if (!hy || Math.abs(hy.normalBoilingPoint - 373.15) > 1e-6) problems.push(`NBP typed as 100 °C stored as ${hy?.normalBoilingPoint} K`);
+    // Switching a field's unit re-expresses what is in it: 100 °C shown as °F is 212.
+    await p.fill('#hy_nbp', '100'); await p.selectOption('#hy_nbp_u', 'F');
+    if (Math.abs(Number(await p.inputValue('#hy_nbp')) - 212) > 1e-6) problems.push(`100 °C switched to °F reads ${await p.inputValue('#hy_nbp')}`);
+    await p.click('#basisClose');
+
+    // The unit set: Field, with the inputs already typed shown in it. 70 bara = 1015.26 psia, 41 °C = 105.8 °F (hand conversion).
+    await p.click('#unitsBtn'); await p.selectOption('#unitPreset', 'Field'); await p.click('#unitsClose');
+    await p.evaluate(() => document.querySelector('#objects [data-id="hp"]').click());
+    await p.click('#tabDesign');
+    const pField = Number(await p.inputValue('#inspForm input[data-spec="pressure"]').then((v) => v.replace(/,/g, '')));
+    const tField = Number((await p.inputValue('#inspForm input[data-spec="temperature"]')).replace(/,/g, ''));
+    if (Math.abs(pField - 70 * 14.503773773) > 0.05) problems.push(`70 bara in the Field set reads ${pField} psia`);
+    if (Math.abs(tField - 105.8) > 0.05) problems.push(`41 °C in the Field set reads ${tField} °F`);
+    const sym = await p.locator('#inspForm select[data-unit="pressure"] option:checked').textContent();
+    if (sym !== 'psia') problems.push(`the pressure unit shows "${sym}" in the Field set`);
+    // Kept across a reload.
+    await p.reload(); await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.click('#unitsBtn');
+    if ((await p.inputValue('#unitPreset')) !== 'Field') problems.push('the unit set was not kept across a reload');
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} Enter to the next field, component menu and browse, hypothetical units, unit set (D121)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4e. bubble and dew points on demand, and HYSYS's enthalpy basis (D119, D120) ----------
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    const solve = async () => {
+      await p.click('#solveBtn');
+      await p.waitForFunction(() => /Converged|Status|Not solved|Fix|Nothing/.test(document.getElementById('solveMsgs').textContent) && !document.getElementById('solveBtn').disabled, null, { timeout: 300_000 });
+    };
+    const resultRow = async (label) => {
+      const row = p.locator('#inspResults tr', { has: p.locator('th', { hasText: label }) }).first();
+      return Number((await row.locator('td').first().textContent()).replace(/,/g, ''));
+    };
+    const props = (id) => p.evaluate((i) => window.flowsteadFlowsheet.project.solve.result.objects[i].properties, id);
+
+    // A gas with a C6+ hypothetical and water (the owner's HYSYS comparison case): the solve leaves the saturation points out.
+    await p.setInputFiles('#openFile', path.join(here, 'fixtures/gas-condensate-compare-hysys.json'));
+    await p.waitForFunction(() => window.flowsteadFlowsheet.project.flowsheet.includes('V-100'), null, { timeout: 30_000 });
+    await solve();
+    const sep = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.filter((o) => o.type === 'material_stream').map((o) => o.id));
+    const early = await props(sep[0]);
+    if (['bubblePointTemperature', 'dewPointTemperature', 'bubblePointPressure', 'dewPointPressure'].some((k) => early[k] !== undefined)) problems.push('the solve still calculates bubble and dew points');
+    // Opening the stream's worksheet asks for them.
+    await p.evaluate((id) => document.querySelector(`#objects [data-id="${id}"]`).click(), sep[1]);
+    await p.click('#tabResults');
+    await p.waitForFunction((id) => window.flowsteadFlowsheet.project.solve.result.objects[id].properties.dewPointTemperature !== undefined
+      || window.flowsteadFlowsheet.project.solve.result.objects[id].properties.bubblePointTemperature !== undefined, sep[1], { timeout: 120_000 });
+    const sat = [await resultRow('Dew point temperature').catch(() => NaN), await resultRow('Bubble point temperature').catch(() => NaN)];
+    if (!sat.some(Number.isFinite)) problems.push(`the worksheet shows no bubble or dew point after they were asked for (${sat})`);
+
+    // HYSYS's basis: pure methane at 25 °C and 1 atm. NIST: Hf −74.87 kJ/mol, S° 186.25 J/(mol·K) at 1 bar (186.14 at 1 atm), MW 16.043.
+    const methane = { schemaVersion: 1, propertyPackage: 'Peng-Robinson (PR)', compounds: ['Methane'], atmosphericPressurePa: 101325,
+      objects: [{ id: 'm', tag: 'M', type: 'material_stream', x: 0, y: 0, specs: { temperature: { si: 298.15, unit: 'C' }, pressure: { si: 101325, unit: 'kPa' }, molarFlow: { si: 100 / 3600, unit: 'kgmol/h' } }, composition: { Methane: 1 }, refs: {} }], connections: [] };
+    await p.setInputFiles('#openFile', { name: 'methane.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(methane)) });
+    await p.waitForFunction(() => window.flowsteadFlowsheet.project.name === 'methane', null, { timeout: 30_000 });
+    await solve();
+    await p.evaluate(() => document.querySelector('#objects [data-id="m"]').click());
+    await p.click('#tabResults');
+    const h = await resultRow('Mass enthalpy'), sEnt = await resultRow('Mass entropy');
+    const want = (-74870 / 16.043) / 1, wantS = 186.14 / 16.043; // kJ/kg and kJ/(kg·K), by hand
+    if (Math.abs(h - want) > 0.01 * Math.abs(want)) problems.push(`HYSYS basis: methane at 25 °C ${h} kJ/kg, NIST ${want.toFixed(0)}`);
+    if (Math.abs(sEnt - wantS) > 0.02 * wantS) problems.push(`HYSYS basis: methane entropy ${sEnt} kJ/kg·K, NIST ${wantS.toFixed(3)}`);
+    // DWSIM's own reference: zero for an ideal gas at 25 °C.
+    await p.click('#basisBtn'); await p.selectOption('#basisSel', 'dwsim'); await p.click('#basisClose');
+    await solve();
+    await p.evaluate(() => document.querySelector('#objects [data-id="m"]').click());
+    await p.click('#tabResults');
+    const hRaw = await resultRow('Mass enthalpy');
+    if (Math.abs(hRaw) > 10) problems.push(`DWSIM basis: methane at 25 °C ${hRaw} kJ/kg, expected about 0`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} bubble and dew points on demand; HYSYS basis (methane ${h} kJ/kg, ${sEnt} kJ/kg·K)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4c. a hypothetical component and a mass % composition, through the Basis and the worksheet (D116) ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });

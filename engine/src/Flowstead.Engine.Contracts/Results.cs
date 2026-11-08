@@ -421,7 +421,8 @@ public static class WorkerMethods
     public const string TestSleep = "testSleep";
 }
 
-public sealed record SearchCompoundsParams(string Query, int Limit = 25);
+/// <summary>Compounds matching <paramref name="Query"/> (all of them when empty), <paramref name="Limit"/> at a time from <paramref name="Offset"/> (the web's Browse list, D121).</summary>
+public sealed record SearchCompoundsParams(string Query, int Limit = 25, int Offset = 0);
 
 /// <summary>A compound's molecular weight (kg/kmol) and ideal liquid density at 60 °F (kg/m³; null if none), D78.</summary>
 public sealed record CompoundBasis(string Name, double MolecularWeight, double? StdLiquidDensity);

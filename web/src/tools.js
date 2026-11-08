@@ -4,6 +4,7 @@
 // inputs, calls the engine worker and lays the reports out. Every number shown is one the engine returned.
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { esc, renderReport } from './report.js';
+import { enterToNext } from './forms.js';
 
 /**
  * [app]: {$, Tools, Safety, engine, project() → {flowsheet, solve}, commit(json, message), toast(text), ready() → Promise}
@@ -24,6 +25,9 @@ export function initTools(app) {
     out.innerHTML = busy(`${label}…`);
     try {
       await app.ready();
+      // The optimiser solves the flowsheet many times: bubble and dew points are only worth their flashes if it uses one (D119).
+      if (req.method === 'optimise' && req.params?.flowsheet && !/(bubble|dew)Point/.test(JSON.stringify(req.params))) req.params.flowsheet.saturationFor = [];
+      if (req.method === 'optimise' && req.params?.flowsheet) req.params.flowsheet.enthalpyBasis = app.enthalpyBasis?.();
       const { result, ms } = await engine.call(req.method, req.params);
       out.innerHTML = renderReport(JSON.parse(report(result))) + `<p class="meta">Calculated by DWSIM in ${(ms / 1000).toFixed(1)} s.</p>`;
       return result;
@@ -167,9 +171,10 @@ export function initTools(app) {
     if (pts.error) { out.innerHTML = err(pts.error); return; }
     await app.ready();
     const answers = [];
+    const wantsSaturation = study.outputs.some((o) => /(bubble|dew)Point/.test(o.key));
     for (let i = 0; i < pts.points.length; i++) {
       out.innerHTML = busy(`Solving point ${i + 1} of ${pts.points.length}…`);
-      try { answers.push({ result: (await engine.call('solve', pts.points[i])).result }); } catch (e) { answers.push({ error: e.message }); }
+      try { answers.push({ result: (await engine.call('solve', { ...pts.points[i], saturationFor: wantsSaturation ? undefined : [], enthalpyBasis: app.enthalpyBasis?.() })).result }); } catch (e) { answers.push({ error: e.message }); }
     }
     const r = JSON.parse(Tools.caseStudyReport(base, study, JSON.stringify(answers)));
     // Kept with the flowsheet, as the app keeps a study and its last results.
@@ -300,7 +305,7 @@ export function initTools(app) {
       if (it.kind === 'check') return apply({ ...it.op, on: el.checked });
       if (it.kind === 'choice' && el.value !== '') return apply({ ...it.op, value: el.value });
     };
-    form.onkeydown = (e) => { if (e.key === 'Enter' && e.target.matches('input[type=text]')) { e.preventDefault(); e.target.dispatchEvent(new Event('change', { bubbles: true })); } };
+    form.onkeydown = (e) => enterToNext(e, form, true);
     form.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.del) return apply({ op: 'delete' });
@@ -343,12 +348,18 @@ export function initTools(app) {
   // ---------- hypothetical components in the Basis (the app's HypotheticalSheet, D44) ----------
 
   let hypoEditing = null; // name of the hypothetical in the form, or null for a new one
+  const hyUnits = {}; // the unit picked for each field of the form, kept while it is open
   function hypotheticalSection(container, onChange) {
     const h = JSON.parse(Fluids.hypotheticals(app.project().flowsheet));
+    for (const k of Object.keys(hyUnits)) delete hyUnits[k]; // a stored value is shown in the field's own unit
     const cur = h.hypotheticals.find((x) => x.name === hypoEditing);
     if (hypoEditing && !cur) hypoEditing = null;
     const val = (k) => cur?.values[k] ?? '';
-    const field = (f) => `<div class="field"><label for="hy_${f.key}">${esc(f.label)}${f.symbol ? `, ${esc(f.symbol)}` : ''}</label><input type="text" inputmode="decimal" id="hy_${f.key}" value="${esc(val(f.key))}" autocomplete="off"/>${f.hint ? `<p class="fs-note">${esc(f.hint)}</p>` : ''}</div>`;
+    // A field with several units (temperatures and the critical pressure) gets a unit menu; switching it re-expresses what is typed (D121).
+    const unitOf = (f) => hyUnits[f.key] && f.units.some((u) => u.id === hyUnits[f.key]) ? hyUnits[f.key] : f.unit;
+    const field = (f) => `<div class="field"><label for="hy_${f.key}">${esc(f.label)}${f.symbol && !f.units.length ? `, ${esc(f.symbol)}` : ''}</label>${f.units.length
+      ? `<div class="row"><input type="text" inputmode="decimal" id="hy_${f.key}" value="${esc(val(f.key))}" autocomplete="off"/><select id="hy_${f.key}_u" data-hy-unit="${f.key}" aria-label="${esc(f.label)} unit">${f.units.map((u) => `<option value="${esc(u.id)}"${u.id === unitOf(f) ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('')}</select></div>`
+      : `<input type="text" inputmode="decimal" id="hy_${f.key}" value="${esc(val(f.key))}" autocomplete="off"/>`}${f.hint ? `<p class="fs-note">${esc(f.hint)}</p>` : ''}</div>`;
     const [nbp, mw, sg, tc, pc, w] = h.fields;
     container.innerHTML = `<h3>Hypothetical components (${h.hypotheticals.length})</h3>
       <p class="fs-note">A pseudo-component, as in HYSYS: give the normal boiling point or the molecular weight, and the specific gravity if known. DWSIM's petroleum correlations estimate the rest; critical constants typed here replace the estimates. It joins the components like any other.</p>
@@ -363,7 +374,21 @@ export function initTools(app) {
       ${field(w)}
       <div class="fs-actions"><button type="button" class="btn btn-sm" id="hy_estimate">Estimate</button><button type="button" class="btn btn-sm btn-primary" id="hy_save">${cur ? 'Save' : 'Add to components'}</button>${cur ? '<button type="button" class="btn btn-sm" id="hy_new">New hypothetical</button>' : ''}</div>
       <div id="hy_out" aria-live="polite"></div>`;
-    const input = () => JSON.stringify(Object.fromEntries(['name', ...h.fields.map((f) => f.key)].map((k) => [k, container.querySelector('#hy_' + k).value])));
+    // A stored hypothetical is shown in the fields' own units; a unit chosen for a field applies to what is typed in it.
+    const input = () => JSON.stringify(Object.fromEntries(['name', ...h.fields.flatMap((f) => [f.key, ...(f.units.length ? [`${f.key}_unit`] : [])])]
+      .map((k) => [k, k.endsWith('_unit') ? container.querySelector(`#hy_${k.slice(0, -5)}_u`).value : container.querySelector('#hy_' + k).value])));
+    container.querySelectorAll('[data-hy-unit]').forEach((sel) => {
+      const f = h.fields.find((x) => x.key === sel.dataset.hyUnit);
+      let was = sel.value;
+      sel.onchange = () => {
+        const box = container.querySelector('#hy_' + f.key), text = box.value.trim().replace(',', '.');
+        if (text !== '' && Number.isFinite(Number(text))) {
+          const r = JSON.parse(Fluids.convert(Number(text), was, sel.value, app.project().flowsheet ? JSON.parse(app.project().flowsheet).atmosphericPressurePa : 101325));
+          if (r.value !== undefined) box.value = String(+r.value.toPrecision(10));
+        }
+        was = hyUnits[f.key] = sel.value;
+      };
+    });
     container.querySelector('#hy_estimate').onclick = () => {
       const req = JSON.parse(Fluids.estimateRequest(app.project().flowsheet, input()));
       run(req, container.querySelector('#hy_out'), 'Estimating', (result) => Fluids.estimateReport(app.project().flowsheet, JSON.stringify(result)));

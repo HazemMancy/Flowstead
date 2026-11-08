@@ -7,6 +7,7 @@
 import { startEngine } from './engine.js';
 import { initTools } from './tools.js';
 import { initDocuments, importDwsim } from './documents.js';
+import { enterToNext } from './forms.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -23,13 +24,20 @@ const typeById = new Map(types.map((t) => [t.id, t]));
 const dark = () => document.documentElement.getAttribute('data-theme') !== 'light';
 
 // ---------- project: the flowsheet (app JSON), its stored solve, undo and redo ----------
-let project = { name: 'Untitled', flowsheet: core.newFlowsheet(PACKAGE), solve: null };
+let project = { name: 'Untitled', flowsheet: core.newFlowsheet(PACKAGE), solve: null, basis: 'hysys' };
 const undo = [], redo = [];
+
+// Enthalpy and entropy basis (D119): HYSYS's (heats of formation and absolute entropies added, for the cubic equations and
+// Lee–Kesler) or DWSIM's own reference. A case that types an enthalpy or entropy keeps the basis it was written on.
+const hasEnergySpecs = (flowsheetJson) => (JSON.parse(flowsheetJson).objects ?? []).some((o) => o.specs?.massEnthalpy || o.specs?.massEntropy);
+const defaultBasis = (flowsheetJson, current) => (hasEnergySpecs(flowsheetJson) ? 'dwsim' : current ?? 'hysys');
+const enthalpyBasis = () => (project.basis === 'dwsim' ? undefined : 'formation');
+const basisApplies = () => /^(Peng-Robinson|Soave-Redlich-Kwong|Lee-Kesler)/.test(JSON.parse(project.flowsheet).propertyPackage ?? '');
 
 function load() {
   try {
     const p = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (p && typeof p.flowsheet === 'string') { view.setFlowsheet(p.flowsheet); project = p; }
+    if (p && typeof p.flowsheet === 'string') { view.setFlowsheet(p.flowsheet); project = p; project.basis = p.basis ?? (hasEnergySpecs(p.flowsheet) ? 'dwsim' : 'hysys'); }
   } catch (e) { project = { name: 'Untitled', flowsheet: core.newFlowsheet(PACKAGE), solve: null }; }
   applyProject();
 }
@@ -321,13 +329,15 @@ function renderInspector() {
     $('inspForm')._items = form.items;
     const t = $('inspForm').querySelector('.fs-compo'); if (t) compositionSum(t);
   }
+  if (isStream && ui.tab === 'results') ensureSaturation([id]);
   const rows = JSON.parse(view.summary(id));
   const msgs = JSON.parse(view.messages(id));
   const solved = project.solve && rows.some((r) => r.value !== '—');
   $('inspResults').innerHTML = (msgs.length ? `<ul class="msgs">${msgs.map((m) => `<li class="${esc(m.level)}">${esc(m.text)}</li>`).join('')}</ul>` : '') +
     (solved ? `<div class="table-wrap"><table class="props"><caption class="sr-only">Results for ${esc(o.tag)}${view.stale ? ' (out of date)' : ''}</caption><tbody>${
       rows.map((r) => `<tr><th scope="row">${esc(r.label)}</th><td>${esc(r.value)}</td><td class="unit">${esc(r.unit)}</td></tr>`).join('')}</tbody></table></div>` +
-      (view.stale ? '<p class="meta">Results are out of date: the flowsheet changed since the last solve.</p>' : '')
+      (view.stale ? '<p class="meta">Results are out of date: the flowsheet changed since the last solve.</p>' : '') +
+      (isStream && basisApplies() ? `<p class="meta">Enthalpy and entropy are on ${project.basis === 'dwsim' ? 'DWSIM’s reference (ideal gas at 25 °C)' : 'HYSYS’s basis (heats of formation and absolute entropies included)'}; change it in Basis.</p>` : '')
       : '<p class="placeholder">No results yet: complete the worksheet and press Solve.</p>');
 }
 const fid = (id, k) => `f_${id}_${k}`.replace(/[^\w-]/g, '_');
@@ -473,10 +483,10 @@ $('inspForm').addEventListener('click', (e) => {
   if (e.target.closest('[data-normalise]')) return compositionAction($('inspForm').querySelector('.fs-compo'), 'normalise');
   if (e.target.closest('[data-open-basis]')) openBasis();
 });
-$('inspForm').addEventListener('keydown', (e) => {
-  // Enter commits the field, as the app's Done key.
-  if (e.key === 'Enter' && e.target.matches('input[type=text]')) { e.preventDefault(); e.target.dispatchEvent(new Event('change', { bubbles: true })); }
-});
+// Enter commits the field, as the app's Done key, and moves to the next one (D121).
+$('inspForm').addEventListener('keydown', (e) => enterToNext(e, $('inspForm'), true));
+// The other forms (the Basis's hypothetical and black-oil forms, the project information, the tools): Enter moves on.
+for (const id of ['hypos', 'blackOils', 'toolsBody', 'inspAnalysis', 'exportDlg']) $(id).addEventListener('keydown', (e) => enterToNext(e, $(id)));
 for (const [tab, name] of [['tabDesign', 'design'], ['tabResults', 'results'], ['tabAnalysis', 'analysis']]) $(tab).addEventListener('click', () => { ui.tab = name; renderInspectorForce(); });
 
 $('inspClose').addEventListener('click', () => select(null));
@@ -579,7 +589,8 @@ function refresh() {
 $('projectName').addEventListener('change', () => { project.name = $('projectName').value.trim() || 'Untitled'; persist(); });
 function replace(name, flowsheet) {
   if (project.flowsheet !== core.newFlowsheet(PACKAGE)) { undo.push(project.flowsheet); redo.length = 0; }
-  project = { name, flowsheet, solve: null };
+  project = { name, flowsheet, solve: null, basis: defaultBasis(flowsheet, project.basis) };
+  if (project.basis === 'dwsim' && hasEnergySpecs(flowsheet)) toast('This case types an enthalpy or an entropy, so it keeps DWSIM’s basis. Change it in Basis if it was written on HYSYS’s.');
   select(null);
   applyProject(); persist();
   view.fit(cssW, cssH); draw();
@@ -646,18 +657,30 @@ function renderBasis() {
     const known = packages.some((p) => p.name === b.propertyPackage);
     $('pkgSel').innerHTML = (known || !b.propertyPackage ? '' : `<option selected>${esc(b.propertyPackage)}</option>`) +
       `<optgroup label="Checked in Flowstead">${checked.map(opt).join('')}</optgroup>` + (other.length ? `<optgroup label="Other DWSIM packages">${other.map(opt).join('')}</optgroup>` : '');
-    $('pkgSel').disabled = false; $('compSearch').disabled = false;
+    $('pkgSel').disabled = false; $('compSearch').disabled = false; $('compPick').disabled = false; $('compBrowse').disabled = false;
     $('pkgNote').textContent = '';
   } else {
-    $('pkgSel').innerHTML = `<option>${esc(b.propertyPackage || '—')}</option>`; $('pkgSel').disabled = true; $('compSearch').disabled = true;
+    $('pkgSel').innerHTML = `<option>${esc(b.propertyPackage || '—')}</option>`; $('pkgSel').disabled = true; $('compSearch').disabled = true; $('compPick').disabled = true; $('compBrowse').disabled = true;
     $('pkgNote').textContent = 'The package list and the component search come from the engine, which is still loading.';
   }
+  $('basisSel').value = project.basis ?? 'hysys';
+  $('basisNote').textContent = basisApplies()
+    ? (project.basis === 'dwsim' ? 'DWSIM’s reference: enthalpy and entropy are zero for an ideal gas at 25 °C. Differences (duties) are the same on either basis.'
+      : 'As HYSYS: each compound’s ideal-gas heat of formation and absolute entropy are included, so absolute values compare with HYSYS. Differences (duties) are the same on either basis.')
+    : 'This property package has its own reference for enthalpy and entropy: the choice applies to Peng-Robinson, SRK and Lee-Kesler.';
   tools.hypotheticalSection($('hypos'), renderBasis);
   tools.blackOilSection($('blackOils'), renderBasis);
   $('compCount').textContent = `(${b.compounds.length})`;
   $('compList').innerHTML = b.compounds.length ? b.compounds.map((c) => `<li><span>${esc(c)}${b.hypotheticals.includes(c) ? ' <small>Hypo</small>' : b.blackOils.includes(c) ? ' <small>Black oil</small>' : ''}</span>${b.usedBy[c] ? `<small>in ${b.usedBy[c]} stream${b.usedBy[c] > 1 ? 's' : ''}</small>` : ''}<button type="button" class="btn btn-sm" data-remove="${esc(c)}" aria-label="Remove ${esc(c)}">Remove</button></li>`).join('')
     : '<li class="empty">No components yet: search below.</li>';
 }
+$('basisSel').addEventListener('change', () => {
+  project.basis = $('basisSel').value;
+  project.solve = null; view.setSolve(null, '', 0); satAsked.clear(); // results on the other basis are not these results
+  persist(); refresh(); renderBasis();
+  if (hasEnergySpecs(project.flowsheet)) toast('Typed enthalpy and entropy values are now read on the other basis.');
+  queueSolve(0, true);
+});
 $('pkgSel').addEventListener('change', () => { const r = JSON.parse(sheets.setPropertyPackage(project.flowsheet, $('pkgSel').value)); if (r.flowsheet) commit(JSON.stringify(r.flowsheet), `Package ${$('pkgSel').value}`); renderBasis(); });
 $('compList').addEventListener('click', (e) => {
   const name = e.target.closest('[data-remove]')?.dataset.remove; if (!name) return;
@@ -684,6 +707,57 @@ $('compSearch').addEventListener('input', () => {
         : '<li class="empty" style="padding:.4rem .6rem">No match in DWSIM’s databases.</li>';
     } catch (e) { $('compResults').innerHTML = `<li class="empty" style="padding:.4rem .6rem">${esc(e.message)}</li>`; }
   }, 250);
+});
+// A menu of the components most cases use (D121). Each name is looked up in DWSIM's databases when picked, so a name the
+// database spells differently is found, not guessed.
+const COMMON = [
+  ['Gases', ['Nitrogen', 'Carbon dioxide', 'Hydrogen sulfide', 'Oxygen', 'Hydrogen', 'Helium', 'Argon', 'Carbon monoxide', 'Ammonia', 'Sulfur dioxide']],
+  ['Alkanes', ['Methane', 'Ethane', 'Propane', 'Isobutane', 'N-butane', 'Isopentane', 'N-pentane', 'N-hexane', 'N-heptane', 'N-octane', 'N-nonane', 'N-decane']],
+  ['Olefins and ring compounds', ['Ethylene', 'Propylene', 'Cyclohexane', 'Benzene', 'Toluene', 'Ethylbenzene', 'M-xylene']],
+  ['Water, glycols and treating', ['Water', 'Methanol', 'Ethanol', 'Ethylene glycol', 'Diethylene glycol', 'Triethylene glycol', 'Monoethanolamine', 'Diethanolamine', 'Methyldiethanolamine']],
+];
+$('compPick').innerHTML = '<option value="">Choose a component…</option>' + COMMON.map(([g, names]) => `<optgroup label="${esc(g)}">${names.map((n) => `<option>${esc(n)}</option>`).join('')}</optgroup>`).join('');
+function addCompound(name) {
+  const r = JSON.parse(sheets.addCompound(project.flowsheet, name));
+  if (r.error) return toast(r.error);
+  commit(JSON.stringify(r.flowsheet), `Added ${name}`);
+  renderBasis(); renderInspectorForce();
+}
+$('compPick').addEventListener('change', async () => {
+  const q = $('compPick').value; $('compPick').value = '';
+  if (!q) return;
+  try {
+    await engine.ready;
+    const { result } = await engine.call('searchCompounds', { query: q, limit: 8 });
+    const hit = result.find((c) => c.name.toLowerCase() === q.toLowerCase()) ?? result[0];
+    if (!hit) return toast(`${q} is not in DWSIM's databases: use the search.`);
+    addCompound(hit.name);
+  } catch (e) { toast(errorText(e)); }
+});
+// Browse every compound: filtered by the engine, 100 at a time.
+const browse = { query: '', offset: 0, seq: 0, timer: 0 };
+async function browseLoad(reset) {
+  if (reset) { browse.offset = 0; $('browseList').innerHTML = ''; }
+  const seq = ++browse.seq;
+  try {
+    await engine.ready;
+    const { result } = await engine.call('searchCompounds', { query: browse.query, limit: 100, offset: browse.offset });
+    if (seq !== browse.seq) return;
+    const have = new Set(JSON.parse(sheets.basis(project.flowsheet)).compounds);
+    $('browseList').insertAdjacentHTML('beforeend', result.map((c) => `<li><button type="button" data-add="${esc(c.name)}"${have.has(c.name) ? ' disabled' : ''}><span>${esc(c.name)}${have.has(c.name) ? ' (added)' : ''}</span><small>${esc(c.formula || '')} · ${c.molecularWeight ? core.formatNumber(c.molecularWeight, 2) : '—'} kg/kmol</small></button></li>`).join(''));
+    browse.offset += result.length;
+    $('browseMore').hidden = result.length < 100;
+    $('browseCount').textContent = `${browse.offset} shown${result.length < 100 ? '' : '; more below'}`;
+  } catch (e) { $('browseCount').textContent = errorText(e); }
+}
+$('compBrowse').addEventListener('click', () => { browse.query = ''; $('browseFilter').value = ''; $('browseDlg').showModal(); browseLoad(true); });
+$('browseClose').addEventListener('click', () => $('browseDlg').close());
+$('browseMore').addEventListener('click', () => browseLoad(false));
+$('browseFilter').addEventListener('input', () => { clearTimeout(browse.timer); browse.timer = setTimeout(() => { browse.query = $('browseFilter').value.trim(); browseLoad(true); }, 250); });
+$('browseList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-add]'); if (!b || b.disabled) return;
+  addCompound(b.dataset.add);
+  b.disabled = true; b.querySelector('span').textContent = `${b.dataset.add} (added)`;
 });
 $('compResults').addEventListener('click', (e) => {
   const name = e.target.closest('[data-add]')?.dataset.add; if (!name) return;
@@ -753,7 +827,8 @@ async function solve(auto) {
   }
   busy = true; $('solveBtn').disabled = true; setStatus('loading', auto ? 'Solving (active)…' : 'Solving…');
   try {
-    const { result, ms } = await engine.call('solve', prep.solvable);
+    // Bubble and dew points are four flashes a stream, most of a solve's time; they are asked for the streams you open (D119).
+    const { result, ms } = await engine.call('solve', { ...prep.solvable, saturationFor: [], enthalpyBasis: enthalpyBasis() });
     project.solve = { result, modelHash: prep.modelHash, at: Date.now() };
     view.setSolve(JSON.stringify(result), prep.modelHash, project.solve.at);
     persist(); refresh();
@@ -766,6 +841,7 @@ async function solve(auto) {
         ...Object.entries(prep.notReady).map(([id, why]) => `${objects().find((o) => o.id === id)?.tag ?? id}: ${why}`)], msgs);
     }
     setStatus('ready', auto ? `Active · ${head}` : head);
+    const t = tableStreams(); if (t.length) ensureSaturation(t);
   } catch (e) {
     showSolve('error', [`Not solved: ${e.message}`]);
     setStatus('failed', 'Not solved');
@@ -781,15 +857,72 @@ function showSolve(level, lines, msgs = []) {
 }
 $('solveClose').addEventListener('click', () => { $('solvePanel').hidden = true; });
 
+// Bubble and dew points (D119): a solve leaves them out, and they are asked for when a stream's worksheet or a table
+// shows them, and before a document is made. The engine reuses the last solve's flowsheet, so only these flashes run.
+const SATURATION = ['bubblePointTemperature', 'dewPointTemperature', 'bubblePointPressure', 'dewPointPressure'];
+const satAsked = new Set(); let satPending = 0;
+async function ensureSaturation(ids) {
+  const s = project.solve;
+  if (!s || engineState !== 'ready') return;
+  const prep = JSON.parse(core.prepareSolve(project.flowsheet));
+  if (prep.modelHash !== s.modelHash || prep.blocking.length) return; // out of date: a new solve comes first
+  const streams = Object.keys(s.result.objects).filter((id) => objects().find((o) => o.id === id)?.type === 'material_stream');
+  const need = (ids ?? streams).filter((id) => streams.includes(id) && !satAsked.has(`${s.modelHash}|${id}`)
+    && !SATURATION.some((k) => s.result.objects[id].properties?.[k] !== undefined));
+  if (!need.length) return;
+  need.forEach((id) => satAsked.add(`${s.modelHash}|${id}`));
+  satPending++; refreshSatNote();
+  try {
+    const { result } = await engine.call('solve', { ...prep.solvable, saturationFor: need, enthalpyBasis: enthalpyBasis() });
+    if (project.solve !== s) return; // a newer solve came in meanwhile
+    for (const id of need) if (result.objects[id]) s.result.objects[id] = result.objects[id];
+    view.setSolve(JSON.stringify(s.result), s.modelHash, s.at);
+    persist();
+  } catch (e) { /* asked once: a failed call is not repeated for this solve */ }
+  finally { satPending--; refreshSatNote(); refresh(); }
+}
+function refreshSatNote() { const n = $('satNote'); if (n) n.hidden = satPending === 0; }
+// Streams a table shows bubble or dew points for.
+const tableStreams = () => (JSON.parse(project.flowsheet).tables ?? []).filter((t) => t.keys.some((k) => SATURATION.includes(k))).map((t) => t.objectId);
+
+// ---------- the user's unit set (D121): new inputs, results, tables and documents in the units chosen ----------
+const UNITS_KEY = 'flowstead.web.units';
+function loadUnits() { try { const j = localStorage.getItem(UNITS_KEY); if (j) core.setUnitSet(j); } catch (e) {} }
+function renderUnits() {
+  const o = JSON.parse(core.unitSetOptions());
+  const sets = [...o.presets, ...(o.presets.some((p) => p.name === o.current.name) ? [] : [o.current])];
+  $('unitPreset').innerHTML = sets.map((p) => `<option${p.name === o.current.name ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+  $('unitGrid').innerHTML = o.quantities.map((q) => `<div class="field"><label for="u_${q.id}">${esc(q.label)}</label><select id="u_${q.id}" data-q="${q.id}">${
+    q.units.map((u) => `<option value="${esc(u.id)}"${u.id === o.current.units[q.id] ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('')}</select></div>`).join('');
+  $('unitsDlg')._options = o;
+}
+function applyUnits(set) {
+  core.setUnitSet(JSON.stringify(set));
+  try { localStorage.setItem(UNITS_KEY, JSON.stringify(set)); } catch (e) {}
+  if ($('unitRestate').checked) commit(core.restateUnits(project.flowsheet), 'Units changed');
+  renderUnits(); renderBasis(); renderInspectorForce(); draw();
+}
+$('unitsBtn').addEventListener('click', () => { renderUnits(); $('unitsDlg').showModal(); });
+$('unitsClose').addEventListener('click', () => $('unitsDlg').close());
+$('unitPreset').addEventListener('change', () => {
+  const p = $('unitsDlg')._options.presets.find((x) => x.name === $('unitPreset').value);
+  if (p) applyUnits(p);
+});
+$('unitGrid').addEventListener('change', (e) => {
+  const q = e.target.dataset.q; if (!q) return;
+  const cur = $('unitsDlg')._options.current;
+  applyUnits({ name: 'Custom', units: { ...cur.units, [q]: e.target.value } });
+});
+
 // ---------- tools (D112) ----------
 const tools = initTools({
-  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Fluids: fluids, engine,
+  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Fluids: fluids, engine, enthalpyBasis,
   project: () => project, commit: (json, message) => commit(json, message), toast,
   ready: () => engine.ready,
 });
 $('toolsBtn').addEventListener('click', () => tools.openTools());
 const documents = initDocuments({
-  $, Documents: Documents.getInstance(), FlowsheetView, core, engine,
+  $, Documents: Documents.getInstance(), FlowsheetView, core, engine, ensureSaturation: () => ensureSaturation(),
   project: () => project, commit: (json, message) => commit(json, message), toast, ready: () => engine.ready,
 });
 
@@ -812,6 +945,7 @@ function toast(text) {
 }
 function announce(text) { $('announce').textContent = text; }
 
+loadUnits();
 renderGroups(); renderPalette();
 load();
 resize();

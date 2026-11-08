@@ -32,6 +32,19 @@ public sealed record Flowsheet
     /// pairs (HYSYS's Binary Coeffs page; D58). Pairs not listed keep DWSIM's value.
     /// </summary>
     public List<BinaryParameter> InteractionParameters { get; init; } = [];
+    /// <summary>
+    /// The streams whose bubble and dew points a solve calculates (D118): null for every stream (what the app asks), a
+    /// list for only those, empty for none. Each point is a DWSIM flash of 10–900 ms and a stream has four, so on a slow
+    /// device (the browser) a solve leaves them out and asks for the streams the user opens. Not part of the model:
+    /// asking for more points reuses the last solve's flowsheet.
+    /// </summary>
+    public List<string>? SaturationFor { get; init; }
+    /// <summary>
+    /// Enthalpy and entropy basis (D119): null for DWSIM's own (an ideal-gas reference at 298.15 K, no heat of formation);
+    /// "formation" for HYSYS's: the ideal-gas heat of formation added to enthalpy and the absolute entropy to entropy,
+    /// for the cubic equations and Lee–Kesler. Typed enthalpy and entropy specifications are taken on the same basis.
+    /// </summary>
+    public string? EnthalpyBasis { get; init; }
 }
 
 /// <summary>kij between compounds <paramref name="A"/> and <paramref name="B"/> (symmetric).</summary>

@@ -142,3 +142,8 @@
 .fs-page footer.fs-chrome a{color:var(--chrome-fg)}
 .fs-page .fs-main{margin:0 .6rem;border:1px solid var(--border);border-radius:.7rem;overflow:hidden;box-shadow:0 0 0 1px color-mix(in srgb,var(--chrome-line) 80%,transparent),0 8px 28px rgba(0,0,0,.3);background:var(--bg)}
 @media(max-width:760px){.fs-page .fs-main{margin:0 .3rem;border-radius:.5rem}.fs-page .nav{height:2.2rem}}
+/* Units (D121) */
+.fs-unit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:.1rem .9rem;margin-top:.6rem}
+.fs-unit-grid .field{margin-top:.45rem}
+.search-results.browse{max-height:min(24rem,55dvh)}
+.search-results button[disabled]{opacity:.55;cursor:default}

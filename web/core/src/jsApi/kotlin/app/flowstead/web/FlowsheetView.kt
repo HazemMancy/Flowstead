@@ -91,7 +91,10 @@ internal class CanvasColors(dark: Boolean) {
 }
 
 /** °C and bara, the rest SI: the units the web app shows, as the results workbook it exports. */
-internal val displayUnits: UnitSet = UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara).copy(name = "SI (°C, bara)")
+internal val WEB_DEFAULT_UNITS: UnitSet = UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara).copy(name = "SI (°C, bara)")
+
+/** The units shown: the web default until the user picks a set (D121); every screen and document reads it when it draws. */
+internal var displayUnits: UnitSet = WEB_DEFAULT_UNITS
 
 @JsExport
 class FlowsheetView {

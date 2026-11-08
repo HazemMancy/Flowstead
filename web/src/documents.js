@@ -108,7 +108,8 @@ export function initDocuments(app) {
     if (r.error) app.toast(r.error); else app.commit(JSON.stringify(r.flowsheet), 'Project information saved');
   });
 
-  const run = (fn) => async () => { try { await fn(); } catch (e) { app.toast(String(e.message ?? e)); } };
+  // The solve leaves out bubble and dew points (D119): a document that lists them has them calculated first.
+  const run = (fn, withSaturation = false) => async () => { try { if (withSaturation) await app.ensureSaturation?.(); await fn(); } catch (e) { app.toast(String(e.message ?? e)); } };
 
   // ---- PFD: the canvas drawing, in print colours, as vectors, on an A3 sheet with the app's title block.
   function pfdSvg(width, height) {
@@ -153,8 +154,8 @@ export function initDocuments(app) {
     download(file, bytes(Documents.sheetsXlsx(kind, name, fsj, sj, h, at, today(), JSON.stringify(ids))), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   };
   const dsIds = () => ($('dsTarget').value ? [$('dsTarget').value] : []);
-  $('hmbPrint').addEventListener('click', run(() => printSheets(`${app.project().name} heat and material balance`, sheets('hmb', []))));
-  $('hmbXlsx').addEventListener('click', run(() => xlsx('hmb', [], `${safeName(app.project().name)} heat and material balance.xlsx`)));
+  $('hmbPrint').addEventListener('click', run(() => printSheets(`${app.project().name} heat and material balance`, sheets('hmb', [])), true));
+  $('hmbXlsx').addEventListener('click', run(() => xlsx('hmb', [], `${safeName(app.project().name)} heat and material balance.xlsx`), true));
   $('dsPrint').addEventListener('click', run(() => printSheets(`${app.project().name} data sheets`, sheets('datasheets', dsIds()))));
   $('dsXlsx').addEventListener('click', run(() => xlsx('datasheets', dsIds(), `${safeName(app.project().name)} data sheets.xlsx`)));
 
@@ -163,15 +164,15 @@ export function initDocuments(app) {
   $('resCsv').addEventListener('click', run(() => {
     const s = solved(), p = app.project();
     download(`${safeName(p.name)} results.csv`, app.core.resultsCsv(p.name, p.flowsheet, JSON.stringify(s.result), s.modelHash, s.at), 'text/csv');
-  }));
+  }, true));
   $('resXlsx').addEventListener('click', run(() => {
     const s = solved(), p = app.project();
     download(`${safeName(p.name)} results.xlsx`, bytes(app.core.resultsXlsx(p.name, p.flowsheet, JSON.stringify(s.result), s.modelHash, s.at)), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  }));
+  }, true));
   $('reportMd').addEventListener('click', run(() => {
     const [name, fsj, sj, h, at] = args();
     download(`${safeName(name)} report.md`, Documents.reportMarkdown(name, fsj, sj, h, at, new Date().toISOString().slice(0, 16).replace('T', ' ')), 'text/markdown');
-  }));
+  }, true));
 
   // ---- DWSIM files, through the engine (as the app's Export / Import DWSIM file)
   $('dwsimExport').addEventListener('click', run(async () => {

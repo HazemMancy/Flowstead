@@ -84,9 +84,16 @@ public static class Hypotheticals
         Derived(c);
 
         var hf = (double[])new GL().calculate_Hf_Sf(sg, mw, nbp);
-        c.IG_Enthalpy_of_Formation_25C = hf[0];
-        c.IG_Entropy_of_Formation_25C = hf[1];
-        c.IG_Gibbs_Energy_of_Formation_25C = hf[0] - 298.15 * hf[1];
+        // DWSIM's correlation puts a C6 pseudo-component's heat of formation near −31 kJ/mol where n-hexane's is −167, and its
+        // entropy near 105 J/(mol·K) where n-hexane's is 389. HYSYS's enthalpy and entropy include both (D119), so they come from
+        // the n-alkane series fitted to NIST instead (C5–C10 within 0.3 kJ/mol and 0.5 J/(mol·K)); the formula keeps DWSIM's H/C.
+        var n = Math.Max(1.0, (mw - 2.016) / 14.027);
+        var hfMolar = -20.64 * n - 43.6;   // kJ/mol (gas, 298.15 K)
+        var s0 = 153.0 + 39.3 * n;         // J/(mol·K), 1 bar
+        var sFormation = s0 - hf[2] * 5.74 - hf[3] / 2 * 130.68; // minus the elements: C graphite, H2 gas
+        c.IG_Enthalpy_of_Formation_25C = hfMolar * 1000 / mw;               // kJ/kg, as DWSIM keeps it
+        c.IG_Entropy_of_Formation_25C = sFormation / 1000 / mw * 1000;      // kJ/(kg·K)
+        c.IG_Gibbs_Energy_of_Formation_25C = c.IG_Enthalpy_of_Formation_25C - 298.15 * c.IG_Entropy_of_Formation_25C;
         c.Formula = "C" + hf[2].ToString("N2", System.Globalization.CultureInfo.InvariantCulture) + "H" + hf[3].ToString("N2", System.Globalization.CultureInfo.InvariantCulture);
 
         Tune(c, tuneAcentric: h.AcentricFactor is null && h.CriticalTemperature is null && h.CriticalPressure is null);

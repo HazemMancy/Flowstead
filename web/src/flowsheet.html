@@ -55,6 +55,7 @@
     </span>
     <button type="button" class="btn btn-sm" id="basisBtn" title="Property package and components">Basis</button>
     <button type="button" class="btn btn-sm" id="toolsBtn" title="Case studies, optimiser and safety analysis">Tools</button>
+    <button type="button" class="btn btn-sm" id="unitsBtn" title="The units you work in: temperature, pressure, flows and more">Units</button>
     <button type="button" class="btn btn-sm" id="exportBtn" title="PFD, heat and material balance, data sheets, results, DWSIM file">Export</button>
     <span class="fs-group">
       <button type="button" class="btn btn-sm" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
@@ -97,6 +98,7 @@
         <p class="fs-desc" id="inspDesc"></p>
         <form id="inspForm" class="fs-form" role="tabpanel" aria-labelledby="tabDesign" novalidate></form>
         <div id="inspResults" role="tabpanel" aria-labelledby="tabResults" hidden></div>
+        <p class="fs-note" id="satNote" hidden>Calculating bubble and dew points…</p>
         <div id="inspAnalysis" class="fs-form" role="tabpanel" aria-labelledby="tabAnalysis" hidden></div>
         <div class="actions">
           <button type="button" class="btn btn-sm" id="copyBtn" hidden title="Take conditions, flow or composition from another stream">Copy from…</button>
@@ -119,8 +121,13 @@
     <label for="pkgSel">Property package</label>
     <select id="pkgSel"></select>
     <p class="meta" id="pkgNote"></p>
+    <label for="basisSel">Enthalpy and entropy basis</label>
+    <select id="basisSel"><option value="hysys">HYSYS: heats of formation included</option><option value="dwsim">DWSIM: ideal gas at 25 °C</option></select>
+    <p class="meta" id="basisNote"></p>
     <h3>Components <span id="compCount"></span></h3>
     <ul class="fs-comps" id="compList"></ul>
+    <label for="compPick">Pick from a list</label>
+    <div class="rowx"><select id="compPick" aria-label="Common components"></select><button type="button" class="btn btn-sm" id="compBrowse" title="Every compound in DWSIM's databases">Browse all…</button></div>
     <label for="compSearch">Add a component</label>
     <input type="search" id="compSearch" placeholder="Search DWSIM's databases: methane, CO2, nC4, water…" autocomplete="off" aria-controls="compResults" />
     <ul class="search-results" id="compResults" aria-label="Matching components"></ul>
@@ -144,6 +151,24 @@
     <div class="fs-checks" id="copyItems"></div>
     <p class="fs-note">Copied conditions, flow and composition replace this stream's own.</p>
     <div class="actions"><button type="button" class="btn btn-sm btn-primary" id="copyApply" disabled>Copy</button><button type="button" class="btn btn-sm" id="copyCancel">Cancel</button></div>
+  </dialog>
+
+  <dialog class="fs-dialog card" id="browseDlg" aria-labelledby="browseTitle">
+    <div class="fs-insp-head"><h2 id="browseTitle">All components</h2><button type="button" class="icon-btn" id="browseClose" aria-label="Close">✕</button></div>
+    <p class="fs-desc">Every compound in DWSIM's databases. Filter by name or formula, and tap Add.</p>
+    <label for="browseFilter" class="sr-only">Filter</label>
+    <input type="search" id="browseFilter" placeholder="Filter: name, formula or CAS number" autocomplete="off" />
+    <ul class="search-results browse" id="browseList" aria-label="Components"></ul>
+    <div class="actions"><button type="button" class="btn btn-sm" id="browseMore" hidden>Show more</button><span class="fs-note" id="browseCount"></span></div>
+  </dialog>
+
+  <dialog class="fs-dialog fs-tools card" id="unitsDlg" aria-labelledby="unitsTitle">
+    <div class="fs-insp-head"><h2 id="unitsTitle">Units</h2><button type="button" class="icon-btn" id="unitsClose" aria-label="Close">✕</button></div>
+    <p class="fs-desc">The units used for new inputs, results, tables and documents. Pick a set, then change any quantity.</p>
+    <label for="unitPreset">Unit set</label>
+    <select id="unitPreset"></select>
+    <div class="fs-unit-grid" id="unitGrid"></div>
+    <label class="chip-check"><input type="checkbox" id="unitRestate" checked /> Also show the inputs already typed in these units (their values are unchanged, only written in the new unit)</label>
   </dialog>
 
   <dialog class="fs-dialog fs-tools card" id="toolsDlg" aria-labelledby="toolsTitle">
