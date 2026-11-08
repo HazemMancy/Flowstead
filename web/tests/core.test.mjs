@@ -428,3 +428,37 @@ test('copy a stream, and define a feed from another stream (D120)', () => {
   // Only feeds can be duplicated whole; a unit cannot.
   assert.ok(JSON.parse(v.duplicate(JSON.parse(fsj).objects.find((o) => o.type !== 'material_stream').id)).error);
 });
+
+// ---------- unit set and unit menus (D123) ----------
+test('a unit set changes what is shown and, if asked, how typed inputs are written, never their size (D123)', () => {
+  const f = core.layout(bench('05-jt-valve-letdown'));
+  const before = JSON.parse(f).objects.find((o) => o.id === 'hp').specs;
+  const field = JSON.parse(core.unitSetOptions()).presets.find((p) => p.name === 'Field');
+  try {
+    core.setUnitSet(JSON.stringify(field));
+    const cur = JSON.parse(core.unitSetOptions()).current;
+    assert.equal(cur.units.Temperature, 'F'); assert.equal(cur.units.Pressure, 'psia');
+    const after = JSON.parse(core.restateUnits(f)).objects.find((o) => o.id === 'hp').specs;
+    assert.equal(after.pressure.unit, 'psia'); assert.equal(after.temperature.unit, 'F');
+    assert.equal(after.pressure.si, before.pressure.si); assert.equal(after.temperature.si, before.temperature.si); // same physical value
+    // The worksheet of the restated flowsheet shows the stored value in the unit set's unit.
+    const form = JSON.parse(sheets.form(core.restateUnits(f), 'hp')).items.find((i) => i.kind === 'spec' && i.key === 'pressure');
+    assert.equal(form.unit, 'psia');
+    // 70 bara typed value = 1015.26 psia by hand (70 × 14.5037738).
+    assert.ok(Math.abs(Number(form.value.replace(/,/g, '')) - 70 * 14.503773773) < 0.01, form.value);
+  } finally { core.setUnitSet('{"units":{}}'); }
+  assert.equal(JSON.parse(core.unitSetOptions()).current.units.Pressure, 'bara');
+});
+
+test('a hypothetical takes its critical constants in the unit chosen for them (D123)', () => {
+  const f = core.newFlowsheet('Peng-Robinson (PR)');
+  const req = (extra) => JSON.parse(fluids.estimateRequest(f, JSON.stringify({ name: 'HY', nbp: '100', nbp_unit: 'C', sg: '0.75', ...extra }))).params[0];
+  assert.ok(Math.abs(req({}).normalBoilingPoint - 373.15) < 1e-9);
+  assert.ok(Math.abs(req({ tc: '600', tc_unit: 'F' }).criticalTemperature - 588.7056) < 1e-3); // (600 − 32) × 5/9 + 273.15
+  assert.ok(Math.abs(req({ pc: '500', pc_unit: 'psia' }).criticalPressure - 500 * 6894.757293168361) < 1);
+  assert.ok(Math.abs(JSON.parse(fluids.convert(100, 'C', 'F', 101325)).value - 212) < 1e-9);
+  assert.match(JSON.parse(fluids.convert(1, 'C', 'bara', 101325)).error, /quantity/i);
+  // A gauge unit is not offered for a critical pressure, which is absolute.
+  const units = JSON.parse(fluids.hypotheticals(f)).fields.find((x) => x.key === 'pc').units.map((u) => u.id);
+  assert.ok(units.includes('psia') && units.includes('bara') && !units.includes('barg') && !units.includes('psig'));
+});

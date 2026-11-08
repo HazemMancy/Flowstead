@@ -35,6 +35,17 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.7**
+- **Faster solves**: bubble and dew points are no longer calculated at every solve (they were most of its time). A stream's
+  worksheet, a table that shows them and the results documents ask for them when needed.
+- **Enthalpy and entropy as HYSYS**: the heats of formation and absolute entropies are included (Peng-Robinson, SRK,
+  Lee-Kesler), so absolute values compare with HYSYS; differences (duties) are unchanged. Basis can switch to DWSIM's own
+  reference. Cases that type an enthalpy or an entropy keep DWSIM's.
+- **Components**: pick from a menu of common ones, or **Browse all…** the databases.
+- **Hypothetical components**: the boiling point, critical temperature and critical pressure take any unit.
+- **Units**: choose SI, Field or your own units per quantity; inputs already typed can be shown in them too.
+- **Enter** commits a field and moves to the next one (Shift+Enter: the previous).
+
 **Web 1.6**
 - **Hold / Active** next to Solve, as in the Android app: Hold solves when you press Solve; Active solves a moment after
   each change. The mode is saved with the case.
