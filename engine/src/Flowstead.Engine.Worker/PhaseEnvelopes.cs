@@ -79,7 +79,7 @@ public static class PhaseEnvelopes
         double? hAt = null;
         string? hAtS = null;
         List<double> hti = [], hpi = [];
-        double? depression = null, required = null, hAtInhibited = null;
+        double? depression = null, required = null, hAtInhibited = null, freezing = null;
         if (req.Hydrates)
         {
             if (!Hydrates.HasFormers(compounds.Where((c, i) => z[i] > 0)))
@@ -105,6 +105,9 @@ public static class PhaseEnvelopes
                 if (inhibitor is not null && req.InhibitorWeightFraction > 0)
                 {
                     var w = req.InhibitorWeightFraction;
+                    // Below its freezing point the inhibited water turns to ice and hydrates form from the ice: there the
+                    // inhibitor does not lower them (D119).
+                    freezing = Hydrates.FreezingTemperature((t, p2) => lnWaterActivity!(w, t, p2), req.Pressure is { } pf && pf > 0 ? pf : 101325);
                     for (var i = 0; i < hp.Count; i++)
                         if (Inhibited(w, hp[i], i > 0 && hti.Count > 0 ? hti[^1] : ht[i] - 10) is { } h) { hti.Add(h.T); hpi.Add(hp[i]); }
                     if (hAt is { } th0 && req.Pressure is { } at0 && Inhibited(w, at0, null) is { } hi)
@@ -136,10 +139,14 @@ public static class PhaseEnvelopes
                     }
                     if (required is null && th > ts) warnings.Add($"Hydrates: no {dose} strength up to 85 wt % keeps this stream out of hydrates.");
                 }
+                var frozen = freezing is { } tf && hAtInhibited is { } tiAt && tiAt <= tf + 0.05;
                 warnings.Add(inhibitor is null || depression is null
                     ? "Hydrates: free water assumed present, with no inhibitor or salt (van der Waals–Platteeuw, Munck et al. 1988)."
                     : $"Hydrates: free water assumed present (van der Waals–Platteeuw, Munck et al. 1988) with {req.InhibitorWeightFraction:P0} {inhibitor} in it, " +
-                      $"through the water's activity (DWSIM NRTL): {depression:0.#} K lower (GPSA correlation: {HydrateInhibitors.Depression(inhibitor, req.InhibitorWeightFraction):0.#} K); no salt.");
+                      $"through the water's activity (DWSIM NRTL): {depression:0.#} K lower (GPSA correlation: {HydrateInhibitors.Depression(inhibitor, req.InhibitorWeightFraction):0.#} K" +
+                      (frozen ? ", which leaves out freezing" : "") + "); no salt." +
+                      (freezing is { } tf2 ? $" This water freezes below {tf2 - 273.15:0.#} °C (DWSIM NRTL; measured freezing points of inhibited water are a few K colder, " +
+                                                    "e.g. −15 °C at 20 wt % methanol against −11 °C here); colder than that, hydrates form from the ice and the inhibitor does not lower them." : ""));
             }
         }
 
@@ -149,13 +156,127 @@ public static class PhaseEnvelopes
             HydrateTemperature = ht, HydratePressure = hp, HydrateStructure = hs,
             HydrateTemperatureAtPressure = hAt, HydrateStructureAtPressure = hAtS,
             InhibitedHydrateTemperature = hti, InhibitedHydratePressure = hpi, InhibitedHydrateTemperatureAtPressure = hAtInhibited,
-            HydrateDepression = depression, RequiredInhibitorFraction = required,
+            HydrateDepression = depression, RequiredInhibitorFraction = required, InhibitedWaterFreezingTemperature = freezing,
             BubbleTemperature = bt, BubblePressure = bp, DewTemperature = dt, DewPressure = dp,
             CriticalTemperature = tc, CriticalPressure = pc,
             CricondenbarTemperature = bar?.T, CricondenbarPressure = bar?.P,
             CricondenthermTemperature = therm?.T, CricondenthermPressure = therm?.P,
             Warnings = warnings,
         };
+    }
+
+    public const string Water = "Water";
+
+    /// <summary>Above this mole fraction of water the fluid is aqueous, and its envelope is traced as it is (D118).</summary>
+    public const double MaxWaterForDryEnvelope = 0.5;
+
+    /// <summary>
+    /// D118: <paramref name="env"/>, traced on the water-free fluid, with the wet stream's water dew line (31 pressures,
+    /// 1 bar to 1.2 × the highest traced pressure, at least 100 and at most 500 bar, evenly in log P) and, when given,
+    /// the water dew temperature at <paramref name="pressure"/>. <paramref name="z"/> is the wet composition and
+    /// <paramref name="w"/> water's index in it; <paramref name="pp"/> is a package whose current stream is the wet one.
+    /// </summary>
+    public static PhaseEnvelope WithWaterDew(PhaseEnvelope env, PropertyPackage pp, double[] z, int w, double? pressure)
+    {
+        var highest = env.BubblePressure.Concat(env.DewPressure).DefaultIfEmpty(1e7).Max();
+        var pMax = Math.Clamp(highest * 1.2, 1e7, 5e7);
+        List<double> wt = [], wp = [];
+        double? guess = null;
+        for (var i = 0; i <= 30; i++)
+        {
+            var p = 1e5 * Math.Pow(pMax / 1e5, i / 30.0);
+            if (WaterDewTemperature(pp, z, w, p, guess) is not { } t) continue;
+            wt.Add(t); wp.Add(p);
+            guess = t;
+        }
+        double? at = pressure is { } ps && ps > 0 ? WaterDewTemperature(pp, z, w, ps, null) : null;
+        var warnings = new List<string>
+        {
+            $"This stream has {z[w]:P2} water. The envelope (bubble and dew curves, critical point, cricondenbar, cricondentherm and " +
+            "vapour-fraction lines) is the hydrocarbons' on a water-free basis, as a wet gas is read in HYSYS: DWSIM's envelope " +
+            "routine follows only one liquid. The water dew line is drawn separately: below it liquid water drops out (with " +
+            "respect to liquid water; below 0 °C ice or hydrate can form first).",
+        };
+        if (wt.Count < 2) warnings.Add("The water dew line could not be found from the stream's fugacities.");
+        warnings.AddRange(env.Warnings);
+        return env with
+        {
+            WaterFree = true, WaterDewTemperature = wt, WaterDewPressure = wp, WaterDewTemperatureAtPressure = at,
+            Warnings = warnings,
+        };
+    }
+
+    /// <summary>
+    /// The temperature (K) at pressure <paramref name="p"/> where the first liquid water forms from the wet stream
+    /// <paramref name="z"/>: the water's fugacity in the vapour, y_w·φ_w(V)·P from DWSIM's package, equals pure liquid
+    /// water's. Liquid water takes up next to no hydrocarbon, so all the water is in the
+    /// vapour (y_w = z_w / (z_w + (1 − z_w)·β), β the water-free fluid's vapour fraction from DWSIM's P-T flash).
+    /// Null outside 200–647 K, or where the hydrocarbons are all liquid.
+    /// </summary>
+    internal static double? WaterDewTemperature(PropertyPackage pp, double[] z, int w, double p, double? guess)
+    {
+        var zw = z[w];
+        var dry = z.Select((v, i) => i == w ? 0 : v / (1 - zw)).ToArray();
+        var pure = z.Select((_, i) => i == w ? 1.0 : 0.0).ToArray();
+        // Positive where liquid water is stable (colder than the dew point).
+        double G(double t)
+        {
+            double beta = 1;
+            var yd = dry;
+            try
+            {
+                var r = (object[])pp.FlashBase.Flash_PT(dry, p, t, pp);
+                var v = Convert.ToDouble(r[1]);
+                if (double.IsFinite(v) && v < 1 - 1e-9)
+                {
+                    if (!(v > 1e-9) || r[3] is not double[] vy || !vy.All(double.IsFinite)) return double.NaN;
+                    (beta, yd) = (v, vy);
+                }
+            }
+            catch
+            {
+                // A failed flash: the water-free fluid is taken as all vapour.
+            }
+            var yw = zw / (zw + (1 - zw) * beta);
+            var y = yd.Select((v, i) => i == w ? yw : v * (1 - yw)).ToArray();
+            var phiV = ((double[])pp.DW_CalcFugCoeff(y, t, p, State.Vapor))[w];
+            return Math.Log(yw * phiV * p) - Math.Log(LiquidWaterFugacity(t));
+        }
+        // Pure liquid water's fugacity from DWSIM's databank vapour pressure, its saturated vapour's fugacity coefficient
+        // and the Poynting correction: p_sat·φ_sat·exp(V_L (P − p_sat)/RT). A cubic equation's own vapour pressure of
+        // water is a few per cent low near ambient (2.6 K on the dew point at 1 bar, against IAPWS-IF97).
+        double LiquidWaterFugacity(double t)
+        {
+            var psat = pp.AUX_PVAPi(w, t);
+            var phiSat = ((double[])pp.DW_CalcFugCoeff(pure, t, psat, State.Vapor))[w];
+            var vl = pp.RET_VMM()[w] / 1000 / pp.AUX_LIQDENSi(w, t);
+            return psat * phiSat * Math.Exp(vl * (p - psat) / (8.314462618 * t));
+        }
+        const double lo = 200, hi = 647;
+        double a, b;
+        // Bracket: near the previous pressure's dew point (it rises with pressure), else scanned down from 647 K.
+        if (guess is { } t0 && t0 - 3 > lo && t0 + 8 < hi && G(t0 - 3) >= 0 && G(t0 + 8) < 0) (a, b) = (t0 - 3, t0 + 8);
+        else
+        {
+            if (!(G(hi) < 0)) return null;
+            (a, b) = (double.NaN, hi);
+            for (var t = hi - 10; t >= lo; t -= 10)
+            {
+                var g = G(t);
+                if (double.IsNaN(g)) return null;
+                if (g >= 0) { a = t; break; }
+                b = t;
+            }
+            if (double.IsNaN(a)) return null;
+        }
+        for (var i = 0; i < 40 && b - a > 0.01; i++)
+        {
+            var m = 0.5 * (a + b);
+            var g = G(m);
+            if (double.IsNaN(g)) return null;
+            if (g >= 0) a = m; else b = m;
+        }
+        return 0.5 * (a + b);
     }
 
     /// <summary>

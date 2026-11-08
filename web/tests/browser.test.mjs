@@ -251,7 +251,7 @@ try {
     await p.close();
   }
 
-  // ---------- 4d. Hold and Active, the table editor, copying streams, the frozen header and the framed page (D118) ----------
+  // ---------- 4d. Hold and Active, the table editor, copying streams, the frozen header and the framed page (D120) ----------
   {
     const exp05 = JSON.parse(fs.readFileSync(path.join(benchDir, '05-jt-valve-letdown', 'expected.json'), 'utf8')).checks;
     const want = exp05.find((c) => c.path === 'objects.lp.properties.temperature').expected - 273.15; // K → °C by hand
@@ -337,7 +337,7 @@ try {
       if (f.radius === '0px' || f.border === '0px') problems.push(`${theme}: the flowsheet is not framed`);
     }
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
-    console.log(`${problems.length ? 'FAIL' : 'ok  '} Hold/Active, table editor, copy and duplicate, frozen header, framed page (D118)`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} Hold/Active, table editor, copy and duplicate, frozen header, framed page (D120)`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();

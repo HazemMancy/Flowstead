@@ -364,8 +364,8 @@ test('composition in mass and liquid-volume bases, stored as mole fractions (D11
   assert.equal(JSON.parse(sheets.form(fj, feed.id)).items.find((i) => i.kind === 'composition').bases.length, 6);
 });
 
-// ---------- solver mode, table editor and copying streams (D118) ----------
-test('Hold or Active is saved with the flowsheet and is not part of the solved model (D118)', () => {
+// ---------- solver mode, table editor and copying streams (D120) ----------
+test('Hold or Active is saved with the flowsheet and is not part of the solved model (D120)', () => {
   const f = core.layout(bench('06-compressor-aftercooler'));
   assert.equal(core.solverActive(f), false);
   const on = core.setSolverActive(f, true);
@@ -374,7 +374,7 @@ test('Hold or Active is saved with the flowsheet and is not part of the solved m
   assert.equal(core.solverActive(core.setSolverActive(on, false)), false);
 });
 
-test('the table on the flowsheet shows exactly the properties ticked (D118)', () => {
+test('the table on the flowsheet shows exactly the properties ticked (D120)', () => {
   const v = new FlowsheetView();
   v.setFlowsheet(core.layout(bench('06-compressor-aftercooler')));
   const opt = JSON.parse(v.tableOptions('out'));
@@ -391,7 +391,7 @@ test('the table on the flowsheet shows exactly the properties ticked (D118)', ()
   assert.equal(JSON.parse(fsj).tables?.length ?? 0, 0);
 });
 
-test('copy a stream, and define a feed from another stream (D118)', () => {
+test('copy a stream, and define a feed from another stream (D120)', () => {
   const result = fs.readFileSync(new URL('../../shared/fixtures/solve-result-06.json', import.meta.url), 'utf8');
   const fsj = core.layout(bench('06-compressor-aftercooler'));
   const v = new FlowsheetView(); v.setFlowsheet(fsj);

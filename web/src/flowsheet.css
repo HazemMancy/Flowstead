@@ -103,13 +103,13 @@
 .ex-info{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));gap:.1rem .6rem}
 .fs-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
 .fs-sub{font-size:.85rem;margin:.9rem 0 .2rem}
-/* Auto-solve and Hold (D118): the app's solver toggle, amber while on hold, green while active. */
+/* Auto-solve and Hold (D120): the app's solver toggle, amber while on hold, green while active. */
 .mode{display:inline-flex;align-items:center;gap:.4rem;font-weight:600}
 .mode .dot{width:9px;height:9px;border-radius:50%;background:var(--warn)}
 .mode[aria-pressed="true"] .dot{background:var(--ok)}
 .mode[aria-pressed="true"]{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 55%,var(--border))}
 .mode[aria-pressed="false"]{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 55%,var(--border))}
-/* The title and the close button stay in view while a worksheet or a window scrolls (D118). */
+/* The title and the close button stay in view while a worksheet or a window scrolls (D120). */
 .fs-inspector{padding-top:0}
 .fs-insp-top{position:sticky;top:0;z-index:4;background:var(--bg-card);margin:0 -1.2rem;padding:.9rem 1.2rem 0}
 .fs-insp-top .fs-insp-head h2{margin-bottom:0}
@@ -124,7 +124,7 @@
 .fs-checks label small{margin-left:auto;color:var(--muted);font-family:var(--mono);font-size:.72rem}
 .fs-checks input{width:auto;accent-color:var(--primary-fill)}
 #tableKeys{display:grid;grid-template-columns:repeat(auto-fill,minmax(13rem,1fr));gap:.1rem .6rem}
-/* The page around the flowsheet (D118). The site's header and footer are a darker frame with small, quiet links; the
+/* The page around the flowsheet (D120). The site's header and footer are a darker frame with small, quiet links; the
    flowsheet is a window inside it, so a stray tap near the edge doesn't leave the flowsheet. */
 .fs-page{--chrome:hsl(222,47%,3.5%);--chrome-fg:hsl(215,20%,62%);--chrome-line:hsl(222,30%,14%);background:var(--chrome)}
 [data-theme="light"] .fs-page{--chrome:hsl(214,28%,87%);--chrome-fg:hsl(215,19%,30%);--chrome-line:hsl(214,24%,78%)}

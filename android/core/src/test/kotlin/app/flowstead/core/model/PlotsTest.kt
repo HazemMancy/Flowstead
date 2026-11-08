@@ -57,6 +57,31 @@ class PlotsTest {
             hydrateTemperature = listOf(280.0, 290.0), hydratePressure = listOf(2e6, 8e6),
         ))!!
         assertEquals(listOf("Bubble point", "Dew point", "VF 0.5", "Hydrate formation"), full.series.map { it.label })
+        // A wet gas (D118): the envelope is labelled water-free and the water dew line is its own series.
+        val wet = Plots.envelope(env.copy(waterFree = true, waterDewTemperature = listOf(300.0, 330.0), waterDewPressure = listOf(1e5, 6e5)))!!
+        assertEquals(listOf("Bubble point (water-free)", "Dew point (water-free)", "Water dew point"), wet.series.map { it.label })
+        assertEquals(listOf(330.0), wet.series.last().x.drop(1))
+        // Its close-up (D119): the water dew line and hydrates stretch the axes, so the envelope alone is offered, without
+        // the stream far outside it.
+        val far = env.copy(waterFree = true, waterDewTemperature = listOf(300.0, 400.0), waterDewPressure = listOf(1e5, 2e7))
+        val close = Plots.envelopeCloseUp(far, 380.0, 1e5)!!
+        assertEquals(listOf("Bubble point (water-free)", "Dew point (water-free)"), close.series.map { it.label })
+        assertEquals(listOf("Cricondentherm"), close.markers.map { it.label })
+        // Without other curves the envelope already fills the plot: no close-up.
+        assertNull(Plots.envelopeCloseUp(env, 280.0, 2e6))
+    }
+
+    @Test
+    fun envelopeNotesSayWhenTheInhibitedWaterFreezesFirst() {
+        val k = { v: Double -> app.flowstead.core.format.ValueFormat.number(v, 1) + " K" }
+        val frozen = PhaseEnvelope(hydrateDepression = 0.0, inhibitedHydrateTemperatureAtPressure = 251.2, inhibitedWaterFreezingTemperature = 262.2)
+        assertTrue(EnvelopeNotes.inhibitor(frozen, k)!!.contains("they form from ice there"))
+        val working = PhaseEnvelope(hydrateDepression = 8.0, inhibitedHydrateTemperatureAtPressure = 275.0, inhibitedWaterFreezingTemperature = 262.2)
+        assertEquals("With the inhibitor in the water, hydrates form 8.0 K lower, below 275.0 K at this stream's pressure; the inhibited water freezes below 262.2 K (dashed curve).",
+            EnvelopeNotes.inhibitor(working, k))
+        val wet = PhaseEnvelope(waterDewTemperatureAtPressure = 330.0)
+        assertEquals("Water dew point at this stream's pressure: 330.0 K. The stream is colder: it carries free (liquid) water.", EnvelopeNotes.waterDew(wet, 311.0, k))
+        assertNull(EnvelopeNotes.waterDew(PhaseEnvelope(), 311.0, k))
     }
 
     @Test

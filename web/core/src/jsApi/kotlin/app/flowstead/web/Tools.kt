@@ -33,6 +33,7 @@ import app.flowstead.core.api.OptimiserTarget
 import app.flowstead.core.api.OptimiserVariable
 import app.flowstead.core.model.BlackOil
 import app.flowstead.core.model.CaseOutput
+import app.flowstead.core.model.EnvelopeNotes
 import app.flowstead.core.model.CaseResults
 import app.flowstead.core.model.CaseStudies
 import app.flowstead.core.model.CaseStudy
@@ -225,6 +226,8 @@ object Tools {
     private fun envelope(rep: Report, env: PhaseEnvelope, f: Flowsheet, r: SolveResult?, solvedHash: String, id: String, p: JsonObject) {
         val plot = Plots.envelope(env, property(f, r, solvedHash, id, "temperature"), property(f, r, solvedHash, id, "pressure"))
         if (plot == null) rep.note("DWSIM traced no bubble or dew curve for this composition.") else rep.plot(plot)
+        // A narrow envelope squeezed by the hydrate curve and the water dew line, close up (D119).
+        Plots.envelopeCloseUp(env, property(f, r, solvedHash, id, "temperature"), property(f, r, solvedHash, id, "pressure"))?.let { rep.plot(it) }
         val rows = mutableListOf<Triple<String, String, String>>()
         fun row(label: String, t: Double?, pr: Double?) {
             if (t == null || pr == null) return
@@ -237,10 +240,10 @@ object Tools {
         env.hydrateTemperatureAtPressure?.let { th ->
             rep.note("Hydrates (${env.hydrateStructureAtPressure ?: "?"}) form below ${rep.withUnit(th, Quantity.Temperature)} at this stream's pressure", "warn")
         }
-        env.hydrateDepression?.let { dT ->
-            rep.note("With the inhibitor in the water, hydrates form ${ValueFormat.number(dT, 1)} K lower" +
-                (env.inhibitedHydrateTemperatureAtPressure?.let { ti -> ", below ${rep.withUnit(ti, Quantity.Temperature)} at this stream's pressure" } ?: "") + " (dashed curve).")
-        }
+        // A wet gas (D118): where its free water drops out; what the inhibitor does, and where its water freezes (D119).
+        val tFmt = { k: Double -> rep.withUnit(k, Quantity.Temperature) }
+        EnvelopeNotes.waterDew(env, property(f, r, solvedHash, id, "temperature"), tFmt)?.let { rep.note(it) }
+        EnvelopeNotes.inhibitor(env, tFmt)?.let { rep.note(it) }
         env.requiredInhibitorFraction?.let { w ->
             val what = HydrateInhibitors.label(p["inhibitor"]?.jsonPrimitive?.content?.takeIf { it in HydrateInhibitors.ALL } ?: HydrateInhibitors.METHANOL)
             rep.note(if (w <= 0) "This stream is warmer than its hydrate temperature: no inhibitor needed."

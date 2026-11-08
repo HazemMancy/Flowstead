@@ -43,6 +43,17 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 - **Show table** now lets you tick any properties for the table on the flowsheet (All, None, update, remove).
 - A worksheet's title, close button, tag and tabs stay in view while you scroll it; every window keeps its title bar.
 - The site's header and footer are a darker frame around the flowsheet, so a stray tap near the edge doesn't leave it.
+**Web 1.5.3**
+- Phase envelope: when the hydrate curve and the water dew line stretch the axes so much that a narrow envelope (a lean
+  gas) looks like a line, a second plot shows the envelope close up.
+- Hydrate inhibitor: the freezing point of the inhibited water is given. Below it hydrates form from ice and the
+  inhibitor does not lower them, which the window now says instead of "0 K lower".
+
+**Web 1.5.2**
+- Phase envelope of a stream with water in it (a wet gas): the envelope is now the hydrocarbons' on a water-free basis,
+  so it closes with its critical point, cricondenbar and cricondentherm, as HYSYS users read a wet gas. The water dew
+  line is drawn as its own curve, with the water dew point at the stream's pressure and whether the stream carries free
+  water (checked against IAPWS-IF97 and the GPSA water-content correlation).
 
 **Web 1.5.1**
 - Phase envelope: when DWSIM traces the bubble and dew curves as two pieces that never meet (some rich gases and

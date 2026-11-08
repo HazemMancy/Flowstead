@@ -269,6 +269,7 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
             Specs = new() { [SpecKeys.Temperature] = new(t, "K"), [SpecKeys.Pressure] = new(p, "Pa"), [SpecKeys.MolarFlow] = new(1, "mol/s") },
         };
         var r = await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs with { Objects = [s] }, Json.Options));
+        Assert.True(r.Objects.ContainsKey("s"), string.Join("; ", r.Messages.Select(m => m.Text)));
         return r.Objects["s"].Properties["vapourFraction"];
     }
 
@@ -321,5 +322,158 @@ public sealed class ProfilesTests(EngineFixture engine, ITestOutputHelper output
             Assert.DoesNotContain(l.Temperature, t => Math.Abs(t - 190.56) < 0.2);
             Assert.All(l.Temperature, t => Assert.InRange(t, tMin, env.CricondenthermTemperature!.Value + 1));
         }
+    }
+
+    // ---- D118: a wet gas's envelope on a water-free basis, and its water dew line ----
+
+    private static readonly Dictionary<string, double> WetGas = new()
+    {
+        ["Nitrogen"] = 0.01, ["Carbon dioxide"] = 0.015, ["Methane"] = 0.82, ["Ethane"] = 0.06, ["Propane"] = 0.03,
+        ["N-butane"] = 0.015, ["N-pentane"] = 0.01, ["N-hexane"] = 0.005, ["Water"] = 0.035,
+    };
+
+    private static Flowsheet Pr(IEnumerable<string> compounds) => new() { PropertyPackage = "Peng-Robinson (PR)", Compounds = compounds.ToList() };
+
+    /// <summary>IAPWS-IF97 saturation temperature of water (K) at <paramref name="p"/> (Pa), its backward equation (31).</summary>
+    private static double IapwsSaturationTemperature(double p)
+    {
+        double[] n = [0, 0.11670521452767e4, -0.72421316703206e6, -0.17073846940092e2, 0.12020824702470e5, -0.32325550322333e7,
+                      0.14915108613530e2, -0.48232657361591e4, 0.40511340542057e6, -0.23855557567849, 0.65017534844798e3];
+        var b = Math.Pow(p / 1e6, 0.25);
+        var e = b * b + n[3] * b + n[6];
+        var f = n[1] * b * b + n[4] * b + n[7];
+        var g = n[2] * b * b + n[5] * b + n[8];
+        var d = 2 * g / (-f - Math.Sqrt(f * f - 4 * e * g));
+        return (n[10] + d - Math.Sqrt((n[10] + d) * (n[10] + d) - 4 * (n[9] + n[10] * d))) / 2;
+    }
+
+    [Fact]
+    public async Task AWetGasEnvelopeIsTheWaterFreeOneAndCloses()
+    {
+        var fs = Pr(WetGas.Keys);
+        var dry = WetGas.Where(c => c.Key != "Water").ToDictionary(c => c.Key, c => c.Value / (1 - WetGas["Water"]));
+        var q = new List<double> { 0.5 };
+        var wet = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope",
+            new PhaseEnvelopeRequest(fs, WetGas, q, Hydrates: true, Pressure: 6e5, Temperature: 311.15), Json.Options));
+        var alone = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope",
+            new PhaseEnvelopeRequest(Pr(dry.Keys), dry, q), Json.Options));
+        output.WriteLine($"wet: crit {wet.CriticalTemperature} K {wet.CriticalPressure} Pa; bar {wet.CricondenbarPressure}; water dew {wet.WaterDewTemperature.Count} pts, " +
+                         $"{wet.WaterDewTemperatureAtPressure} K at 6 bar | " + string.Join(" | ", wet.Warnings));
+        Assert.True(wet.WaterFree);
+        Assert.False(alone.WaterFree);
+        Assert.NotNull(wet.CriticalTemperature);
+        Assert.NotNull(wet.CricondenbarPressure);
+        Assert.DoesNotContain(wet.Warnings, w => w.Contains("did not close"));
+        Assert.Contains(wet.Warnings, w => w.Contains("water-free basis"));
+        // The envelope is the water-free gas's own: the same curves and points as that gas traced on its own.
+        // (within 0.01 %: the water stays in the package at zero, which moves the last points near the critical point by a few ppm)
+        static void Same(List<double> a, List<double> b) { Assert.Equal(a.Count, b.Count); Assert.All(a.Zip(b), x => Assert.Equal(x.First, x.Second, x.First * 1e-4)); }
+        Same(alone.BubbleTemperature, wet.BubbleTemperature);
+        Same(alone.DewPressure, wet.DewPressure);
+        Assert.Equal(alone.CricondenbarPressure!.Value, wet.CricondenbarPressure!.Value, 10.0);
+        Assert.Equal(alone.CricondenthermTemperature!.Value, wet.CricondenthermTemperature!.Value, 1e-4);
+        // Independent check of the hydrocarbon envelope: at the cricondenbar temperature a P-T flash of the dry gas finds two
+        // phases 2 % below it and one phase 2 % above it.
+        var (tb, pb) = (wet.CricondenbarTemperature!.Value, wet.CricondenbarPressure!.Value);
+        var below = await VapourFraction(Pr(dry.Keys), dry, tb, pb * 0.98);
+        var above = await VapourFraction(Pr(dry.Keys), dry, tb, pb * 1.02);
+        output.WriteLine($"dry gas at the cricondenbar temperature: vapour fraction {below} at -2 %, {above} at +2 %");
+        Assert.InRange(below, 1e-4, 1 - 1e-4);
+        Assert.True(above < 1e-6 || above > 1 - 1e-6);
+        // Hydrates are unchanged: the model already takes the water-free gas with free water present.
+        Assert.NotNull(wet.HydrateTemperatureAtPressure);
+        Assert.True(wet.HydrateTemperature.Count > 10);
+    }
+
+    [Fact]
+    public async Task TheWaterDewLineMatchesIapwsAtLowPressureAndBukacekAtPressure()
+    {
+        var fs = Pr(WetGas.Keys);
+        var env = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope",
+            new PhaseEnvelopeRequest(fs, WetGas, [], Pressure: 5e5), Json.Options));
+        output.WriteLine(string.Join(", ", env.WaterDewTemperature.Zip(env.WaterDewPressure).Select(x => $"{x.Second / 1e5:0.00} bar {x.First - 273.15:0.00} °C")));
+        Assert.True(env.WaterDewTemperature.Count > 20);
+        Assert.True(env.WaterDewTemperature.Zip(env.WaterDewTemperature.Skip(1)).All(x => x.Second > x.First), "the dew point rises with pressure");
+        // Up to 5 bar the gas is nearly ideal: the water's partial pressure is its vapour pressure, y_w·P = p_sat(T),
+        // with p_sat from IAPWS-IF97. Peng-Robinson's water and the small gas non-ideality agree within 1 K.
+        var yw = WetGas["Water"] / WetGas.Values.Sum();
+        var lows = env.WaterDewTemperature.Zip(env.WaterDewPressure).Where(x => x.Second <= 5.01e5).ToList();
+        Assert.True(lows.Count >= 5);
+        foreach (var (t, p) in lows)
+        {
+            var reference = IapwsSaturationTemperature(yw * p);
+            output.WriteLine($"{p / 1e5:0.000} bar: engine {t - 273.15:0.00} °C, IAPWS ideal {reference - 273.15:0.00} °C");
+            Assert.InRange(t, reference - 1.0, reference + 1.0);
+        }
+        Assert.InRange(env.WaterDewTemperatureAtPressure!.Value, IapwsSaturationTemperature(yw * 5e5) - 1.0, IapwsSaturationTemperature(yw * 5e5) + 1.0);
+        // At pressure the gas is not ideal (it holds more water than y_w = p_sat/P). Reference: Bukacek's correlation of
+        // the water content of a sweet natural gas (GPSA Engineering Data Book, ±5 %), W = 47484·p_sat/P + B in
+        // lb/MMscf with log10 B = 6.69449 − 3083.87/(T + 459.6), T in °F: 47484 lb/MMscf is a mole fraction of one, so
+        // y_w = p_sat/P + B/47484. The dew point is the temperature where it equals the stream's water.
+        foreach (var target in new[] { 30e5, 70e5 })
+        {
+            var (t, p) = env.WaterDewTemperature.Zip(env.WaterDewPressure).MinBy(x => Math.Abs(Math.Log(x.Second / target)));
+            double Content(double tk) => IapwsSaturationPressure(tk) / p + Math.Pow(10, 6.69449 - 3083.87 / ((tk - 273.15) * 1.8 + 32 + 459.6)) / 47484;
+            double lo = 250, hi = 500;
+            for (var k = 0; k < 60; k++) { var m = 0.5 * (lo + hi); if (Content(m) < yw) lo = m; else hi = m; }
+            output.WriteLine($"{p / 1e5:0.0} bar: engine {t - 273.15:0.00} °C, Bukacek {lo - 273.15:0.00} °C, ideal {IapwsSaturationTemperature(yw * p) - 273.15:0.00} °C");
+            Assert.InRange(t, lo - 2.0, lo + 2.0);
+        }
+    }
+
+    /// <summary>IAPWS-IF97 saturation pressure of water (Pa) at <paramref name="t"/> (K), its equation (30).</summary>
+    private static double IapwsSaturationPressure(double t)
+    {
+        double[] n = [0, 0.11670521452767e4, -0.72421316703206e6, -0.17073846940092e2, 0.12020824702470e5, -0.32325550322333e7,
+                      0.14915108613530e2, -0.48232657361591e4, 0.40511340542057e6, -0.23855557567849, 0.65017534844798e3];
+        var th = t + n[9] / (t - n[10]);
+        var a = th * th + n[1] * th + n[2];
+        var b = n[3] * th * th + n[4] * th + n[5];
+        var c = n[6] * th * th + n[7] * th + n[8];
+        return Math.Pow(2 * c / (-b + Math.Sqrt(b * b - 4 * a * c)), 4) * 1e6;
+    }
+
+    [Fact]
+    public async Task AnAqueousStreamKeepsItsOwnEnvelope()
+    {
+        // Mostly water (water with a little methane): not a wet gas, so no water-free envelope is traced.
+        var x = new Dictionary<string, double> { ["Water"] = 0.9, ["Methane"] = 0.1 };
+        var env = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope", new PhaseEnvelopeRequest(Pr(x.Keys), x), Json.Options));
+        Assert.False(env.WaterFree);
+        Assert.Empty(env.WaterDewTemperature);
+    }
+
+    // ---- D119: inhibited water that freezes before hydrates form ----
+
+    [Theory]
+    [InlineData(0.02)]
+    [InlineData(0.20)]
+    public async Task InhibitedWaterFreezesAndBelowThatTheInhibitorDoesNotLowerHydrates(double w)
+    {
+        var fs = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane"] };
+        // Methane at 6 bar: hydrates form near −25 °C, from ice.
+        var env = await EngineFixture.Json<PhaseEnvelope>(await engine.Authed().PostAsJsonAsync("/phase-envelope",
+            new PhaseEnvelopeRequest(fs, new() { ["Methane"] = 1.0 }, Hydrates: true, Pressure: 6e5, Temperature: 311.15,
+                Inhibitor: HydrateInhibitors.Methanol, InhibitorWeightFraction: w), Json.Options));
+        var tf = env.InhibitedWaterFreezingTemperature!.Value;
+        output.WriteLine($"{w:P0} methanol: freezes at {tf - 273.15:0.00} °C; hydrate {env.HydrateTemperatureAtPressure - 273.15:0.00} °C, inhibited {env.InhibitedHydrateTemperatureAtPressure - 273.15:0.00} °C | " + string.Join(" | ", env.Warnings));
+        if (w < 0.05)
+        {
+            // Dilute limit, independent of the activity model: ΔT = K_f·m, water's cryoscopic constant 1.853 K·kg/mol.
+            var m = w * 1000 / 32.042 / (1 - w);
+            Assert.Equal(273.15 - 1.853 * m, tf, 0.15);
+        }
+        else
+        {
+            // CRC Handbook (Concentrative properties of aqueous solutions): 20 wt % methanol freezes near −15.0 °C.
+            // DWSIM's NRTL water activity (fitted to vapour–liquid data well above 0 °C) puts it 4.0 K warmer, at
+            // −11.0 °C; an ideal solution would give −13.0 °C. Warmer is the safe side: the app says the inhibitor stops
+            // working sooner than it does, and the warning says the measured value is colder.
+            Assert.InRange(tf - 273.15, -15.0, -10.5);
+        }
+        // The hydrate point is below the freezing point: the water there is ice, so the inhibitor changes nothing.
+        Assert.True(env.HydrateTemperatureAtPressure < tf);
+        Assert.Equal(env.HydrateTemperatureAtPressure!.Value, env.InhibitedHydrateTemperatureAtPressure!.Value, 0.01);
+        Assert.Contains(env.Warnings, x => x.Contains("freezes below") && x.Contains("leaves out freezing"));
     }
 }

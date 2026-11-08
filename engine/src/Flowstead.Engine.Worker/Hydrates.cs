@@ -122,6 +122,26 @@ public static class Hydrates
         return hydrate - (t < T0 ? Math.Max(solution, WaterSide(s, t, p)) : solution);
     }
 
+    /// <summary>
+    /// The temperature (K) below which inhibited free water freezes at pressure <paramref name="p"/>: where the
+    /// solution's chemical potential (pure liquid water's lowered by ln a_w) equals ice's, with the same ice and liquid
+    /// water properties as the hydrate balance (melting at 273.15 K, 6011 J/mol, ΔCp of the empty lattice integrated).
+    /// It is where <see cref="Imbalance"/> switches from the solution to ice. Null if the water does not freeze above 180 K.
+    /// </summary>
+    public static double? FreezingTemperature(Func<double, double, double> lnAw, double p)
+    {
+        // Positive while the solution is the stable water phase; structure-independent (the lattice terms cancel).
+        double D(double t) => LiquidWaterSide(SI, t, p) - lnAw(t, p) - WaterSide(SI, t, p);
+        double a = 180, b = T0 - 1e-6;
+        if (!(D(b) > 0) || D(a) > 0) return null;
+        for (var i = 0; i < 50 && b - a > 1e-3; i++)
+        {
+            var m = 0.5 * (a + b);
+            if (D(m) > 0) b = m; else a = m;
+        }
+        return 0.5 * (a + b);
+    }
+
     /// <summary>Δμ of water (empty lattice − ice or liquid) / RT at (T, P), unit water activity.</summary>
     private static double WaterSide(Structure s, double t, double p)
     {

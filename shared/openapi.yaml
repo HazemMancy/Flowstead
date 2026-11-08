@@ -182,7 +182,7 @@ paths:
                 pressure: { type: number, description: "The stream's pressure (Pa), for its hydrate formation temperature" }
       responses:
         "200":
-          description: Bubble and dew curves (K, Pa), with the critical point, cricondenbar and cricondentherm where found; qualityLines (quality, temperature, pressure); hydrateTemperature, hydratePressure, hydrateStructure; hydrateTemperatureAtPressure and hydrateStructureAtPressure.
+          description: Bubble and dew curves (K, Pa), with the critical point, cricondenbar and cricondentherm where found; qualityLines (quality, temperature, pressure); hydrateTemperature, hydratePressure, hydrateStructure; hydrateTemperatureAtPressure and hydrateStructureAtPressure. With water in a mostly non-aqueous stream (D118) waterFree is true, the envelope is the water-free fluid's, and waterDewTemperature, waterDewPressure and waterDewTemperatureAtPressure give the water dew line.
           content:
             application/json:
               schema:
