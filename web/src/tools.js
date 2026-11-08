@@ -171,7 +171,7 @@ export function initTools(app) {
     if (pts.error) { out.innerHTML = err(pts.error); return; }
     await app.ready();
     const answers = [];
-    const wantsSaturation = study.outputs.some((o) => /(bubble|dew)Point/.test(o.key));
+    const wantsSaturation = cs.outputs.some((o) => /(bubble|dew)Point/.test(o.key ?? ''));
     for (let i = 0; i < pts.points.length; i++) {
       out.innerHTML = busy(`Solving point ${i + 1} of ${pts.points.length}…`);
       try { answers.push({ result: (await engine.call('solve', { ...pts.points[i], saturationFor: wantsSaturation ? undefined : [], enthalpyBasis: app.enthalpyBasis?.() })).result }); } catch (e) { answers.push({ error: e.message }); }
