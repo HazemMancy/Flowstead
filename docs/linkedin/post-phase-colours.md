@@ -1,6 +1,6 @@
 # LinkedIn post: stream phase colours
 
-Image: `post-phase-colours-1200x1500.png` (source `src/post-phase-colours.html`). The colours are the app's own (dark theme) and the thresholds are `phaseColor()` in `Icons.kt`; it is a diagram, so no result numbers appear.
+Image: `post-phase-colours-1200x1500.png` (source `src/post-phase-colours.html`). The heater, separator, stream arrows and colours are the app's own: the web core's flowsheet canvas (the app's `Icons.kt`, copied unchanged) draws them (`src/render-phase-flowsheet.mjs`, dark theme), and the thresholds are `phaseColor()`. The streams take their colour from a vapour-fraction spec, as the app does before a solve; no result numbers appear.
 
 ```text
 Did you know? Flowstead colours every stream by its phase.

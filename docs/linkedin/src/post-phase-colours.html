@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- LinkedIn feed post image, 4:5 (1200x1500): "did you know" stream phase colours. The colours are the app's own (dark theme,
-     ui/theme/ValueColors.kt) and the thresholds are phaseColor() in Icons.kt; a diagram, so no result numbers appear.
+     ui/theme/ValueColors.kt) and the thresholds are phaseColor() in Icons.kt; the symbols and streams are the app's own, drawn by its canvas code (render-phase-flowsheet.mjs); no result numbers appear.
      Render: node src/render.js -->
 <html><head><meta charset="utf-8"><script src="mark.js"></script><style>
 @font-face{font-family:Inter;font-weight:700;src:url(../../../android/app/src/main/res/font/inter_bold.ttf)}
@@ -32,7 +32,7 @@ h1 span{color:#14D3CF}
 
 h1{top:205px;font-size:58px;letter-spacing:-1.4px}
 .lead{top:392px}
-.dia{position:absolute;left:0;top:560px}
+.dia{position:absolute;left:50px;top:600px}
 .leg{position:absolute;left:80px;top:1180px;width:1040px;display:grid;grid-template-columns:1fr 1fr;gap:14px 28px}
 .row{display:flex;align-items:center;gap:16px;padding:16px 20px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10)}
 .dot{width:34px;height:8px;border-radius:4px;flex:none}
@@ -44,29 +44,7 @@ h1{top:205px;font-size:58px;letter-spacing:-1.4px}
 <div><div class="name">Flow<span>stead</span></div><div class="sub">PROCESS ENGINEERING WORKBENCH</div></div></div>
 <h1>Did you know? Flowstead colours <span>every stream by its phase.</span></h1>
 <div class="lead">Vapour, liquid or two-phase, from the solved vapour fraction. On the flowsheet and on the printed PFD.</div>
-<svg class="dia" width="1200" height="600" viewBox="0 0 1200 600" fill="none" stroke-linecap="round" stroke-linejoin="round">
-<defs>
- <linearGradient id="st" x1="0" x2="1"><stop offset="0" stop-color="#7C8DA3"/><stop offset=".45" stop-color="#C5D1DE"/><stop offset="1" stop-color="#6F8097"/></linearGradient>
- <marker id="av" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#F5A524"/></marker>
- <marker id="al" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#22B8D6"/></marker>
- <marker id="at" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#A78BFA"/></marker>
- <marker id="ae" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#FF7A45"/></marker>
-</defs>
-<!-- separator -->
-<rect x="470" y="130" width="260" height="360" rx="130" fill="url(#st)" stroke="#0B1930" stroke-width="3"/>
-<path d="M486 330H714" stroke="#0B1930" stroke-opacity=".35" stroke-width="3" stroke-dasharray="10 8"/>
-<!-- streams -->
-<path d="M40 310H300H470" stroke="#A78BFA" stroke-width="9" marker-end="url(#at)"/>
-<path d="M600 130V40H1000" stroke="#F5A524" stroke-width="9" marker-end="url(#av)"/>
-<path d="M600 490V560H1000" stroke="#22B8D6" stroke-width="9" marker-end="url(#al)"/>
-<path d="M130 90H330" stroke="#FF7A45" stroke-width="9" stroke-dasharray="3 14" marker-end="url(#ae)"/>
-<!-- labels -->
-<g font-family="Inter" font-weight="700" font-size="30">
-<text x="40" y="285" fill="#A78BFA">Two-phase feed</text>
-<text x="640" y="95" fill="#F5A524">Vapour</text>
-<text x="640" y="530" fill="#22B8D6">Liquid</text>
-<text x="130" y="66" fill="#FF7A45" font-size="26">Energy stream</text></g>
-</svg>
+<img class="dia" src="phase-flowsheet.png" width="1100" height="430">
 <div class="leg"><div class="row"><div class="dot" style="background:#F5A524"></div><div><b>Vapour</b><span>vapour fraction 0.9999 or more</span></div></div><div class="row"><div class="dot" style="background:#22B8D6"></div><div><b>Liquid</b><span>vapour fraction 0.0001 or less</span></div></div><div class="row"><div class="dot" style="background:#A78BFA"></div><div><b>Two-phase</b><span>anything in between</span></div></div><div class="row"><div class="dot" style="background:#FF7A45"></div><div><b>Energy stream</b><span>heat or power duty</span></div></div></div>
 <div class="foot">Free &amp; open source (GPL-3.0) · Powered by DWSIM · github.com/HazemMancy/Flowstead</div>
 </div>
