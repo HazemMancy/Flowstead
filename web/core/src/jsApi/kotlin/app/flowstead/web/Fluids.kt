@@ -71,7 +71,13 @@ object Fluids {
         val ctx = UnitContext(f.atmosphericPressurePa)
         return buildJsonObject {
             putJsonArray("fields") {
-                fields.forEach { (t, hint) -> addJsonObject { put("key", t.first); put("label", t.second); put("unit", t.third.id); put("symbol", t.third.symbol); put("hint", hint) } }
+                fields.forEach { (t, hint) ->
+                    addJsonObject {
+                        put("key", t.first); put("label", t.second); put("unit", t.third.id); put("symbol", t.third.symbol); put("hint", hint)
+                        // Any unit of the quantity (critical pressures are absolute, so no gauge units): the form lets the user type in another.
+                        putJsonArray("units") { choices(t.third).forEach { u -> addJsonObject { put("id", u.id); put("symbol", u.symbol) } } }
+                    }
+                }
             }
             putJsonArray("hypotheticals") {
                 f.hypotheticals.forEach { h ->
@@ -87,6 +93,18 @@ object Fluids {
         }.toString()
     }
 
+    /** The units a field can be typed in: its quantity's units, without gauge pressures. Quantities with one unit offer none. */
+    private fun choices(unit: EngUnit): List<EngUnit> =
+        Units.forQuantity(unit.quantity).filter { it != Units.barg && it != Units.psig && it != Units.kPag }.takeIf { it.size > 1 } ?: emptyList()
+
+    /** A value re-expressed in another unit of the same quantity (the form's unit menus); {value} or {error}. */
+    fun convert(value: Double, fromId: String, toId: String, atmosphericPa: Double): String = try {
+        val from = Units.byId(fromId); val to = Units.byId(toId)
+        require(from.quantity == to.quantity) { "Not the same quantity" }
+        val ctx = UnitContext(atmosphericPa)
+        buildJsonObject { put("value", to.fromSi(from.toSi(value, ctx), ctx)) }.toString()
+    } catch (e: IllegalArgumentException) { err(e.message ?: "Cannot convert") }
+
     /** The hypothetical the page's form describes, in SI; the structure (SMILES, groups) of one of that name is kept. */
     private fun parse(f: Flowsheet, inputJson: String): Hypothetical {
         val o = FlowsheetJson.parseToJsonElement(inputJson).jsonObject
@@ -96,7 +114,10 @@ object Fluids {
             val text = (o[k] as? JsonPrimitive)?.content?.trim()?.replace(',', '.').orEmpty()
             if (text.isEmpty()) return null
             val x = text.toDoubleOrNull()?.takeIf { it.isFinite() } ?: throw EditRejected("Not a number: $text")
-            return fields.first { it.first.first == k }.first.third.toSi(x, ctx)
+            val default = fields.first { it.first.first == k }.first.third
+            // The unit the user picked for this field, if it is one of the field's own quantity.
+            val unit = (o["${k}_unit"] as? JsonPrimitive)?.content?.let { Units.byIdOrNull(it) }?.takeIf { it.quantity == default.quantity } ?: default
+            return unit.toSi(x, ctx)
         }
         val old = f.hypothetical(name)
         val h = Hypothetical(

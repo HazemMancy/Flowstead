@@ -116,7 +116,7 @@ public sealed partial class DwsimEngine
                 .Where(x => x.rank < int.MaxValue)
                 .OrderBy(x => x.rank).ThenBy(x => DbRank(x.c)).ThenBy(x => x.c.Name.Length).ThenBy(x => x.c.Name)
                 .Select(x => x.c);
-        return all.Take(limit).Select(c => new CompoundInfo(
+        return all.Skip(Math.Max(0, p.Offset)).Take(limit).Select(c => new CompoundInfo(
             c.Name, c.CAS_Number ?? "", c.Formula ?? "", c.Molar_Weight, c.Normal_Boiling_Point, c.CurrentDB ?? "")).ToList();
 
         static int Rank(ICompoundConstantProperties c, string q)
@@ -244,7 +244,7 @@ public sealed partial class DwsimEngine
         var results = new Dictionary<string, ObjectResult>();
         foreach (var o in model.Objects)
         {
-            if (objects.TryGetValue(o.Id, out var so)) results[o.Id] = Extract(o, so);
+            if (objects.TryGetValue(o.Id, out var so)) results[o.Id] = Extract(o, so, model.SaturationFor?.Contains(o.Id) ?? true, model.EnthalpyBasis == FormationBasis.Name);
             else if (o.Type == ObjectType.Set) results[o.Id] = SetSolver.Result(o, model);
         }
         AddTankResidenceTimes(model, results);
@@ -316,6 +316,7 @@ public sealed partial class DwsimEngine
     /// </summary>
     private static string StructureKey(Flowsheet model, WaterMode mode) => mode + JsonSerializer.Serialize(model with
     {
+        SaturationFor = null,
         Objects = model.Objects.Select(o => Reapplicable(o.Type)
             ? o with { X = 0, Y = 0, Specs = o.Specs.ToDictionary(p => p.Key, p => p.Value with { Si = 0 }), Composition = o.Composition.ToDictionary(p => p.Key, _ => 0.0) }
             : o with { X = 0, Y = 0 }).ToList(),
@@ -893,8 +894,13 @@ public sealed partial class DwsimEngine
 
         if (Has(SpecKeys.Temperature)) ms.SetTemperature(V(SpecKeys.Temperature));
         if (Has(SpecKeys.Pressure)) ms.SetPressure(V(SpecKeys.Pressure));
-        if (Has(SpecKeys.MassEnthalpy)) ms.SetMassEnthalpy(V(SpecKeys.MassEnthalpy) / 1000.0); // DWSIM kJ/kg
-        if (Has(SpecKeys.MassEntropy)) ms.SetMassEntropy(V(SpecKeys.MassEntropy) / 1000.0); // DWSIM kJ/kg·K
+        // Typed on HYSYS's basis (D119): back to DWSIM's reference for this composition before it is set.
+        var shift = model.EnthalpyBasis == FormationBasis.Name && (Has(SpecKeys.MassEnthalpy) || Has(SpecKeys.MassEntropy)) && FormationBasis.Applies(ms.PropertyPackage as PropertyPackage)
+            ? FormationBasis.Shift(FormationBasis.Of(ms), model.Compounds.Select((c, i) => new KeyValuePair<string, double>(c, o.Composition.GetValueOrDefault(c)))) : default;
+        if (Has(SpecKeys.MassEntropy) && model.EnthalpyBasis == FormationBasis.Name && FormationBasis.Applies(ms.PropertyPackage as PropertyPackage) && shift.Smass is null)
+            throw new ArgumentException($"{o.Tag}: an entropy specification needs a standard entropy for every compound; use temperature or enthalpy instead");
+        if (Has(SpecKeys.MassEnthalpy)) ms.SetMassEnthalpy((V(SpecKeys.MassEnthalpy) - shift.Hmass) / 1000.0); // DWSIM kJ/kg
+        if (Has(SpecKeys.MassEntropy)) ms.SetMassEntropy((V(SpecKeys.MassEntropy) - (shift.Smass ?? 0)) / 1000.0); // DWSIM kJ/kg·K
         if (Has(SpecKeys.VapourFraction)) ms.Phases[2].Properties.molarfraction = V(SpecKeys.VapourFraction);
 
         if (Has(SpecKeys.Pressure) && Has(SpecKeys.MassEntropy)) ms.SpecType = StreamSpec.Pressure_and_Entropy;
@@ -1233,12 +1239,14 @@ public sealed partial class DwsimEngine
     /// flowsheet is built once and each call only resets the stream's state and composition and recalculates it,
     /// read back the same way as a solve. Anything other than a lone material stream goes to <see cref="Solve"/>.
     /// </summary>
-    private Func<Flowsheet, SolveResult> StreamFlasher(bool saturationPoints = true, WaterMode? water = null)
+    private Func<Flowsheet, SolveResult> StreamFlasher(bool saturationPoints = true, WaterMode? water = null, bool honourBasis = false)
     {
         string? key = null;
         MaterialStream? ms = null;
         return model =>
         {
+            // The PVT laboratory and the blowdown take enthalpies from their own flashes and give them back: they stay on DWSIM's reference.
+            if (!honourBasis) model = model with { EnthalpyBasis = null };
             if (model.Objects is not [{ Type: ObjectType.MaterialStream } o] || model.Connections.Count > 0) return Solve(model);
             var k = JsonSerializer.Serialize(model with { Objects = [] }, Json.Options);
             try
@@ -1258,12 +1266,12 @@ public sealed partial class DwsimEngine
                 ms = null; // rebuild on the next call
                 return new SolveResult { Status = SolveStatus.Failed, Messages = [new SolverMessage(MessageLevel.Error, Plain(e), o.Id)] };
             }
-            var r = Extract(o, ms, saturationPoints);
+            var r = Extract(o, ms, saturationPoints, model.EnthalpyBasis == FormationBasis.Name);
             return new SolveResult { Status = r.Status == ObjectStatus.Solved ? SolveStatus.Converged : SolveStatus.Failed, Objects = new() { [o.Id] = r } };
         };
     }
 
-    private static ObjectResult Extract(SimObject o, ISimulationObject so, bool saturationPoints = true)
+    private static ObjectResult Extract(SimObject o, ISimulationObject so, bool saturationPoints = true, bool formation = false)
     {
         var error = so.ErrorMessage;
         if (!string.IsNullOrWhiteSpace(error))
@@ -1277,7 +1285,7 @@ public sealed partial class DwsimEngine
 
         return so switch
         {
-            MaterialStream ms => StreamResult(ms, saturationPoints),
+            MaterialStream ms => StreamResult(ms, saturationPoints, formation && FormationBasis.Applies(ms.PropertyPackage as PropertyPackage)),
             EnergyStream es => new ObjectResult
             {
                 Status = ObjectStatus.Solved,
@@ -1353,8 +1361,13 @@ public sealed partial class DwsimEngine
     private static readonly (int Index, string Key)[] PhaseIndices =
         [(0, "overall"), (2, "vapour"), (3, "liquid1"), (4, "liquid2")];
 
-    private static ObjectResult StreamResult(MaterialStream ms, bool saturationPoints = true)
+    private static ObjectResult StreamResult(MaterialStream ms, bool saturationPoints = true, bool formation = false)
     {
+        var basis = formation ? FormationBasis.Of(ms) : null;
+        // On HYSYS's basis (D119): the shift for a phase's composition, from the compounds' heats of formation and absolute entropies.
+        (double Hm, double Hmass, double? Sm, double? Smass) Shift(DWSIM.Interfaces.IPhase ph) => basis is null ? default
+            : FormationBasis.Shift(basis, ph.Compounds.Values.Where(c => c.MoleFraction.HasValue).Select(c => new KeyValuePair<string, double>(c.Name, c.MoleFraction!.Value)));
+        double? H(double? raw, double shift) => raw + shift;
         // An empty stream (a reactor's liquid outlet when everything leaves as vapour) has a temperature and pressure
         // but no composition or phase properties: DWSIM 9 filled those with zeros, DWSIM 10 with the other outlet's.
         if (ms.Phases[0].Properties.molarflow is { } flow && flow == 0)
@@ -1375,6 +1388,7 @@ public sealed partial class DwsimEngine
             var ph = ms.Phases[idx];
             var p = ph.Properties;
             var fraction = p.molarfraction;
+            var sh = Shift(ph);
             // Absent phases are left out entirely rather than reported as zeros.
             if (idx != 0 && (fraction is null || fraction <= 1e-12)) continue;
 
@@ -1387,10 +1401,10 @@ public sealed partial class DwsimEngine
                     ("molarFlow", p.molarflow),
                     ("massFlow", p.massflow),
                     ("volumeFlow", p.volumetric_flow),
-                    ("massEnthalpy", p.enthalpy * 1000.0),          // DWSIM kJ/kg
-                    ("molarEnthalpy", p.molar_enthalpy),            // DWSIM kJ/kmol = J/mol
+                    ("massEnthalpy", H(p.enthalpy * 1000.0, sh.Hmass)),          // DWSIM kJ/kg
+                    ("molarEnthalpy", H(p.molar_enthalpy, sh.Hm)),            // DWSIM kJ/kmol = J/mol
                     ("stdLiquidVolumeFlow", ms.PropertyPackage is PropertyPackage spp ? StandardLiquid.VolumeFlow(ph, spp) : null),
-                    ("massEntropy", p.entropy * 1000.0),            // DWSIM kJ/kg·K
+                    ("massEntropy", basis is null ? p.entropy * 1000.0 : sh.Smass is { } ds ? p.entropy * 1000.0 + ds : null), // DWSIM kJ/kg·K; none on HYSYS's basis if a compound has no standard entropy
                     ("massHeatCapacity", p.heatCapacityCp * 1000.0), // DWSIM kJ/kg·K
                     ("density", p.density),
                     ("molecularWeight", p.molecularWeight),
@@ -1430,7 +1444,7 @@ public sealed partial class DwsimEngine
                 ("vapourFraction", ms.Phases[2].Properties.molarfraction ?? 0.0),
                 ("molarFlow", overall.molarflow),
                 ("massFlow", overall.massflow),
-                ("massEnthalpy", overall.enthalpy * 1000.0), // DWSIM kJ/kg
+                ("massEnthalpy", H(overall.enthalpy * 1000.0, Shift(ms.Phases[0]).Hmass)), // DWSIM kJ/kg
                 // HYSYS reports these too: bubble point (VF 0) and dew point (VF 1) at the stream's P, and the
                 // pressures of both at its T. Each is DWSIM's own P-VF / T-VF flash; one that fails is left out.
                 ("bubblePointTemperature", bubbleT),

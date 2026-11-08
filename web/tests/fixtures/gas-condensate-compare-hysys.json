@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "propertyPackage": "Peng-Robinson (PR)",
+  "compounds": [
+    "Methane",
+    "Ethane",
+    "Propane",
+    "Isobutane",
+    "N-butane",
+    "Isopentane",
+    "N-pentane",
+    "C6+",
+    "Water"
+  ],
+  "atmosphericPressurePa": 101325,
+  "objects": [
+    {
+      "id": "5a17cb00-e5cf-4110-b056-c353ea0d6c80",
+      "tag": "1",
+      "type": "material_stream",
+      "x": -216,
+      "y": -24,
+      "specs": {
+        "temperature": {
+          "si": 308.15,
+          "unit": "C"
+        },
+        "pressure": {
+          "si": 1101325,
+          "unit": "barg"
+        },
+        "molarFlow": {
+          "si": 277.77777777777777,
+          "unit": "kgmol/h"
+        }
+      },
+      "composition": {
+        "Methane": 0.85,
+        "Ethane": 0.03,
+        "Propane": 0.02,
+        "Isobutane": 0.02,
+        "N-butane": 0.02,
+        "Isopentane": 0.02,
+        "N-pentane": 0.01,
+        "C6+": 0.01,
+        "Water": 0.02
+      },
+      "refs": {}
+    },
+    {
+      "id": "7b4a96e6-e31f-4849-9a87-19dab73e7ac2",
+      "tag": "V-100",
+      "type": "separator",
+      "x": -120,
+      "y": -12,
+      "specs": {},
+      "composition": {},
+      "refs": {}
+    },
+    {
+      "id": "14a289a8-36d1-4a04-a2fb-02411848163a",
+      "tag": "2",
+      "type": "material_stream",
+      "x": -24,
+      "y": -72,
+      "specs": {},
+      "composition": {},
+      "refs": {}
+    },
+    {
+      "id": "17e61c24-dfa1-4a6c-94e0-2203354f635d",
+      "tag": "3",
+      "type": "material_stream",
+      "x": -24,
+      "y": 72,
+      "specs": {},
+      "composition": {},
+      "refs": {}
+    },
+    {
+      "id": "bf4f5c15-9867-438d-9d6a-4de19d0fb538",
+      "tag": "VLV-100",
+      "type": "valve",
+      "x": 84,
+      "y": -79.14,
+      "specs": {
+        "pressureDrop": {
+          "si": 300000,
+          "unit": "dbar"
+        }
+      },
+      "composition": {},
+      "refs": {}
+    },
+    {
+      "id": "6fca8a32-3aa8-42f7-b4e3-91060aa756df",
+      "tag": "4",
+      "type": "material_stream",
+      "x": 192,
+      "y": -72,
+      "specs": {},
+      "composition": {},
+      "refs": {}
+    },
+    {
+      "id": "220353a4-86f3-4f9d-9703-67414bcb814a",
+      "tag": "PIPE-100",
+      "type": "pipe_segment",
+      "x": 312,
+      "y": -72,
+      "specs": {
+        "length": {
+          "si": 2500,
+          "unit": "m"
+        },
+        "innerDiameter": {
+          "si": 0.254508,
+          "unit": "in"
+        },
+        "outerDiameter": {
+          "si": 0.27305,
+          "unit": "in"
+        }
+      },
+      "composition": {},
+      "refs": {
+        "nps": "10",
+        "schedule": "40 / STD / 40S"
+      }
+    },
+    {
+      "id": "baf7e6ba-3e32-4353-8d2b-4647054222e9",
+      "tag": "5",
+      "type": "material_stream",
+      "x": 432,
+      "y": -72,
+      "specs": {},
+      "composition": {},
+      "refs": {}
+    }
+  ],
+  "connections": [
+    {
+      "fromObject": "5a17cb00-e5cf-4110-b056-c353ea0d6c80",
+      "fromPort": 0,
+      "toObject": "7b4a96e6-e31f-4849-9a87-19dab73e7ac2",
+      "toPort": 0
+    },
+    {
+      "fromObject": "7b4a96e6-e31f-4849-9a87-19dab73e7ac2",
+      "fromPort": 0,
+      "toObject": "14a289a8-36d1-4a04-a2fb-02411848163a",
+      "toPort": 0
+    },
+    {
+      "fromObject": "7b4a96e6-e31f-4849-9a87-19dab73e7ac2",
+      "fromPort": 1,
+      "toObject": "17e61c24-dfa1-4a6c-94e0-2203354f635d",
+      "toPort": 0
+    },
+    {
+      "fromObject": "14a289a8-36d1-4a04-a2fb-02411848163a",
+      "fromPort": 0,
+      "toObject": "bf4f5c15-9867-438d-9d6a-4de19d0fb538",
+      "toPort": 0
+    },
+    {
+      "fromObject": "bf4f5c15-9867-438d-9d6a-4de19d0fb538",
+      "fromPort": 0,
+      "toObject": "6fca8a32-3aa8-42f7-b4e3-91060aa756df",
+      "toPort": 0
+    },
+    {
+      "fromObject": "6fca8a32-3aa8-42f7-b4e3-91060aa756df",
+      "fromPort": 0,
+      "toObject": "220353a4-86f3-4f9d-9703-67414bcb814a",
+      "toPort": 0
+    },
+    {
+      "fromObject": "220353a4-86f3-4f9d-9703-67414bcb814a",
+      "fromPort": 0,
+      "toObject": "baf7e6ba-3e32-4353-8d2b-4647054222e9",
+      "toPort": 0
+    }
+  ],
+  "hypotheticals": [
+    {
+      "name": "C6+",
+      "normalBoilingPoint": 373.15,
+      "specificGravity": 0.75
+    }
+  ]
+}

@@ -43,6 +43,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 
 @JsExport
 object FlowsteadCore {
@@ -161,6 +162,61 @@ object FlowsteadCore {
 
     /** SHA-256 of the solved part of the flowsheet: the same as the app computes (CanonicalJson.kt). */
     fun modelHash(flowsheetJson: String): String = fs(flowsheetJson).modelHash()
+
+    // ---------- the user's unit set (D121) ----------
+
+    private val unitQuantities = listOf(
+        Quantity.Temperature to "Temperature", Quantity.TemperatureDifference to "Temperature difference", Quantity.Pressure to "Pressure",
+        Quantity.PressureDifference to "Pressure difference", Quantity.MolarFlow to "Molar flow", Quantity.MassFlow to "Mass flow",
+        Quantity.VolumeFlow to "Volume flow", Quantity.Power to "Power and duty", Quantity.MassEnthalpy to "Mass enthalpy",
+        Quantity.MolarEnthalpy to "Molar enthalpy", Quantity.MassEntropy to "Mass entropy", Quantity.MassHeatCapacity to "Heat capacity",
+        Quantity.Density to "Density", Quantity.Viscosity to "Viscosity", Quantity.Length to "Length", Quantity.Volume to "Volume",
+        Quantity.Time to "Time", Quantity.Velocity to "Velocity",
+    )
+
+    private fun setJson(set: UnitSet) = buildJsonObject {
+        put("name", set.name)
+        putJsonObject("units") { unitQuantities.forEach { (q, _) -> put(q.name, set.unitFor(q).id) } }
+    }
+
+    /** The unit set in use, the presets and every quantity with its units: {current, presets, quantities: [{id, label, units: [{id, symbol}]}]}. */
+    fun unitSetOptions(): String = buildJsonObject {
+        put("current", setJson(displayUnits))
+        putJsonArray("presets") { listOf(WEB_DEFAULT_UNITS, UnitSet.SI.copy(name = "SI (°C, kPa)"), UnitSet.FIELD).forEach { add(setJson(it)) } }
+        putJsonArray("quantities") {
+            unitQuantities.forEach { (q, label) ->
+                add(buildJsonObject {
+                    put("id", q.name); put("label", label)
+                    putJsonArray("units") { Units.forQuantity(q).forEach { u -> add(buildJsonObject { put("id", u.id); put("symbol", u.symbol.ifEmpty { u.id }) }) } }
+                })
+            }
+        }
+    }.toString()
+
+    /** Uses the units of [json] ({name?, units: {Quantity: unitId}}); a quantity not listed keeps the web default. Unknown ones are ignored. */
+    fun setUnitSet(json: String) {
+        val o = FlowsheetJson.parseToJsonElement(json).jsonObject
+        val chosen = (o["units"] as? JsonObject).orEmpty().mapNotNull { (k, v) ->
+            val q = unitQuantities.firstOrNull { it.first.name == k }?.first ?: return@mapNotNull null
+            val u = Units.byIdOrNull((v as? JsonPrimitive)?.content ?: return@mapNotNull null)?.takeIf { it.quantity == q } ?: return@mapNotNull null
+            q to u
+        }
+        var set = WEB_DEFAULT_UNITS
+        chosen.forEach { (q, u) -> set = set.with(q, u) }
+        val name = (o["name"] as? JsonPrimitive)?.content
+        displayUnits = if (name != null && name != UnitSet.CUSTOM) set.copy(name = name) else set
+    }
+
+    /** Every typed input shown in the unit set's unit for its quantity: the same physical value, written in the units now chosen. */
+    fun restateUnits(flowsheetJson: String): String {
+        val f = fs(flowsheetJson)
+        val wanted = unitQuantities.map { it.first }.toSet()
+        fun restate(sp: app.flowstead.core.model.Spec): app.flowstead.core.model.Spec {
+            val q = Units.byIdOrNull(sp.unit)?.quantity?.takeIf { it in wanted } ?: return sp
+            return sp.copy(unit = displayUnits.unitFor(q).id)
+        }
+        return out(f.copy(objects = f.objects.map { o -> o.copy(specs = o.specs.mapValues { restate(it.value) }) }))
+    }
 
     /** Hold (false) or Active (true) solver, as HYSYS's solver buttons (the app's Flowsheet.solverActive); saved with the flowsheet, not part of the solved model. */
     fun solverActive(flowsheetJson: String): Boolean = fs(flowsheetJson).solverActive

@@ -72,7 +72,7 @@ public sealed partial class DwsimEngine
         if (!(req.Temperature > 0) || !(req.Pressure > 0)) throw new InvalidDataException("Give the temperature and pressure.");
         var n = (int)Math.Round(1 / req.Step);
         var fluid = Fluid(req.Flowsheet) with { Compounds = req.Compounds, Hypotheticals = req.Flowsheet.Hypotheticals.Where(h => req.Compounds.Contains(h.Name)).ToList() };
-        var flash = StreamFlasher(saturationPoints: false, water: WaterMode.RigorousVlle);
+        var flash = StreamFlasher(saturationPoints: false, water: WaterMode.RigorousVlle, honourBasis: true);
         var points = new List<TernaryPoint>();
         var failed = 0;
         for (var i = 0; i <= n; i++)
@@ -155,7 +155,7 @@ public sealed partial class DwsimEngine
         if (req.Points is < 2 or > 100) throw new InvalidDataException("Points must be from 2 to 100.");
         if (req.Variable is not (SweepVariables.Temperature or SweepVariables.Pressure)) throw new InvalidDataException($"Unknown variable '{req.Variable}'.");
         if (!(req.From > 0) || !(req.To > 0) || !(req.Fixed > 0)) throw new InvalidDataException("Temperatures and pressures must be positive (K, Pa).");
-        var flash = StreamFlasher(saturationPoints: false);
+        var flash = StreamFlasher(saturationPoints: false, honourBasis: true);
         var values = Enumerable.Range(0, req.Points).Select(i => req.From + (req.To - req.From) * i / (req.Points - 1)).ToList();
         var results = new List<ObjectResult?>();
         var fluid = Fluid(req.Flowsheet);
