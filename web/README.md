@@ -35,6 +35,15 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.6**
+- **Hold / Active** next to Solve, as in the Android app: Hold solves when you press Solve; Active solves a moment after
+  each change. The mode is saved with the case.
+- Streams: **Duplicate** (all a stream's data; from a calculated stream, a new feed with its solved conditions and
+  composition) and **Copy from…** (tick conditions, flow or composition from another stream into a feed).
+- **Show table** now lets you tick any properties for the table on the flowsheet (All, None, update, remove).
+- A worksheet's title, close button, tag and tabs stay in view while you scroll it; every window keeps its title bar.
+- The site's header and footer are a darker frame around the flowsheet, so a stray tap near the edge doesn't leave it.
+
 **Web 1.5.1**
 - Phase envelope: when DWSIM traces the bubble and dew curves as two pieces that never meet (some rich gases and
   condensates), the envelope says so and shows no critical point, cricondenbar or cricondentherm, instead of

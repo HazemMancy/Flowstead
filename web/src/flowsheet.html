@@ -24,7 +24,7 @@
 </head>
 <body class="fs-page">
 <a href="#canvas" class="skip-link">Skip to the flowsheet</a>
-<header>
+<header class="fs-chrome" aria-label="Site">
   <div class="wrap nav">
     <a href="https://hazemmancy.github.io/" class="logo" aria-label="Hazem ElMancy — portfolio home"><b>H</b>E</a>
     <nav class="nav-links" aria-label="Main">
@@ -61,6 +61,7 @@
       <button type="button" class="btn btn-sm" id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
       <button type="button" class="btn btn-sm" id="fitBtn" title="Fit the flowsheet in view">Fit</button>
     </span>
+    <button type="button" class="btn btn-sm mode" id="modeBtn" aria-pressed="false" title="Hold: nothing solves until you press Solve. Active: the flowsheet solves a moment after each change."><span class="dot" aria-hidden="true"></span><span id="modeText">Hold</span></button>
     <button type="button" class="btn btn-sm btn-primary" id="solveBtn">Solve</button>
     <span class="fs-status" id="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="statusText">Loading…</span></span>
   </div>
@@ -78,24 +79,28 @@
         <p><b>An empty flowsheet.</b> Add a stream or a unit from the palette, or open an example.</p>
       </div>
       <section class="fs-inspector card" id="inspector" hidden aria-labelledby="inspTitle">
-        <div class="fs-insp-head">
-          <h2 id="inspTitle"><span id="inspType"></span></h2>
-          <button type="button" class="icon-btn" id="inspClose" aria-label="Close the worksheet">✕</button>
-        </div>
-        <div class="fs-tagrow">
-          <label for="inspTag">Tag</label>
-          <input type="text" id="inspTag" autocomplete="off" spellcheck="false" />
+        <div class="fs-insp-top">
+          <div class="fs-insp-head">
+            <h2 id="inspTitle"><span id="inspType"></span></h2>
+            <button type="button" class="icon-btn" id="inspClose" aria-label="Close the worksheet">✕</button>
+          </div>
+          <div class="fs-tagrow">
+            <label for="inspTag">Tag</label>
+            <input type="text" id="inspTag" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="fs-tabs" role="tablist" aria-label="Worksheet">
+            <button type="button" role="tab" id="tabDesign" aria-controls="inspForm" aria-selected="true">Design</button>
+            <button type="button" role="tab" id="tabResults" aria-controls="inspResults" aria-selected="false">Worksheet</button>
+            <button type="button" role="tab" id="tabAnalysis" aria-controls="inspAnalysis" aria-selected="false" hidden>Analysis</button>
+          </div>
         </div>
         <p class="fs-desc" id="inspDesc"></p>
-        <div class="fs-tabs" role="tablist" aria-label="Worksheet">
-          <button type="button" role="tab" id="tabDesign" aria-controls="inspForm" aria-selected="true">Design</button>
-          <button type="button" role="tab" id="tabResults" aria-controls="inspResults" aria-selected="false">Worksheet</button>
-          <button type="button" role="tab" id="tabAnalysis" aria-controls="inspAnalysis" aria-selected="false" hidden>Analysis</button>
-        </div>
         <form id="inspForm" class="fs-form" role="tabpanel" aria-labelledby="tabDesign" novalidate></form>
         <div id="inspResults" role="tabpanel" aria-labelledby="tabResults" hidden></div>
         <div id="inspAnalysis" class="fs-form" role="tabpanel" aria-labelledby="tabAnalysis" hidden></div>
         <div class="actions">
+          <button type="button" class="btn btn-sm" id="copyBtn" hidden title="Take conditions, flow or composition from another stream">Copy from…</button>
+          <button type="button" class="btn btn-sm" id="dupBtn" hidden>Duplicate</button>
           <button type="button" class="btn btn-sm" id="tableBtn">Show table</button>
           <button type="button" class="btn btn-sm" id="deleteBtn">Delete</button>
         </div>
@@ -121,6 +126,24 @@
     <ul class="search-results" id="compResults" aria-label="Matching components"></ul>
     <div id="hypos" class="fs-form"></div>
     <div id="blackOils" class="fs-form"></div>
+  </dialog>
+
+  <dialog class="fs-dialog card" id="tableDlg" aria-labelledby="tableTitle">
+    <div class="fs-insp-head"><h2 id="tableTitle">Table on the flowsheet</h2><button type="button" class="icon-btn" id="tableClose" aria-label="Close">✕</button></div>
+    <p class="fs-desc">Tick what to show. Values come from the last solve, in your units. Drag the table on the flowsheet to place it; it prints on the PFD.</p>
+    <div class="fs-actions"><button type="button" class="btn btn-sm" id="tableAll">All</button><button type="button" class="btn btn-sm" id="tableNone">None</button><button type="button" class="btn btn-sm" id="tableDefault">Conditions and flows</button></div>
+    <div class="fs-checks" id="tableKeys"></div>
+    <div class="actions"><button type="button" class="btn btn-sm btn-primary" id="tableApply">Show table</button><button type="button" class="btn btn-sm" id="tableRemove">Remove table</button><button type="button" class="btn btn-sm" id="tableCancel">Cancel</button></div>
+  </dialog>
+
+  <dialog class="fs-dialog card" id="copyDlg" aria-labelledby="copyTitle">
+    <div class="fs-insp-head"><h2 id="copyTitle">Copy into a stream</h2><button type="button" class="icon-btn" id="copyClose" aria-label="Close">✕</button></div>
+    <h3>From</h3>
+    <div class="fs-checks" id="copySources" role="radiogroup" aria-label="Copy from"></div>
+    <h3>Take</h3>
+    <div class="fs-checks" id="copyItems"></div>
+    <p class="fs-note">Copied conditions, flow and composition replace this stream's own.</p>
+    <div class="actions"><button type="button" class="btn btn-sm btn-primary" id="copyApply" disabled>Copy</button><button type="button" class="btn btn-sm" id="copyCancel">Cancel</button></div>
   </dialog>
 
   <dialog class="fs-dialog fs-tools card" id="toolsDlg" aria-labelledby="toolsTitle">
@@ -161,7 +184,7 @@
   <div class="sr-only" aria-live="polite" id="announce"></div>
 </main>
 
-<footer>
+<footer class="fs-chrome">
   <div class="wrap">
     <span>Flowstead · created by <a href="https://hazemmancy.github.io/">Hazem ElMancy</a> · <a href="https://github.com/HazemMancy/Flowstead">source (GPL-3.0)</a> · everything you draw stays in this browser</span>
     <span>Powered by <a href="https://dwsim.org/">DWSIM</a> (GPL-3.0) · not affiliated with the DWSIM project</span>

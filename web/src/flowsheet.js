@@ -55,6 +55,7 @@ function commit(next, message) {
   view.setFlowsheet(next);
   persist();
   refresh();
+  queueSolve();
   if (message) announce(message);
 }
 /** Applies what a FlowsheetView edit returned: {flowsheet}, {error} or {}. */
@@ -73,7 +74,7 @@ function step(from, to) {
   to.push(project.flowsheet);
   project.flowsheet = from.pop();
   view.setFlowsheet(project.flowsheet);
-  persist(); refresh();
+  persist(); refresh(); queueSolve();
 }
 
 // ---------- canvas ----------
@@ -285,8 +286,16 @@ function renderInspector() {
   $('inspType').textContent = `${form.typeLabel}`;
   if (document.activeElement !== $('inspTag')) $('inspTag').value = o.tag;
   $('inspDesc').textContent = view.describe(id);
-  $('tableBtn').textContent = view.hasTable(id) ? 'Hide table' : 'Show table';
   const isStream = o.type === 'material_stream';
+  $('tableBtn').textContent = view.hasTable(id) ? 'Edit table' : 'Show table';
+  $('tableBtn').hidden = !JSON.parse(view.tableOptions(id)).keys.length;
+  $('copyBtn').hidden = !isStream || !JSON.parse(view.copySources(id)).length;
+  $('dupBtn').hidden = !isStream;
+  if (isStream) {
+    const feed = view.isFeed(id);
+    $('dupBtn').textContent = feed ? 'Duplicate' : 'Duplicate as a feed';
+    $('dupBtn').title = feed ? 'A new feed stream with all this stream’s data' : 'A new feed stream with this stream’s solved temperature, pressure, flow and composition';
+  }
   if (!isStream && ui.tab === 'analysis') ui.tab = 'design';
   $('tabAnalysis').hidden = !isStream;
   $('inspector').classList.toggle('wide', ui.tab === 'analysis');
@@ -474,7 +483,75 @@ $('inspTag').addEventListener('change', () => {
   tryEdit(() => core.rename(project.flowsheet, id, $('inspTag').value.trim()), 'Renamed');
 });
 $('deleteBtn').addEventListener('click', removeSelected);
-$('tableBtn').addEventListener('click', () => { const id = view.selectedId; if (id) applyEdit(view.toggleTable(id)); });
+
+// ---------- the table on the flowsheet (the app's PropertyTableSheet): tick any property ----------
+let tableFor = null;
+$('tableBtn').addEventListener('click', () => {
+  const id = view.selectedId; if (!id) return;
+  tableFor = id;
+  const t = JSON.parse(view.tableOptions(id));
+  $('tableTitle').textContent = `Table on the flowsheet · ${t.tag}`;
+  $('tableKeys').innerHTML = t.keys.map((k) => `<label><input type="checkbox" data-key="${esc(k.key)}"${k.on ? ' checked' : ''} />${esc(k.label)}</label>`).join('');
+  $('tableApply').textContent = t.shown ? 'Update table' : 'Show table';
+  $('tableRemove').hidden = !t.shown;
+  syncTableApply();
+  $('tableDlg').showModal();
+});
+const tableBoxes = () => [...$('tableKeys').querySelectorAll('input')];
+const syncTableApply = () => { $('tableApply').disabled = !tableBoxes().some((b) => b.checked); };
+$('tableKeys').addEventListener('change', syncTableApply);
+$('tableAll').addEventListener('click', () => { tableBoxes().forEach((b) => { b.checked = true; }); syncTableApply(); });
+$('tableNone').addEventListener('click', () => { tableBoxes().forEach((b) => { b.checked = false; }); syncTableApply(); });
+$('tableDefault').addEventListener('click', () => {
+  const d = new Set(['temperature', 'pressure', 'vapourFraction', 'molarFlow', 'massFlow']);
+  tableBoxes().forEach((b) => { b.checked = d.has(b.dataset.key); }); syncTableApply();
+});
+$('tableApply').addEventListener('click', () => {
+  const keys = tableBoxes().filter((b) => b.checked).map((b) => b.dataset.key);
+  $('tableDlg').close();
+  if (tableFor) applyEdit(view.setTable(tableFor, JSON.stringify(keys)), 'Table updated');
+});
+$('tableRemove').addEventListener('click', () => { $('tableDlg').close(); if (tableFor) applyEdit(view.setTable(tableFor, '[]'), 'Table removed'); });
+for (const b of ['tableCancel', 'tableClose']) $(b).addEventListener('click', () => $('tableDlg').close());
+
+// ---------- copy a stream's data and define from another stream (the app's StreamCopy) ----------
+let copyTo = null, copyFrom = null;
+$('copyBtn').addEventListener('click', () => {
+  const id = view.selectedId; if (!id) return;
+  copyTo = id; copyFrom = null;
+  const tag = objects().find((x) => x.id === id)?.tag;
+  $('copyTitle').textContent = `Copy into ${tag}`;
+  $('copySources').innerHTML = JSON.parse(view.copySources(id)).map((s) =>
+    `<label><input type="radio" name="copySrc" value="${esc(s.id)}" />${esc(s.tag)}<small>${s.feed ? 'feed' : 'calculated'}</small></label>`).join('');
+  renderCopyItems();
+  $('copyDlg').showModal();
+});
+function renderCopyItems() {
+  const items = copyFrom ? JSON.parse(view.copyItems(copyFrom)) : [];
+  $('copyItems').innerHTML = !copyFrom ? '<p class="fs-note">Choose a stream above.</p>'
+    : items.length ? items.map((it) => `<label><input type="checkbox" data-key="${esc(it.key)}" checked />${esc(it.label)}<small>${esc(it.value)}</small></label>`).join('')
+    : '<p class="fs-note warn">Nothing to copy: solve first, so the calculated stream has current results.</p>';
+  syncCopyApply();
+}
+const copyBoxes = () => [...$('copyItems').querySelectorAll('input')];
+const syncCopyApply = () => { $('copyApply').disabled = !copyBoxes().some((b) => b.checked); };
+$('copySources').addEventListener('change', (e) => { copyFrom = e.target.value; renderCopyItems(); });
+$('copyItems').addEventListener('change', syncCopyApply);
+$('copyApply').addEventListener('click', () => {
+  const keys = copyBoxes().filter((b) => b.checked).map((b) => b.dataset.key);
+  $('copyDlg').close();
+  const from = objects().find((x) => x.id === copyFrom)?.tag;
+  if (!applyEdit(view.copyFrom(copyTo, copyFrom, JSON.stringify(keys)), `Copied from ${from}`)) toast('Nothing changed: the stream already has those values.');
+  renderInspectorForce();
+});
+for (const b of ['copyCancel', 'copyClose']) $(b).addEventListener('click', () => $('copyDlg').close());
+$('dupBtn').addEventListener('click', () => {
+  const id = view.selectedId; if (!id) return;
+  const r = JSON.parse(view.duplicate(id));
+  if (r.error) return toast(r.error);
+  commit(JSON.stringify(r.flowsheet), 'Duplicated the stream');
+  select(r.id);
+});
 function removeSelected() {
   const id = view.selectedId; if (!id) return;
   const tag = objects().find((x) => x.id === id)?.tag;
@@ -490,6 +567,7 @@ function renderObjectList() {
 $('objects').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (b) { select(b.dataset.id); canvas.focus(); } });
 
 function refresh() {
+  syncMode();
   $('empty').hidden = objects().length > 0;
   $('undoBtn').disabled = !undo.length; $('redoBtn').disabled = !redo.length;
   renderInspector(); renderObjectList(); draw();
@@ -504,7 +582,8 @@ function replace(name, flowsheet) {
   applyProject(); persist();
   view.fit(cssW, cssH); draw();
 }
-$('newBtn').addEventListener('click', () => replace('Untitled', core.newFlowsheet(PACKAGE)));
+// A new case keeps the solver mode you chose (Hold or Active).
+$('newBtn').addEventListener('click', () => replace('Untitled', core.setSolverActive(core.newFlowsheet(PACKAGE), solverActive())));
 $('saveBtn').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(JSON.parse(project.flowsheet), null, 2)], { type: 'application/json' });
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${project.name.replace(/[\\/:*?"<>|]/g, '_') || 'flowsheet'}.json` });
@@ -618,7 +697,7 @@ let engineState = 'loading', busy = false;
 const engine = startEngine((s) => {
   if (s.type === 'status') setStatus('loading', s.total ? `Engine ${Math.round((100 * s.loaded) / Math.max(s.total, 1))} %` : s.text);
   else if (s.type === 'ready') {
-    engineState = 'ready'; setStatus('ready', `DWSIM ${s.dwsimVersion} ready`);
+    engineState = 'ready'; setStatus('ready', `DWSIM ${s.dwsimVersion} ready`); queueSolve(0);
     engine.call('propertyPackages', null).then(({ result }) => { packages = result; if ($('basisDlg').open) renderBasis(); }).catch(() => {});
   }
   else if (s.type === 'failed') { engineState = 'failed'; setStatus('failed', 'Engine failed to start'); toast(s.error); }
@@ -630,11 +709,47 @@ function setStatus(kind, text) {
   $('status').className = `fs-status ${kind}`;
   $('statusText').textContent = text;
 }
-$('solveBtn').addEventListener('click', async () => {
+// Hold or Active, as the app (HYSYS's solver buttons): Hold solves when asked; Active solves a moment after each change
+// that alters the model. The mode is saved with the flowsheet.
+const solverActive = () => core.solverActive(project.flowsheet);
+function syncMode() {
+  const on = solverActive();
+  $('modeBtn').setAttribute('aria-pressed', String(on));
+  $('modeBtn').setAttribute('aria-label', on ? 'Solver active: solves after each change. Press to hold.' : 'Solver on hold: solves when you press Solve. Press to make it active.');
+  $('modeText').textContent = on ? 'Active' : 'Hold';
+}
+$('modeBtn').addEventListener('click', () => {
+  // Not an edit to undo, as in the app: the mode is a setting of the case.
+  project.flowsheet = core.setSolverActive(project.flowsheet, !solverActive());
+  view.setFlowsheet(project.flowsheet);
+  persist(); refresh();
+  if (solverActive()) { announce('Solver active: the flowsheet solves after each change.'); queueSolve(0, true); }
+  else { clearTimeout(autoTimer); announce('Solver on hold: press Solve to calculate.'); setStatus('ready', 'On hold · press Solve'); }
+});
+let autoTimer = 0, lastTried = '';
+function queueSolve(delay = 800, force = false) {
+  clearTimeout(autoTimer);
+  if (!solverActive()) return;
+  const hash = core.modelHash(project.flowsheet);
+  // Only a change to the solved model needs a new solve (moving a table or switching the mode does not).
+  if (!force && (project.solve?.modelHash === hash || lastTried === hash)) return;
+  autoTimer = setTimeout(() => solve(true), delay);
+}
+$('solveBtn').addEventListener('click', () => solve(false));
+async function solve(auto) {
+  if (engineState !== 'ready') return;
+  if (busy) return;
   const prep = JSON.parse(core.prepareSolve(project.flowsheet));
-  if (prep.blocking.length) return showSolve('error', [`Fix ${prep.blocking.length} issue(s) first:`, ...prep.blocking]);
-  if (!prep.anyReady) return showSolve('warning', [`Nothing is ready to solve yet: ${prep.problems[0] ?? 'complete a feed stream'}`]);
-  busy = true; $('solveBtn').disabled = true; setStatus('loading', 'Solving…');
+  lastTried = prep.modelHash;
+  if (prep.blocking.length) {
+    if (auto) return setStatus('ready', `Active · ${prep.blocking.length} thing(s) to fix before solving`);
+    return showSolve('error', [`Fix ${prep.blocking.length} issue(s) first:`, ...prep.blocking]);
+  }
+  if (!prep.anyReady) {
+    if (auto) return setStatus('ready', 'Active · waiting for a complete feed stream');
+    return showSolve('warning', [`Nothing is ready to solve yet: ${prep.problems[0] ?? 'complete a feed stream'}`]);
+  }
+  busy = true; $('solveBtn').disabled = true; setStatus('loading', auto ? 'Solving (active)…' : 'Solving…');
   try {
     const { result, ms } = await engine.call('solve', prep.solvable);
     project.solve = { result, modelHash: prep.modelHash, at: Date.now() };
@@ -643,14 +758,20 @@ $('solveBtn').addEventListener('click', async () => {
     const left = Object.keys(prep.notReady).length;
     const msgs = JSON.parse(view.messages(null));
     const head = `${result.status === 'converged' ? 'Converged' : `Status: ${result.status}`} in ${(ms / 1000).toFixed(1)} s${left ? ` · ${left} not ready` : ''}`;
-    showSolve(result.status === 'converged' ? 'info' : 'warning', [head,
-      ...Object.entries(prep.notReady).map(([id, why]) => `${objects().find((o) => o.id === id)?.tag ?? id}: ${why}`)], msgs);
-    setStatus('ready', head);
+    // An Active solve is quiet when it converges, as the app; anything else is shown.
+    if (!auto || result.status !== 'converged' || !$('solvePanel').hidden) {
+      showSolve(result.status === 'converged' ? 'info' : 'warning', [head,
+        ...Object.entries(prep.notReady).map(([id, why]) => `${objects().find((o) => o.id === id)?.tag ?? id}: ${why}`)], msgs);
+    }
+    setStatus('ready', auto ? `Active · ${head}` : head);
   } catch (e) {
     showSolve('error', [`Not solved: ${e.message}`]);
     setStatus('failed', 'Not solved');
-  } finally { busy = false; $('solveBtn').disabled = engineState !== 'ready'; }
-});
+  } finally {
+    busy = false; $('solveBtn').disabled = engineState !== 'ready';
+    queueSolve(); // changes made while this solve ran
+  }
+}
 function showSolve(level, lines, msgs = []) {
   $('solvePanel').hidden = false;
   $('solveMsgs').innerHTML = lines.map((l, i) => `<li class="${i === 0 ? esc(level) : ''}">${esc(l)}</li>`).join('') +

@@ -44,7 +44,10 @@ import app.flowstead.core.model.SpecKey
 import app.flowstead.core.model.SpecStatus
 import app.flowstead.core.model.Specification
 import app.flowstead.core.model.StoredSolve
+import app.flowstead.core.model.StreamCopy
+import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.displayName
+import app.flowstead.core.model.isFeed
 import app.flowstead.core.model.isLoop
 import app.flowstead.core.model.modelHash
 import app.flowstead.core.model.obj
@@ -60,7 +63,12 @@ import app.flowstead.ui.flowsheet.drawNozzles
 import app.flowstead.ui.flowsheet.drawUnitIcon
 import app.flowstead.ui.flowsheet.hitTest
 import app.flowstead.ui.flowsheet.phaseColor
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
@@ -250,6 +258,64 @@ class FlowsheetView {
     }
 
     fun hasTable(id: String): Boolean = saved.tables.any { it.objectId == id }
+
+    /** The table editor (the app's PropertyTableSheet): {tag, shown, keys: [{key, label, on}]}; a new table starts with the app's defaults. */
+    fun tableOptions(id: String): String {
+        val o = saved.obj(id) ?: return "{}"
+        val existing = saved.tables.firstOrNull { it.objectId == id }
+        val chosen = existing?.keys ?: PropertyTables.defaults(saved, o)
+        return buildJsonObject {
+            put("tag", o.tag); put("shown", existing != null)
+            putJsonArray("keys") { PropertyTables.available(saved, o).forEach { k -> add(buildJsonObject { put("key", k); put("label", app.flowstead.core.model.ResultKeys.label(k)); put("on", k in chosen) }) } }
+        }.toString()
+    }
+
+    /** Shows the object's table with exactly these properties ([keysJson], a JSON array of keys); an empty list removes it. */
+    fun setTable(id: String, keysJson: String): String = edit {
+        val keys = FlowsheetJson.parseToJsonElement(keysJson).jsonArray.map { it.jsonPrimitive.content }
+        FlowsheetEditing.setTable(saved, id, keys)
+    }
+
+    /** True for a material stream nothing calculates (its conditions are typed), as the app's feed editor. */
+    fun isFeed(id: String): Boolean = saved.obj(id)?.let { it.type == ObjectType.MaterialStream && saved.isFeed(it) } ?: false
+
+    // ---------- copying a stream's data (the app's StreamCopy, 1.8.8) ----------
+
+    /** The streams [targetId] can copy from: [{id, tag, feed}]. Empty unless the target is a feed (a calculated stream cannot take values). */
+    fun copySources(targetId: String): String = buildJsonArray {
+        val t = saved.obj(targetId)
+        if (t != null && t.type == ObjectType.MaterialStream && saved.isFeed(t)) {
+            saved.objects.filter { it.type == ObjectType.MaterialStream && it.id != targetId }.forEach { s ->
+                add(buildJsonObject { put("id", s.id); put("tag", s.tag); put("feed", saved.isFeed(s)) })
+            }
+        }
+    }.toString()
+
+    /** What [sourceId] can give: [{key, label, value}] in the display units (a feed's specifications, or a calculated stream's current results). */
+    fun copyItems(sourceId: String): String = buildJsonArray {
+        val s = saved.obj(sourceId) ?: return@buildJsonArray
+        val ctx = app.flowstead.core.units.UnitContext(saved.atmosphericPressurePa)
+        StreamCopy.available(saved, s, results, displayUnits).forEach { item ->
+            val text = item.spec?.let { sp ->
+                val u = app.flowstead.core.units.Units.byId(sp.unit)
+                ValueFormat.number(u.fromSi(sp.si, ctx), u.decimals) + " " + u.symbol
+            } ?: item.composition?.let { c -> "${c.size} components" }.orEmpty()
+            add(buildJsonObject { put("key", item.key); put("label", item.label); put("value", text) })
+        }
+    }.toString()
+
+    /** Puts the ticked items of [sourceId] on feed [targetId]; they replace its own conditions, flow and composition. */
+    fun copyFrom(targetId: String, sourceId: String, keysJson: String): String = edit {
+        val s = saved.obj(sourceId) ?: throw EditRejected("That stream no longer exists")
+        val keys = FlowsheetJson.parseToJsonElement(keysJson).jsonArray.map { it.jsonPrimitive.content }.toSet()
+        StreamCopy.apply(saved, targetId, StreamCopy.available(saved, s, results, displayUnits).filter { it.key in keys })
+    }
+
+    /** A new feed beside [id] with all it can give; {flowsheet, id}. */
+    fun duplicate(id: String): String = try {
+        val (next, copy) = StreamCopy.duplicate(saved, id, results, displayUnits)
+        buildJsonObject { put("flowsheet", FlowsheetJson.encodeToJsonElement(Flowsheet.serializer(), next)); put("id", copy.id) }.toString()
+    } catch (e: IllegalArgumentException) { buildJsonObject { put("error", e.message ?: "Not allowed") }.toString() }
 
     /**
      * Every result the app can show for the object, as rows {label, value, unit}: the engine's numbers in °C, bara and

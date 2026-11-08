@@ -186,6 +186,7 @@ _Last updated: 2026-11-05_
 - **Web black-oil form (D115):** the Basis black-oil fields are labelled one by one with hints, as the app's Black oil sheet; tested on a phone viewport (API 32 → SG 141.5/163.5 by hand).
 - **Web hypotheticals and composition bases (D116):** the Basis adds, estimates and edits hypothetical components (the app's HypotheticalSheet); feed compositions in all six bases of the app's CompositionBasis, mass and volume from the engine's compoundBasis. Checked: n-decane as C10* (Tc, Pc against NIST), a 50/50 mass % feed against a hand calculation.
 - **Phase envelopes (D117, app 3.2.2, Web 1.5.1):** an envelope DWSIM traced in two pieces reports no critical point, cricondenbar or cricondentherm and says so; quality-line points are each checked with a P-T flash. Engine tests 262/262.
+- **Web flowsheet (D118, Web 1.6):** Hold/Active solver as the app; Duplicate and Copy-from for streams; the property table shows any properties you tick; the worksheet's title and close button stay in view while it scrolls; the site header and footer are a darker frame around the flowsheet window. Tested in core (24) and in the browser.
 
 ## Next
 - A time limit for on-device solves (a slow column solver can run for minutes).

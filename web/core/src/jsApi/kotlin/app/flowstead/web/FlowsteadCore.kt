@@ -162,6 +162,10 @@ object FlowsteadCore {
     /** SHA-256 of the solved part of the flowsheet: the same as the app computes (CanonicalJson.kt). */
     fun modelHash(flowsheetJson: String): String = fs(flowsheetJson).modelHash()
 
+    /** Hold (false) or Active (true) solver, as HYSYS's solver buttons (the app's Flowsheet.solverActive); saved with the flowsheet, not part of the solved model. */
+    fun solverActive(flowsheetJson: String): Boolean = fs(flowsheetJson).solverActive
+    fun setSolverActive(flowsheetJson: String, active: Boolean): String = out(fs(flowsheetJson).copy(solverActive = active))
+
     // [solvedModelHash] is the model hash taken when the solve ran (as the app's StoredSolve keeps it), not the current
     // one: if the flowsheet changed since, the workbook says its results are out of date.
     private fun sheets(projectName: String, flowsheetJson: String, solveResultJson: String, solvedModelHash: String, solvedAtMillis: Double) =
