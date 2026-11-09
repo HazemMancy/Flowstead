@@ -7,8 +7,8 @@
 # package ships next to them. Needs git and the .NET 10 SDK. Desktop UI projects are not built.
 set -euo pipefail
 
-VERSION="10.2.12"
-COMMIT="c3dc1b0c55ebc1ed7c4d76e0943cf5c7eaf2f56d"
+VERSION="10.2.15"
+COMMIT="fb800c41f1cfbcc9abdb3751fb8474fb81a451d5"
 REPO="https://github.com/DanWBR/dwsim10"
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
