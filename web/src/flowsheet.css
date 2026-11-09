@@ -201,3 +201,61 @@
 .fs-ports th,.fs-ports td{text-align:left;padding:.25rem .3rem;border-bottom:1px solid var(--line,#8884);vertical-align:middle}
 .fs-ports select{max-width:100%}
 @media (max-width:600px){.fs-ports thead{display:none}.fs-ports tr{display:grid;grid-template-columns:1fr 1fr;gap:.2rem;padding:.3rem 0;border-bottom:1px solid var(--line,#8884)}.fs-ports td{border:0}}
+
+/* ---------- Every screen, touch and mouse (Web 1.13) ---------- */
+/* The toolbar's secondary controls: inline on a wide screen, one scrolling strip on a narrow one. */
+.fs-tbscroll{display:contents}
+.fs-palhead{display:flex;align-items:flex-start;gap:.3rem}
+.fs-palhead .fs-groups{flex:1;min-width:0}
+.fs-paltoggle{display:none;flex-shrink:0}
+.fs-palette.collapsed .fs-items,.fs-palette.collapsed .fs-hint{display:none}
+.fs-palette.collapsed .fs-paltoggle{transform:rotate(180deg)}
+/* Zoom buttons on the canvas: for a mouse without a wheel, a pen, or a finger that would rather tap than pinch. */
+.fs-zoom{position:absolute;right:.6rem;bottom:.6rem;z-index:5;display:flex;gap:.1rem;padding:.15rem}
+.fs-zoom .icon-btn{width:2.3rem;height:2.3rem;font-size:1.15rem;line-height:1}
+/* Touch screens: targets a finger can hit (44 px class), and 16 px text in fields so a phone doesn't zoom in on them. */
+@media (pointer:coarse){
+  .btn-sm{min-height:2.5rem;padding-left:.75rem;padding-right:.75rem}
+  .icon-btn{min-width:2.5rem;min-height:2.5rem}
+  .chip{min-height:2.2rem}
+  input,select,textarea{font-size:16px}
+  .fs-tabs button{padding:.6rem .7rem}
+  .fs-zoom .icon-btn{width:2.75rem;height:2.75rem}
+}
+/* Narrow screens (phones; tablets in split view). */
+@media (max-width:760px){
+  .fs-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.35rem;padding:.4rem .45rem}
+  .fs-name{width:auto!important;min-width:0}
+  .fs-tbscroll{display:flex;grid-column:1/-1;grid-row:2;gap:.3rem;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+    mask-image:linear-gradient(to right,#000 calc(100% - 1.5rem),transparent);padding-right:1.2rem}
+  .fs-tbscroll::-webkit-scrollbar{display:none}
+  .fs-tbscroll>*{flex-shrink:0}
+  .fs-select{max-width:9rem}
+  .fs-status{grid-column:1/-1;grid-row:3;margin:0;font-size:.7rem}
+  .fs-paltoggle{display:inline-flex}
+  .fs-items li{flex:0 0 4.4rem}
+  .fs-items .tile{padding:.3rem .2rem;font-size:.66rem}
+  /* A worksheet or a block's panel slides up from the bottom, full width, over the palette. */
+  .fs-inspector{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%!important;max-height:min(80dvh,40rem);border-radius:1rem 1rem 0 0;
+    border-bottom:none;z-index:30;padding-bottom:max(.8rem,env(safe-area-inset-bottom));box-shadow:0 -10px 30px rgba(0,0,0,.35)}
+  .fs-inspector::before{content:"";display:block;width:2.5rem;height:.28rem;border-radius:1rem;background:var(--border);margin:.45rem auto .1rem}
+  .fs-solve{position:fixed;left:.5rem;right:.5rem;width:auto;bottom:.5rem;z-index:25}
+  /* Dialogs take the whole screen. */
+  .fs-dialog{inset:0;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0;border:none}
+  .fs-zoom{bottom:auto;top:.5rem;right:.5rem;flex-direction:column}
+  .fs-levelbar{max-width:calc(100% - 4.5rem)}
+}
+/* Phones on their side: the palette is a narrow column, the toolbar one line, so the flowsheet keeps the height. */
+@media (max-height:520px) and (orientation:landscape){
+  .fs-page header.fs-chrome .nav{height:1.8rem}
+  .fs-body{grid-template-columns:5.6rem minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+  .fs-palette{order:0;border-right:1px solid var(--border);border-top:none;overflow-y:auto;padding:.3rem}
+  .fs-palhead{display:none}
+  .fs-items{display:grid;grid-template-columns:1fr;overflow:visible}
+  .fs-items li{flex:none}
+  .fs-paltoggle{display:none}
+  .fs-toolbar{grid-template-columns:8rem minmax(0,1fr) auto auto}
+  .fs-tbscroll{grid-column:2;grid-row:1}
+  .fs-status{grid-column:1/-1;grid-row:2}
+  .fs-inspector{max-height:92dvh;left:auto;width:min(26rem,70vw)!important;border-radius:1rem 0 0 0}
+}
