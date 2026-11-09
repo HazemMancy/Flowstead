@@ -25,6 +25,7 @@ import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ReliefDeviceDef
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.Safety
+import app.flowstead.core.model.SubflowsheetSolve
 import app.flowstead.core.model.PerformanceCurve
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
@@ -827,7 +828,7 @@ class FlowsheetViewModel @Inject constructor(
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
             val request = PhaseEnvelopeRequest(
-                fs, composition, qualities, hydrates, streamPressure(fs, streamId), streamProperty(fs, streamId, "temperature"),
+                SubflowsheetSolve.forObject(fs, streamId), composition, qualities, hydrates, streamPressure(fs, streamId), streamProperty(fs, streamId, "temperature"),
                 inhibitor.takeIf { inhibitorFraction > 0 }, inhibitorFraction,
             )
             val next = if (url.isBlank()) EnvelopeUi(streamId, error = "Set the engine address in Settings")
@@ -852,7 +853,7 @@ class FlowsheetViewModel @Inject constructor(
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
             val next = if (url.isBlank()) PetroleumUi(streamId, error = "Set the engine address in Settings")
-            else when (val r = engine.petroleumProperties(url, secrets.apiKey(), app.flowstead.core.api.PetroleumPropertiesRequest(fs, composition))) {
+            else when (val r = engine.petroleumProperties(url, secrets.apiKey(), app.flowstead.core.api.PetroleumPropertiesRequest(SubflowsheetSolve.forObject(fs, streamId), composition))) {
                 is EngineResult.Ok -> PetroleumUi(streamId, result = r.value)
                 is EngineResult.Failed -> PetroleumUi(streamId, error = "No distillation curves: ${r.reason}")
             }
@@ -892,7 +893,7 @@ class FlowsheetViewModel @Inject constructor(
         val view = ResultView(currentSolve, fs.modelHash())
         Safety.problem(fs, view, d)?.let { _messages.trySend(it); return }
         engineCall(id) { url, key ->
-            when (val r = engine.relief(url, key, ReliefRequest(fs, Safety.request(fs, view, d)))) {
+            when (val r = engine.relief(url, key, ReliefRequest(SubflowsheetSolve.forObject(fs, d.protectedId), Safety.request(fs, view, d)))) {
                 is EngineResult.Ok -> edit(undoable = false) { FlowsheetEditing.setReliefResult(it, id, r.value, fs.modelHash()) }
                 is EngineResult.Failed -> _messages.send("Not sized: ${r.reason}")
             }
@@ -944,7 +945,7 @@ class FlowsheetViewModel @Inject constructor(
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
             val next = if (url.isBlank()) PvtUi(streamId, experiment, error = "Set the engine address in Settings")
-            else when (val r = engine.pvt(url, secrets.apiKey(), PvtRequest(fs, composition, experiment, temperature, stages = stages))) {
+            else when (val r = engine.pvt(url, secrets.apiKey(), PvtRequest(SubflowsheetSolve.forObject(fs, streamId), composition, experiment, temperature, stages = stages))) {
                 is EngineResult.Ok -> PvtUi(streamId, experiment, result = r.value)
                 is EngineResult.Failed -> PvtUi(streamId, experiment, error = "Not run: ${r.reason}")
             }

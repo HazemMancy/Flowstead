@@ -181,7 +181,7 @@ object Safety {
         val supply = streamState(fs, results, c.supplyId) ?: error("No supply")
         val (geometry, wall) = network(sections(fs, c)) ?: error("No pipes")
         return DepressuringRequest(
-            flowsheet = fs, composition = supply.composition, initialPressure = c.initialPressure,
+            flowsheet = SubflowsheetSolve.forObject(fs, c.supplyId), composition = supply.composition, initialPressure = c.initialPressure,
             initialTemperature = c.initialTemperature ?: supply.temperature, vessel = geometry, wallThickness = wall,
             targetPressure = c.targetPressure, targetTime = c.targetTime, duration = c.duration,
             supply = PressurizationSupply(
@@ -287,7 +287,7 @@ object Safety {
     fun depressuringRequest(fs: Flowsheet, results: ResultView, c: DepressuringCase): DepressuringRequest {
         val contents = contents(fs, results, c.protectedId) ?: error("No contents")
         return DepressuringRequest(
-            flowsheet = fs, composition = contents.composition, initialPressure = contents.pressure, initialTemperature = contents.temperature,
+            flowsheet = SubflowsheetSolve.forObject(fs, c.protectedId), composition = contents.composition, initialPressure = contents.pressure, initialTemperature = contents.temperature,
             vessel = geometry(fs, c.protectedId, c.vessel)!!, backPressure = c.backPressure, orificeDiameter = c.orificeDiameter,
             wallThickness = fs.objects.firstOrNull { it.id == c.protectedId }?.let { pipeGeometry(it)?.second },
             fire = if (c.withFire) ReliefScenario(ReliefScenarioKinds.FIRE) else null, heatTransferCoefficient = c.heatTransferCoefficient,
