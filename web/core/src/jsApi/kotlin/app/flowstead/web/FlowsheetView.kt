@@ -165,6 +165,20 @@ class FlowsheetView {
         return f.copy(objects = objs, connections = f.connections.filter { it.fromObject in ids && it.toObject in ids }, tables = f.tables.filter { it.objectId in ids })
     }
 
+    /** A grid point near ([x], [y]) (world) where a new block covers no object or block: [x, y]. */
+    fun freeSpot(x: Double, y: Double): String {
+        val g = FlowsheetEditing.GRID
+        val taken = fs.objects.map { CanvasGeometry.bounds(it).inflate(12f) } + Subflowsheets.blocksAt(saved, level).map { blockRect(it.x, it.y).inflate(12f) }
+        fun free(cx: Double, cy: Double) = blockRect(cx, cy).let { r -> taken.none { it.left < r.right && r.left < it.right && it.top < r.bottom && r.top < it.bottom } }
+        val x0 = kotlin.math.round(x / g) * g; val y0 = kotlin.math.round(y / g) * g
+        for (ring in 0..40) for (dx in -ring..ring) for (dy in -ring..ring) {
+            if (maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy)) != ring) continue
+            val cx = x0 + dx * g * 2; val cy = y0 + dy * g * 2
+            if (free(cx, cy)) return "[$cx,$cy]"
+        }
+        return "[$x0,$y0]"
+    }
+
     /** Opens a sub-flowsheet ([id]) or, with "", the main flowsheet. */
     fun setLevel(id: String) {
         level = id.takeIf { it.isNotEmpty() && Subflowsheets.of(saved, it) != null }
@@ -305,6 +319,20 @@ class FlowsheetView {
                     val p = CanvasGeometry.snap(fs, o, moved.second)
                     val c = CanvasGeometry.center(o)
                     if (p == c) null else FlowsheetClipboard.moveAll(saved, selection.toList(), (p.x - c.x).toDouble(), (p.y - c.y).toDouble())
+                }
+                moved != null && fs.obj(moved.first)?.type == ObjectType.MaterialStream && blockAt(world) != null -> {
+                    // A stream dropped on a sub-flowsheet goes into it (a free end) or comes out of it (a free start),
+                    // as HYSYS's Connections tab; the boundary stream inside is made for it (D132).
+                    val b = blockAt(world)!!
+                    val canIn = Subflowsheets.connectable(saved, b.id, true).any { it.id == moved.first }
+                    val canOut = Subflowsheets.connectable(saved, b.id, false).any { it.id == moved.first }
+                    val feed = when {
+                        canIn && canOut -> (fs.obj(moved.first)!!.x < b.x)
+                        canIn -> true
+                        canOut -> false
+                        else -> throw EditRejected("${fs.obj(moved.first)!!.tag} is joined at both ends: only a stream with a free end can go into or out of ${b.tag}")
+                    }
+                    Subflowsheets.connect(saved, b.id, moved.first, feed).first
                 }
                 moved != null -> {
                     val o = fs.obj(moved.first) ?: return@edit null
@@ -589,22 +617,6 @@ class FlowsheetView {
             val color = if (energy) palette.energy else stream?.let { streamColor(it) } ?: palette.stroke
             drawPath(polyline(pts), color, style = Stroke(width = 2f, cap = StrokeCap.Round, pathEffect = if (energy) PathEffect.dashPathEffect(floatArrayOf(6f, 5f)) else null))
         }
-        // Sub-flowsheet blocks (D132), with a dashed line from each matched stream of this flowsheet to the block.
-        for (b in Subflowsheets.blocksAt(saved, level)) {
-            val c = blockCenter(b)
-            val r = blockRect(c.x.toDouble(), c.y.toDouble())
-            drawRoundRect(palette.fill, r.topLeft, r.size, CornerRadius(8f))
-            drawRoundRect(if (b.fluid != null) colors.secondary else palette.stroke, r.topLeft, r.size, CornerRadius(8f), style = Stroke(2f))
-            drawRoundRect(palette.stroke, Offset(r.left + 5f, r.top + 5f), Size(r.width - 10f, r.height - 10f), CornerRadius(5f), style = Stroke(0.8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 3f))))
-            for (p in b.ports) {
-                val outer = p.outer?.let { fs.obj(it) } ?: continue
-                val feed = saved.connections.none { it.toObject == p.inner }
-                val at = positionOf(outer)
-                val edge = Offset(if (feed) r.left else r.right, at.y.coerceIn(r.top + 8f, r.bottom - 8f))
-                drawLine(streamColor(outer), at, edge, 2f, StrokeCap.Round, PathEffect.dashPathEffect(floatArrayOf(4f, 4f)))
-                drawCircle(streamColor(outer), 3.5f, edge)
-            }
-        }
         for (o in fs.objects) {
             val at = positionOf(o)
             val s = CanvasGeometry.size(o.type)
@@ -640,6 +652,22 @@ class FlowsheetView {
             if (badge != null && !print) {
                 val b = CanvasGeometry.bounds(o, at)
                 drawCircle(badge, 4.5f, Offset(b.left - 7f, b.top - 7f))
+            }
+        }
+        // Sub-flowsheet blocks (D132), over the streams, with a dashed line from each matched stream of this flowsheet to the block.
+        for (b in Subflowsheets.blocksAt(saved, level)) {
+            val c = blockCenter(b)
+            val r = blockRect(c.x.toDouble(), c.y.toDouble())
+            drawRoundRect(palette.fill, r.topLeft, r.size, CornerRadius(8f))
+            drawRoundRect(if (b.fluid != null) colors.secondary else palette.stroke, r.topLeft, r.size, CornerRadius(8f), style = Stroke(2f))
+            drawRoundRect(palette.stroke, Offset(r.left + 5f, r.top + 5f), Size(r.width - 10f, r.height - 10f), CornerRadius(5f), style = Stroke(0.8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 3f))))
+            for (p in b.ports) {
+                val outer = p.outer?.let { fs.obj(it) } ?: continue
+                val feed = Subflowsheets.boundary(saved, b.id).firstOrNull { it.stream.id == p.inner }?.feed ?: true
+                val at = positionOf(outer)
+                val edge = Offset(if (feed) r.left else r.right, at.y.coerceIn(r.top + 8f, r.bottom - 8f))
+                drawLine(streamColor(outer), at, edge, 2f, StrokeCap.Round, PathEffect.dashPathEffect(floatArrayOf(4f, 4f)))
+                drawCircle(streamColor(outer), 3.5f, edge)
             }
         }
         // Adjust, controller and Set references: dashed signal lines to the objects they read and write.
@@ -704,7 +732,7 @@ class FlowsheetView {
             for (p in blk.ports) {
                 val inner = fs.obj(p.inner) ?: continue
                 val outerTag = p.outer?.let { saved.obj(it)?.tag } ?: continue
-                val feed = saved.connections.none { it.toObject == p.inner }
+                val feed = Subflowsheets.boundary(saved, blk.id).firstOrNull { it.stream.id == p.inner }?.feed ?: true
                 val bx = CanvasGeometry.bounds(inner, positionOf(inner))
                 val a = vp.toScreen(Offset(bx.center.x, bx.bottom + 4f), 1f)
                 ctx.fillText(if (feed) "from $outerTag" else "to $outerTag", a.x, a.y + fontSize + 2f)

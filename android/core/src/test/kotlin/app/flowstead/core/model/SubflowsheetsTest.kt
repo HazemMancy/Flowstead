@@ -176,4 +176,29 @@ class SubflowsheetsTest {
         val gone = own.copy(objects = own.objects.filter { it.id != "in" }, connections = own.connections.filter { it.fromObject != "in" })
         assertTrue(Subflowsheets.regions(gone).second.isEmpty())
     }
+
+    @Test
+    fun aStreamOfTheParentGoesIntoAnEmptyBlockAsHysysConnections() {
+        // DISCHARGE has a free end once E-100 is gone: it can go into an empty block, which makes its boundary stream.
+        val f = train.copy(objects = train.objects.filter { it.id !in setOf("e", "out") }, connections = train.connections.take(2))
+        val (f1, b) = Subflowsheets.add(f, null, 300.0, 0.0)
+        assertEquals(listOf("dis"), Subflowsheets.connectable(f1, b.id, true).map { it.id })
+        val (f2, inner) = Subflowsheets.connect(f1, b.id, "dis", true)
+        val bd = Subflowsheets.boundary(f2, b.id).single()
+        assertEquals(inner, bd.stream.id); assertTrue(bd.feed); assertEquals("dis", bd.port?.outer)
+        assertEquals("DISCHARGE-SUB-1", bd.stream.tag)
+        // Nothing inside is joined to it yet, and it stays matched; flattened, the engine sees DISCHARGE as before.
+        assertEquals(f2, Subflowsheets.clean(f2))
+        assertEquals(shape(f), shape(Subflowsheets.flatten(f2)))
+        // DISCHARGE is no longer free; a stream joined at both ends can't go in.
+        assertTrue(Subflowsheets.connectable(f2, b.id, true).isEmpty())
+        assertFailsWith<EditRejected> { Subflowsheets.connect(f2, b.id, "suc", true) }
+        // Taken out again: the stream inside goes with it (nothing was joined to it).
+        val f3 = Subflowsheets.disconnect(f2, b.id, inner)
+        assertTrue(f3.objects.none { it.id == inner } && Subflowsheets.of(f3, b.id)!!.ports.isEmpty())
+        // A stream out: COOLED-like free start.
+        val g = f1.copy(objects = f1.objects + SimObject("q", "Q", ObjectType.MaterialStream))
+        val (g2, qi) = Subflowsheets.connect(g, b.id, "q", false)
+        assertEquals(false, Subflowsheets.boundary(g2, b.id).first { it.stream.id == qi }.feed)
+    }
 }
