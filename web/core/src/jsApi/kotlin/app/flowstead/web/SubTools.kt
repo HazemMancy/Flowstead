@@ -15,11 +15,11 @@ import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetJson
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.obj
-import app.flowstead.web.model.Region
-import app.flowstead.web.model.SubFluid
-import app.flowstead.web.model.Subflowsheets
-import app.flowstead.web.model.Transfer
-import app.flowstead.web.model.TransferBasis
+import app.flowstead.core.model.Region
+import app.flowstead.core.model.SubFluid
+import app.flowstead.core.model.Subflowsheets
+import app.flowstead.core.model.Transfer
+import app.flowstead.core.model.TransferBasis
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer

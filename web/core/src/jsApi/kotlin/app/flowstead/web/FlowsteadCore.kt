@@ -14,7 +14,7 @@ import androidx.compose.ui.geometry.Size
 import app.flowstead.core.export.Csv
 import app.flowstead.core.help.AutoLayout
 import app.flowstead.core.model.Readiness
-import app.flowstead.web.model.Subflowsheets
+import app.flowstead.core.model.Subflowsheets
 import app.flowstead.core.model.displayName
 import app.flowstead.ui.flowsheet.drawNozzles
 import app.flowstead.ui.flowsheet.drawUnitIcon

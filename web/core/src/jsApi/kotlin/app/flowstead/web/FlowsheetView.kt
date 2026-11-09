@@ -26,7 +26,7 @@ import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.EditRejected
-import app.flowstead.web.model.Subflowsheets
+import app.flowstead.core.model.Subflowsheets
 import kotlin.math.roundToInt
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
@@ -175,7 +175,7 @@ class FlowsheetView {
 
     private val blockSize = Size(128f, 80f)
     private fun blockRect(x: Double, y: Double) = Rect(Offset(x.toFloat() - blockSize.width / 2, y.toFloat() - blockSize.height / 2), blockSize)
-    private fun blockCenter(b: app.flowstead.web.model.Subflowsheet) = blockDrag?.takeIf { it.first == b.id }?.second ?: Offset(b.x.toFloat(), b.y.toFloat())
+    private fun blockCenter(b: app.flowstead.core.model.Subflowsheet) = blockDrag?.takeIf { it.first == b.id }?.second ?: Offset(b.x.toFloat(), b.y.toFloat())
     private fun blockAt(world: Offset) = Subflowsheets.blocksAt(saved, level).lastOrNull { b -> blockCenter(b).let { c -> blockRect(c.x.toDouble(), c.y.toDouble()) }.contains(world) }
 
     /** A solve's result (the engine's JSON) and the model hash taken when it ran; null clears it. */

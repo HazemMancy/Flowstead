@@ -1,5 +1,5 @@
 /*
- * Flowstead web (D132): sub-flowsheets, as HYSYS's. A sub-flowsheet is a block on its parent flowsheet; inside it is a
+ * Flowstead (D132, D133): sub-flowsheets, as HYSYS's. A sub-flowsheet is a block on its parent flowsheet; inside it is a
  * flowsheet of its own. Its boundary streams (a stream inside with one open end) are matched to streams of the parent,
  * as HYSYS's internal and external streams. A sub-flowsheet may use its own fluid package: then its boundary streams
  * pass across with a transfer basis (temperature and pressure, or pressure and vapour fraction, with the molar flow and
@@ -8,29 +8,17 @@
  * The engine never sees a sub-flowsheet. A case on one fluid package is sent as the one flat flowsheet it is, so every
  * number is what the flat case gives. A case with sub-flowsheets on their own packages is solved region by region, each
  * region one ordinary engine solve on its own package; the browser carries the boundary streams across and repeats
- * until they stop changing (D132). Pure model code on the app's Flowsheet, in commonMain so it is tested on the JVM
- * and in JavaScript. android/ is unchanged.
+ * until they stop changing (D132; SubflowsheetSolve). The app and the web share this code (D133).
  * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
  */
 @file:OptIn(ExperimentalSerializationApi::class)
 
-package app.flowstead.web.model
+package app.flowstead.core.model
 
 import app.flowstead.core.api.ObjectResult
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.api.SolverMessage
-import app.flowstead.core.model.BinaryParameter
-import app.flowstead.core.model.BlackOil
-import app.flowstead.core.model.Connection
-import app.flowstead.core.model.EditRejected
-import app.flowstead.core.model.Flowsheet
-import app.flowstead.core.model.FlowsheetEditing
-import app.flowstead.core.model.Hypothetical
-import app.flowstead.core.model.ObjectType
-import app.flowstead.core.model.SimObject
-import app.flowstead.core.model.Spec
-import app.flowstead.core.model.SpecKey
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable

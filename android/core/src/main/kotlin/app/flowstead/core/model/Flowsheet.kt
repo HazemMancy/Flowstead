@@ -36,6 +36,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val blackOils: List<BlackOil> = emptyList(),
+    /** Sub-flowsheets, as HYSYS's (D132, D133); objects inside one name it as their [SimObject.parent]. Written only when there are some. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val subflowsheets: List<Subflowsheet> = emptyList(),
     /** Liquid density method: null for the engine default, [LiquidDensityMethods.COSTALD] or [LiquidDensityMethods.EOS]. Written only when set. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -155,6 +159,10 @@ data class SimObject(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val equipmentSizing: EquipmentSizingInput? = null,
+    /** The sub-flowsheet the object is in (D132, D133); null on the main flowsheet. Written only when set. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val parent: String? = null,
 )
 
 /**

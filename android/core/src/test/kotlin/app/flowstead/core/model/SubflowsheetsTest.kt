@@ -1,27 +1,18 @@
 /*
- * Flowstead web (D132): sub-flowsheets, on the JVM and in JavaScript.
+ * Flowstead (D132, D133): sub-flowsheets.
  * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Benchmark 06's train (SUCTION → K-100 → DISCHARGE → E-100 → COOLED): putting the cooler in a sub-flowsheet and
  * flattening it again must give back exactly the flowsheet the engine solved before (so the same numbers), and a
  * sub-flowsheet on its own package must carry DISCHARGE across as a feed defined by the engine's result.
  */
-package app.flowstead.web.model
+package app.flowstead.core.model
 
 import app.flowstead.core.api.ObjectResult
 import app.flowstead.core.api.ObjectStatus
 import app.flowstead.core.api.PhaseResult
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
-import app.flowstead.core.model.Connection
-import app.flowstead.core.model.EditRejected
-import app.flowstead.core.model.Flowsheet
-import app.flowstead.core.model.FlowsheetJson
-import app.flowstead.core.model.ObjectType
-import app.flowstead.core.model.Readiness
-import app.flowstead.core.model.SimObject
-import app.flowstead.core.model.Spec
-import app.flowstead.core.model.modelHash
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
