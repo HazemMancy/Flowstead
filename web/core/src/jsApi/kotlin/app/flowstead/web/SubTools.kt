@@ -1,0 +1,202 @@
+/*
+ * Flowstead web (D132): sub-flowsheets for the page. Editing (add, group, match boundary streams, own fluid package)
+ * and the solve plan the page's engine client follows: one flat solve when every sub-flowsheet uses the main package,
+ * else one solve a region with the boundary streams carried across (Subflowsheets).
+ * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
+ */
+@file:OptIn(ExperimentalJsExport::class)
+
+package app.flowstead.web
+
+import app.flowstead.core.api.ObjectResult
+import app.flowstead.core.api.SolveResult
+import app.flowstead.core.model.EditRejected
+import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.FlowsheetJson
+import app.flowstead.core.model.Spec
+import app.flowstead.core.model.obj
+import app.flowstead.web.model.Region
+import app.flowstead.web.model.SubFluid
+import app.flowstead.web.model.Subflowsheets
+import app.flowstead.web.model.Transfer
+import app.flowstead.web.model.TransferBasis
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+
+@JsExport
+object SubTools {
+    private fun fs(json: String): Flowsheet = FlowsheetJson.decodeFromString(Flowsheet.serializer(), json)
+    private fun out(f: Flowsheet) = FlowsheetJson.encodeToString(Flowsheet.serializer(), f)
+    private fun ok(f: Flowsheet, extra: (kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = {}) =
+        buildJsonObject { put("flowsheet", FlowsheetJson.parseToJsonElement(out(Subflowsheets.clean(f)))); extra() }.toString()
+    private fun err(e: Throwable) = buildJsonObject { put("error", e.message ?: "Not allowed") }.toString()
+    private inline fun edit(block: () -> String): String = try { block() } catch (e: IllegalArgumentException) { err(e) } catch (e: IllegalStateException) { err(e) }
+    private fun lvl(level: String?) = level?.takeIf { it.isNotEmpty() }
+
+    fun has(flowsheetJson: String): Boolean = Subflowsheets.has(fs(flowsheetJson))
+    fun multiPackage(flowsheetJson: String): Boolean = Subflowsheets.multiPackage(fs(flowsheetJson))
+
+    /** The blocks on [level] ("" for the main flowsheet): [{id, tag, x, y, own, package}]. */
+    fun blocks(flowsheetJson: String, level: String): String {
+        val f = fs(flowsheetJson)
+        return kotlinx.serialization.json.buildJsonArray {
+            Subflowsheets.blocksAt(f, lvl(level)).forEach { b ->
+                addJsonObject {
+                    put("id", b.id); put("tag", b.tag); put("x", b.x); put("y", b.y); put("own", b.fluid != null)
+                    put("package", Subflowsheets.fluidAt(f, b.id).propertyPackage ?: "")
+                    putJsonArray("ports") {
+                        Subflowsheets.boundary(f, b.id).forEach { bd -> addJsonObject { put("inner", bd.stream.id); put("feed", bd.feed); bd.port?.outer?.let { put("outer", it) } } }
+                    }
+                }
+            }
+        }.toString()
+    }
+
+    /** Breadcrumb from the main flowsheet to [level]: [{id, tag}]. */
+    fun path(flowsheetJson: String, level: String): String = kotlinx.serialization.json.buildJsonArray {
+        Subflowsheets.path(fs(flowsheetJson), lvl(level)).forEach { addJsonObject { put("id", it.id); put("tag", it.tag) } }
+    }.toString()
+
+    /** The level an object or block is on ("" for the main flowsheet). */
+    fun levelOf(flowsheetJson: String, id: String): String {
+        val f = fs(flowsheetJson)
+        return f.obj(id)?.parent ?: Subflowsheets.of(f, id)?.parent ?: ""
+    }
+
+    /** A block for its inspector: {id, tag, own, package, compounds, parentPackage, ports: [{inner, innerTag, feed, outer?, basis, candidates: [{id, tag}]}]}. */
+    fun info(flowsheetJson: String, blockId: String): String {
+        val f = fs(flowsheetJson)
+        val b = Subflowsheets.of(f, blockId) ?: return "null"
+        val fluid = Subflowsheets.fluidAt(f, b.id)
+        val parentFluid = Subflowsheets.fluidAt(f, b.parent)
+        return buildJsonObject {
+            put("id", b.id); put("tag", b.tag); put("own", b.fluid != null)
+            put("package", fluid.propertyPackage ?: ""); put("parentPackage", parentFluid.propertyPackage ?: "")
+            putJsonArray("compounds") { fluid.compounds.forEach { add(JsonPrimitive(it)) } }
+            put("differs", Subflowsheets.regionOf(f, b.id) != Subflowsheets.regionOf(f, b.parent))
+            putJsonArray("ports") {
+                Subflowsheets.boundary(f, b.id).forEach { bd ->
+                    addJsonObject {
+                        put("inner", bd.stream.id); put("innerTag", bd.stream.tag); put("feed", bd.feed); put("energy", bd.stream.type.name == "EnergyStream")
+                        bd.port?.outer?.let { o -> put("outer", o); put("outerTag", f.obj(o)?.tag ?: "?") }
+                        put("basis", bd.port?.basis ?: TransferBasis.TP)
+                        putJsonArray("candidates") { Subflowsheets.outerCandidates(f, b.id, bd.stream.id).forEach { c -> addJsonObject { put("id", c.id); put("tag", c.tag) } } }
+                    }
+                }
+            }
+        }.toString()
+    }
+
+    fun add(flowsheetJson: String, level: String, x: Double, y: Double): String = edit {
+        val (f, b) = Subflowsheets.add(fs(flowsheetJson), lvl(level), x, y)
+        ok(f) { put("id", b.id) }
+    }
+    fun rename(flowsheetJson: String, id: String, tag: String): String = edit { ok(Subflowsheets.rename(fs(flowsheetJson), id, tag)) }
+    fun move(flowsheetJson: String, id: String, x: Double, y: Double): String = edit { ok(Subflowsheets.move(fs(flowsheetJson), id, x, y)) }
+    fun place(flowsheetJson: String, objectId: String, level: String): String = edit { ok(Subflowsheets.place(fs(flowsheetJson), objectId, lvl(level))) }
+    fun link(flowsheetJson: String, blockId: String, innerId: String, outerId: String): String =
+        edit { ok(Subflowsheets.link(fs(flowsheetJson), blockId, innerId, outerId.takeIf { it.isNotEmpty() })) }
+    fun setBasis(flowsheetJson: String, blockId: String, innerId: String, basis: String): String =
+        edit { ok(Subflowsheets.setBasis(fs(flowsheetJson), blockId, innerId, basis)) }
+    fun delete(flowsheetJson: String, id: String): String = edit { ok(Subflowsheets.delete(fs(flowsheetJson), id)) }
+    fun ungroup(flowsheetJson: String, id: String): String = edit { ok(Subflowsheets.ungroup(fs(flowsheetJson), id)) }
+    fun group(flowsheetJson: String, idsJson: String, x: Double, y: Double): String = edit {
+        val ids = FlowsheetJson.parseToJsonElement(idsJson).jsonArray.map { it.jsonPrimitive.content }
+        val (f, b) = Subflowsheets.group(fs(flowsheetJson), ids, x, y)
+        ok(f) { put("id", b.id) }
+    }
+
+    /** Own package on (a copy of the parent's, to edit) or off (the parent's again). */
+    fun setOwnFluid(flowsheetJson: String, blockId: String, own: Boolean): String = edit {
+        val f = fs(flowsheetJson)
+        val b = Subflowsheets.of(f, blockId) ?: throw EditRejected("That sub-flowsheet no longer exists")
+        ok(Subflowsheets.setFluid(f, blockId, if (own) Subflowsheets.fluidAt(f, b.parent) else null))
+    }
+
+    /** The flowsheet a basis editor works on for [blockId]: the case with the block's fluid in the case's own fields. */
+    fun fluidView(flowsheetJson: String, blockId: String): String {
+        val f = fs(flowsheetJson)
+        return out(Subflowsheets.withFluid(f, Subflowsheets.fluidAt(f, blockId)))
+    }
+
+    /** Writes the fluid fields of [editedJson] (from [fluidView], after editing) back into [blockId]'s own package. */
+    fun setFluidFrom(flowsheetJson: String, blockId: String, editedJson: String): String = edit {
+        ok(Subflowsheets.setFluid(fs(flowsheetJson), blockId, Subflowsheets.fluidOf(fs(editedJson))))
+    }
+
+    // ---------- the solve plan ----------
+
+    /** The case for the engine when every sub-flowsheet uses the main package: one flat flowsheet. */
+    fun flatten(flowsheetJson: String): String = out(Subflowsheets.flatten(fs(flowsheetJson)))
+
+    /** A flat solve's result with each joined inner stream given its outer stream's result. */
+    fun expand(flowsheetJson: String, resultJson: String): String {
+        val r = FlowsheetJson.decodeFromString(SolveResult.serializer(), resultJson)
+        return FlowsheetJson.encodeToString(SolveResult.serializer(), Subflowsheets.expand(fs(flowsheetJson), r))
+    }
+
+    /** {regions: [{id, tag, flowsheet}], transfers: [...], order: [id]} or {error}. Region ids: "" for the main one. */
+    fun regions(flowsheetJson: String): String = edit {
+        val f = fs(flowsheetJson)
+        val (regions, transfers) = Subflowsheets.regions(f)
+        buildJsonObject {
+            putJsonArray("regions") {
+                regions.forEach { r -> addJsonObject { put("id", r.id ?: ""); put("tag", r.tag); put("flowsheet", FlowsheetJson.parseToJsonElement(out(r.flowsheet))) } }
+            }
+            put("transfers", FlowsheetJson.encodeToJsonElement(ListSerializer(Transfer.serializer()), transfers.map { it.copy(sourceRegion = it.sourceRegion ?: "", targetRegion = it.targetRegion ?: "") }))
+            putJsonArray("order") { Subflowsheets.order(regions, transfers).forEach { add(JsonPrimitive(it ?: "")) } }
+        }.toString()
+    }
+
+    /**
+     * What [transferJson] puts on its target stream from [sourceResultJson] (the source stream's result), on region
+     * [targetJson]: {specs, composition} or {missing: true} when the source has no result yet, or {error}.
+     */
+    fun transfer(transferJson: String, sourceResultJson: String?, sourceTag: String, targetJson: String): String = edit {
+        val t = FlowsheetJson.decodeFromString(Transfer.serializer(), transferJson)
+        val src = sourceResultJson?.takeIf { it.isNotBlank() && it != "null" }?.let { FlowsheetJson.decodeFromString(ObjectResult.serializer(), it) }
+        val r = Subflowsheets.transferSpecs(t, src, sourceTag, fs(targetJson))
+        if (r == null) buildJsonObject { put("missing", true) }.toString()
+        else buildJsonObject {
+            put("specs", FlowsheetJson.encodeToJsonElement(MapSerializer(String.serializer(), Spec.serializer()), r.first))
+            put("composition", FlowsheetJson.encodeToJsonElement(MapSerializer(String.serializer(), Double.serializer()), r.second))
+        }.toString()
+    }
+
+    /** Largest change between two transfers' values ({specs, composition} each); Infinity when [previousJson] is null. */
+    fun change(previousJson: String?, nextJson: String): Double {
+        fun read(j: String) = FlowsheetJson.parseToJsonElement(j).jsonObject.let { o ->
+            FlowsheetJson.decodeFromJsonElement(MapSerializer(String.serializer(), Spec.serializer()), o.getValue("specs")) to
+                FlowsheetJson.decodeFromJsonElement(MapSerializer(String.serializer(), Double.serializer()), o.getValue("composition"))
+        }
+        return Subflowsheets.change(previousJson?.takeIf { it != "null" }?.let(::read), read(nextJson))
+    }
+
+    /** [regionJson] with stream [streamId] set as a feed by a transfer's {specs, composition}. */
+    fun apply(regionJson: String, streamId: String, valuesJson: String): String {
+        val o = FlowsheetJson.parseToJsonElement(valuesJson).jsonObject
+        return out(Subflowsheets.applyTransfer(fs(regionJson), streamId,
+            FlowsheetJson.decodeFromJsonElement(MapSerializer(String.serializer(), Spec.serializer()), o.getValue("specs")),
+            FlowsheetJson.decodeFromJsonElement(MapSerializer(String.serializer(), Double.serializer()), o.getValue("composition"))))
+    }
+
+    /** The regions' results as one result of the whole case: [partsJson] = [{id, tag, result}]. */
+    fun combine(flowsheetJson: String, partsJson: String, sweeps: Int): String {
+        val f = fs(flowsheetJson)
+        val parts = FlowsheetJson.parseToJsonElement(partsJson).jsonArray.map { p ->
+            val o = p.jsonObject
+            val id = o.getValue("id").jsonPrimitive.content.takeIf { it.isNotEmpty() }
+            Region(id, o.getValue("tag").jsonPrimitive.content, Flowsheet()) to FlowsheetJson.decodeFromJsonElement(SolveResult.serializer(), o.getValue("result"))
+        }
+        return FlowsheetJson.encodeToString(SolveResult.serializer(), Subflowsheets.combine(f, parts, sweeps))
+    }
+}

@@ -315,6 +315,31 @@ diff -ruN a/app/flowstead/core/model/EquipmentSizing.kt b/app/flowstead/core/mod
          }
          if (type == ObjectType.HeatExchanger && shellsF != null && area / shellsF.first > 1000) {
              warnings += "Over 1000 m² a shell: split into parallel shells."
+diff -ruN a/app/flowstead/core/model/Flowsheet.kt b/app/flowstead/core/model/Flowsheet.kt
+--- a/app/flowstead/core/model/Flowsheet.kt
++++ b/app/flowstead/core/model/Flowsheet.kt
+@@ -36,6 +36,10 @@
+     @OptIn(ExperimentalSerializationApi::class)
+     @EncodeDefault(EncodeDefault.Mode.NEVER)
+     val blackOils: List<BlackOil> = emptyList(),
++    /** Web (D132): sub-flowsheets, as HYSYS's; objects inside one name it as their [SimObject.parent]. Written only when there are some. */
++    @OptIn(ExperimentalSerializationApi::class)
++    @EncodeDefault(EncodeDefault.Mode.NEVER)
++    val subflowsheets: List<app.flowstead.web.model.Subflowsheet> = emptyList(),
+     /** Liquid density method: null for the engine default, [LiquidDensityMethods.COSTALD] or [LiquidDensityMethods.EOS]. Written only when set. */
+     @OptIn(ExperimentalSerializationApi::class)
+     @EncodeDefault(EncodeDefault.Mode.NEVER)
+@@ -155,6 +159,10 @@
+     @OptIn(ExperimentalSerializationApi::class)
+     @EncodeDefault(EncodeDefault.Mode.NEVER)
+     val equipmentSizing: EquipmentSizingInput? = null,
++    /** Web (D132): the sub-flowsheet the object is in; null on the main flowsheet. Written only when set. */
++    @OptIn(ExperimentalSerializationApi::class)
++    @EncodeDefault(EncodeDefault.Mode.NEVER)
++    val parent: String? = null,
+ )
+ 
+ /**
 diff -ruN a/app/flowstead/core/model/FlowsheetEditing.kt b/app/flowstead/core/model/FlowsheetEditing.kt
 --- a/app/flowstead/core/model/FlowsheetEditing.kt
 +++ b/app/flowstead/core/model/FlowsheetEditing.kt

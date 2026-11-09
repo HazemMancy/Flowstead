@@ -8,13 +8,14 @@ import { startEngine } from './engine.js';
 import { initTools } from './tools.js';
 import { initDocuments, importDwsim } from './documents.js';
 import { enterToNext } from './forms.js';
+import { withSubflowsheets } from './subflowsheets.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools, SubTools } = await import('./core/flowstead-core.mjs');
 const fluids = Fluids.getInstance();
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
@@ -855,7 +856,7 @@ $('compResults').addEventListener('click', (e) => {
 
 // ---------- solve ----------
 let engineState = 'loading', busy = false;
-const engine = startEngine((s) => {
+const engine = withSubflowsheets(startEngine((s) => {
   if (s.type === 'status') setStatus('loading', s.total ? `Engine ${Math.round((100 * s.loaded) / Math.max(s.total, 1))} %` : s.text);
   else if (s.type === 'ready') {
     engineState = 'ready'; setStatus('ready', `DWSIM ${String(s.dwsimVersion ?? '').split('.')[0]} ready`); queueSolve(0);
@@ -863,7 +864,7 @@ const engine = startEngine((s) => {
   }
   else if (s.type === 'failed') { engineState = 'failed'; setStatus('failed', 'Engine failed to start'); toast(s.error); }
   $('solveBtn').disabled = engineState !== 'ready' || busy;
-});
+}), SubTools);
 engine.ready.catch(() => {});
 $('solveBtn').disabled = true;
 function setStatus(kind, text) {

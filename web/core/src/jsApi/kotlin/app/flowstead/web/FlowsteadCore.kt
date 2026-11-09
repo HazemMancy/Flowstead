@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import app.flowstead.core.export.Csv
 import app.flowstead.core.help.AutoLayout
 import app.flowstead.core.model.Readiness
+import app.flowstead.web.model.Subflowsheets
 import app.flowstead.core.model.displayName
 import app.flowstead.ui.flowsheet.drawNozzles
 import app.flowstead.ui.flowsheet.drawUnitIcon
@@ -94,15 +95,25 @@ object FlowsteadCore {
      * app stores it with the result.
      */
     fun prepareSolve(flowsheetJson: String): String {
-        val f = fs(flowsheetJson)
+        val whole = fs(flowsheetJson)
+        // With sub-flowsheets (D132) the checks run on the case flattened, each matched pair one stream; the engine
+        // later gets the ready part of the case as it is, which the page's engine client flattens or solves by region.
+        val f = Subflowsheets.flatten(whole)
         val r = Readiness.of(f)
+        val solvable = if (!Subflowsheets.has(whole)) r.solvable else {
+            val ready = r.solvable.objects.map { it.id }.toSet()
+            val pairs = whole.subflowsheets.flatMap { b -> b.ports.mapNotNull { p -> p.outer?.let { p.inner to it } } }.toMap()
+            val keep = whole.objects.filter { it.id in ready || pairs[it.id] in ready }
+            val ids = keep.map { it.id }.toSet()
+            whole.copy(objects = keep, connections = whole.connections.filter { it.fromObject in ids && it.toObject in ids })
+        }
         return buildJsonObject {
             putJsonArray("blocking") { Specification.blocking(f).forEach { add(JsonPrimitive(it.second)) } }
             putJsonArray("problems") { Specification.problems(f).forEach { add(JsonPrimitive(it.second)) } }
             put("notReady", JsonObject(r.notReady.mapValues { JsonPrimitive(it.value) }))
             put("anyReady", r.anyReady)
-            put("solvable", FlowsheetJson.parseToJsonElement(out(r.solvable)))
-            put("modelHash", f.modelHash())
+            put("solvable", FlowsheetJson.parseToJsonElement(out(solvable)))
+            put("modelHash", whole.modelHash())
         }.toString()
     }
 
