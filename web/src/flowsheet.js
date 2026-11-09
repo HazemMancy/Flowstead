@@ -1167,5 +1167,5 @@ renderGroups(); renderPalette();
 load();
 resize();
 view.fit(cssW, cssH); draw();
-window.flowsteadFlowsheet = { core, view, tools, engine, get project() { return project; } }; // for the browser tests
+window.flowsteadFlowsheet = { core, view, tools, engine, SubTools, get project() { return project; } }; // for the browser tests
 window.flowsheetReady = true;

@@ -929,6 +929,102 @@ try {
     await p.close();
   }
 
+  // ---------- 4m. sub-flowsheets (D132): grouped equals flat; an own package checked against IAPWS-IF97 ----------
+  // (a) Benchmark 07 (a recycle loop) with half its units put in a sub-flowsheet solves to the same numbers as flat:
+  // on the main package the engine gets the same flowsheet. (b) Water heated from 25 to 150 °C at 5 bar in a
+  // sub-flowsheet on the steam tables, fed from and back to a Peng-Robinson flowsheet: the duty is the IAPWS-IF97
+  // region-1 enthalpy rise (computed here from the release's own equations, checked on its verification values), the
+  // boundary streams cross at the same T, P and flow (transfer basis T–P), and mass is conserved.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [], got = {};
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const solveNow = async () => {
+      await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+      const before = await p.evaluate(() => window.flowsteadFlowsheet.project.solve?.at ?? 0);
+      await p.click('#solveBtn');
+      await p.waitForFunction((b) => (window.flowsteadFlowsheet.project.solve?.at ?? 0) > b || /Not solved|Fix /.test(document.getElementById('solveMsgs')?.textContent ?? ''), before, { timeout: 600_000 });
+      return p.evaluate(() => window.flowsteadFlowsheet.project.solve?.result);
+    };
+    // (a)
+    const b07 = JSON.parse(fs.readFileSync(path.join(benchDir, '07-recycle-loop', 'input.json'), 'utf8'));
+    await p.setInputFiles('#openFile', { name: 'b07.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(b07)) });
+    await p.waitForFunction(() => window.flowsteadFlowsheet.project.name === 'b07', null, { timeout: 30_000 });
+    const flat = await solveNow();
+    const f07 = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
+    const units = f07.objects.filter((o) => !/stream/.test(o.type)).sort((a, b) => a.x - b.x);
+    const chosen = new Set(units.slice(Math.floor(units.length / 2)).map((o) => o.id));
+    for (const o of f07.objects.filter((o) => /stream/.test(o.type))) {
+      const ends = f07.connections.filter((c) => c.fromObject === o.id || c.toObject === o.id).map((c) => (c.fromObject === o.id ? c.toObject : c.fromObject));
+      if (ends.length && ends.every((id) => chosen.has(id))) chosen.add(o.id);
+    }
+    await p.evaluate((ids) => window.flowsteadFlowsheet.view.setSelectedIds(JSON.stringify(ids)), [...chosen]);
+    await p.click('#subBtn');
+    await p.waitForFunction(() => (JSON.parse(window.flowsteadFlowsheet.project.flowsheet).subflowsheets ?? []).length === 1, null, { timeout: 10_000 });
+    const grouped = await solveNow();
+    let worst = 0, compared = 0;
+    for (const [id, r] of Object.entries(flat?.objects ?? {})) for (const [k, v] of Object.entries(r.properties ?? {})) {
+      const w = grouped?.objects?.[id]?.properties?.[k];
+      if (typeof v !== 'number') continue;
+      compared++;
+      if (typeof w !== 'number') { problems.push(`grouped case has no ${k} for ${id}`); continue; }
+      worst = Math.max(worst, Math.abs(w - v) / Math.max(Math.abs(v), 1e-9));
+    }
+    got.a = { compared, worst, status: grouped?.status };
+    if (!(flat?.status === 'converged' && grouped?.status === 'converged' && compared > 50 && worst < 1e-7)) problems.push(`grouped vs flat: ${JSON.stringify(got.a)}`);
+    // (b)
+    const K = 273.15, P = 5e5, m = 1.0;
+    const S = (si, unit) => ({ si, unit });
+    const water = { Water: 1 };
+    const fsB = {
+      schemaVersion: 1, propertyPackage: 'Peng-Robinson (PR)', compounds: ['Water'], atmosphericPressurePa: 101325,
+      objects: [
+        { id: 'feed', tag: 'FEED', type: 'material_stream', x: 0, y: 0, specs: { temperature: S(25 + K, 'C'), pressure: S(P, 'bara'), massFlow: S(m, 'kg/s') }, composition: water },
+        { id: 'prod', tag: 'PRODUCT', type: 'material_stream', x: 480, y: 0 },
+        { id: 'in', tag: 'IN', type: 'material_stream', x: 0, y: 0, parent: 'blk' },
+        { id: 'h', tag: 'H-100', type: 'heater', x: 120, y: 0, parent: 'blk', specs: { outletTemperature: S(150 + K, 'C'), pressureDrop: S(0, 'bar') } },
+        { id: 'out', tag: 'OUT', type: 'material_stream', x: 240, y: 0, parent: 'blk' },
+      ],
+      connections: [{ fromObject: 'in', fromPort: 0, toObject: 'h', toPort: 0 }, { fromObject: 'h', fromPort: 0, toObject: 'out', toPort: 0 }],
+      subflowsheets: [{ id: 'blk', tag: 'STEAM', x: 240, y: 0, fluid: { propertyPackage: 'Steam Tables (IAPWS-IF97)', compounds: ['Water'] },
+        ports: [{ inner: 'in', outer: 'feed' }, { inner: 'out', outer: 'prod' }] }],
+    };
+    await p.setInputFiles('#openFile', { name: 'steam.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fsB)) });
+    await p.waitForFunction(() => window.flowsteadFlowsheet.project.name === 'steam', null, { timeout: 30_000 });
+    const r = await solveNow();
+    // IAPWS-IF97 region 1: h = R T τ γτ, π = p/16.53 MPa, τ = 1386 K/T.
+    const I1 = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 8, 8, 21, 23, 29, 30, 31, 32];
+    const J1 = [-2, -1, 0, 1, 2, 3, 4, 5, -9, -7, -1, 0, 1, 3, -3, 0, 1, 3, 17, -4, 0, 6, -5, -2, 10, -8, -11, -6, -29, -31, -38, -39, -40, -41];
+    const N1 = [0.14632971213167, -0.84548187169114, -0.37563603672040e1, 0.33855169168385e1, -0.95791963387872, 0.15772038513228, -0.16616417199501e-1, 0.81214629983568e-3,
+      0.28319080123804e-3, -0.60706301565874e-3, -0.18990068218419e-1, -0.32529748770505e-1, -0.21841717175414e-1, -0.52838357969930e-4, -0.47184321073267e-3, -0.30001780793026e-3,
+      0.47661393906987e-4, -0.44141845330846e-5, -0.72694996297594e-15, -0.31679644845054e-4, -0.28270797985312e-5, -0.85205128120103e-9, -0.22425281908000e-5, -0.65171222895601e-6,
+      -0.14341729937924e-12, -0.40516996860117e-6, -0.12734301741641e-8, -0.17424871230634e-9, -0.68762131295531e-18, 0.14478307828521e-19, 0.26335781662795e-22, -0.11947622640071e-22,
+      0.18228094581404e-23, -0.93537087292458e-25];
+    const h1 = (T, p) => { const pi = p / 16.53e6, tau = 1386 / T; let g = 0; for (let i = 0; i < 34; i++) g += N1[i] * (7.1 - pi) ** I1[i] * J1[i] * (tau - 1.222) ** (J1[i] - 1); return 0.461526 * T * tau * g; };
+    // The release's verification values (Table 5): 115.331273, 184.142828, 975.542239 kJ/kg.
+    const check = [[300, 3e6, 115.331273], [300, 80e6, 184.142828], [500, 3e6, 975.542239]].map(([T, pp, h]) => Math.abs(h1(T, pp) - h));
+    if (Math.max(...check) > 1e-5) problems.push(`IF97 region 1 off its verification values by ${Math.max(...check)} kJ/kg`);
+    const dutyRef = m * (h1(150 + K, P) - h1(25 + K, P)) * 1000; // W
+    const o = r?.objects ?? {};
+    const duty = o.h?.properties?.duty;
+    got.b = { status: r?.status, duty, dutyRef };
+    if (r?.status !== 'converged') problems.push(`steam sub-flowsheet: ${r?.status} ${JSON.stringify(r?.messages ?? [])}`);
+    if (!(Math.abs(duty - dutyRef) / dutyRef < 5e-4)) problems.push(`duty ${duty} W; IAPWS-IF97 ${dutyRef.toFixed(1)} W`);
+    const pr = (id, k) => o[id]?.properties?.[k];
+    for (const [a, b] of [['feed', 'in'], ['out', 'prod']]) for (const k of ['temperature', 'pressure'])
+      if (!(Math.abs(pr(a, k) - pr(b, k)) <= 1e-9 * Math.abs(pr(a, k)))) problems.push(`${b} ${k} ${pr(b, k)} ≠ ${a} ${pr(a, k)}`);
+    if (!(Math.abs(pr('prod', 'massFlow') - m) < 1e-6 && Math.abs(pr('in', 'massFlow') - m) < 1e-6)) problems.push(`mass flows ${pr('in', 'massFlow')}, ${pr('prod', 'massFlow')} kg/s for ${m}`);
+    if (!(Math.abs(pr('out', 'temperature') - (150 + K)) < 1e-6)) problems.push(`OUT at ${pr('out', 'temperature')} K`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} sub-flowsheets (grouped vs flat: ${got.a?.compared} values, worst ${got.a?.worst?.toExponential(1)}; steam tables block duty ${(duty / 1000).toFixed(3)} kW, IAPWS-IF97 ${(dutyRef / 1000).toFixed(3)} kW)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4e. bubble and dew points on demand, and HYSYS's enthalpy basis (D119, D120) ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });

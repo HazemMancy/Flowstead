@@ -35,6 +35,17 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.12**
+- **Sub-flowsheets**, as in HYSYS. A sub-flowsheet is a block on the flowsheet. Double-click it (or Open) to see the
+  flowsheet inside; the bar at the bottom leads back. "Sub-flowsheet" adds an empty block, or puts the objects you
+  selected in one.
+- Streams enter and leave a block as in HYSYS: inside, a stream with one open end is a boundary stream, matched in the
+  block's table to a stream of the parent flowsheet.
+- Each block uses the parent's fluid package or its own: any package, with its own components (Edit its basis). On the
+  parent's package the case solves as one flowsheet, with the same numbers as without the block. On its own package,
+  each boundary stream crosses as a feed defined by the engine's result on the other side, by temperature and pressure
+  or by pressure and vapour fraction (the transfer basis), with its flow and composition.
+
 **Web 1.11.1**
 - The engine is **DWSIM 10.2.15** (was 10.2.12), as in app 3.3.0. Gases dissolved in water now follow the IAPWS G7-04
   Henry's constants: air dissolved in a receiver's condensate is within 1.2 % of G7-04 (was up to 3.8 % off). Other
