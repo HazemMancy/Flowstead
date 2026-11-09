@@ -568,11 +568,16 @@ try {
     for (const c of ctl) {
       const pv = tr(c.id, 'controlledValue'), sp = tr(c.id, 'target');
       if (!pv || !sp) { problems.push(`${c.tag}: no trend`); continue; }
-      const peak = Math.max(...pv.map((v, i) => Math.abs(v - sp[i])));
-      const end = Math.abs(pv.at(-1) - sp.at(-1));
-      ends[c.tag] = { end: pv.at(-1), sp: sp.at(-1), peak };
+      const dev = pv.map((v, i) => Math.abs(v - sp[i]));
+      const peak = Math.max(...dev);
+      const end = dev.at(-1);
+      // Mean deviation over a 10-minute window starting at t0 (the upset is at 30 s).
+      const window = (t0) => { const ix = r.times.map((t, i) => (t >= t0 && t < t0 + 600 ? i : -1)).filter((i) => i >= 0); return ix.reduce((a, i) => a + dev[i], 0) / ix.length; };
+      const early = window(30), late = window(r.times.at(-1) - 600);
+      ends[c.tag] = { end: pv.at(-1), sp: sp.at(-1), peak, early, late };
       if (!(peak > 1e-3 * Math.abs(sp[0]))) problems.push(`${c.tag}: the feed upset did not move it (peak deviation ${peak})`);
-      if (!(end < 0.01 * Math.abs(sp.at(-1)) && end < 0.2 * peak)) problems.push(`${c.tag} ends ${pv.at(-1)} against its setpoint ${sp.at(-1)} (peak deviation ${peak}): a PI controller leaves no offset`);
+      // Integral action removes the offset: the error dies away (a level, an integrating process, does it slowly).
+      if (!(end < 0.01 * Math.abs(sp.at(-1)) && late < 0.5 * early)) problems.push(`${c.tag} ends ${pv.at(-1)} against its setpoint ${sp.at(-1)}; mean deviation ${early} after the upset, ${late} in the last 10 minutes: a PI controller leaves no offset`);
     }
     const plots = await p.locator('#dyn_out figure').count();
     if (plots < ctl.length) problems.push(`${plots} plots for ${ctl.length} controllers`);
@@ -604,6 +609,9 @@ try {
       await p.click('#pid_out [data-use="0"]');
       const g = await p.evaluate((id) => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).dynamics.parameters[id]?.gain?.si, pic.id);
       if (!(Math.abs(g - st.settings[0].gain) < 1e-12)) problems.push(`Use put gain ${g} in the controller, the rule gives ${st.settings[0].gain}`);
+      // The tuning changed the setup: the fit is now out of date and its Use buttons are off.
+      await p.click('#toolsTabs [data-tab="pid"]');
+      if (!(await p.isVisible('#pid_out .stale')) || !(await p.locator('#pid_out [data-use="0"]').isDisabled())) problems.push('after the setup changed, the old step test can still be used');
     }
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} dynamics (${Object.entries(ends).map(([t, e]) => `${t} ends ${e.end.toPrecision(5)} for ${e.sp.toPrecision(5)}`).join(', ')}; no-event drift ${(drift * 100).toFixed(4)} %) and PID tuning (${kv ? `K ${kv['Process gain K']}, τ ${kv['Time constant τ']} s, θ ${kv['Dead time θ']} s` : 'no model'})`);

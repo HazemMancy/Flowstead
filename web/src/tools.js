@@ -507,8 +507,11 @@ export function initTools(app) {
       <div class="actions"><button type="button" class="btn btn-primary btn-sm" id="pid_run">Run the step test</button></div>` : '<p class="fs-note warn">Add a controller (PIC, LIC…) to the flowsheet first.</p>'}
       <div id="pid_out" aria-live="polite"></div>`;
     const out = body.querySelector('#pid_out');
+    // A fit belongs to the flowsheet and dynamic setup it was run on: after a change it is shown out of date and can't be used.
     const show = (t) => {
-      out.innerHTML = renderReport(t.report) + t.settings.map((s, i) => `<button type="button" class="btn btn-sm" data-use="${i}">Use ${esc(s.rule)} in ${esc(f.controllers.find((c) => c.id === t.id)?.label ?? '')}</button>`).join(' ');
+      const stale = t.key !== Dyn.key(app.project().flowsheet);
+      out.innerHTML = (stale ? '<p class="rp-note warn stale">⚠ Out of date: the flowsheet or the dynamics setup changed after this step test. Run it again to use its settings.</p>' : '') +
+        renderReport(t.report) + t.settings.map((s, i) => `<button type="button" class="btn btn-sm" data-use="${i}"${stale ? ' disabled' : ''}>Use ${esc(s.rule)} in ${esc(f.controllers.find((c) => c.id === t.id)?.label ?? '')}</button>`).join(' ');
     };
     if (pid.last && pid.last.id === pid.id) show(pid.last);
     body.onchange = (e) => {
@@ -518,7 +521,7 @@ export function initTools(app) {
     };
     body.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.use && pid.last) {
+      if (b.dataset.use && pid.last && pid.last.key === Dyn.key(app.project().flowsheet)) {
         const s = pid.last.settings[Number(b.dataset.use)];
         const r = JSON.parse(Dyn.applyTuning(app.project().flowsheet, pid.last.id, s.gain, s.integralTime, s.derivativeTime, s.action));
         if (r.error) return app.toast(r.error);
@@ -542,7 +545,7 @@ export function initTools(app) {
         const r1 = await engine.call(req.method, req.params);
         const t = JSON.parse(Dyn.stepTestReport(fsj, id, req.stepTime, req.step, JSON.stringify(r1.result)));
         if (t.error) { out.innerHTML = err(t.error); return; }
-        pid.last = { ...t, id };
+        pid.last = { ...t, id, key: Dyn.key(fsj) };
         show(pid.last);
         out.insertAdjacentHTML('beforeend', `<p class="meta">Calculated by DWSIM in ${((r0.ms + r1.ms) / 1000).toFixed(1)} s.</p>`);
       } catch (x) { out.innerHTML = err(`Not calculated: ${x.message}`); } finally { b.disabled = false; }
