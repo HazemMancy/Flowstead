@@ -27,6 +27,13 @@ jobs:
         run: dotnet engine/src/Flowstead.Engine.Spike/bin/Release/net10.0/linux-x64/Flowstead.Engine.Spike.dll
       - name: Tests + benchmark harness
         run: dotnet test engine/Flowstead.Engine.sln -c Release --no-build --logger "console;verbosity=normal"
+      - name: Expected values from this engine (D131, for a DWSIM upgrade; review before committing)
+        if: always() && github.event_name == 'pull_request' && hashFiles('benchmarks/tools/update_expected.py') != ''
+        run: |
+          python3 -I benchmarks/tools/update_expected.py benchmarks/[0-9]*/
+          git diff --stat -- benchmarks
+          echo "EXPECTED-PATCH-BEGIN"; git diff -- benchmarks | gzip -9 | base64 -w0; echo; echo "EXPECTED-PATCH-END"
+          git checkout -- benchmarks
 
   docker:
     runs-on: ubuntu-24.04
