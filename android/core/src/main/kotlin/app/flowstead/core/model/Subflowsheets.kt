@@ -327,6 +327,7 @@ object Subflowsheets {
         val level = chosen.first().parent
         if (chosen.any { it.parent != level }) throw EditRejected("Select objects on one flowsheet")
         val inSet = chosen.map { it.id }.toSet()
+        partnerOfAnotherBlock(fs, inSet, null)?.let { throw EditRejected(it) }
         var (f, block) = add(fs, level, x, y)
         val ports = ArrayList<SubPort>()
         var conns = f.connections
@@ -390,6 +391,7 @@ object Subflowsheets {
         val chosen = fs.objects.filter { it.id in ids }
         if (chosen.isEmpty()) throw EditRejected("Select the equipment to move into ${b.tag}")
         if (chosen.any { it.parent != b.parent }) throw EditRejected("Move objects that are on the same flowsheet as ${b.tag}")
+        partnerOfAnotherBlock(fs, chosen.map { it.id }.toSet(), blockId)?.let { throw EditRejected(it) }
         val compounds = fluidAt(fs, blockId).compounds.toSet()
         val missing = chosen.flatMap { it.composition.filterValues { x -> x > 0 }.keys }.filter { it !in compounds }.distinct()
         if (missing.isNotEmpty()) throw EditRejected("${b.tag}'s fluid package has no ${missing.joinToString(", ")}: add ${if (missing.size == 1) "it" else "them"} there first")
@@ -504,6 +506,19 @@ object Subflowsheets {
             safety = safety, dynamics = dynamics,
         )
         return Triple(clean(out), newBlocks.first(), notes)
+    }
+
+    /**
+     * Why [ids] can't go into a block other than [except]: a stream among them is the outside partner of another block's
+     * stream in or out, which must stay on that block's flowsheet. Null when they can.
+     */
+    private fun partnerOfAnotherBlock(fs: Flowsheet, ids: Set<String>, except: String?): String? {
+        for (b in fs.subflowsheets) {
+            if (b.id == except) continue
+            val p = b.ports.firstOrNull { it.outer in ids } ?: continue
+            return "${fs.obj(p.outer!!)?.tag} runs into or out of ${b.tag}: leave it out (its unit can go, it stays matched)"
+        }
+        return null
     }
 
     /** Refs that name another object. */

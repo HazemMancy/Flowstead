@@ -254,6 +254,15 @@ class SubflowsheetsTest {
         assertTrue("Propane" in e.message!!, e.message)
         // Equipment without a composition of its own moves in.
         assertEquals(b.id, Subflowsheets.moveInto(own, listOf("k"), b.id).obj("k")!!.parent)
+        // A stream matched to another block stays on that block's flowsheet: DISCHARGE feeds a cooler block.
+        val (g, cooler) = Subflowsheets.group(train, listOf("e"), 360.0, 0.0)
+        val (g2, other) = Subflowsheets.add(g, null, 0.0, 300.0)
+        val r = assertFailsWith<EditRejected> { Subflowsheets.moveInto(g2, listOf("k", "dis"), other.id) }
+        assertTrue("DISCHARGE" in r.message!! && cooler.tag in r.message!!, r.message)
+        assertFailsWith<EditRejected> { Subflowsheets.group(g2, listOf("k", "dis"), 0.0, 0.0) }
+        // Its unit alone moves, and the stream stays matched, now crossing into the new block too.
+        val k = Subflowsheets.moveInto(g2, listOf("k"), other.id)
+        assertEquals(shape(train), shape(Subflowsheets.flatten(k)))
         // Only from the flowsheet the block is on.
         val (f1, inner) = Subflowsheets.add(f0, b.id, 0.0, 0.0)
         assertFailsWith<EditRejected> { Subflowsheets.moveInto(f1, listOf("k"), inner.id) }
