@@ -19,3 +19,28 @@ export function enterToNext(e, scope, commit = false) {
   if (target?.isConnected) { target.focus(); target.select?.(); }
   return true;
 }
+
+/** A selector that finds [el] again after its form is drawn anew: its id, else its data-* attributes (data-i, data-unit…). */
+function keyOf(el) {
+  if (el.id) return `#${CSS.escape(el.id)}`;
+  const attrs = [...el.attributes].filter((a) => a.name.startsWith('data-'));
+  return attrs.length ? `${el.tagName.toLowerCase()}${attrs.map((a) => `[${a.name}="${CSS.escape(a.value)}"]`).join('')}` : null;
+}
+
+/**
+ * Redraws [scope] after a change without losing the keyboard's place (Web 1.10.2): it waits until the browser has moved
+ * focus (Tab, Enter's next field, a click), redraws, then focuses the same field in the new form, by id or data-* key.
+ */
+export function redrawKeepingFocus(scope, redraw) {
+  setTimeout(() => {
+    const a = document.activeElement;
+    const key = a && a !== document.body && scope.contains(a) ? keyOf(a) : null;
+    const caret = a?.selectionStart ?? null;
+    redraw();
+    const el = key && scope.querySelector(key);
+    if (el && el !== document.activeElement) {
+      el.focus({ preventScroll: true });
+      if (caret !== null && el.setSelectionRange && el.value !== undefined) { try { el.select(); } catch (e) {} }
+    }
+  }, 0);
+}

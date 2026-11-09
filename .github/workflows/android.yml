@@ -13,11 +13,11 @@ jobs:
       run:
         working-directory: android
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             engine/dwsim-bin
@@ -26,11 +26,11 @@ jobs:
       - name: Prepare the on-device engine (DWSIM + .NET runtime for Android)
         working-directory: .
         run: engine/embedded/android/ci-prepare.sh
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
       - name: Core unit tests (units, model, formatting)
         run: ./gradlew :core:test
       - name: App unit + Robolectric UI tests
@@ -55,13 +55,13 @@ jobs:
         run: find app/schemas -name '*.json' -exec sh -c 'echo "=== $1"; cat "$1"' _ {} \;
       - name: Upload APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: flowstead-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: android-reports
           path: |
@@ -71,7 +71,7 @@ jobs:
             android/app/schemas/
       - name: Upload screenshots (light and dark, from StoreScreenshots)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: screenshots
           path: android/app/build/screenshots/
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: build-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Start engine container
         run: |
           docker build -t flowstead-engine engine/
@@ -90,11 +90,11 @@ jobs:
           for i in $(seq 1 60); do curl -fs localhost:8080/healthz && break; sleep 2; done
           echo "FLOWSTEAD_E2E_KEY=$(docker exec eng dotnet /app/Flowstead.Engine.Api.dll keys add ci-e2e | tail -1)" >> "$GITHUB_ENV"
           echo "FLOWSTEAD_E2E_URL=http://localhost:8080" >> "$GITHUB_ENV"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
       - name: End-to-end test
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --tests 'app.flowstead.e2e.*'
@@ -114,11 +114,11 @@ jobs:
     needs: build-test
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             engine/dwsim-bin
@@ -127,11 +127,11 @@ jobs:
       - name: Prepare the on-device engine (DWSIM + .NET runtime for Android)
         working-directory: .
         run: engine/embedded/android/ci-prepare.sh
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -168,7 +168,7 @@ jobs:
           grep "FlowsteadPdf" logcat.txt | sed -E 's/^.*FlowsteadPdf\( *[0-9]+\): //' || true
       - name: Upload device test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: device-reports
           path: |

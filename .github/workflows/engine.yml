@@ -10,12 +10,12 @@ jobs:
   build-test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
       - name: Cache the DWSIM build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: engine/dwsim-bin
           key: dwsim-${{ hashFiles('engine/scripts/fetch-dwsim.sh', 'engine/patches/**', 'engine/native/ipopt_stub.c') }}
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: build-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build image
         run: docker build -t flowstead-engine engine/
       - name: Spike in container

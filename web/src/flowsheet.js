@@ -857,7 +857,7 @@ let engineState = 'loading', busy = false;
 const engine = startEngine((s) => {
   if (s.type === 'status') setStatus('loading', s.total ? `Engine ${Math.round((100 * s.loaded) / Math.max(s.total, 1))} %` : s.text);
   else if (s.type === 'ready') {
-    engineState = 'ready'; setStatus('ready', `DWSIM ${s.dwsimVersion} ready`); queueSolve(0);
+    engineState = 'ready'; setStatus('ready', `DWSIM ${String(s.dwsimVersion ?? '').split('.')[0]} ready`); queueSolve(0);
     engine.call('propertyPackages', null).then(({ result }) => { packages = result; if ($('basisDlg').open) renderBasis(); }).catch(() => {});
   }
   else if (s.type === 'failed') { engineState = 'failed'; setStatus('failed', 'Engine failed to start'); toast(s.error); }
@@ -1002,7 +1002,7 @@ $('unitGrid').addEventListener('change', (e) => {
 const tools = initTools({
   $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Data: DataTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
   project: () => project, commit: (json, message) => commit(json, message), toast,
-  ready: () => engine.ready,
+  ready: () => engine.ready, ensureSaturation: (ids) => ensureSaturation(ids),
 });
 $('toolsBtn').addEventListener('click', () => tools.openTools());
 const documents = initDocuments({

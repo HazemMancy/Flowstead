@@ -4,7 +4,7 @@
 // inputs, calls the engine worker and lays the reports out. Every number shown is one the engine returned.
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { esc, renderReport } from './report.js';
-import { enterToNext } from './forms.js';
+import { enterToNext, redrawKeepingFocus } from './forms.js';
 
 /**
  * [app]: {$, Tools, Safety, engine, project() → {flowsheet, solve}, commit(json, message), toast(text), ready() → Promise}
@@ -155,7 +155,7 @@ export function initTools(app) {
       const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
       setPath(cs, p, v);
       if (p.endsWith('.objectId')) setPath(cs, p.replace('objectId', 'key'), '');
-      if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') caseStudy(body);
+      if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') redrawKeepingFocus(body, () => caseStudy(body));
     };
     body.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
@@ -211,7 +211,7 @@ export function initTools(app) {
       const p = e.target.dataset.p; if (!p) return;
       setPath(op, p, e.target.type === 'checkbox' ? e.target.checked : e.target.value);
       if (p.endsWith('.objectId')) setPath(op, p.replace('objectId', 'key'), '');
-      if (e.target.tagName === 'SELECT') optimiser(body);
+      if (e.target.tagName === 'SELECT') redrawKeepingFocus(body, () => optimiser(body));
     };
     body.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
@@ -292,9 +292,9 @@ export function initTools(app) {
     out.innerHTML = renderReport(JSON.parse(Safety.report(app.project().flowsheet, kind, id)));
     const apply = (action) => {
       const r = JSON.parse(Safety.apply(app.project().flowsheet, ...solveArgs(), kind, id, JSON.stringify(action)));
-      if (r.error) { app.toast(r.error); return redraw(); }
+      if (r.error) { app.toast(r.error); return redrawKeepingFocus($('toolsBody'), redraw); }
       app.commit(JSON.stringify(r.flowsheet), 'Updated');
-      redraw();
+      redrawKeepingFocus($('toolsBody'), redraw);
     };
     form.onchange = (e) => {
       const el = e.target, it = f.items[Number(el.dataset.i)]; if (!it) return;
@@ -311,7 +311,7 @@ export function initTools(app) {
       if (it.kind === 'check') return apply({ ...it.op, on: el.checked });
       if (it.kind === 'choice' && el.value !== '') return apply({ ...it.op, value: el.value });
     };
-    form.onkeydown = (e) => enterToNext(e, form, true);
+    form.onkeydown = (e) => { enterToNext(e, form, true); }; // braces: an on… handler that returns false cancels the key (Tab did nothing)
     form.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.del) return apply({ op: 'delete' });
@@ -423,9 +423,9 @@ export function initTools(app) {
   }
   const dynApply = (action, redraw) => {
     const r = JSON.parse(Dyn.apply(app.project().flowsheet, JSON.stringify(action)));
-    if (r.error) { app.toast(r.error); return redraw(); }
+    if (r.error) { app.toast(r.error); return redrawKeepingFocus($('toolsBody'), redraw); }
     app.commit(JSON.stringify(r.flowsheet), 'Dynamics updated');
-    redraw();
+    redrawKeepingFocus($('toolsBody'), redraw);
   };
   const ev = { time: '', objectId: '', key: '', value: '', unit: '', timeUnit: '' };
   function dynamicsTool(body) {
@@ -464,13 +464,13 @@ export function initTools(app) {
       if (el.dataset.unit) { const u = it.units.find((x) => x.id === sel.value); it.unit = sel.value; if (u?.text) input.value = u.text; return; }
       dynApply({ op: 'param', id: it.id, key: it.key, value: input.value, unit: sel.value }, redraw);
     };
-    form.onkeydown = (e) => enterToNext(e, form, true);
+    form.onkeydown = (e) => { enterToNext(e, form, true); }; // braces: an on… handler that returns false cancels the key (Tab did nothing)
     body.onchange = (e) => {
       const id = e.target.id;
       if (id === 'dyn_evt') ev.time = e.target.value;
       else if (id === 'dyn_evtu') ev.timeUnit = e.target.value;
-      else if (id === 'dyn_evo') { ev.objectId = e.target.value; ev.key = ''; ev.value = ''; redraw(); }
-      else if (id === 'dyn_evk') { ev.key = e.target.value; ev.value = ''; ev.unit = ''; redraw(); }
+      else if (id === 'dyn_evo') { ev.objectId = e.target.value; ev.key = ''; ev.value = ''; redrawKeepingFocus(body, redraw); }
+      else if (id === 'dyn_evk') { ev.key = e.target.value; ev.value = ''; ev.unit = ''; redrawKeepingFocus(body, redraw); }
       else if (id === 'dyn_evv') ev.value = e.target.value;
       else if (id === 'dyn_evvu') ev.unit = e.target.value;
     };
@@ -553,7 +553,7 @@ export function initTools(app) {
   }
 
   // ---------- spreadsheet (D126): the app's SpreadsheetTool ----------
-  const sh = { cell: 'A1', resObj: '', resKey: '', expObj: '', expKey: '' };
+  const sh = { cell: 'A1', resObj: '', resKey: '', expObj: '', expKey: '', satAsked: new Set() };
   function sheetTool(body) {
     const redraw = () => sheetTool(body);
     const [solveJson, hash] = solveArgs();
@@ -562,6 +562,15 @@ export function initTools(app) {
     const ro = cat.find((o) => o.id === sh.resObj);
     const to = d.targets.find((o) => o.id === sh.expObj);
     const cur = d.cells[sh.cell];
+    // Bubble and dew points are calculated on demand (D121): a cell that imports one asks the engine for that stream's,
+    // once per solve, and the sheet is drawn again with the answer (Web 1.10.2).
+    const satIds = [...new Set(Object.values(d.cells).flatMap((c) => [...String(c.raw).matchAll(/\[([^\]]+?)\.((?:bubble|dew)Point\w+)\]/g)]
+      .map((m) => cat.find((o) => o.tag.trim() === m[1].trim())?.id)).filter(Boolean))];
+    const want = satIds.filter((id) => !sh.satAsked.has(`${hash}|${id}`));
+    if (hash && want.length && app.ensureSaturation) {
+      want.forEach((id) => sh.satAsked.add(`${hash}|${id}`));
+      Promise.resolve(app.ensureSaturation(want)).then(() => { if (dlg.open && tab === 'sheet') redraw(); });
+    }
     const grid = `<div class="table-wrap"><table class="props ss-grid"><thead><tr><th scope="col"></th>${d.columns.map((c) => `<th scope="col">${c}</th>`).join('')}</tr></thead><tbody>${
       Array.from({ length: d.rows }, (_, r) => `<tr><th scope="row">${r + 1}</th>${d.columns.map((c) => {
         const n = `${c}${r + 1}`, v = d.cells[n];
@@ -585,7 +594,7 @@ export function initTools(app) {
     body.onkeydown = (e) => { if (e.target.id === 'ss_in' && e.key === 'Enter') { e.preventDefault(); setCell(); body.querySelector('#ss_in')?.focus(); } };
     body.onchange = (e) => {
       const id = e.target.id, v = e.target.value;
-      if (id === 'ss_ro') { sh.resObj = v; sh.resKey = ''; redraw(); }
+      if (id === 'ss_ro') { sh.resObj = v; sh.resKey = ''; redrawKeepingFocus(body, redraw); }
       else if (id === 'ss_rk' && v) {
         // Inserts [TAG.key] at the cursor of the formula, starting a formula if the cell has none.
         const tag = cat.find((o) => o.id === sh.resObj)?.tag, input = body.querySelector('#ss_in');
@@ -593,8 +602,8 @@ export function initTools(app) {
         input.value = t.startsWith('=') ? t + ref : `=${ref}`;
         sh.resKey = ''; e.target.value = '';
         input.focus();
-      } else if (id === 'ss_xo') { sh.expObj = v; sh.expKey = ''; redraw(); }
-      else if (id === 'ss_xk') { sh.expKey = v; redraw(); }
+      } else if (id === 'ss_xo') { sh.expObj = v; sh.expKey = ''; redrawKeepingFocus(body, redraw); }
+      else if (id === 'ss_xk') { sh.expKey = v; redrawKeepingFocus(body, redraw); }
     };
     body.onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;

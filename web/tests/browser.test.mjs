@@ -453,6 +453,18 @@ try {
       return r;
     }));
     for (const r of found) if (Math.abs(r.top) > 1 || r.gap < 0 || Math.abs(r.scrolled) > 1) problems.push(`${r.id}: title ${r.top.toFixed(1)} px from the top, ${r.gap.toFixed(1)} px above the first line, ${r.scrolled.toFixed(1)} px scrolled`);
+    // The keyboard (Web 1.10.2): in a Tools form, typing a value and pressing Tab keeps it and moves on (the key used to be
+    // cancelled), and a form drawn again after the change keeps the keyboard's place.
+    await p.click('#toolsBtn'); await p.click('#toolsTabs [data-tab="dyn"]');
+    const vol = await p.evaluate(() => { const f = document.querySelectorAll('#dyn_form .field'); return [...f].findIndex((x) => /Volume/.test(x.querySelector('label')?.textContent)); });
+    const volIn = p.locator('#dyn_form .field').nth(vol).locator('input');
+    await volIn.click(); await volIn.fill('6');
+    await p.keyboard.press('Tab'); await p.waitForTimeout(150);
+    const kb = await p.evaluate(() => ({ v: JSON.parse(window.flowsteadFlowsheet.project.flowsheet).dynamics.parameters.sep.volume.si, unit: document.activeElement.matches('select[data-unit]'), i: document.activeElement.dataset.i }));
+    await p.keyboard.press('Tab'); await p.waitForTimeout(150);
+    const next = await p.evaluate(() => document.activeElement.closest('.field')?.querySelector('label')?.textContent);
+    if (kb.v !== 6 || !kb.unit || !/Height/.test(next ?? '')) problems.push(`Tab in Dynamics: volume ${kb.v} m³, focus on the volume's unit ${kb.unit}, then on "${next}"`);
+    await p.evaluate(() => document.getElementById('toolsDlg').close());
     if (found.length < 7) problems.push(`only ${found.length} windows checked`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} window title bars at ${width} px (${found.length} windows)`);
     problems.forEach((x) => console.log('     ' + x));
@@ -683,6 +695,13 @@ try {
     await setCell('A2', '=A1/2 + 10');
     await setCell('B1', '12');
     const shown = async (c) => Number((await p.textContent(`[data-cell="${c}"]`)).replace(/,/g, ''));
+    // A dew point is calculated on demand (D121): the sheet asks for SUCTION's and shows the engine's, in °C.
+    await setCell('C1', '=[SUCTION.dewPointTemperature]');
+    await p.waitForFunction(() => window.flowsteadFlowsheet.project.solve.result.objects.suc.properties.dewPointTemperature !== undefined, null, { timeout: 120_000 }).catch(() => {});
+    await p.waitForFunction(() => !/ERR/.test(document.querySelector('[data-cell="C1"]')?.textContent ?? 'ERR'), null, { timeout: 30_000 }).catch(() => {});
+    const dewK = await p.evaluate(() => window.flowsteadFlowsheet.project.solve.result.objects.suc.properties.dewPointTemperature);
+    const c1 = await shown('C1');
+    if (!(dewK !== undefined && Math.abs(c1 - (dewK - 273.15)) < 1e-3)) problems.push(`C1 = [SUCTION.dewPointTemperature] shows ${await p.textContent('[data-cell="C1"]')}; the engine's dew point is ${dewK} K`);
     const a1 = await shown('A1'), a2 = await shown('A2');
     if (!(Math.abs(a1 - w1 / 1000) < 1e-3)) problems.push(`A1 shows ${a1} kW; the engine's K-100 power is ${w1 / 1000} kW`);
     if (!(Math.abs(a2 - (a1 / 2 + 10)) < 1e-3)) problems.push(`A2 = A1/2 + 10 shows ${a2}, by hand ${a1 / 2 + 10}`);
