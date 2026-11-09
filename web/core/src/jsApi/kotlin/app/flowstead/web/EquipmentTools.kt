@@ -69,7 +69,7 @@ object EquipmentTools {
         return u?.toSi(v, ctx) ?: v
     }
     private fun ctx(f: Flowsheet) = UnitContext(f.atmosphericPressurePa)
-    private inline fun edit(block: () -> Flowsheet): String = try { out(block()) } catch (e: IllegalArgumentException) { err(e.message ?: "Not allowed") }
+    private inline fun edit(block: () -> Flowsheet): String = try { out(block()) } catch (e: Exception) { err(e.message ?: "Not allowed") }
 
     // ---------- performance curves (D48) ----------
 
@@ -361,5 +361,5 @@ object EquipmentTools {
             else -> f
         }
         buildJsonObject { put("flowsheet", FlowsheetJson.encodeToJsonElement(Flowsheet.serializer(), next)); created?.let { put("reaction", it) } }.toString()
-    } catch (e: IllegalArgumentException) { err(e.message ?: "Not allowed") }
+    } catch (e: Exception) { err(e.message ?: "Not allowed") }
 }
