@@ -149,10 +149,8 @@ class FlowsheetView {
         if (level != null && Subflowsheets.of(saved, level) == null) level = null
         fs = PortAlignment.align(levelView(saved))
         // A matched boundary stream is defined by its partner (D132): checked on the case flattened.
-        val pairs = Subflowsheets.joinedAll(saved)
-        val flat = Subflowsheets.flatten(saved)
-        status = saved.objects.associate { o -> o.id to Specification.status(flat, flat.obj(pairs[o.id] ?: o.id) ?: o) }
-        notReady = Readiness.of(flat).notReady.let { nr -> nr + pairs.mapNotNull { (i, o) -> nr[o]?.let { i to it } } }
+        status = Readiness.statusOf(saved)
+        notReady = Readiness.of(saved).notReady
         results = ResultView(solve, saved.modelHash())
         selection.retainAll(fs.objects.map { it.id }.toSet())
     }

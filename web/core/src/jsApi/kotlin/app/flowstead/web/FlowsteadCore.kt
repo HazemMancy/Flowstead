@@ -96,17 +96,11 @@ object FlowsteadCore {
      */
     fun prepareSolve(flowsheetJson: String): String {
         val whole = fs(flowsheetJson)
-        // With sub-flowsheets (D132) the checks run on the case flattened, each matched pair one stream; the engine
-        // later gets the ready part of the case as it is, which the page's engine client flattens or solves by region.
+        // With sub-flowsheets (D132, D133) the checks run on the case flattened (Readiness does); the engine later gets
+        // the ready part of the case as it is, which the page's engine client flattens or solves by package.
         val f = Subflowsheets.flatten(whole)
-        val r = Readiness.of(f)
-        val solvable = if (!Subflowsheets.has(whole)) r.solvable else {
-            val ready = r.solvable.objects.map { it.id }.toSet()
-            val pairs = Subflowsheets.joinedAll(whole)
-            val keep = whole.objects.filter { it.id in ready || pairs[it.id] in ready }
-            val ids = keep.map { it.id }.toSet()
-            whole.copy(objects = keep, connections = whole.connections.filter { it.fromObject in ids && it.toObject in ids })
-        }
+        val r = Readiness.of(whole)
+        val solvable = r.solvable
         return buildJsonObject {
             putJsonArray("blocking") { Specification.blocking(f).forEach { add(JsonPrimitive(it.second)) } }
             putJsonArray("problems") { Specification.problems(f).forEach { add(JsonPrimitive(it.second)) } }
