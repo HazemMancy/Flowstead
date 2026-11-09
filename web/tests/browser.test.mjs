@@ -633,7 +633,8 @@ try {
     // With the event removed, the run holds the steady state: the separator pressure stays at its steady value.
     await p.click('#toolsTabs [data-tab="dyn"]');
     await p.click('[data-rmev="0"]');
-    if (!(await p.isVisible('#dyn_out .stale'))) problems.push('the last run is not marked out of date after the setup changed');
+    // The form is drawn again a moment after the change (it keeps the keyboard's place, D129): wait for the mark.
+    if (!(await p.waitForSelector('#dyn_out .stale', { timeout: 5000 }).then(() => true, () => false))) problems.push('the last run is not marked out of date after the setup changed');
     await p.click('#dyn_run');
     await p.waitForFunction(() => !document.querySelector('#dyn_out .stale') && !/Running/.test(document.getElementById('dyn_out').textContent), null, { timeout: 600_000 });
     const r2 = await p.evaluate(() => window.flowsteadFlowsheet.tools.lastDynamics());

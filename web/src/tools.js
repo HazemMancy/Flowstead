@@ -814,7 +814,8 @@ export function initTools(app) {
     }
     if (!st.streams.some((x) => x.id === th.source)) th.source = '';
     const pkgs = (app.packages?.() ?? []).map((x) => x.name);
-    th.packages ??= st.package ? [st.package] : [];
+    // The packages compared start from this fluid's own, and start again when the fluid's package changes.
+    if (th.pkgFor !== st.package) { th.pkgFor = st.package; th.packages = st.package ? [st.package] : []; }
     th.property ||= st.properties[0];
     const copt = (k) => opts(cs.map((c) => ({ id: c, label: c })), th[k]);
     const uopts = (list, v) => list.map((u) => `<option value="${esc(u.id)}"${u.id === v ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('');
