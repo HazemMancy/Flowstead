@@ -578,6 +578,9 @@ try {
       if (!(peak > 1e-3 * Math.abs(sp[0]))) problems.push(`${c.tag}: the feed upset did not move it (peak deviation ${peak})`);
       // Integral action removes the offset: the error dies away (a level, an integrating process, does it slowly).
       if (!(end < 0.01 * Math.abs(sp.at(-1)) && late < 0.5 * early)) problems.push(`${c.tag} ends ${pv.at(-1)} against its setpoint ${sp.at(-1)}; mean deviation ${early} after the upset, ${late} in the last 10 minutes: a PI controller leaves no offset`);
+      // The loop's course every 5 minutes (measurement, output, the valve it moves), for the log.
+      const op = tr(c.id, 'output'), mv = tr(c.refs.manipulatedObject, 'valveOpening');
+      console.log(`     ${c.tag} every 300 s: ` + r.times.map((t, i) => [t, i]).filter(([t]) => t % 300 === 0).map(([t, i]) => `${t}s PV ${pv[i].toPrecision(5)} OP ${op?.[i]?.toFixed(1)} % valve ${mv ? (mv[i] * 100).toFixed(1) : '?'} %`).join('; '));
     }
     const plots = await p.locator('#dyn_out figure').count();
     if (plots < ctl.length) problems.push(`${plots} plots for ${ctl.length} controllers`);
