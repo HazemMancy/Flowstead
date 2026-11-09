@@ -45,6 +45,7 @@
   <div class="fs-toolbar" role="toolbar" aria-label="Flowsheet">
     <label class="sr-only" for="projectName">Project name</label>
     <input type="text" id="projectName" class="fs-name" value="Untitled" autocomplete="off" spellcheck="false" />
+    <div class="fs-tbscroll">
     <label class="sr-only" for="examples">Open an example</label>
     <select id="examples" class="fs-select"><option value="">Examples…</option></select>
     <span class="fs-group">
@@ -68,6 +69,7 @@
       <button type="button" class="btn btn-sm" id="pasteBtn" disabled title="Paste what you copied (Ctrl+V)">Paste</button>
       <button type="button" class="btn btn-sm" id="subBtn" title="Add a sub-flowsheet: a block holding a flowsheet of its own, as HYSYS's. Select objects first to put them in it.">Sub-flowsheet</button>
     </span>
+    </div>
     <button type="button" class="btn btn-sm mode" id="modeBtn" aria-pressed="false" title="Hold: nothing solves until you press Solve. Active: the flowsheet solves a moment after each change."><span class="dot" aria-hidden="true"></span><span id="modeText">Hold</span></button>
     <button type="button" class="btn btn-sm btn-primary" id="solveBtn">Solve</button>
     <span class="fs-status" id="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="statusText">Loading…</span></span>
@@ -75,7 +77,8 @@
 
   <div class="fs-body">
     <aside class="fs-palette" aria-label="Palette">
-      <div class="fs-groups" id="groups" role="tablist" aria-label="Object groups"></div>
+      <div class="fs-palhead"><div class="fs-groups" id="groups" role="tablist" aria-label="Object groups"></div>
+        <button type="button" class="icon-btn fs-paltoggle" id="palToggle" aria-expanded="true" aria-controls="items" title="Hide or show the palette">▾</button></div>
       <ul class="fs-items" id="items"></ul>
       <p class="fs-hint">Tap to add in the middle of the view, or drag onto the flowsheet. Drag from a port to draw a stream.</p>
     </aside>
@@ -83,6 +86,11 @@
     <div class="fs-stage">
       <canvas id="canvas" tabindex="0" role="application" aria-roledescription="flowsheet" aria-label="Flowsheet canvas. Use the object list to reach objects; Shift and click or Shift and drag selects several; Ctrl+C copies, Ctrl+V pastes, Ctrl+D duplicates, Ctrl+A selects all; Delete removes what is selected, arrow keys move it." aria-describedby="objects"></canvas>
       <nav class="fs-levelbar card" id="levelBar" hidden aria-label="Sub-flowsheets"></nav>
+      <div class="fs-zoom card" role="group" aria-label="Zoom">
+        <button type="button" class="icon-btn" id="zoomOut" aria-label="Zoom out" title="Zoom out">−</button>
+        <button type="button" class="icon-btn" id="zoomIn" aria-label="Zoom in" title="Zoom in">+</button>
+        <button type="button" class="icon-btn" id="zoomFit" aria-label="Fit the flowsheet in view" title="Fit">⤢</button>
+      </div>
       <div class="fs-empty" id="empty">
         <p><b>An empty flowsheet.</b> Add a stream or a unit from the palette, or open an example.</p>
       </div>

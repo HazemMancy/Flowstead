@@ -35,6 +35,15 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.13**
+- **Comfortable on every screen, with a finger or a mouse.** On a phone the toolbar is two lines (the name, Hold or
+  Active, Solve; then one strip of every other button that scrolls sideways), so the flowsheet keeps most of the
+  screen. The palette folds away with ▾. On a phone on its side, the palette is a narrow column and the toolbar one line.
+- A worksheet or a block's panel slides up from the bottom, full width; dialogs (Basis, Tools, Units…) take the whole
+  screen on a phone.
+- Zoom buttons (−, +, fit) on the flowsheet, for a mouse without a wheel, a pen, or a finger.
+- On touch screens, buttons a finger can hit and fields with 16 px text, so the phone doesn't zoom in on them.
+
 **Web 1.12.1**
 - **Streams in and out of a sub-flowsheet** as HYSYS's Connections: in the block's panel, add a stream in or out from
   the free streams around it, or drag a stream onto the block; the stream inside is made for you.

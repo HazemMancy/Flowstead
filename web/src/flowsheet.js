@@ -265,6 +265,21 @@ function paintTiles() {
     core.drawSymbol(g, b.dataset.type, w, h, dark());
   }
 }
+// The palette folds away on a small screen (Web 1.13), remembered in this browser.
+const PAL_KEY = 'flowstead.web.paletteCollapsed';
+function setPalette(collapsed) {
+  document.querySelector('.fs-palette').classList.toggle('collapsed', collapsed);
+  $('palToggle').setAttribute('aria-expanded', String(!collapsed));
+  $('palToggle').setAttribute('aria-label', collapsed ? 'Show the palette' : 'Hide the palette');
+  try { localStorage.setItem(PAL_KEY, collapsed ? '1' : ''); } catch (e) {}
+  requestAnimationFrame(resize);
+}
+$('palToggle').addEventListener('click', () => setPalette(!document.querySelector('.fs-palette').classList.contains('collapsed')));
+try { if (localStorage.getItem(PAL_KEY)) setPalette(true); } catch (e) {}
+// Zoom buttons on the canvas, about its centre.
+$('zoomIn').addEventListener('click', () => { view.zoomAround(cssW / 2, cssH / 2, 1.25); draw(); });
+$('zoomOut').addEventListener('click', () => { view.zoomAround(cssW / 2, cssH / 2, 0.8); draw(); });
+$('zoomFit').addEventListener('click', () => { view.fit(cssW, cssH); draw(); });
 $('groups').addEventListener('click', (e) => {
   const b = e.target.closest('[data-group]'); if (!b) return;
   group = b.dataset.group || null; renderGroups(); renderPalette();
