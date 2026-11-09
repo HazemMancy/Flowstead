@@ -129,11 +129,18 @@ object Subflowsheets {
     private fun hasSource(fs: Flowsheet, id: String) = fs.connections.any { it.toObject == id }
     private fun hasDestination(fs: Flowsheet, id: String) = fs.connections.any { it.fromObject == id }
 
+    // A stream is fed or drained by a connection, or by a block it is matched to (it then runs into or out of that
+    // block): so a stream can pass through one block straight into a block inside it.
+    private fun fed(fs: Flowsheet, id: String, depth: Int = 0): Boolean = hasSource(fs, id) || (depth < 16 &&
+        fs.subflowsheets.any { b -> b.ports.any { p -> p.outer == id && fed(fs, p.inner, depth + 1) } })
+    private fun drained(fs: Flowsheet, id: String, depth: Int = 0): Boolean = hasDestination(fs, id) || (depth < 16 &&
+        fs.subflowsheets.any { b -> b.ports.any { p -> p.outer == id && !fed(fs, p.inner, depth + 1) } })
+
     /** The streams inside [blockId] with one open end: its feeds and products, as HYSYS's boundary streams. */
     fun boundary(fs: Flowsheet, blockId: String): List<Boundary> {
         val b = of(fs, blockId) ?: return emptyList()
         return objectsAt(fs, blockId).filter(::isStream).mapNotNull { s ->
-            val src = hasSource(fs, s.id); val dst = hasDestination(fs, s.id)
+            val src = fed(fs, s.id); val dst = drained(fs, s.id)
             val port = b.ports.firstOrNull { it.inner == s.id }
             when {
                 !src && dst -> Boundary(s, true, port)
@@ -147,10 +154,12 @@ object Subflowsheets {
     fun outerCandidates(fs: Flowsheet, blockId: String, innerId: String): List<SimObject> {
         val b = of(fs, blockId) ?: return emptyList()
         val bd = boundary(fs, blockId).firstOrNull { it.stream.id == innerId } ?: return emptyList()
-        val taken = fs.subflowsheets.flatMap { s -> s.ports.mapNotNull { it.outer } }.toSet() - setOfNotNull(bd.port?.outer)
+        // Judged without this stream's own match, so the stream it is matched to now stays a choice.
+        val free = fs.copy(subflowsheets = fs.subflowsheets.map { s -> if (s.id == blockId) s.copy(ports = s.ports.filter { it.inner != innerId }) else s })
+        val taken = free.subflowsheets.flatMap { s -> s.ports.mapNotNull { it.outer } }.toSet()
         return objectsAt(fs, b.parent).filter { o ->
             o.type == bd.stream.type && o.id !in taken &&
-                if (bd.feed) !hasDestination(fs, o.id) else !hasSource(fs, o.id)
+                if (bd.feed) !drained(free, o.id) else !fed(free, o.id)
         }
     }
 
@@ -318,7 +327,7 @@ object Subflowsheets {
 
     /** Joins each matched pair of [ports] into the outer stream: connections and references to the inner one move to it. */
     private fun mergePorts(fs: Flowsheet, ports: List<SubPort>): Flowsheet {
-        val map = ports.mapNotNull { p -> p.outer?.let { p.inner to it } }.toMap()
+        val map = chain(ports)
         if (map.isEmpty()) return fs
         fun r(id: String) = map[id] ?: id
         return fs.copy(
@@ -328,19 +337,31 @@ object Subflowsheets {
         )
     }
 
+    /** Inner → outer for [ports], followed through every level (a stream passed down two blocks ends at the outermost). */
+    private fun chain(ports: List<SubPort>): Map<String, String> {
+        val direct = ports.mapNotNull { p -> p.outer?.let { p.inner to it } }.toMap()
+        return direct.mapValues { (_, o) -> var x = o; var n = 0; while (n++ < 32) x = direct[x] ?: break; x }
+    }
+
+    /** Every matched inner stream and the stream it is joined into on one package (for checks): inner → outermost. */
+    fun joinedAll(fs: Flowsheet): Map<String, String> = chain(clean(fs).subflowsheets.flatMap { it.ports })
+
     /**
      * The case as one flat flowsheet, every matched pair joined: what the engine solves when every sub-flowsheet uses
      * the main package, and what readiness is checked on.
      */
-    fun flatten(fs: Flowsheet): Flowsheet {
-        if (!has(fs)) return fs
+    fun flatten(fs0: Flowsheet): Flowsheet {
+        if (!has(fs0)) return fs0
+        val fs = clean(fs0)
         val m = mergePorts(fs, fs.subflowsheets.flatMap { it.ports })
         return m.copy(objects = m.objects.map { if (it.parent != null) it.copy(parent = null) else it }, subflowsheets = emptyList())
     }
 
     /** Inner streams joined into their outer stream by [flatten]: inner id → outer id (their results are the same). */
-    fun joined(fs: Flowsheet): Map<String, String> =
-        fs.subflowsheets.filter { it.fluid == null || !multiPackage(fs) }.flatMap { b -> b.ports.mapNotNull { p -> p.outer?.let { p.inner to it } } }.toMap()
+    fun joined(fs: Flowsheet): Map<String, String> {
+        val c = clean(fs)
+        return chain(c.subflowsheets.filter { it.fluid == null || !multiPackage(c) }.flatMap { it.ports })
+    }
 
     /** A flat solve's result with each joined inner stream given its outer stream's result. */
     fun expand(fs: Flowsheet, result: SolveResult): SolveResult {
@@ -349,21 +370,24 @@ object Subflowsheets {
     }
 
     /** The regions of a case with own-package sub-flowsheets, and the boundary streams carried between them. */
-    fun regions(fs: Flowsheet): Pair<List<Region>, List<Transfer>> {
+    fun regions(fs0: Flowsheet): Pair<List<Region>, List<Transfer>> {
+        val fs = clean(fs0)
         val own = fs.subflowsheets.filter { it.fluid != null }
         val regionIds = listOf<String?>(null) + own.map { it.id }
         // Pairs inside one region are joined; pairs across a package boundary are carried.
         val crossing = own.flatMap { b -> b.ports.filter { it.outer != null }.map { b to it } }
         val joinedPorts = fs.subflowsheets.filter { it.fluid == null }.flatMap { it.ports }
         val merged = mergePorts(fs, joinedPorts)
+        val into = chain(joinedPorts)
         val transfers = crossing.map { (b, p) ->
             val inner = fs.objects.first { it.id == p.inner }
             if (inner.type == ObjectType.EnergyStream)
                 throw EditRejected("${inner.tag}: an energy stream can't cross into ${b.tag}, which has its own fluid package; put the unit it serves on one side")
             val feed = boundary(fs, b.id).firstOrNull { it.stream.id == p.inner }?.feed ?: true
             val outerRegion = regionOf(fs, b.parent)
-            if (feed) Transfer(outerRegion, p.outer!!, b.id, p.inner, p.basis ?: TransferBasis.TP)
-            else Transfer(b.id, p.inner, outerRegion, p.outer!!, p.basis ?: TransferBasis.TP)
+            val outer = into[p.outer!!] ?: p.outer
+            if (feed) Transfer(outerRegion, outer, b.id, p.inner, p.basis ?: TransferBasis.TP)
+            else Transfer(b.id, p.inner, outerRegion, outer, p.basis ?: TransferBasis.TP)
         }
         val regions = regionIds.map { rid ->
             val objs = merged.objects.filter { regionOf(fs, it.parent) == rid }

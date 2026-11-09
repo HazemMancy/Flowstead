@@ -151,5 +151,38 @@ class SubflowsheetsTest {
         val d = Subflowsheets.delete(g, block.id)
         assertTrue(d.objects.none { it.id == "e" } && d.objects.any { it.id == "dis" } && d.subflowsheets.isEmpty())
         assertNotEquals(g.modelHash(), d.modelHash())
+        // Moving a block changes no result.
+        assertEquals(g.modelHash(), Subflowsheets.move(g, block.id, 999.0, -48.0).modelHash())
+    }
+
+    @Test
+    fun aStreamPassesThroughOneBlockStraightIntoAnother() {
+        // DISCHARGE (main) → X on block P (main package) → inside P, X runs straight into block A (own package), where
+        // A's boundary stream IN feeds E-100. X has no connection on P: its match to A is what drains it.
+        val f = train.copy(
+            objects = train.objects.filter { it.id != "out" }.map { if (it.id == "e") it.copy(parent = "a") else it } + listOf(
+                SimObject("x", "X", ObjectType.MaterialStream, 0.0, 0.0, parent = "pp"),
+                SimObject("in", "IN", ObjectType.MaterialStream, 0.0, 0.0, parent = "a"),
+                SimObject("o", "OUT", ObjectType.MaterialStream, 0.0, 0.0, parent = "a"),
+            ),
+            connections = listOf(Connection("suc", 0, "k", 0), Connection("k", 0, "dis", 0), Connection("in", 0, "e", 0), Connection("e", 0, "o", 0)),
+            subflowsheets = listOf(
+                Subflowsheet("pp", "P", ports = listOf(SubPort("x", "dis"))),
+                Subflowsheet("a", "A", parent = "pp", ports = listOf(SubPort("in", "x"))),
+            ),
+        )
+        assertEquals(listOf("x"), Subflowsheets.boundary(f, "pp").filter { it.feed }.map { it.stream.id })
+        assertEquals(listOf("dis"), Subflowsheets.outerCandidates(f, "pp", "x").map { it.id } + emptyList())
+        // On one package: IN and X both join DISCHARGE, and both get its result.
+        val flat = Subflowsheets.flatten(f)
+        assertTrue(flat.connections.contains(Connection("dis", 0, "e", 0)))
+        assertEquals(setOf("x" to "dis", "in" to "dis"), Subflowsheets.joinedAll(f).toList().toSet())
+        // On its own package, A takes DISCHARGE itself (X is joined into it on the main package).
+        val own = f.copy(subflowsheets = f.subflowsheets.map { if (it.id == "a") it.copy(fluid = SubFluid("Soave-Redlich-Kwong (SRK)", f.compounds)) else it })
+        val (_, transfers) = Subflowsheets.regions(own)
+        assertEquals(listOf(Transfer(null, "dis", "a", "in")), transfers)
+        // A boundary stream deleted inside leaves no dangling match.
+        val gone = own.copy(objects = own.objects.filter { it.id != "in" }, connections = own.connections.filter { it.fromObject != "in" })
+        assertTrue(Subflowsheets.regions(gone).second.isEmpty())
     }
 }

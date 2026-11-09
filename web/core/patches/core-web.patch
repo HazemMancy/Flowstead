@@ -410,10 +410,12 @@ diff -ruN a/app/flowstead/core/model/Plots.kt b/app/flowstead/core/model/Plots.k
 diff -ruN a/app/flowstead/core/model/Results.kt b/app/flowstead/core/model/Results.kt
 --- a/app/flowstead/core/model/Results.kt
 +++ b/app/flowstead/core/model/Results.kt
-@@ -368,8 +368,9 @@
+@@ -368,8 +368,10 @@
  
  private fun hashOf(solved: Flowsheet, positions: Boolean): String {
-     val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) })
+-    val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) })
++    // Web (D132): where a sub-flowsheet block sits changes no result either.
++    val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) }, subflowsheets = solved.subflowsheets.map { it.copy(x = 0.0, y = 0.0) })
 -    val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), fs)
 -    return java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
 +    // Java's spelling of every Double, so the browser computes the app's hash (CanonicalJson.kt).

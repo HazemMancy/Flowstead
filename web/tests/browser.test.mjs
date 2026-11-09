@@ -1019,8 +1019,12 @@ try {
     if (!(Math.abs(pr('prod', 'massFlow') - m) < 1e-6 && Math.abs(pr('in', 'massFlow') - m) < 1e-6)) problems.push(`mass flows ${pr('in', 'massFlow')}, ${pr('prod', 'massFlow')} kg/s for ${m}`);
     // The benchmarks' temperature tolerance (±0.01 K): DWSIM's heater meets its outlet temperature to its flash tolerance.
     if (!(Math.abs(pr('out', 'temperature') - (150 + K)) < 0.01)) problems.push(`OUT at ${pr('out', 'temperature')} K`);
+    // FEED → block → PRODUCT needs three engine solves: the main part without PRODUCT, the block, the main part again.
+    const solves = (r?.messages ?? []).map((x) => x.text).find((t) => /engine solves/.test(t));
+    got.solves = solves;
+    if (!/ 3 engine solves/.test(solves ?? '')) problems.push(`solves: ${solves}`);
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
-    console.log(`${problems.length ? 'FAIL' : 'ok  '} sub-flowsheets (grouped vs flat: ${got.a?.compared} values, worst ${got.a?.worst?.toExponential(1)}; steam tables block duty ${(duty / 1000).toFixed(3)} kW, IAPWS-IF97 ${(dutyRef / 1000).toFixed(3)} kW)`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} sub-flowsheets (grouped vs flat: ${got.a?.compared} values, worst ${got.a?.worst?.toExponential(1)}; steam tables block duty ${(duty / 1000).toFixed(3)} kW, IAPWS-IF97 ${(dutyRef / 1000).toFixed(3)} kW; ${got.solves})`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();

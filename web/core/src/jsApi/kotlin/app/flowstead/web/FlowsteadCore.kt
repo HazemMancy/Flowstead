@@ -102,7 +102,7 @@ object FlowsteadCore {
         val r = Readiness.of(f)
         val solvable = if (!Subflowsheets.has(whole)) r.solvable else {
             val ready = r.solvable.objects.map { it.id }.toSet()
-            val pairs = whole.subflowsheets.flatMap { b -> b.ports.mapNotNull { p -> p.outer?.let { p.inner to it } } }.toMap()
+            val pairs = Subflowsheets.joinedAll(whole)
             val keep = whole.objects.filter { it.id in ready || pairs[it.id] in ready }
             val ids = keep.map { it.id }.toSet()
             whole.copy(objects = keep, connections = whole.connections.filter { it.fromObject in ids && it.toObject in ids })
