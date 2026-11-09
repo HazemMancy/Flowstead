@@ -650,6 +650,7 @@ export function initTools(app) {
     };
   }
   // ---------- a pump's or compressor's curve and a pipe's sections (D136, the app's CurveSection and PipeSectionsSection) ----------
+  let rxOpen = null;
   function equipmentSection(el, id) {
     el.dataset.id = id;
     const fsj = app.project().flowsheet;
@@ -688,7 +689,36 @@ export function initTools(app) {
           (ps.totals ? `<p class="fs-note">${esc(ps.totals)}</p>` : '');
       }
     }
+    const rx = JSON.parse(Equip.reactions(fsj, id));
+    if (rx.reactor && !rx.gibbs) {
+      const sel = (field, list, value, extra = '') => `<select data-rx="${field}" ${extra}>${list.map((o) => `<option value="${esc(o.id)}"${o.id === value ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`;
+      const fld = (label, field, value, r, extra = '') => `<label class="eq-cell"><span>${esc(label)}</span><input type="text" value="${esc(value)}" data-rx="${field}" data-r="${esc(r.id)}" ${extra} autocomplete="off"/></label>`;
+      html += `<h3>${esc(rx.kinds.map((k) => k.label).join(' and '))} reactions</h3>` + rx.items.map((r) => {
+        const open = rxOpen === r.id;
+        let body = '';
+        if (open) {
+          body = `<div class="eq-sec">${fld('Name', 'name', r.name, r)}<p class="fs-note">Stoichiometric coefficients: negative for reactants, positive for products, empty if not involved.</p><div class="eq-row">${
+            rx.compounds.map((c) => fld(c, 'stoich', r.stoich[c], r, `data-c="${esc(c)}" inputmode="decimal"`)).join('')}</div><div class="eq-row">
+            <label class="eq-cell"><span>Base compound</span>${sel('base', [{ id: '', label: 'Choose…' }, ...r.reactants.map((c) => ({ id: c, label: c }))], r.base, `data-r="${esc(r.id)}"`)}</label>
+            <label class="eq-cell"><span>Phase</span>${sel('phase', r.phases, r.phase, `data-r="${esc(r.id)}"`)}</label></div>`;
+          if (r.type === 'Conversion') body += `<div class="eq-row">${fld('Conversion of the base compound, %', 'conversion', r.conversion, r, 'inputmode="decimal"')}</div>`;
+          if (r.type === 'Equilibrium') body += `<p class="fs-note">K from Gibbs energies of formation at the reactor temperature.</p><div class="eq-row">${fld('Temperature approach, K', 'approach', r.approach, r, 'inputmode="decimal" placeholder="0 if empty"')}</div>`;
+          if (r.type === 'Kinetic') body += `<p class="fs-note">r = A·exp(−E/RT)·Π cᵢ^orderᵢ, in mol/(m³·s) with concentrations in mol/m³.</p><div class="eq-row">${fld('Forward A', 'forwardA', r.forwardA, r)}${fld('Forward E, J/mol', 'forwardE', r.forwardE, r)}</div><div class="eq-row">${
+            r.reactants.map((c) => fld(`Order in ${c}`, 'order', r.orders[c], r, `data-c="${esc(c)}" placeholder="0 if empty"`)).join('')}</div><div class="eq-row">${fld('Reverse A', 'reverseA', r.reverseA, r, 'placeholder="irreversible if empty"')}${r.reverseA ? fld('Reverse E, J/mol', 'reverseE', r.reverseE, r) : ''}</div>`;
+          if (r.type === 'Catalytic') body += `<p class="fs-note">Langmuir–Hinshelwood: rate = numerator / denominator per kg of catalyst, DWSIM expressions of T (K) and the concentrations ${esc(r.symbols)}. E.g. 2.5e-3*exp(-45000/(8.314*T))*R1 over (1+0.4*R1)^2.</p>
+            <div class="eq-row">${fld('Rate numerator', 'num', r.num, r)}${fld('Rate denominator', 'den', r.den, r, 'placeholder="1"')}</div><div class="eq-row">
+            <label class="eq-cell"><span>Concentrations in</span>${sel('conc', r.concUnits.map((u) => ({ id: u, label: u })), r.conc, `data-r="${esc(r.id)}"`)}</label>
+            <label class="eq-cell"><span>Rate in</span>${sel('rate', r.rateUnits.map((u) => ({ id: u, label: u })), r.rate, `data-r="${esc(r.id)}"`)}</label></div>
+            <div class="eq-row">${fld('Lowest temperature, K', 'tmin', r.tmin, r, 'placeholder="no limit"')}${fld('Highest temperature, K', 'tmax', r.tmax, r, 'placeholder="no limit"')}</div>`;
+          body += (r.problem ? `<p class="fs-note warn">${esc(r.problem)}</p>` : '') + `<button type="button" class="btn btn-sm" data-rxop="delete" data-r="${esc(r.id)}">Delete reaction</button></div>`;
+        }
+        return `<div class="eq-rx"><label class="fs-switch"><input type="checkbox" data-rxuse="${esc(r.id)}"${r.used ? ' checked' : ''}/> <span><b>${esc(r.name)}</b> <small>${esc(r.equation)}</small></span></label>
+          <button type="button" class="btn btn-sm" data-rxopen="${esc(r.id)}">${open ? 'Done' : 'Edit'}</button>${!open && r.problem && r.used ? `<p class="fs-note warn">${esc(r.problem)}</p>` : ''}</div>${body}`;
+      }).join('') + `<div class="eq-row">${rx.kinds.map((k) => `<button type="button" class="btn btn-sm" data-rxnew="${esc(k.type)}">New ${esc(k.label.toLowerCase())} reaction</button>`).join('')}</div>
+        <p class="fs-note">Basis → Compound and data tools → Reaction finder suggests reactions among the components.</p>`;
+    }
     el.innerHTML = html;
+    const rxEdit = (op, msg) => { const r = JSON.parse(Equip.reactionEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); if (r.reaction) rxOpen = r.reaction; app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     const curveEdit = (op, msg) => { const r = JSON.parse(Equip.curveEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     const secEdit = (op, msg) => { const r = JSON.parse(Equip.sectionsEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     el.onchange = (e) => {
@@ -696,11 +726,16 @@ export function initTools(app) {
       if (t.id === 'eq_curve') return curveEdit({ op: t.checked ? 'on' : 'off' }, t.checked ? 'Runs on its curve' : 'Curve off');
       if (t.id === 'eq_sections') return secEdit({ op: t.checked ? 'on' : 'off' }, t.checked ? 'Sections and fittings on' : 'One straight run');
       if (t.id === 'eq_fitting' && t.value) return secEdit({ op: 'addFitting', value: t.value }, 'Fitting added');
+      if (t.dataset.rxuse) return rxEdit({ op: 'use', reaction: t.dataset.rxuse, on: String(t.checked) }, t.checked ? 'Reaction used' : 'Reaction not used');
+      if (t.dataset.rx) return rxEdit({ op: 'set', reaction: t.dataset.r, field: t.dataset.rx, compound: t.dataset.c, value: t.value }, 'Reaction changed');
       if (t.dataset.cv) return curveEdit({ op: t.dataset.cv, line: Number(t.dataset.line ?? -1), index: Number(t.dataset.i ?? 0), field: t.dataset.f, value: t.value }, 'Curve changed');
       if (t.dataset.ps) return secEdit({ op: 'set', index: Number(t.dataset.i), field: t.dataset.ps, value: t.value }, 'Section changed');
     };
     el.onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.rxopen) { rxOpen = rxOpen === b.dataset.rxopen ? null : b.dataset.rxopen; return equipmentSection(el, id); }
+      if (b.dataset.rxnew) return rxEdit({ op: 'new', kind: b.dataset.rxnew }, 'New reaction');
+      if (b.dataset.rxop === 'delete') { rxOpen = null; return rxEdit({ op: 'delete', reaction: b.dataset.r }, 'Reaction deleted'); }
       if (b.dataset.cvop) return curveEdit({ op: b.dataset.cvop, line: Number(b.dataset.line ?? -1), index: Number(b.dataset.i ?? 0) }, 'Curve changed');
       if (b.dataset.cvfit !== undefined) return curveEdit({ op: 'field', field: 'fit', value: b.dataset.cvfit }, 'Curve changed');
       if (b.dataset.psop) return secEdit({ op: b.dataset.psop, index: Number(b.dataset.i ?? 0) }, 'Sections changed');

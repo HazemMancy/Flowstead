@@ -24,6 +24,12 @@ import app.flowstead.core.model.PipeFittings
 import app.flowstead.core.model.PipeSegmentSection
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SpecKey
+import app.flowstead.core.model.CatalyticUnits
+import app.flowstead.core.model.Reaction
+import app.flowstead.core.model.ReactionPhase
+import app.flowstead.core.model.ReactionType
+import app.flowstead.core.model.ReactorKeys
+import app.flowstead.core.model.Reactors
 import app.flowstead.core.model.Specification
 import app.flowstead.core.model.SpeedLine
 import app.flowstead.core.model.StoredSolve
@@ -254,5 +260,106 @@ object EquipmentTools {
         }
         FlowsheetEditing.setPipeSections(f, id, next?.ifEmpty { null })
     }
-}
 
+    // ---------- reactors and their reactions (D136, the app's ReactorEditor and ReactionFields) ----------
+
+    private fun plain(v: Double?): String = v?.let { x -> if (x == kotlin.math.floor(x) && kotlin.math.abs(x) < 1e15) x.toLong().toString() else x.toString() } ?: ""
+
+    /**
+     * The reactions a reactor can run: {reactor, gibbs, kinds: [{type, label}], compounds, items: [{id, name, type, equation,
+     * used, problem?, stoich: {compound: text}, base, reactants, phase, phases: [{id, label}], conversion, approach,
+     * forwardA, forwardE, orders: {compound: text}, reverseA, reverseE, num, den, conc, rate, concUnits, rateUnits, tmin,
+     * tmax}]}. Numbers as typed (no unit conversion), as in the app.
+     */
+    fun reactions(flowsheetJson: String, id: String): String {
+        val f = fs(flowsheetJson)
+        val o = f.obj(id)
+        if (o == null || !Reactors.isReactor(o.type)) return buildJsonObject { put("reactor", false) }.toString()
+        val type = Reactors.reactionType(o.type)
+        val kinds = when (type) { null -> emptyList(); ReactionType.Kinetic -> listOf(ReactionType.Kinetic, ReactionType.Catalytic); else -> listOf(type) }
+        val used = Reactors.reactionIds(o)
+        return buildJsonObject {
+            put("reactor", true); put("gibbs", type == null)
+            putJsonArray("kinds") { kinds.forEach { k -> addJsonObject { put("type", k.name); put("label", k.label) } } }
+            putJsonArray("compounds") { f.compounds.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }
+            putJsonArray("items") {
+                f.reactions.filter { it.type in kinds }.forEach { r ->
+                    addJsonObject {
+                        put("id", r.id); put("name", r.name); put("type", r.type.name); put("equation", r.equation()); put("used", r.id in used)
+                        Reactors.problem(f, r)?.let { put("problem", it.replaceFirstChar(Char::uppercase)) }
+                        putJsonObject("stoich") { f.compounds.forEach { c -> put(c, plain(r.stoichiometry[c])) } }
+                        val reactants = r.stoichiometry.filterValues { it < 0 }.keys.toList()
+                        put("base", r.baseCompound.takeIf { it in reactants } ?: "")
+                        putJsonArray("reactants") { reactants.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }
+                        put("phase", r.phase.name)
+                        putJsonArray("phases") {
+                            (if (r.type == ReactionType.Equilibrium) listOf(ReactionPhase.Vapour, ReactionPhase.Liquid) else ReactionPhase.entries)
+                                .forEach { p -> addJsonObject { put("id", p.name); put("label", p.label) } }
+                        }
+                        put("conversion", plain(r.conversion?.times(100))); put("approach", plain(r.approachTemperature))
+                        put("forwardA", plain(r.forwardA)); put("forwardE", plain(r.forwardE))
+                        putJsonObject("orders") { reactants.forEach { c -> put(c, plain(r.forwardOrders[c])) } }
+                        put("reverseA", plain(r.reverseA)); put("reverseE", plain(r.reverseE))
+                        put("num", r.rateNumerator ?: ""); put("den", r.rateDenominator ?: "")
+                        put("conc", r.concentrationUnit ?: CatalyticUnits.CONCENTRATIONS.first()); put("rate", r.rateUnit ?: CatalyticUnits.RATES.first())
+                        putJsonArray("concUnits") { CatalyticUnits.CONCENTRATIONS.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }
+                        putJsonArray("rateUnits") { CatalyticUnits.RATES.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }
+                        put("tmin", plain(r.minTemperature)); put("tmax", plain(r.maxTemperature))
+                        // The symbols a catalytic rate may use, in stoichiometry order (DWSIM's R1…, P1…).
+                        val order = r.stoichiometry.entries.toList()
+                        put("symbols", (order.filter { it.value < 0 }.mapIndexed { i, e -> "R${i + 1} = ${e.key}" } + order.filter { it.value > 0 }.mapIndexed { i, e -> "P${i + 1} = ${e.key}" }).joinToString(", "))
+                    }
+                }
+            }
+        }.toString()
+    }
+
+    /**
+     * One change to a reactor's reactions: {op: use|new|delete|set, reaction, on, kind, field, compound, value}.
+     * Returns {flowsheet, reaction?} or {error}.
+     */
+    fun reactionEdit(flowsheetJson: String, reactorId: String, opJson: String): String = try {
+        val f = fs(flowsheetJson)
+        val o = f.obj(reactorId) ?: throw EditRejected("That reactor no longer exists")
+        val op = FlowsheetJson.parseToJsonElement(opJson).jsonObject
+        fun s(k: String) = op[k]?.jsonPrimitive?.contentOrNull
+        val used = Reactors.reactionIds(o)
+        fun setUsed(fl: Flowsheet, ids: List<String>) = FlowsheetEditing.setRef(fl, reactorId, ReactorKeys.REACTIONS, ids.joinToString(",").ifEmpty { null })
+        fun num(): Double? = parse(s("value"), null, ctx(f))
+        var created: String? = null
+        val next = when (s("op")) {
+            "use" -> setUsed(f, if (s("on") == "true") (used + s("reaction")!!).distinct() else used - s("reaction")!!)
+            "new" -> {
+                val kind = ReactionType.valueOf(s("kind") ?: throw EditRejected("Choose a kind"))
+                val id = FlowsheetEditing.newId()
+                val n = generateSequence(1) { it + 1 }.first { k -> f.reactions.none { it.name == "Rxn-$k" } }
+                created = id
+                setUsed(FlowsheetEditing.upsertReaction(f, Reaction(id, "Rxn-$n", kind, phase = if (kind == ReactionType.Equilibrium) ReactionPhase.Vapour else ReactionPhase.Mixture)), used + id)
+            }
+            "delete" -> setUsed(FlowsheetEditing.deleteReaction(f, s("reaction")!!), used - s("reaction")!!)
+            "set" -> {
+                val r = f.reaction(s("reaction") ?: "") ?: throw EditRejected("That reaction no longer exists")
+                val c = s("compound")
+                val u = when (s("field")) {
+                    "name" -> s("value")?.trim()?.takeIf { it.isNotEmpty() }?.let { r.copy(name = it) } ?: throw EditRejected("Give the reaction a name")
+                    "stoich" -> num().let { v -> r.copy(stoichiometry = if (v == null || v == 0.0) r.stoichiometry - c!! else r.stoichiometry + (c!! to v)) }
+                    "base" -> r.copy(baseCompound = s("value") ?: "")
+                    "phase" -> r.copy(phase = ReactionPhase.valueOf(s("value")!!))
+                    "conversion" -> r.copy(conversion = num()?.div(100))
+                    "approach" -> r.copy(approachTemperature = num())
+                    "forwardA" -> r.copy(forwardA = num()); "forwardE" -> r.copy(forwardE = num())
+                    "order" -> num().let { v -> r.copy(forwardOrders = if (v == null) r.forwardOrders - c!! else r.forwardOrders + (c!! to v)) }
+                    "reverseA" -> r.copy(reverseA = num()); "reverseE" -> r.copy(reverseE = num())
+                    "num" -> r.copy(rateNumerator = s("value")?.trim()?.ifBlank { null })
+                    "den" -> r.copy(rateDenominator = s("value")?.trim()?.ifBlank { null })
+                    "conc" -> r.copy(concentrationUnit = s("value")); "rate" -> r.copy(rateUnit = s("value"))
+                    "tmin" -> r.copy(minTemperature = num()); "tmax" -> r.copy(maxTemperature = num())
+                    else -> r
+                }
+                FlowsheetEditing.upsertReaction(f, u)
+            }
+            else -> f
+        }
+        buildJsonObject { put("flowsheet", FlowsheetJson.encodeToJsonElement(Flowsheet.serializer(), next)); created?.let { put("reaction", it) } }.toString()
+    } catch (e: IllegalArgumentException) { err(e.message ?: "Not allowed") }
+}
