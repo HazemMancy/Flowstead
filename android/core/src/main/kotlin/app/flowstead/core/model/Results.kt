@@ -367,7 +367,8 @@ private fun Flowsheet.solvedPart() = copy(
 )
 
 private fun hashOf(solved: Flowsheet, positions: Boolean): String {
-    val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) })
+    // Where a sub-flowsheet block sits changes no result either (D132).
+    val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) }, subflowsheets = solved.subflowsheets.map { it.copy(x = 0.0, y = 0.0) })
     val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), fs)
     return java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
 }

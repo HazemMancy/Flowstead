@@ -25,6 +25,9 @@ import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.ReliefDeviceDef
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.Safety
+import app.flowstead.core.model.SubflowsheetSolve
+import app.flowstead.core.model.Subflowsheets
+import app.flowstead.core.model.Subflowsheet
 import app.flowstead.core.model.PerformanceCurve
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.Port
@@ -102,6 +105,12 @@ enum class ResultsFormat(val mimeType: String, val extension: String) {
 data class FlowsheetUi(
     val projectName: String,
     val flowsheet: Flowsheet,
+    /** Sub-flowsheets (D133): the flowsheet shown (null the main one), the path to it, its blocks and the selected block. */
+    val level: String? = null,
+    val path: List<Subflowsheet> = emptyList(),
+    val blocks: List<BlockView> = emptyList(),
+    val selectedBlock: String? = null,
+    val streamNotes: Map<String, String> = emptyMap(),
     val status: Map<String, SpecStatus>,
     val problems: List<Pair<String?, String>>,
     /** Problems that stop any solve (no package, no components…); the rest only leave their objects out (D83). */
@@ -211,6 +220,8 @@ class FlowsheetViewModel @Inject constructor(
     private val projectId = savedState.toRoute<FlowsheetRoute>().projectId
 
     private data class Local(
+        val level: String? = null,
+        val selectedBlock: String? = null,
         val selectedId: String? = null,
         val editingId: String? = null,
         val undo: List<Flowsheet> = emptyList(),
@@ -269,7 +280,12 @@ class FlowsheetViewModel @Inject constructor(
             FlowsheetUi(
                 projectName = project.name,
                 flowsheet = fs,
-                status = fs.objects.associate { it.id to Specification.status(fs, it) },
+                level = l.level?.takeIf { Subflowsheets.of(fs, it) != null },
+                path = Subflowsheets.path(fs, l.level),
+                blocks = blockViews(fs, l.level?.takeIf { Subflowsheets.of(fs, it) != null }),
+                selectedBlock = l.selectedBlock?.takeIf { Subflowsheets.of(fs, it) != null },
+                streamNotes = streamNotes(fs, l.level),
+                status = Readiness.statusOf(fs),
                 problems = Specification.problems(fs),
                 blocking = Specification.blocking(fs),
                 notReady = Readiness.of(fs).notReady,
@@ -316,9 +332,80 @@ class FlowsheetViewModel @Inject constructor(
         }
     }
 
+    // ---- sub-flowsheets (D133): blocks that hold a flowsheet, as HYSYS's
+
+    private fun blockViews(fs: Flowsheet, level: String?): List<BlockView> = Subflowsheets.blocksAt(fs, level).map { b ->
+        val bd = Subflowsheets.boundary(fs, b.id)
+        BlockView(b.id, b.tag, b.x, b.y, b.fluid?.propertyPackage?.substringBefore(" ("),
+            b.ports.mapNotNull { p -> p.outer?.let { o -> BlockLink(o, bd.firstOrNull { it.stream.id == p.inner }?.feed ?: true) } })
+    }
+
+    private fun streamNotes(fs: Flowsheet, level: String?): Map<String, String> {
+        val b = Subflowsheets.of(fs, level) ?: return emptyMap()
+        val bd = Subflowsheets.boundary(fs, b.id)
+        return b.ports.mapNotNull { p ->
+            val outer = p.outer?.let { o -> fs.objects.firstOrNull { it.id == o }?.tag } ?: return@mapNotNull null
+            p.inner to if (bd.firstOrNull { it.stream.id == p.inner }?.feed != false) "from $outer" else "to $outer"
+        }.toMap()
+    }
+
+    /** Opens a sub-flowsheet, or (null) the main flowsheet. */
+    fun openLevel(id: String?) = local.update { it.copy(level = id, selectedBlock = null, selectedId = null, editingId = null) }
+
+    private var lastBlockTap: Pair<String, Long> = "" to 0L
+    /** A tap selects a block; a second tap on it within a moment opens it. */
+    fun tapBlock(id: String) {
+        val now = System.currentTimeMillis()
+        if (lastBlockTap.first == id && now - lastBlockTap.second < 450) { lastBlockTap = "" to 0L; openLevel(id); return }
+        lastBlockTap = id to now
+        local.update { it.copy(selectedBlock = id, selectedId = null, editingId = null) }
+    }
+    fun closeBlock() = local.update { it.copy(selectedBlock = null) }
+
+    /** A new empty sub-flowsheet on the flowsheet shown, at ([x], [y]). */
+    fun addBlock(x: Double, y: Double) = edit { fs ->
+        val (next, b) = Subflowsheets.add(fs, local.value.level, x, y)
+        local.update { it.copy(selectedBlock = b.id, selectedId = null, editingId = null) }
+        next
+    }
+    /** Puts [id] (a unit or stream here) in a new sub-flowsheet; streams joining it to the rest stay outside, matched. */
+    fun groupObject(id: String) = edit { fs ->
+        val o = fs.objects.firstOrNull { it.id == id } ?: return@edit fs
+        val (next, b) = Subflowsheets.group(fs, listOf(id), o.x, o.y)
+        local.update { it.copy(selectedBlock = b.id, selectedId = null, editingId = null) }
+        next
+    }
+    fun moveBlock(id: String, x: Double, y: Double) = edit { Subflowsheets.move(it, id, x, y) }
+    fun renameBlock(id: String, tag: String) = edit { Subflowsheets.rename(it, id, tag) }
+    fun deleteBlock(id: String) = edit { fs -> local.update { it.copy(selectedBlock = null) }; Subflowsheets.delete(fs, id) }
+    fun ungroupBlock(id: String) = edit { fs -> local.update { it.copy(selectedBlock = null) }; Subflowsheets.ungroup(fs, id) }
+    fun connectToBlock(blockId: String, streamId: String, feed: Boolean) = edit { Subflowsheets.connect(it, blockId, streamId, feed).first }
+    fun disconnectFromBlock(blockId: String, innerId: String) = edit { Subflowsheets.disconnect(it, blockId, innerId) }
+    fun setTransferBasis(blockId: String, innerId: String, basis: String) = edit { Subflowsheets.setBasis(it, blockId, innerId, basis) }
+    fun rematch(blockId: String, innerId: String, outerId: String?) = edit { Subflowsheets.link(it, blockId, innerId, outerId) }
+    /** Own fluid package (a copy of the parent's, to edit in the Fluid screen) or the parent's again. */
+    fun setOwnFluid(blockId: String, own: Boolean) = edit { fs ->
+        val b = Subflowsheets.of(fs, blockId) ?: return@edit fs
+        Subflowsheets.setFluid(fs, blockId, if (own) Subflowsheets.fluidAt(fs, b.parent) else null)
+    }
+    /** A stream dropped on a block: into it from a free end, out of it from a free start (by where it lies when both). */
+    fun dropOnBlock(streamId: String, blockId: String) = edit { fs ->
+        val b = Subflowsheets.of(fs, blockId) ?: return@edit fs
+        val canIn = Subflowsheets.connectable(fs, blockId, true).any { it.id == streamId }
+        val canOut = Subflowsheets.connectable(fs, blockId, false).any { it.id == streamId }
+        val tag = fs.objects.firstOrNull { it.id == streamId }?.tag ?: "That stream"
+        val feed = when {
+            canIn && canOut -> (fs.objects.first { it.id == streamId }.x < b.x)
+            canIn -> true
+            canOut -> false
+            else -> throw EditRejected("$tag is joined at both ends: only a stream with a free end can go into or out of ${b.tag}")
+        }
+        Subflowsheets.connect(fs, blockId, streamId, feed).first
+    }
+
     // ---- selection and editor
 
-    fun select(id: String?) = local.update { it.copy(selectedId = id) }
+    fun select(id: String?) = local.update { it.copy(selectedId = id, selectedBlock = if (id != null) null else it.selectedBlock) }
     fun openEditor(id: String) = local.update { it.copy(selectedId = id, editingId = id) }
     fun closeEditor() = local.update { it.copy(editingId = null) }
     fun openSizingCriteria() = local.update { it.copy(editingSizingCriteria = true) }
@@ -331,7 +418,8 @@ class FlowsheetViewModel @Inject constructor(
     fun add(type: ObjectType, x: Double, y: Double) = edit { fs ->
         val (next, obj) = FlowsheetEditing.add(fs, type, x, y)
         local.update { it.copy(selectedId = obj.id) }
-        next
+        // On the flowsheet shown: inside a sub-flowsheet the new object is one of its own (D133).
+        Subflowsheets.place(next, obj.id, local.value.level)
     }
 
     fun move(id: String, x: Double, y: Double) = edit(undoable = true) { FlowsheetEditing.move(it, id, x, y) }
@@ -827,7 +915,7 @@ class FlowsheetViewModel @Inject constructor(
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
             val request = PhaseEnvelopeRequest(
-                fs, composition, qualities, hydrates, streamPressure(fs, streamId), streamProperty(fs, streamId, "temperature"),
+                SubflowsheetSolve.forObject(fs, streamId), composition, qualities, hydrates, streamPressure(fs, streamId), streamProperty(fs, streamId, "temperature"),
                 inhibitor.takeIf { inhibitorFraction > 0 }, inhibitorFraction,
             )
             val next = if (url.isBlank()) EnvelopeUi(streamId, error = "Set the engine address in Settings")
@@ -852,7 +940,7 @@ class FlowsheetViewModel @Inject constructor(
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
             val next = if (url.isBlank()) PetroleumUi(streamId, error = "Set the engine address in Settings")
-            else when (val r = engine.petroleumProperties(url, secrets.apiKey(), app.flowstead.core.api.PetroleumPropertiesRequest(fs, composition))) {
+            else when (val r = engine.petroleumProperties(url, secrets.apiKey(), app.flowstead.core.api.PetroleumPropertiesRequest(SubflowsheetSolve.forObject(fs, streamId), composition))) {
                 is EngineResult.Ok -> PetroleumUi(streamId, result = r.value)
                 is EngineResult.Failed -> PetroleumUi(streamId, error = "No distillation curves: ${r.reason}")
             }
@@ -892,7 +980,7 @@ class FlowsheetViewModel @Inject constructor(
         val view = ResultView(currentSolve, fs.modelHash())
         Safety.problem(fs, view, d)?.let { _messages.trySend(it); return }
         engineCall(id) { url, key ->
-            when (val r = engine.relief(url, key, ReliefRequest(fs, Safety.request(fs, view, d)))) {
+            when (val r = engine.relief(url, key, ReliefRequest(SubflowsheetSolve.forObject(fs, d.protectedId), Safety.request(fs, view, d)))) {
                 is EngineResult.Ok -> edit(undoable = false) { FlowsheetEditing.setReliefResult(it, id, r.value, fs.modelHash()) }
                 is EngineResult.Failed -> _messages.send("Not sized: ${r.reason}")
             }
@@ -944,7 +1032,7 @@ class FlowsheetViewModel @Inject constructor(
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
             val next = if (url.isBlank()) PvtUi(streamId, experiment, error = "Set the engine address in Settings")
-            else when (val r = engine.pvt(url, secrets.apiKey(), PvtRequest(fs, composition, experiment, temperature, stages = stages))) {
+            else when (val r = engine.pvt(url, secrets.apiKey(), PvtRequest(SubflowsheetSolve.forObject(fs, streamId), composition, experiment, temperature, stages = stages))) {
                 is EngineResult.Ok -> PvtUi(streamId, experiment, result = r.value)
                 is EngineResult.Failed -> PvtUi(streamId, experiment, error = "Not run: ${r.reason}")
             }
@@ -1144,7 +1232,8 @@ class FlowsheetViewModel @Inject constructor(
     private fun edit(undoable: Boolean = true, block: (Flowsheet) -> Flowsheet) {
         val before = current ?: return
         val after = try {
-            block(before)
+            // Inside a sub-flowsheet, whatever the edit made belongs to it (D133).
+            Subflowsheets.adopt(before, block(before), local.value.level)
         } catch (e: EditRejected) {
             _messages.trySend(e.message ?: "That change isn't allowed")
             return

@@ -1,5 +1,5 @@
 /*
- * Flowstead web (D132): sub-flowsheets, as HYSYS's. A sub-flowsheet is a block on its parent flowsheet; inside it is a
+ * Flowstead (D132, D133): sub-flowsheets, as HYSYS's. A sub-flowsheet is a block on its parent flowsheet; inside it is a
  * flowsheet of its own. Its boundary streams (a stream inside with one open end) are matched to streams of the parent,
  * as HYSYS's internal and external streams. A sub-flowsheet may use its own fluid package: then its boundary streams
  * pass across with a transfer basis (temperature and pressure, or pressure and vapour fraction, with the molar flow and
@@ -8,29 +8,17 @@
  * The engine never sees a sub-flowsheet. A case on one fluid package is sent as the one flat flowsheet it is, so every
  * number is what the flat case gives. A case with sub-flowsheets on their own packages is solved region by region, each
  * region one ordinary engine solve on its own package; the browser carries the boundary streams across and repeats
- * until they stop changing (D132). Pure model code on the app's Flowsheet, in commonMain so it is tested on the JVM
- * and in JavaScript. android/ is unchanged.
+ * until they stop changing (D132; SubflowsheetSolve). The app and the web share this code (D133).
  * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
  */
 @file:OptIn(ExperimentalSerializationApi::class)
 
-package app.flowstead.web.model
+package app.flowstead.core.model
 
 import app.flowstead.core.api.ObjectResult
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
 import app.flowstead.core.api.SolverMessage
-import app.flowstead.core.model.BinaryParameter
-import app.flowstead.core.model.BlackOil
-import app.flowstead.core.model.Connection
-import app.flowstead.core.model.EditRejected
-import app.flowstead.core.model.Flowsheet
-import app.flowstead.core.model.FlowsheetEditing
-import app.flowstead.core.model.Hypothetical
-import app.flowstead.core.model.ObjectType
-import app.flowstead.core.model.SimObject
-import app.flowstead.core.model.Spec
-import app.flowstead.core.model.SpecKey
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -73,7 +61,14 @@ data class SubPort(
     val inner: String,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val outer: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val basis: String? = null,
-)
+    /**
+     * [IN] or [OUT] for a boundary stream made from the parent (connect), so it is matched before anything inside is
+     * joined to it; null: its connections inside tell (an open inlet end is a feed).
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val direction: String? = null,
+) {
+    companion object { const val IN = "in"; const val OUT = "out" }
+}
 
 object TransferBasis {
     /** Temperature and pressure carried across, the stream flashed on the new package there (HYSYS's default). */
@@ -107,6 +102,14 @@ object Subflowsheets {
     fun blocksAt(fs: Flowsheet, level: String?) = fs.subflowsheets.filter { it.parent == level }
     fun objectsAt(fs: Flowsheet, level: String?) = fs.objects.filter { it.parent == level }
 
+    /** [fs] as drawn on [level]: its objects, the connections between them and their tables (blocks are drawn apart). */
+    fun levelView(fs: Flowsheet, level: String?): Flowsheet {
+        if (!has(fs) && level == null) return fs
+        val objs = fs.objects.filter { it.parent == level }
+        val ids = objs.map { it.id }.toSet()
+        return fs.copy(objects = objs, connections = fs.connections.filter { it.fromObject in ids && it.toObject in ids }, tables = fs.tables.filter { it.objectId in ids })
+    }
+
     /** The path from the main flowsheet down to [level], outermost first. */
     fun path(fs: Flowsheet, level: String?): List<Subflowsheet> {
         val out = ArrayList<Subflowsheet>()
@@ -132,9 +135,18 @@ object Subflowsheets {
     // A stream is fed or drained by a connection, or by a block it is matched to (it then runs into or out of that
     // block): so a stream can pass through one block straight into a block inside it.
     private fun fed(fs: Flowsheet, id: String, depth: Int = 0): Boolean = hasSource(fs, id) || (depth < 16 &&
-        fs.subflowsheets.any { b -> b.ports.any { p -> p.outer == id && fed(fs, p.inner, depth + 1) } })
+        fs.subflowsheets.any { b -> b.ports.any { p -> p.outer == id && !portIn(fs, p, depth + 1) } })
     private fun drained(fs: Flowsheet, id: String, depth: Int = 0): Boolean = hasDestination(fs, id) || (depth < 16 &&
-        fs.subflowsheets.any { b -> b.ports.any { p -> p.outer == id && !fed(fs, p.inner, depth + 1) } })
+        fs.subflowsheets.any { b -> b.ports.any { p -> p.outer == id && portIn(fs, p, depth + 1) } })
+    /** Whether [p] carries a stream into its block: its inner stream's connections tell, else the direction it was made with. */
+    private fun portIn(fs: Flowsheet, p: SubPort, depth: Int): Boolean {
+        val src = fed(fs, p.inner, depth); val dst = drained(fs, p.inner, depth)
+        return when {
+            !src && dst -> true
+            src && !dst -> false
+            else -> p.direction != SubPort.OUT
+        }
+    }
 
     /** The streams inside [blockId] with one open end: its feeds and products, as HYSYS's boundary streams. */
     fun boundary(fs: Flowsheet, blockId: String): List<Boundary> {
@@ -145,6 +157,8 @@ object Subflowsheets {
             when {
                 !src && dst -> Boundary(s, true, port)
                 src && !dst -> Boundary(s, false, port)
+                // Made from the parent and not yet joined to anything inside: its direction says which it is.
+                !src && !dst && port?.direction != null -> Boundary(s, port.direction == SubPort.IN, port)
                 else -> null
             }
         }
@@ -190,6 +204,17 @@ object Subflowsheets {
 
     fun move(fs: Flowsheet, id: String, x: Double, y: Double) = update(fs, id) { it.copy(x = x, y = y) }
 
+    /**
+     * Objects an edit made while [level] is shown (a stream wired to empty canvas, a duplicate, a new unit) belong to
+     * that flowsheet: [after] with every object new since [before] and on no flowsheet yet put on [level].
+     */
+    fun adopt(before: Flowsheet, after: Flowsheet, level: String?): Flowsheet {
+        if (level == null || of(after, level) == null) return after
+        val old = before.objects.map { it.id }.toSet()
+        if (after.objects.none { it.id !in old && it.parent == null }) return after
+        return after.copy(objects = after.objects.map { if (it.id !in old && it.parent == null) it.copy(parent = level) else it })
+    }
+
     /** Puts [objectId] (just added) on [level]. */
     fun place(fs: Flowsheet, objectId: String, level: String?): Flowsheet =
         if (level == null) fs else fs.copy(objects = fs.objects.map { if (it.id == objectId) it.copy(parent = level) else it })
@@ -200,8 +225,46 @@ object Subflowsheets {
             throw EditRejected("That stream can't be matched here: it must be an open ${if (boundary(fs, blockId).firstOrNull { it.stream.id == innerId }?.feed == true) "product" else "feed"} of the parent flowsheet, not matched yet")
         return update(fs, blockId) { b ->
             val old = b.ports.firstOrNull { it.inner == innerId }
-            b.copy(ports = b.ports.filter { it.inner != innerId } + listOfNotNull(outerId?.let { SubPort(innerId, it, old?.basis) }))
+            b.copy(ports = b.ports.filter { it.inner != innerId } + listOfNotNull(outerId?.let { SubPort(innerId, it, old?.basis, old?.direction) }))
         }
+    }
+
+    /**
+     * Streams of the block's parent that can go into it ([feed]) or come out of it: open at that end and not matched.
+     * As HYSYS's Connections tab, picking one makes the boundary stream inside ([connect]).
+     */
+    fun connectable(fs: Flowsheet, blockId: String, feed: Boolean): List<SimObject> {
+        val b = of(fs, blockId) ?: return emptyList()
+        val taken = fs.subflowsheets.flatMap { s -> s.ports.mapNotNull { it.outer } }.toSet()
+        return objectsAt(fs, b.parent).filter { o ->
+            o.type == ObjectType.MaterialStream && o.id !in taken && if (feed) !drained(fs, o.id) else !fed(fs, o.id)
+        }
+    }
+
+    /**
+     * [outerId] (a stream of the parent) goes into ([feed]) or comes out of [blockId]: a boundary stream is made inside,
+     * named after it, and matched to it. Returns the case and the new inner stream's id.
+     */
+    fun connect(fs: Flowsheet, blockId: String, outerId: String, feed: Boolean): Pair<Flowsheet, String> {
+        val b = of(fs, blockId) ?: throw EditRejected("That sub-flowsheet no longer exists")
+        val outer = fs.objects.firstOrNull { it.id == outerId } ?: throw EditRejected("That stream no longer exists")
+        if (connectable(fs, blockId, feed).none { it.id == outerId })
+            throw EditRejected(if (feed) "${outer.tag} already runs into something: a stream into ${b.tag} must have a free end" else "${outer.tag} already comes from something: a stream out of ${b.tag} must have a free start")
+        val used = (fs.objects.map { it.tag } + fs.subflowsheets.map { it.tag }).map { it.lowercase() }.toSet()
+        val tag = generateSequence(1) { it + 1 }.map { if (it == 1) "${outer.tag}-${b.tag}" else "${outer.tag}-${b.tag}-$it" }.first { it.lowercase() !in used }
+        val side = b.ports.count { p -> boundary(fs, blockId).firstOrNull { it.stream.id == p.inner }?.feed == feed }
+        val inner = SimObject(FlowsheetEditing.newId(), tag, ObjectType.MaterialStream, if (feed) -240.0 else 240.0, 96.0 * side, parent = blockId)
+        val next = fs.copy(
+            objects = fs.objects + inner,
+            subflowsheets = fs.subflowsheets.map { if (it.id == blockId) it.copy(ports = it.ports + SubPort(inner.id, outerId, direction = if (feed) SubPort.IN else SubPort.OUT)) else it },
+        )
+        return next to inner.id
+    }
+
+    /** Takes a boundary stream out of the block: its match and, if nothing inside is joined to it, the stream inside. */
+    fun disconnect(fs: Flowsheet, blockId: String, innerId: String): Flowsheet {
+        val f = fs.copy(subflowsheets = fs.subflowsheets.map { if (it.id == blockId) it.copy(ports = it.ports.filter { p -> p.inner != innerId }) else it })
+        return if (f.connections.any { it.fromObject == innerId || it.toObject == innerId }) f else f.copy(objects = f.objects.filter { it.id != innerId })
     }
 
     fun setBasis(fs: Flowsheet, blockId: String, innerId: String, basis: String?) = update(fs, blockId) { b ->
@@ -244,8 +307,11 @@ object Subflowsheets {
         if (fs.subflowsheets.isEmpty()) return fs
         val ids = fs.objects.map { it.id }.toSet()
         val next = fs.subflowsheets.map { b ->
-            val open = boundary(fs, b.id).map { it.stream.id }.toSet()
-            b.copy(ports = b.ports.filter { it.inner in open && (it.outer == null || it.outer in ids) })
+            val bd = boundary(fs, b.id).associateBy { it.stream.id }
+            b.copy(ports = b.ports.filter { p ->
+                val x = bd[p.inner]
+                x != null && (p.outer == null || p.outer in ids) && (p.direction == null || x.feed == (p.direction == SubPort.IN))
+            })
         }
         return if (next == fs.subflowsheets) fs else fs.copy(subflowsheets = next)
     }

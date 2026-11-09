@@ -20,6 +20,28 @@ data class Readiness(
 
     companion object {
         fun of(flowsheet: Flowsheet): Readiness {
+            if (!Subflowsheets.has(flowsheet)) return flat(flowsheet)
+            // With sub-flowsheets (D132, D133): checked on the case flattened, each matched pair one stream; the engine
+            // client gets the ready part of the case as it is (SubflowsheetSolve flattens it or solves it by package).
+            val f = Subflowsheets.flatten(flowsheet)
+            val r = flat(f)
+            val pairs = Subflowsheets.joinedAll(flowsheet)
+            val ready = r.solvable.objects.map { it.id }.toSet()
+            val keep = flowsheet.objects.filter { it.id in ready || pairs[it.id] in ready }
+            val ids = keep.map { it.id }.toSet()
+            val notReady = r.notReady + pairs.mapNotNull { (inner, outer) -> r.notReady[outer]?.let { inner to it } }
+            return Readiness(notReady, flowsheet.copy(objects = keep, connections = flowsheet.connections.filter { it.fromObject in ids && it.toObject in ids }))
+        }
+
+        /** Each object's own check, with sub-flowsheets the case flattened (a matched stream is defined by its partner). */
+        fun statusOf(flowsheet: Flowsheet): Map<String, SpecStatus> {
+            if (!Subflowsheets.has(flowsheet)) return flowsheet.objects.associate { it.id to Specification.status(flowsheet, it) }
+            val f = Subflowsheets.flatten(flowsheet)
+            val pairs = Subflowsheets.joinedAll(flowsheet)
+            return flowsheet.objects.associate { o -> o.id to Specification.status(f, f.objects.firstOrNull { it.id == (pairs[o.id] ?: o.id) } ?: o) }
+        }
+
+        private fun flat(flowsheet: Flowsheet): Readiness {
             val applied = Specification.withSets(flowsheet)
             val byId = applied.objects.associateBy { it.id }
             val reason = linkedMapOf<String, String>()

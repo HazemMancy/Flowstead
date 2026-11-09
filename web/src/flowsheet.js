@@ -59,6 +59,8 @@ function applyProject() {
 /** Commits an edit: the new flowsheet JSON goes on the page, the old one on the undo stack. */
 function commit(next, message) {
   if (!next || next === project.flowsheet) return;
+  // Inside a sub-flowsheet, whatever the edit made (a stream wired to empty canvas, a pasted copy) belongs to it (D133).
+  if (level) next = SubTools.adopt(project.flowsheet, next, level);
   undo.push(project.flowsheet); if (undo.length > 100) undo.shift();
   redo.length = 0;
   project.flowsheet = next;
@@ -116,6 +118,17 @@ new ResizeObserver(resize).observe(canvas);
 const pointers = new Map();
 let gesture = null; // {id, x0, y0, mode: null|'move'|'wire'|'pan'|'table'|'pinch', lastX, lastY}
 const SLOP = 6;
+// A finger moves a little during a tap and covers more than a mouse pointer: a wider allowance and a wider reach.
+const slopOf = (g) => (g?.touch ? 14 : SLOP);
+function hitAt(x, y, touch) {
+  const h = JSON.parse(view.hit(x, y));
+  if (!touch || h.kind !== 'empty') return h;
+  for (const r of [10, 18, 26]) for (let a = 0; a < 8; a++) {
+    const t = JSON.parse(view.hit(x + r * Math.cos(a * Math.PI / 4), y + r * Math.sin(a * Math.PI / 4)));
+    if (t.kind === 'object' || t.kind === 'block') return t;
+  }
+  return h;
+}
 const local = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -128,7 +141,7 @@ canvas.addEventListener('pointerdown', (e) => {
     const [a, b] = [...pointers.values()];
     gesture = { mode: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
     draw();
-  } else if (pointers.size === 1) gesture = { id: e.pointerId, x0: x, y0: y, lastX: x, lastY: y, mode: null, multi: e.shiftKey || e.ctrlKey || e.metaKey };
+  } else if (pointers.size === 1) gesture = { id: e.pointerId, x0: x, y0: y, lastX: x, lastY: y, mode: null, multi: e.shiftKey || e.ctrlKey || e.metaKey, touch: e.pointerType !== 'mouse' };
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!pointers.has(e.pointerId)) return;
@@ -146,9 +159,9 @@ canvas.addEventListener('pointermove', (e) => {
   }
   if (e.pointerId !== gesture.id) return;
   if (!gesture.mode) {
-    if (Math.hypot(x - gesture.x0, y - gesture.y0) < SLOP) return;
+    if (Math.hypot(x - gesture.x0, y - gesture.y0) < slopOf(gesture)) return;
     // On empty canvas, Shift (or the Select tool) draws a selection box (D124); otherwise the drag pans.
-    if ((gesture.multi || selectMode) && JSON.parse(view.hit(gesture.x0, gesture.y0)).kind === 'empty') { gesture.mode = 'box'; view.beginBox(gesture.x0, gesture.y0); }
+    if ((gesture.multi || selectMode) && hitAt(gesture.x0, gesture.y0, gesture.touch).kind === 'empty') { gesture.mode = 'box'; view.beginBox(gesture.x0, gesture.y0); }
     else gesture.mode = view.beginDrag(gesture.x0, gesture.y0);
   }
   if (gesture.mode === 'box') view.boxTo(x, y);
@@ -166,7 +179,7 @@ function endPointer(e, cancelled) {
   if (e.pointerId !== gesture.id) return;
   const g = gesture; gesture = null;
   if (cancelled) { view.cancelDrag(); return draw(); }
-  if (!g.mode) return tap(x, y, g.multi || selectMode);
+  if (!g.mode) return tap(x, y, g.multi || selectMode, g.touch);
   if (g.mode === 'pan') return;
   if (g.mode === 'box') { view.endBox(g.multi || selectMode); return selectionChanged(); }
   const many = g.mode === 'move' && view.selectionCount > 1;
@@ -183,8 +196,8 @@ canvas.addEventListener('wheel', (e) => {
   draw();
 }, { passive: false });
 
-function tap(x, y, multi) {
-  const h = JSON.parse(view.hit(x, y));
+function tap(x, y, multi, touch = false) {
+  const h = hitAt(x, y, touch);
   if (h.kind === 'block' && !multi) {
     // A second tap on the same block within a moment opens it (works with a mouse, a pen or a finger).
     const now = Date.now();
@@ -322,7 +335,7 @@ function selectionChanged() {
 }
 function renderSelection() {
   const n = view.selectionCount;
-  $('selBar').hidden = n < 2;
+  $('selBar').hidden = selectMode ? n < 1 : n < 2;
   $('selCount').textContent = `${n} selected`;
   $('copySelBtn').disabled = !n;
   $('pasteBtn').disabled = !clipboard();
@@ -331,7 +344,8 @@ function renderSelection() {
 // Worksheets.apply, which uses the app's FlowsheetEditing. Only what the page itself must remember lives here.
 const ui = { tab: 'design', chosen: {}, basis: {}, units: {} };
 function renderInspector() {
-  const id = view.selectedId;
+  // With the Select tool on, taps build a selection: the worksheet stays shut so it can't cover the next tap (a phone).
+  const id = selectMode ? null : view.selectedId;
   const o = id && objects().find((x) => x.id === id);
   $('inspector').hidden = !o;
   if (!o) return;
@@ -661,6 +675,7 @@ let selectMode = false;
 $('selectBtn').addEventListener('click', () => {
   selectMode = !selectMode;
   $('selectBtn').setAttribute('aria-pressed', selectMode);
+  selectionChanged();
   announce(selectMode ? 'Select: drag to draw a box, tap to add or take out an object' : 'Select off: a drag pans');
 });
 $('copySelBtn').addEventListener('click', copySelection);
@@ -685,7 +700,7 @@ function renderLevel() {
   const crumbs = [{ id: '', tag: 'Main' }, ...path];
   $('levelBar').innerHTML = crumbs.map((c, i) => i === crumbs.length - 1
     ? `<span aria-current="page">${esc(c.tag)}</span>` : `<button type="button" data-level="${esc(c.id)}">${esc(c.tag)}</button><span class="sep" aria-hidden="true">›</span>`).join('')
-    + (level ? '' : '<small style="opacity:.7;margin-left:.4rem">Double-click a block to open it</small>');
+    + (level ? '' : '<small style="opacity:.7;margin-left:.4rem">Tap a block twice to open it</small>');
 }
 $('levelBar').addEventListener('click', (e) => { const b = e.target.closest('[data-level]'); if (b) goLevel(b.dataset.level); });
 const lastBlockTap = { id: null, at: 0 };
@@ -705,7 +720,8 @@ function addBlock() {
     if (r) { view.selectedId = null; blockSel = r.id; selectionChanged(); }
     return;
   }
-  const r = subEdit(SubTools.add(project.flowsheet, level, Math.round(view.worldX(cssW / 2) / 12) * 12, Math.round(view.worldY(cssH / 2) / 12) * 12), 'Added a sub-flowsheet');
+  const [fx, fy] = JSON.parse(view.freeSpot(view.worldX(cssW / 2), view.worldY(cssH / 2)));
+  const r = subEdit(SubTools.add(project.flowsheet, level, fx, fy), 'Added a sub-flowsheet');
   if (r) { blockSel = r.id; selectionChanged(); }
 }
 $('subBtn').addEventListener('click', addBlock);
@@ -731,7 +747,9 @@ function renderBlock() {
     <td><select data-link="${esc(p.inner)}" aria-label="${esc(p.innerTag)} is matched to"><option value="">Not matched</option>${p.outer && !p.candidates.some((c) => c.id === p.outer) ? `<option value="${esc(p.outer)}" selected>${esc(p.outerTag)}</option>` : ''}${
       p.candidates.map((c) => `<option value="${esc(c.id)}"${c.id === p.outer ? ' selected' : ''}>${esc(c.tag)}</option>`).join('')}</select></td>
     <td>${b.differs && !p.energy ? `<select data-basis="${esc(p.inner)}" aria-label="Transfer basis of ${esc(p.innerTag)}"><option value="tp"${p.basis !== 'pvf' ? ' selected' : ''}>T–P</option><option value="pvf"${p.basis === 'pvf' ? ' selected' : ''}>P–VF</option></select>` : '—'}</td>
-    <td>${vals(p.inner)}</td></tr>`;
+    <td>${vals(p.inner)}</td><td><button type="button" class="icon-btn" data-unlink="${esc(p.inner)}" aria-label="Take ${esc(p.innerTag)} out of the block" title="Take it out of the block">✕</button></td></tr>`;
+  const adder = (list, kind, label) => `<div class="field" style="flex:1;min-width:10rem"><label for="blockAdd${kind}">${label}</label><select id="blockAdd${kind}" data-add="${kind}"${list.length ? '' : ' disabled'}>
+    <option value="">${list.length ? 'Choose a stream…' : 'No free stream here'}</option>${list.map((c) => `<option value="${esc(c.id)}">${esc(c.tag)}</option>`).join('')}</select></div>`;
   $('blockInsp').innerHTML = `<div class="fs-insp-head"><h2 id="blockTitle">Sub-flowsheet</h2><button type="button" class="icon-btn" id="blockClose" aria-label="Close">✕</button></div>
     <div class="field"><label for="blockTag">Name</label><input id="blockTag" value="${esc(b.tag)}" autocomplete="off"></div>
     <div class="fs-row" style="display:flex;gap:.35rem;flex-wrap:wrap;margin:.4rem 0">
@@ -743,9 +761,11 @@ function renderBlock() {
       <option value="own"${b.own ? ' selected' : ''}>Its own${b.own ? `: ${esc(b.package || '—')}` : ''}</option></select></div>
     ${b.own ? `<p class="fs-note">${esc(b.package || 'No package')} · ${b.compounds.length} component${b.compounds.length === 1 ? '' : 's'} <button type="button" class="btn btn-sm" id="blockBasis">Edit its basis</button></p>
       <p class="fs-note">Solved on its own package: each boundary stream crosses as a feed defined by the engine’s result on the other side, by its transfer basis (T–P: temperature and pressure; P–VF: pressure and vapour fraction), with its molar flow and composition, as HYSYS’s.</p>` : '<p class="fs-note">On the parent’s package it solves with the parent as one flowsheet: the same numbers as without the block.</p>'}
-    <h3 style="font-size:.85rem;margin:.6rem 0 .2rem">Boundary streams</h3>
-    ${b.ports.length ? `<table class="fs-ports"><thead><tr><th>Inside</th><th></th><th>Matched to</th><th>Transfer</th><th>Values</th></tr></thead><tbody>${b.ports.map(port).join('')}</tbody></table>`
-      : '<p class="fs-note">None yet. Open the block and add streams with one open end: each is a feed or a product to match to a stream here.</p>'}`;
+    <h3 style="font-size:.85rem;margin:.6rem 0 .2rem">Streams in and out</h3>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">${adder(b.canIn, 'In', 'Add a stream in')}${adder(b.canOut, 'Out', 'Add a stream out')}</div>
+    <p class="fs-note">Or drag a stream onto the block. Inside, each one is a stream to join to the equipment there.</p>
+    ${b.ports.length ? `<table class="fs-ports"><thead><tr><th>Inside</th><th></th><th>Matched to</th><th>Transfer</th><th>Values</th><th></th></tr></thead><tbody>${b.ports.map(port).join('')}</tbody></table>`
+      : ''}`;
   if (keep && $(keep)) $(keep).focus();
 }
 $('blockInsp').addEventListener('click', (e) => {
@@ -755,6 +775,8 @@ $('blockInsp').addEventListener('click', (e) => {
   if (id === 'blockDelete') return deleteBlock(blockSel);
   if (id === 'blockUngroup') { const tag = JSON.parse(SubTools.info(project.flowsheet, blockSel)).tag; if (subEdit(SubTools.ungroup(project.flowsheet, blockSel), `Ungrouped ${tag}`)) { blockSel = null; selectionChanged(); } return; }
   if (id === 'blockBasis') return openBasis(blockSel);
+  const un = e.target.closest('[data-unlink]')?.dataset.unlink;
+  if (un) return subEdit(SubTools.disconnect(project.flowsheet, blockSel, un), 'Took the stream out of the block');
 });
 $('blockInsp').addEventListener('change', (e) => {
   const t = e.target;
@@ -764,6 +786,7 @@ $('blockInsp').addEventListener('change', (e) => {
     if (subEdit(SubTools.setOwnFluid(project.flowsheet, blockSel, own), own ? 'Own fluid package: a copy of the parent’s to edit' : 'Uses the parent’s fluid package') && own) openBasis(blockSel);
     return;
   }
+  if (t.dataset.add && t.value) return subEdit(SubTools.connect(project.flowsheet, blockSel, t.value, t.dataset.add === 'In'), `${t.selectedOptions[0].textContent} ${t.dataset.add === 'In' ? 'goes into' : 'comes out of'} the block`);
   if (t.dataset.link !== undefined) return subEdit(SubTools.link(project.flowsheet, blockSel, t.dataset.link, t.value), t.value ? 'Matched the boundary stream' : 'Unmatched the boundary stream');
   if (t.dataset.basis !== undefined) return subEdit(SubTools.setBasis(project.flowsheet, blockSel, t.dataset.basis, t.value), `Transfer basis ${t.value === 'pvf' ? 'P–VF' : 'T–P'}`);
 });

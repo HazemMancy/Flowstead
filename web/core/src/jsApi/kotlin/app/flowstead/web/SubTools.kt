@@ -15,11 +15,11 @@ import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetJson
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.obj
-import app.flowstead.web.model.Region
-import app.flowstead.web.model.SubFluid
-import app.flowstead.web.model.Subflowsheets
-import app.flowstead.web.model.Transfer
-import app.flowstead.web.model.TransferBasis
+import app.flowstead.core.model.Region
+import app.flowstead.core.model.SubFluid
+import app.flowstead.core.model.Subflowsheets
+import app.flowstead.core.model.Transfer
+import app.flowstead.core.model.TransferBasis
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -83,6 +83,8 @@ object SubTools {
             put("package", fluid.propertyPackage ?: ""); put("parentPackage", parentFluid.propertyPackage ?: "")
             putJsonArray("compounds") { fluid.compounds.forEach { add(JsonPrimitive(it)) } }
             put("differs", Subflowsheets.regionOf(f, b.id) != Subflowsheets.regionOf(f, b.parent))
+            putJsonArray("canIn") { Subflowsheets.connectable(f, b.id, true).forEach { c -> addJsonObject { put("id", c.id); put("tag", c.tag) } } }
+            putJsonArray("canOut") { Subflowsheets.connectable(f, b.id, false).forEach { c -> addJsonObject { put("id", c.id); put("tag", c.tag) } } }
             putJsonArray("ports") {
                 Subflowsheets.boundary(f, b.id).forEach { bd ->
                     addJsonObject {
@@ -102,9 +104,20 @@ object SubTools {
     }
     fun rename(flowsheetJson: String, id: String, tag: String): String = edit { ok(Subflowsheets.rename(fs(flowsheetJson), id, tag)) }
     fun move(flowsheetJson: String, id: String, x: Double, y: Double): String = edit { ok(Subflowsheets.move(fs(flowsheetJson), id, x, y)) }
+    /** What an edit made while [level] was shown belongs to it: [afterJson] with new objects on no flowsheet put there. */
+    fun adopt(beforeJson: String, afterJson: String, level: String): String =
+        if (level.isEmpty()) afterJson else out(Subflowsheets.adopt(fs(beforeJson), fs(afterJson), level))
+
     fun place(flowsheetJson: String, objectId: String, level: String): String = edit { ok(Subflowsheets.place(fs(flowsheetJson), objectId, lvl(level))) }
     fun link(flowsheetJson: String, blockId: String, innerId: String, outerId: String): String =
         edit { ok(Subflowsheets.link(fs(flowsheetJson), blockId, innerId, outerId.takeIf { it.isNotEmpty() })) }
+    /** A stream of the parent into ([feed]) or out of the block: the boundary stream inside is made and matched. */
+    fun connect(flowsheetJson: String, blockId: String, outerId: String, feed: Boolean): String = edit {
+        val (f, id) = Subflowsheets.connect(fs(flowsheetJson), blockId, outerId, feed)
+        ok(f) { put("id", id) }
+    }
+    fun disconnect(flowsheetJson: String, blockId: String, innerId: String): String = edit { ok(Subflowsheets.disconnect(fs(flowsheetJson), blockId, innerId)) }
+
     fun setBasis(flowsheetJson: String, blockId: String, innerId: String, basis: String): String =
         edit { ok(Subflowsheets.setBasis(fs(flowsheetJson), blockId, innerId, basis)) }
     fun delete(flowsheetJson: String, id: String): String = edit { ok(Subflowsheets.delete(fs(flowsheetJson), id)) }

@@ -1,27 +1,18 @@
 /*
- * Flowstead web (D132): sub-flowsheets, on the JVM and in JavaScript.
+ * Flowstead (D132, D133): sub-flowsheets.
  * Copyright (C) 2026 Flowstead contributors. SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Benchmark 06's train (SUCTION → K-100 → DISCHARGE → E-100 → COOLED): putting the cooler in a sub-flowsheet and
  * flattening it again must give back exactly the flowsheet the engine solved before (so the same numbers), and a
  * sub-flowsheet on its own package must carry DISCHARGE across as a feed defined by the engine's result.
  */
-package app.flowstead.web.model
+package app.flowstead.core.model
 
 import app.flowstead.core.api.ObjectResult
 import app.flowstead.core.api.ObjectStatus
 import app.flowstead.core.api.PhaseResult
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
-import app.flowstead.core.model.Connection
-import app.flowstead.core.model.EditRejected
-import app.flowstead.core.model.Flowsheet
-import app.flowstead.core.model.FlowsheetJson
-import app.flowstead.core.model.ObjectType
-import app.flowstead.core.model.Readiness
-import app.flowstead.core.model.SimObject
-import app.flowstead.core.model.Spec
-import app.flowstead.core.model.modelHash
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -184,5 +175,42 @@ class SubflowsheetsTest {
         // A boundary stream deleted inside leaves no dangling match.
         val gone = own.copy(objects = own.objects.filter { it.id != "in" }, connections = own.connections.filter { it.fromObject != "in" })
         assertTrue(Subflowsheets.regions(gone).second.isEmpty())
+    }
+
+    @Test
+    fun aStreamOfTheParentGoesIntoAnEmptyBlockAsHysysConnections() {
+        // DISCHARGE has a free end once E-100 is gone: it can go into an empty block, which makes its boundary stream.
+        val f = train.copy(objects = train.objects.filter { it.id !in setOf("e", "out") }, connections = train.connections.take(2))
+        val (f1, b) = Subflowsheets.add(f, null, 300.0, 0.0)
+        assertEquals(listOf("dis"), Subflowsheets.connectable(f1, b.id, true).map { it.id })
+        val (f2, inner) = Subflowsheets.connect(f1, b.id, "dis", true)
+        val bd = Subflowsheets.boundary(f2, b.id).single()
+        assertEquals(inner, bd.stream.id); assertTrue(bd.feed); assertEquals("dis", bd.port?.outer)
+        assertEquals("DISCHARGE-SUB-1", bd.stream.tag)
+        // Nothing inside is joined to it yet, and it stays matched; flattened, the engine sees DISCHARGE as before.
+        assertEquals(f2, Subflowsheets.clean(f2))
+        assertEquals(shape(f), shape(Subflowsheets.flatten(f2)))
+        // DISCHARGE is no longer free; a stream joined at both ends can't go in.
+        assertTrue(Subflowsheets.connectable(f2, b.id, true).isEmpty())
+        assertFailsWith<EditRejected> { Subflowsheets.connect(f2, b.id, "suc", true) }
+        // Taken out again: the stream inside goes with it (nothing was joined to it).
+        val f3 = Subflowsheets.disconnect(f2, b.id, inner)
+        assertTrue(f3.objects.none { it.id == inner } && Subflowsheets.of(f3, b.id)!!.ports.isEmpty())
+        // A stream out: COOLED-like free start.
+        val g = f1.copy(objects = f1.objects + SimObject("q", "Q", ObjectType.MaterialStream))
+        val (g2, qi) = Subflowsheets.connect(g, b.id, "q", false)
+        assertEquals(false, Subflowsheets.boundary(g2, b.id).first { it.stream.id == qi }.feed)
+    }
+
+    @Test
+    fun whatAnEditMakesInsideABlockBelongsToIt() {
+        val (g, block) = Subflowsheets.group(train, listOf("e"), 360.0, 0.0)
+        // A stream wired from E-100's free port to empty canvas while the block is open.
+        val (wired, _) = FlowsheetEditing.add(g, ObjectType.MaterialStream, 500.0, 100.0)
+        val adopted = Subflowsheets.adopt(g, wired, block.id)
+        assertEquals(block.id, adopted.objects.last().parent)
+        // On the main flowsheet nothing changes, and objects that were already somewhere stay there.
+        assertEquals(wired, Subflowsheets.adopt(g, wired, null))
+        assertEquals(g.objects.map { it.parent }, adopted.objects.dropLast(1).map { it.parent })
     }
 }

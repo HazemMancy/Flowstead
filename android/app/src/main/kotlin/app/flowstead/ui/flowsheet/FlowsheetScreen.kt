@@ -58,6 +58,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import kotlin.math.roundToInt
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -90,6 +91,7 @@ import app.flowstead.ui.theme.valueColors
 fun FlowsheetScreen(
     onBack: () -> Unit,
     onOpenFluid: () -> Unit,
+    onOpenBlockFluid: (String) -> Unit = {},
     onOpenResults: () -> Unit,
     onOpenLog: () -> Unit,
     onOpenHelp: (String?) -> Unit = {},
@@ -203,14 +205,14 @@ fun FlowsheetScreen(
             FlowsheetUiState.NotFound -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("This project no longer exists.")
             }
-            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, onOpenResults, onOpenLog, onOpenHelp, Modifier.padding(padding))
+            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, onOpenResults, onOpenLog, onOpenHelp, onOpenBlockFluid, Modifier.padding(padding))
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () -> Unit, onOpenLog: () -> Unit, onOpenHelp: (String?) -> Unit, modifier: Modifier) {
+private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () -> Unit, onOpenLog: () -> Unit, onOpenHelp: (String?) -> Unit, onOpenBlockFluid: (String) -> Unit, modifier: Modifier) {
     val density = LocalDensity.current.density
     var viewport by remember { mutableStateOf(Viewport()) }
     var canvasRect by remember { mutableStateOf(Rect.Zero) }
@@ -250,7 +252,19 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 vm.select(objectId)
                 tableFor = objectId
             }
+            override fun tapBlock(id: String) = vm.tapBlock(id)
+            override fun openBlock(id: String) = vm.openLevel(id)
+            override fun moveBlock(id: String, x: Double, y: Double) = vm.moveBlock(id, x, y)
+            override fun dropOnBlock(streamId: String, blockId: String) = vm.dropOnBlock(streamId, blockId)
         }
+    }
+    // The flowsheet shown (D133): the main one or a sub-flowsheet's; each opens centred on what it holds.
+    val levelFs = remember(ui.flowsheet, ui.level) { app.flowstead.core.model.Subflowsheets.levelView(ui.flowsheet, ui.level) }
+    LaunchedEffect(ui.level) {
+        if (!centred || canvasRect.width == 0f) return@LaunchedEffect
+        val pts = levelFs.objects.map { Offset(it.x.toFloat(), it.y.toFloat()) } + ui.blocks.map { Offset(it.x.toFloat(), it.y.toFloat()) }
+        val c = if (pts.isEmpty()) Offset.Zero else Offset(pts.map { it.x }.average().toFloat(), pts.map { it.y }.average().toFloat())
+        viewport = Viewport(offset = Offset(canvasRect.width / 2, canvasRect.height / 2) - c * density, zoom = viewport.zoom)
     }
     val safetyActions = remember(vm) {
         object : SafetyActions {
@@ -308,7 +322,10 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 .onGloballyPositioned { canvasRect = Rect(it.positionInRoot(), it.size.toSize()) },
         ) {
             FlowsheetCanvas(
-                flowsheet = ui.flowsheet,
+                flowsheet = levelFs,
+                blocks = ui.blocks,
+                selectedBlock = ui.selectedBlock,
+                streamNotes = ui.streamNotes,
                 status = ui.status,
                 notReady = ui.notReady,
                 selectedId = ui.selectedId,
@@ -319,7 +336,11 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 modifier = Modifier.fillMaxSize(),
                 unitSet = ui.unitSet,
             )
-            if (ui.flowsheet.objects.isEmpty()) {
+            LevelBar(ui, onLevel = vm::openLevel, onAddBlock = {
+                val c = viewport.toWorld(Offset(canvasRect.width / 2, canvasRect.height / 2), density)
+                vm.addBlock(((c.x / 24).roundToInt() * 24).toDouble(), ((c.y / 24).roundToInt() * 24 - 120).toDouble())
+            }, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
+            if (levelFs.objects.isEmpty() && ui.blocks.isEmpty()) {
                 Text(
                     "Tap or long-press-drag an item from the palette below.\nStart with a material stream for your feed.",
                     textAlign = TextAlign.Center,
@@ -489,8 +510,13 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 onTable = if (PropertyTables.available(ui.flowsheet, obj).isEmpty()) null else ({ tableFor = id }),
                 hasTable = ui.flowsheet.tables.any { it.objectId == id },
                 onDuplicate = if (obj.type == app.flowstead.core.model.ObjectType.MaterialStream) ({ vm.duplicateStream(id); Unit }) else null,
+                onGroup = if (obj.type.isStream) null else ({ vm.groupObject(id) }),
             )
         }
+    }
+
+    ui.selectedBlock?.let { id ->
+        SubflowsheetSheet(ui.flowsheet, id, ui.results, ui.unitSet, vm, onOpenFluid = onOpenBlockFluid, onDismiss = vm::closeBlock)
     }
 
     tableFor?.let { id ->
@@ -610,6 +636,28 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onSolverActive: (Bool
                 if (solving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Solve", style = MaterialTheme.typography.labelLarge)
             }
+        }
+    }
+}
+
+/**
+ * Where you are among sub-flowsheets (D133), as a breadcrumb (Main › SUB-1), and a button to add a block here. A block
+ * opens with a second tap or a long press; streams go in and out from its sheet or by dragging one onto it.
+ */
+@Composable
+private fun LevelBar(ui: FlowsheetUi, onLevel: (String?) -> Unit, onAddBlock: () -> Unit, modifier: Modifier) {
+    androidx.compose.material3.Surface(
+        modifier = modifier, shape = MaterialTheme.shapes.small, tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+            val crumbs = listOf<Pair<String?, String>>(null to "Main") + ui.path.map { it.id to it.tag }
+            crumbs.forEachIndexed { i, (id, tag) ->
+                if (i > 0) Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (i == crumbs.lastIndex) Text(tag, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 8.dp))
+                else androidx.compose.material3.TextButton(onClick = { onLevel(id) }) { Text(tag) }
+            }
+            androidx.compose.material3.TextButton(onClick = onAddBlock, modifier = Modifier.testTag("add_block")) { Text("+ Sub-flowsheet") }
         }
     }
 }

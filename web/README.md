@@ -35,6 +35,14 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.12.1**
+- **Streams in and out of a sub-flowsheet** as HYSYS's Connections: in the block's panel, add a stream in or out from
+  the free streams around it, or drag a stream onto the block; the stream inside is made for you.
+- New blocks go where there is room, drawn over the streams.
+- **Touch**: with Select on, each finger tap adds an object to the selection (the worksheet no longer opens over the
+  flowsheet), and a finger reaches small symbols.
+- The same sub-flowsheet code as the Android app (3.4.0).
+
 **Web 1.12**
 - **Sub-flowsheets**, as in HYSYS. A sub-flowsheet is a block on the flowsheet. Double-click it (or Open) to see the
   flowsheet inside; the bar at the bottom leads back. "Sub-flowsheet" adds an empty block, or puts the objects you
