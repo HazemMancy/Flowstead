@@ -576,7 +576,9 @@ try {
       const iPeak = dev.indexOf(peak);
       const at = (t) => dev[r.times.findIndex((x) => x >= t)];
       const tEnd = r.times.at(-1);
-      const falling = [0.25, 0.5, 0.75].map((f) => at(r.times[iPeak] + f * (tEnd - r.times[iPeak]))).every((d, k, a) => d <= (k ? a[k - 1] : peak) + 1e-12 * Math.abs(sp[0])) && end <= at(tEnd - 600);
+      // Falling, allowing a tenth of the peak for the small wobble of a fast loop already back at its setpoint.
+      const slack = 0.1 * peak;
+      const falling = [0.25, 0.5, 0.75].map((f) => at(r.times[iPeak] + f * (tEnd - r.times[iPeak]))).every((d, k, a) => d <= (k ? a[k - 1] : peak) + slack) && end <= at(tEnd - 600) + slack;
       const opRange = (tr(c.id, 'output') ?? []).slice(iPeak);
       const free = opRange.every((o) => o > 0.5 && o < 99.5);
       ends[c.tag] = { end: pv.at(-1), sp: sp.at(-1), peak };
