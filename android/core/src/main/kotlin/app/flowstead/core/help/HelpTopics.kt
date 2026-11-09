@@ -35,7 +35,7 @@ internal object HelpTopics {
         HelpTopic(
             "start", START, "Welcome to Flowstead",
             """
-            Flowstead is a steady-state process simulator and engineering workbench. Every number it shows is computed by DWSIM 10.2.12's thermodynamics, on the phone or on your own engine server; Flowstead never invents a value.
+            Flowstead is a steady-state process simulator and engineering workbench. Every number it shows is computed by DWSIM 10's thermodynamics, on the phone or on your own engine server; Flowstead never invents a value.
             ## Where things are
             - **Projects**: each project is one flowsheet with its fluid package, results and studies.
             - **Fluid package**: components, property package, hypotheticals and binary interaction parameters.

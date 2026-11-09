@@ -194,7 +194,8 @@ _Last updated: 2026-11-09_
 - **Web 1.9 (D125):** dynamics (vessels, valves, controllers, events, the app's trends) and PID tuning from a step test (FOPDT fit, SIMC, IMC, Ziegler–Nichols, Cohen–Coon; Use puts the settings in the controller), in the Tools window. Checked: benchmark 20's PI loops return to their setpoints after the feed upset; an exact FOPDT is fitted back and the rules match their formulas by hand.
 - **Web 1.10 (D126, D127):** the flowsheet spreadsheet (formulas on solved results in display units, exports applied to specifications) and saved scenarios (compare, restore) in the Tools window; the Fluid package's compound and data tools in Basis (compound from structure with PubChem look-up, VLE regression, reaction finder). Checked against the engine's numbers, hand arithmetic, Joback by hand, a known kij fitted back and a balanced combustion.
 - **Web 1.10.1 (D128):** every window's title bar sits at its top instead of over the first line of text (Units, Basis, Export, Tools and the rest); Dynamics' starting level and opening in %. Checked in every window at phone and desktop width, at rest and scrolled.
-- **Web 1.10.2 (D129):** Tab works in the Tools forms (it was cancelled) and forms keep the keyboard's place when they redraw; the spreadsheet fetches bubble and dew points on demand; the engine is shown as "DWSIM 10" and document footers carry the current web version; CI actions on Node 24. DWSIM tags 10.2.13–10.2.15 exist upstream; the engine stays on 10.2.12 until the owner approves a move.
+- **Web 1.10.2 (D129):** Tab works in the Tools forms (it was cancelled) and forms keep the keyboard's place when they redraw; the spreadsheet fetches bubble and dew points on demand; the engine is shown as "DWSIM 10" and document footers carry the current web version; CI actions on Node 24. DWSIM tags 10.2.13–10.2.15 exist upstream; the owner approved the move (D131).
+- **3.3.0 and Web 1.11.1 (D131): DWSIM 10.2.15** on the phone, the server and the browser. Gases dissolved in water follow IAPWS G7-04 (dissolved air within 1.2 %, was up to 3.8 % off); of 2,131 benchmark checks only those of 4 cases moved, all but the dissolved gases by under 0.1 %; expected values re-based with `update_expected.py`, every independent reference holding. About and Help say "DWSIM 10".
 - **Web 1.11 (D130):** the thermodynamics tools in Basis: binary T–x–y/P–x–y with liquid–liquid branches, ternary with tie lines, true critical point, package comparison, property charts. Checked against NIST boiling and critical points and IAPWS-95 water density.
 
 ## Next
@@ -214,7 +215,7 @@ _Last updated: 2026-11-09_
 
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).
 - The engine Docker image is verified in CI only (no Docker daemon in the sandbox).
-- The engine is built from the pinned DWSIM 10.2.12 source (D94); upstream updates are taken deliberately (ENGINE_VERSION.md).
+- The engine is built from the pinned DWSIM 10.2.15 source (D94, D131); upstream updates are taken deliberately (ENGINE_VERSION.md).
 - DWSIM's rigorous PR VLLE flash did not find the water phase in benchmark 04; Flowstead uses DWSIM's free-water flash instead (D17). Glycol/amine systems still use rigorous VLLE and need checking case by case.
 - DWSIM absolute enthalpy uses a different reference state from HYSYS. Compare duties and ΔH, not absolute H (`docs/engine-spike.md`).
 - The brief's amber/green value colours fail 4.5:1 as text. Darker text variants are used (D14).

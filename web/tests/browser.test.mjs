@@ -52,6 +52,18 @@ const lookup = (node, p) => {
   return typeof cur === 'number' ? cur : null;
 };
 const paths = (n) => (Array.isArray(n) ? n : typeof n === 'string' ? [n] : []);
+/** A check's value in [result], with its minus/plus terms; null when the engine gave none. */
+function actualOf(check, result) {
+  let actual = lookup(result, check.path);
+  for (const [m, sign] of [...paths(check.minus).map((m) => [m, -1]), ...paths(check.plus).map((m) => [m, 1])]) {
+    const b = lookup(result, m);
+    actual = actual === null || b === null ? null : actual + sign * b;
+  }
+  return actual;
+}
+// Engine drift (DWSIM upgrades, D131): every benchmark check's value against expected.json, which the engine wrote with
+// the DWSIM version it was generated with, whatever the tolerance; summarised after the benchmarks.
+const drift = [];
 function evaluate(check, result, label, failures) {
   let p = check.path, actual = lookup(result, p);
   for (const [m, sign] of [...paths(check.minus).map((m) => [m, -1]), ...paths(check.plus).map((m) => [m, 1])]) {
@@ -91,7 +103,11 @@ try {
       const want = expected.status ?? 'converged';
       if (out.result.status !== want) failures.push(`status ${out.result.status} (expected ${want}); messages: ${JSON.stringify(out.result.messages)}`);
       const source = `[${expected.source ?? 'unknown'}]`;
-      for (const c of expected.checks ?? []) evaluate(c, out.result, source, failures);
+      for (const c of expected.checks ?? []) {
+        evaluate(c, out.result, source, failures);
+        const a = actualOf(c, out.result);
+        if (a !== null && Number.isFinite(c.expected)) drift.push({ name, path: c.path + (c.minus ? ` − ${paths(c.minus).join(' − ')}` : '') + (c.plus ? ` + ${paths(c.plus).join(' + ')}` : ''), expected: c.expected, actual: a, rel: Math.abs(a - c.expected) / Math.max(Math.abs(c.expected), 1e-12), abs: Math.abs(a - c.expected) });
+      }
       for (const r of expected.reference ?? []) {
         const rf = [];
         evaluate(r, out.result, `[reference: ${r.source}] ${r.label ?? ''}`, rf);
@@ -104,6 +120,15 @@ try {
     if (failures.length) failed++;
   }
   console.log(`${cases.length - failed}/${cases.length} benchmarks pass in the browser (${checks} checks)`);
+  {
+    // What moved since expected.json was written (its generatedWith says which DWSIM): a count, then the largest changes.
+    const gen = [...new Set(cases.map((n) => JSON.parse(fs.readFileSync(path.join(benchDir, n, 'expected.json'), 'utf8')).generatedWith?.dwsim).filter(Boolean))].join(', ');
+    const moved = drift.filter((d) => d.rel > 1e-9 && d.abs > 1e-12).sort((x, y) => y.rel - x.rel);
+    const band = (lo, hi) => moved.filter((d) => d.rel > lo && d.rel <= hi).length;
+    console.log(`Engine drift against expected.json (DWSIM ${gen || '?'}): ${moved.length} of ${drift.length} checks moved; ` +
+      `up to 1e-6: ${band(1e-9, 1e-6)}, 1e-6–1e-4: ${band(1e-6, 1e-4)}, 1e-4–1e-3: ${band(1e-4, 1e-3)}, 1e-3–1e-2: ${band(1e-3, 1e-2)}, over 1 %: ${band(1e-2, Infinity)}`);
+    for (const d of moved.slice(0, 60)) console.log(`  drift ${(d.rel * 100).toExponential(2)} %  ${d.name}  ${d.path}: ${d.expected} → ${d.actual}`);
+  }
   if (pageErrors.length) { console.log('page errors:', pageErrors); failed++; }
   await page.close();
 
