@@ -16,6 +16,7 @@ const path = require('path');
     ['role-built-to-check.html', 'role-built-to-check-1200x627.png', 1200, 627, 1],
     ['post-pocket.html', 'post-pocket-1200x1500.png', 1200, 1500, 1],
     ['post-phase-colours.html', 'post-phase-colours-1200x1500.png', 1200, 1500, 1],
+    ['post-thanks.html', 'post-thanks-1200x1500.png', 1200, 1500, 1],
     ['post-dwsim10.html', 'post-dwsim10-1200x1500.png', 1200, 1500, 1],
     ['post-310.html', 'post-310-1200x1500.png', 1200, 1500, 1],
   ]) {
