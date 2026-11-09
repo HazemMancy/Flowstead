@@ -1017,7 +1017,8 @@ try {
     for (const [a, b] of [['feed', 'in'], ['out', 'prod']]) for (const k of ['temperature', 'pressure'])
       if (!(Math.abs(pr(a, k) - pr(b, k)) <= 1e-9 * Math.abs(pr(a, k)))) problems.push(`${b} ${k} ${pr(b, k)} ≠ ${a} ${pr(a, k)}`);
     if (!(Math.abs(pr('prod', 'massFlow') - m) < 1e-6 && Math.abs(pr('in', 'massFlow') - m) < 1e-6)) problems.push(`mass flows ${pr('in', 'massFlow')}, ${pr('prod', 'massFlow')} kg/s for ${m}`);
-    if (!(Math.abs(pr('out', 'temperature') - (150 + K)) < 1e-6)) problems.push(`OUT at ${pr('out', 'temperature')} K`);
+    // The benchmarks' temperature tolerance (±0.01 K): DWSIM's heater meets its outlet temperature to its flash tolerance.
+    if (!(Math.abs(pr('out', 'temperature') - (150 + K)) < 0.01)) problems.push(`OUT at ${pr('out', 'temperature')} K`);
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} sub-flowsheets (grouped vs flat: ${got.a?.compared} values, worst ${got.a?.worst?.toExponential(1)}; steam tables block duty ${(duty / 1000).toFixed(3)} kW, IAPWS-IF97 ${(dutyRef / 1000).toFixed(3)} kW)`);
     problems.forEach((x) => console.log('     ' + x));
