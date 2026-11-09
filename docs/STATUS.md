@@ -201,6 +201,7 @@ _Last updated: 2026-11-09_
 - **Web 1.13 (D134): every screen and pointer.** Two-line toolbar with a sideways strip on phones, folding palette, bottom-sheet worksheets, full-screen dialogs, a palette column on phones on their side, zoom buttons, touch-sized targets and 16 px fields.
 - **D135: one sub-flowsheet solve for app and web** (the web calls the app core's `SubflowsheetSolve`), and the sub-flowsheet reference checks run on the phone's engine as well (`OnDeviceSubflowsheetTest`).
 - **Web 1.14 (D136): the app's remaining tools on the web** — performance curves, pipe sections and fittings, reactors and reactions, McCabe–Thiele, the check and the watch panel; each checked against a hand or NIST reference in browser test 4n.
+- **Web 1.14 (D137): re-solving only what changed works in the browser** — the downstream recalculation no longer blocks on a task (the browser cannot); a spec change re-solves what is downstream of it, as on the phone.
 - **Web 1.11 (D130):** the thermodynamics tools in Basis: binary T–x–y/P–x–y with liquid–liquid branches, ternary with tie lines, true critical point, package comparison, property charts. Checked against NIST boiling and critical points and IAPWS-95 water density.
 
 ## Next

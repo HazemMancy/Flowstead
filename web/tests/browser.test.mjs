@@ -1087,6 +1087,7 @@ try {
     const rise = (ra?.objects?.d?.properties?.pressure ?? NaN) - 1e5;
     got.pump = { head, hRef, rise, rhoGH: rho * 9.80665 * hRef };
     if (!(curve?.points?.length === 2 && Math.abs(curve.points[1].flow - 200 / 3600) < 1e-12 && curve.points[1].head === 40)) problems.push(`curve as saved: ${JSON.stringify(curve)}`);
+    if (ra?.status !== 'converged') problems.push(`pump case: ${ra?.status} ${JSON.stringify(ra?.messages ?? [])}`);
     if (!(Math.abs(head - hRef) / hRef < 2e-3)) problems.push(`pump head ${head} m; the curve at ${qh.toFixed(2)} m³/h gives ${hRef.toFixed(3)} m`);
     if (!(Math.abs(rise - rho * 9.80665 * hRef) / rise < 3e-3)) {
       const pp = ra?.objects?.p?.properties ?? {}, ov = (id) => ra?.objects?.[id]?.phases?.overall?.properties ?? {};

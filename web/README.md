@@ -41,6 +41,9 @@ In the repository's settings, **Pages → Build and deployment → Source** must
   fittings** (Crane L/D or K), **reactors** with their **reactions** (conversion, equilibrium, kinetic, catalytic),
   **McCabe–Thiele** for a binary column, the flowsheet **check**, and the **watch panel** over the flowsheet.
 - Sub-flowsheets on several fluid packages are solved by the app's own code (one implementation for app and web).
+- **Fixed:** after a change to a unit's specification, a re-solve could stop with "Cannot wait on monitors on this
+  runtime" and leave the streams after that unit at the previous solve's values (case studies, the optimiser, Adjusts,
+  controllers and pump or compressor curves all re-solve this way). It now recalculates them, as the app does.
 
 **Web 1.13**
 - **Comfortable on every screen, with a finger or a mouse.** On a phone the toolbar is two lines (the name, Hold or

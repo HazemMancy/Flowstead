@@ -364,7 +364,10 @@ public sealed partial class DwsimEngine
             });
             try
             {
-                errors.AddRange(Task.Run(() => DWSIM.FlowsheetSolver.FlowsheetSolver.SolveFlowsheet(fs, DWSIM.GlobalSettings.Settings.SolverMode, null, frompgrid: true)).GetAwaiter().GetResult() ?? []);
+                // The browser has one thread and cannot block on a task ("Cannot wait on monitors on this runtime"):
+                // there DWSIM's solver runs inline (dwsim-browser.patch), so it is called directly.
+                List<Exception> Run() => DWSIM.FlowsheetSolver.FlowsheetSolver.SolveFlowsheet(fs, DWSIM.GlobalSettings.Settings.SolverMode, null, frompgrid: true);
+                errors.AddRange((OperatingSystem.IsBrowser() ? Run() : Task.Run(Run).GetAwaiter().GetResult()) ?? []);
             }
             finally
             {
