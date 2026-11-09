@@ -571,13 +571,17 @@ try {
       const dev = pv.map((v, i) => Math.abs(v - sp[i]));
       const peak = Math.max(...dev);
       const end = dev.at(-1);
-      // Mean deviation over a 10-minute window starting at t0 (the upset is at 30 s).
-      const window = (t0) => { const ix = r.times.map((t, i) => (t >= t0 && t < t0 + 600 ? i : -1)).filter((i) => i >= 0); return ix.reduce((a, i) => a + dev[i], 0) / ix.length; };
-      const early = window(30), late = window(r.times.at(-1) - 600);
-      ends[c.tag] = { end: pv.at(-1), sp: sp.at(-1), peak, early, late };
+      // Integral action removes the offset: after its peak the error dies away and the output stays off its limits (no
+      // wind-up holding it). A level, an integrating process, recovers slowly: benchmark 20's peaks at about 20 min.
+      const iPeak = dev.indexOf(peak);
+      const at = (t) => dev[r.times.findIndex((x) => x >= t)];
+      const tEnd = r.times.at(-1);
+      const falling = [0.25, 0.5, 0.75].map((f) => at(r.times[iPeak] + f * (tEnd - r.times[iPeak]))).every((d, k, a) => d <= (k ? a[k - 1] : peak) + 1e-12 * Math.abs(sp[0])) && end <= at(tEnd - 600);
+      const opRange = (tr(c.id, 'output') ?? []).slice(iPeak);
+      const free = opRange.every((o) => o > 0.5 && o < 99.5);
+      ends[c.tag] = { end: pv.at(-1), sp: sp.at(-1), peak };
       if (!(peak > 1e-3 * Math.abs(sp[0]))) problems.push(`${c.tag}: the feed upset did not move it (peak deviation ${peak})`);
-      // Integral action removes the offset: the error dies away (a level, an integrating process, does it slowly).
-      if (!(end < 0.01 * Math.abs(sp.at(-1)) && late < 0.5 * early)) problems.push(`${c.tag} ends ${pv.at(-1)} against its setpoint ${sp.at(-1)}; mean deviation ${early} after the upset, ${late} in the last 10 minutes: a PI controller leaves no offset`);
+      if (!(end < 0.01 * Math.abs(sp.at(-1)) && end < 0.5 * peak && falling && free)) problems.push(`${c.tag} ends ${pv.at(-1)} against its setpoint ${sp.at(-1)} (peak deviation ${peak} at ${r.times[iPeak]} s; falling since: ${falling}; output off its limits: ${free}): a PI controller leaves no offset`);
       // The loop's course every 5 minutes (measurement, output, the valve it moves), for the log.
       const op = tr(c.id, 'output'), mv = tr(c.refs.manipulatedObject, 'valveOpening');
       console.log(`     ${c.tag} every 300 s: ` + r.times.map((t, i) => [t, i]).filter(([t]) => t % 300 === 0).map(([t, i]) => `${t}s PV ${pv[i].toPrecision(5)} OP ${op?.[i]?.toFixed(1)} % valve ${mv ? (mv[i] * 100).toFixed(1) : '?'} %`).join('; '));
