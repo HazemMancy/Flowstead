@@ -1088,7 +1088,11 @@ try {
     got.pump = { head, hRef, rise, rhoGH: rho * 9.80665 * hRef };
     if (!(curve?.points?.length === 2 && Math.abs(curve.points[1].flow - 200 / 3600) < 1e-12 && curve.points[1].head === 40)) problems.push(`curve as saved: ${JSON.stringify(curve)}`);
     if (!(Math.abs(head - hRef) / hRef < 2e-3)) problems.push(`pump head ${head} m; the curve at ${qh.toFixed(2)} m³/h gives ${hRef.toFixed(3)} m`);
-    if (!(Math.abs(rise - rho * 9.80665 * hRef) / rise < 3e-3)) problems.push(`pressure rise ${rise} Pa; ρgH ${rho * 9.80665 * hRef} Pa`);
+    if (!(Math.abs(rise - rho * 9.80665 * hRef) / rise < 3e-3)) {
+      const pp = ra?.objects?.p?.properties ?? {}, ov = (id) => ra?.objects?.[id]?.phases?.overall?.properties ?? {};
+      const later = await p.evaluate(() => window.flowsteadFlowsheet.project.solve?.result?.objects?.d?.properties?.pressure);
+      problems.push(`pressure rise ${rise} Pa; ρgH ${rho * 9.80665 * hRef} Pa (P-100 rise ${pp.pressureRise}, curve head ${pp.curveHead}, ${pp.curveIterations} solves, η ${pp.efficiency}; WATER ${ra?.objects?.w?.properties?.pressure} Pa, ρ ${ov('w').density}, Q ${ov('w').volumeFlow}; DIS ${ra?.objects?.d?.properties?.pressure} Pa, later ${later} Pa; ${JSON.stringify(ra?.messages ?? [])})`);
+    }
     // (b)
     const b13 = JSON.parse(fs.readFileSync(path.join(benchDir, '13-conversion-reactor', 'input.json'), 'utf8')).flowsheet;
     await open(b13, 'rx');
