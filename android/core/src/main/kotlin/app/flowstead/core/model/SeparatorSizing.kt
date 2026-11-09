@@ -4,6 +4,7 @@
  */
 package app.flowstead.core.model
 
+import app.flowstead.core.format.ValueFormat
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.math.PI
@@ -279,7 +280,7 @@ object SeparatorSizing {
                 length = roundUp(1.5 * d, 0.05)
                 notes += "Height raised to 1.5 × D, the least for a vertical vessel."
             }
-            if (length / d > 6) warnings += "H/D ${"%.1f".format(length / d)} is above 6: a horizontal vessel will be shorter."
+            if (length / d > 6) warnings += "H/D ${ValueFormat.number(length / d, 1)} is above 6: a horizontal vessel will be shorter."
             SeparatorSizingResult(
                 false, water, d, length, k, vMax, if (qg > 0) qg / a else 0.0, levels, nozzles, meArea, liquidVolume, notes, warnings,
             )
@@ -324,7 +325,7 @@ object SeparatorSizing {
             }
             d += STEP
         }
-        warnings += "No diameter up to 6 m meets every limit at L/D ${"%.1f".format(ld)}."
+        warnings += "No diameter up to 6 m meets every limit at L/D ${ValueFormat.number(ld, 1)}."
         val d6 = 6.0
         return SeparatorSizingResult(true, water, d6, ld * d6, k, vMax, if (qg > 0) qg / segment(max(0.2 * d6, 0.3), d6) else 0.0,
             emptyList(), nozzles, meArea, liquidVolume, notes, warnings)

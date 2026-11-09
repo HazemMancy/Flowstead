@@ -209,16 +209,7 @@ diff -ruN a/app/flowstead/core/format/ValueFormat.kt b/app/flowstead/core/format
 diff -ruN a/app/flowstead/core/help/Help.kt b/app/flowstead/core/help/Help.kt
 --- a/app/flowstead/core/help/Help.kt
 +++ b/app/flowstead/core/help/Help.kt
-@@ -4,6 +4,8 @@
-  */
- package app.flowstead.core.help
- 
-+import app.flowstead.core.compat.jfmt
-+
- import app.flowstead.core.model.DataLibrary
- import app.flowstead.core.model.Flowsheet
- import app.flowstead.core.model.FlowsheetJson
-@@ -42,7 +44,7 @@
+@@ -43,7 +43,7 @@
      const val DWSIM = "https://dwsim.org"
  
      private fun resource(path: String): String? =
@@ -227,94 +218,6 @@ diff -ruN a/app/flowstead/core/help/Help.kt b/app/flowstead/core/help/Help.kt
  
      private val index: List<String> by lazy { resource("index.txt")?.lines()?.filter { it.isNotBlank() }.orEmpty() }
  
-@@ -81,7 +83,7 @@
-                 "## Mist eliminators (Souders–Brown K, vertical flow, near atmospheric)\n" +
-                     MistEliminator.entries.joinToString("\n") { "- ${it.label}: K ${it.k} m/s" + if (it.padThickness > 0) ", element ${it.padThickness} m" else "" } +
-                     "\n## K pressure factor (GPSA)\n" + listOf(0.0, 300.0, 600.0, 900.0, 1500.0).joinToString("\n") {
--                        "- $it psig: × ${"%.2f".format(SeparatorSizing.pressureFactor(it * 6894.757 + 101325.0))}"
-+                        "- $it psig: × ${"%.2f".jfmt(SeparatorSizing.pressureFactor(it * 6894.757 + 101325.0))}"
-                     } +
-                     "\n## Inlet devices (largest inlet momentum ρv²)\n" + InletDevice.entries.joinToString("\n") { "- ${it.label}: ${it.maxMomentum.toInt()} Pa" } +
-                     "\n## Outlets\n- Gas outlet: ρv² ≤ ${SeparatorSizing.GAS_OUTLET_MOMENTUM.toInt()} Pa\n- Liquid outlets: ≤ ${SeparatorSizing.LIQUID_OUTLET_VELOCITY} m/s" +
-@@ -97,8 +99,8 @@
-                 listOf("FL", "xT", "valve", "Cv")),
-             HelpTopic("lib_pipes", LIBRARY, "Pipe sizes (ASME B36.10M / B36.19M)",
-                 "Inside diameters, mm, for the common schedules.\n" + PipeSizes.ALL.joinToString("\n") { s ->
--                    "- NPS ${s.nps} (DN ${s.dn}, OD ${"%.1f".format(s.outsideDiameterM * 1000)}): " +
--                        s.schedules.joinToString(", ") { "${it.label} ${"%.1f".format(s.insideDiameterM(it) * 1000)}" }
-+                    "- NPS ${s.nps} (DN ${s.dn}, OD ${"%.1f".jfmt(s.outsideDiameterM * 1000)}): " +
-+                        s.schedules.joinToString(", ") { "${it.label} ${"%.1f".jfmt(s.insideDiameterM(it) * 1000)}" }
-                 },
-                 listOf("pipe", "schedule", "NPS", "DN", "inside diameter")),
-             HelpTopic("lib_utilities", LIBRARY, "Utility temperatures",
-diff -ruN a/app/flowstead/core/model/EquipmentSizing.kt b/app/flowstead/core/model/EquipmentSizing.kt
---- a/app/flowstead/core/model/EquipmentSizing.kt
-+++ b/app/flowstead/core/model/EquipmentSizing.kt
-@@ -4,6 +4,8 @@
-  */
- package app.flowstead.core.model
- 
-+import app.flowstead.core.compat.jfmt
-+
- import app.flowstead.core.units.Quantity
- import kotlinx.serialization.Serializable
- import kotlin.math.PI
-@@ -218,7 +220,7 @@
-                 val motor = DataLibrary.motor(rated)
-                 val lines = mutableListOf(
-                     SizingLine(if (o.type == ObjectType.Expander) "Shaft power delivered" else "Shaft power", w, Quantity.Power),
--                    SizingLine("Margin", text = "${"%.0f".format(margin * 100)} %" + if (input.margin == null) (if (o.type == ObjectType.Pump) " (API 610)" else " (API 617)") else ""),
-+                    SizingLine("Margin", text = "${"%.0f".jfmt(margin * 100)} %" + if (input.margin == null) (if (o.type == ObjectType.Pump) " (API 610)" else " (API 617)") else ""),
-                     SizingLine(if (o.type == ObjectType.Expander) "Generator at least" else "Driver at least", rated, Quantity.Power),
-                 )
-                 lines += if (motor != null) SizingLine(if (o.type == ObjectType.Expander) "Standard generator (IEC 60072)" else "Standard motor (IEC 60072)", motor, Quantity.Power)
-@@ -241,7 +243,7 @@
-                         SizingLine("Diameter (H = 1.5 D)", d, Quantity.Length),
-                         SizingLine("Height", 1.5 * d, Quantity.Length),
-                     ),
--                    notes = listOf("Residence time ${"%.0f".format(time / 60)} min, filled to ${"%.0f".format(fill * 100)} %" +
-+                    notes = listOf("Residence time ${"%.0f".jfmt(time / 60)} min, filled to ${"%.0f".jfmt(fill * 100)} %" +
-                         if (input.residenceTime == null || input.fillFraction == null) " (data library: 10 min, 85 %)." else "."),
-                 )
-             }
-@@ -282,11 +284,11 @@
-                         SizingLine("Height (tangent to tangent)", r.height, Quantity.Length),
-                     ) + extra },
-                     notes = listOf(
--                        "Fair's flooding correlation at ${"%.0f".format(ff * 100)} % of flood, ${"%.0f".format(ts * 1000)} mm tray spacing, " +
--                            "${"%.0f".format(dc * 100)} % downcomer area, ${"%.0f".format(eff * 100)} % tray efficiency; " +
-+                        "Fair's flooding correlation at ${"%.0f".jfmt(ff * 100)} % of flood, ${"%.0f".jfmt(ts * 1000)} mm tray spacing, " +
-+                            "${"%.0f".jfmt(dc * 100)} % downcomer area, ${"%.0f".jfmt(eff * 100)} % tray efficiency; " +
-                             "${ColumnSizing.TOP_SPACE} m above the top tray and ${ColumnSizing.BOTTOM_SPACE} m below the bottom one.",
--                        "Internals: sieve trays at the rounded diameter, ${"%.0f".format(layout.weirHeight * 1000)} mm weir, " +
--                            "${"%.1f".format(layout.holeDiameter * 1000)} mm holes over ${"%.0f".format(layout.holeFraction * 100)} % of the active area " +
-+                        "Internals: sieve trays at the rounded diameter, ${"%.0f".jfmt(layout.weirHeight * 1000)} mm weir, " +
-+                            "${"%.1f".jfmt(layout.holeDiameter * 1000)} mm holes over ${"%.0f".jfmt(layout.holeFraction * 100)} % of the active area " +
-                             "(Sinnott §11.13: Francis weir, dry plate with C0 0.84, residual head, downcomer backup).",
-                     ),
-                     warnings = r.warnings + h?.warnings.orEmpty(),
-@@ -296,7 +298,7 @@
-         }
-     }
- 
--    private fun fmtC(k: Double) = "%.0f".format(k - 273.15)
-+    private fun fmtC(k: Double) = "%.0f".jfmt(k - 273.15)
- 
-     private fun exchanger(
-         q: Double, hotIn: Double, hotOut: Double, coldIn: Double, coldOut: Double, input: EquipmentSizingInput,
-@@ -328,10 +330,10 @@
-         lines += SizingLine("U" + if (input.u == null) " (${service?.label}, typical)" else "", u, Quantity.HeatTransferCoefficient)
-         val f = shellsF?.second ?: 1.0
-         val area = q / (u * f * lm)
--        lines += SizingLine(if (type == ObjectType.AirCooler) "Bare-tube area" else "Heat-transfer area", area, null, text = "%.1f m²".format(area))
-+        lines += SizingLine(if (type == ObjectType.AirCooler) "Bare-tube area" else "Heat-transfer area", area, null, text = "%.1f m²".jfmt(area))
-         if (input.u == null && service != null) {
-             lines += SizingLine("Area over the service's U range", null, null,
--                text = "%.1f – %.1f m²".format(q / (service.high * f * lm), q / (service.low * f * lm)))
-+                text = "%.1f – %.1f m²".jfmt(q / (service.high * f * lm), q / (service.low * f * lm)))
-         }
-         if (type == ObjectType.HeatExchanger && shellsF != null && area / shellsF.first > 1000) {
-             warnings += "Over 1000 m² a shell: split into parallel shells."
 diff -ruN a/app/flowstead/core/model/FlowsheetEditing.kt b/app/flowstead/core/model/FlowsheetEditing.kt
 --- a/app/flowstead/core/model/FlowsheetEditing.kt
 +++ b/app/flowstead/core/model/FlowsheetEditing.kt
@@ -373,7 +276,7 @@ diff -ruN a/app/flowstead/core/model/Plots.kt b/app/flowstead/core/model/Plots.k
  import app.flowstead.core.api.PhaseEnvelope
  import app.flowstead.core.api.ProfileKeys
  import app.flowstead.core.units.Quantity
-@@ -81,7 +83,7 @@
+@@ -83,7 +85,7 @@
          if (envelope.isEmpty()) return null
          // Quality lines (D52) dotted, then the hydrate curve (D52), each only where the engine traced it.
          val series = envelope +
@@ -385,7 +288,7 @@ diff -ruN a/app/flowstead/core/model/Plots.kt b/app/flowstead/core/model/Plots.k
 diff -ruN a/app/flowstead/core/model/Results.kt b/app/flowstead/core/model/Results.kt
 --- a/app/flowstead/core/model/Results.kt
 +++ b/app/flowstead/core/model/Results.kt
-@@ -369,8 +369,9 @@
+@@ -375,8 +375,9 @@
  private fun hashOf(solved: Flowsheet, positions: Boolean): String {
      // Where a sub-flowsheet block sits changes no result either (D132).
      val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) }, subflowsheets = solved.subflowsheets.map { it.copy(x = 0.0, y = 0.0) })
@@ -416,36 +319,6 @@ diff -ruN a/app/flowstead/core/model/Safety.kt b/app/flowstead/core/model/Safety
      }
  
      /** The sections a pressurization case fills: its pipe segments (by their size) and its typed sections. */
-diff -ruN a/app/flowstead/core/model/SeparatorSizing.kt b/app/flowstead/core/model/SeparatorSizing.kt
---- a/app/flowstead/core/model/SeparatorSizing.kt
-+++ b/app/flowstead/core/model/SeparatorSizing.kt
-@@ -4,6 +4,8 @@
-  */
- package app.flowstead.core.model
- 
-+import app.flowstead.core.compat.jfmt
-+
- import kotlinx.serialization.SerialName
- import kotlinx.serialization.Serializable
- import kotlin.math.PI
-@@ -277,7 +279,7 @@
-                 length = roundUp(1.5 * d, 0.05)
-                 notes += "Height raised to 1.5 × D, the least for a vertical vessel."
-             }
--            if (length / d > 6) warnings += "H/D ${"%.1f".format(length / d)} is above 6: a horizontal vessel will be shorter."
-+            if (length / d > 6) warnings += "H/D ${"%.1f".jfmt(length / d)} is above 6: a horizontal vessel will be shorter."
-             SeparatorSizingResult(
-                 false, water, d, length, k, vMax, if (qg > 0) qg / a else 0.0, levels, nozzles, meArea, liquidVolume, notes, warnings,
-             )
-@@ -322,7 +324,7 @@
-             }
-             d += STEP
-         }
--        warnings += "No diameter up to 6 m meets every limit at L/D ${"%.1f".format(ld)}."
-+        warnings += "No diameter up to 6 m meets every limit at L/D ${"%.1f".jfmt(ld)}."
-         val d6 = 6.0
-         return SeparatorSizingResult(true, water, d6, ld * d6, k, vMax, if (qg > 0) qg / segment(max(0.2 * d6, 0.3), d6) else 0.0,
-             emptyList(), nozzles, meArea, liquidVolume, notes, warnings)
 diff -ruN a/app/flowstead/core/model/Specification.kt b/app/flowstead/core/model/Specification.kt
 --- a/app/flowstead/core/model/Specification.kt
 +++ b/app/flowstead/core/model/Specification.kt
