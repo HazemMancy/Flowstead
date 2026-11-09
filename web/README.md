@@ -35,6 +35,12 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.11.1**
+- The engine is **DWSIM 10.2.15** (was 10.2.12), as in app 3.3.0. Gases dissolved in water now follow the IAPWS G7-04
+  Henry's constants: air dissolved in a receiver's condensate is within 1.2 % of G7-04 (was up to 3.8 % off). Other
+  results move by less than 0.1 %.
+- Document footers name the current web version again (they still said 1.10.2).
+
 **Web 1.11**
 - **Thermodynamics tools** (Basis), as in the Android app: a **binary diagram** (T–x–y or P–x–y, with the liquid–liquid
   region), a **ternary** with tie lines, the mixture's true **critical point**, one composition **compared** across up to
