@@ -59,6 +59,8 @@ function applyProject() {
 /** Commits an edit: the new flowsheet JSON goes on the page, the old one on the undo stack. */
 function commit(next, message) {
   if (!next || next === project.flowsheet) return;
+  // Inside a sub-flowsheet, whatever the edit made (a stream wired to empty canvas, a pasted copy) belongs to it (D133).
+  if (level) next = SubTools.adopt(project.flowsheet, next, level);
   undo.push(project.flowsheet); if (undo.length > 100) undo.shift();
   redo.length = 0;
   project.flowsheet = next;

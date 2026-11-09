@@ -204,6 +204,17 @@ object Subflowsheets {
 
     fun move(fs: Flowsheet, id: String, x: Double, y: Double) = update(fs, id) { it.copy(x = x, y = y) }
 
+    /**
+     * Objects an edit made while [level] is shown (a stream wired to empty canvas, a duplicate, a new unit) belong to
+     * that flowsheet: [after] with every object new since [before] and on no flowsheet yet put on [level].
+     */
+    fun adopt(before: Flowsheet, after: Flowsheet, level: String?): Flowsheet {
+        if (level == null || of(after, level) == null) return after
+        val old = before.objects.map { it.id }.toSet()
+        if (after.objects.none { it.id !in old && it.parent == null }) return after
+        return after.copy(objects = after.objects.map { if (it.id !in old && it.parent == null) it.copy(parent = level) else it })
+    }
+
     /** Puts [objectId] (just added) on [level]. */
     fun place(fs: Flowsheet, objectId: String, level: String?): Flowsheet =
         if (level == null) fs else fs.copy(objects = fs.objects.map { if (it.id == objectId) it.copy(parent = level) else it })

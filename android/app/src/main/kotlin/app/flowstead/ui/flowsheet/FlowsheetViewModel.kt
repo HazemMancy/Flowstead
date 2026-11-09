@@ -1232,7 +1232,8 @@ class FlowsheetViewModel @Inject constructor(
     private fun edit(undoable: Boolean = true, block: (Flowsheet) -> Flowsheet) {
         val before = current ?: return
         val after = try {
-            block(before)
+            // Inside a sub-flowsheet, whatever the edit made belongs to it (D133).
+            Subflowsheets.adopt(before, block(before), local.value.level)
         } catch (e: EditRejected) {
             _messages.trySend(e.message ?: "That change isn't allowed")
             return

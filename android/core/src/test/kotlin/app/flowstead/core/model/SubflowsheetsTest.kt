@@ -201,4 +201,16 @@ class SubflowsheetsTest {
         val (g2, qi) = Subflowsheets.connect(g, b.id, "q", false)
         assertEquals(false, Subflowsheets.boundary(g2, b.id).first { it.stream.id == qi }.feed)
     }
+
+    @Test
+    fun whatAnEditMakesInsideABlockBelongsToIt() {
+        val (g, block) = Subflowsheets.group(train, listOf("e"), 360.0, 0.0)
+        // A stream wired from E-100's free port to empty canvas while the block is open.
+        val (wired, _) = FlowsheetEditing.add(g, ObjectType.MaterialStream, 500.0, 100.0)
+        val adopted = Subflowsheets.adopt(g, wired, block.id)
+        assertEquals(block.id, adopted.objects.last().parent)
+        // On the main flowsheet nothing changes, and objects that were already somewhere stay there.
+        assertEquals(wired, Subflowsheets.adopt(g, wired, null))
+        assertEquals(g.objects.map { it.parent }, adopted.objects.dropLast(1).map { it.parent })
+    }
 }

@@ -104,6 +104,10 @@ object SubTools {
     }
     fun rename(flowsheetJson: String, id: String, tag: String): String = edit { ok(Subflowsheets.rename(fs(flowsheetJson), id, tag)) }
     fun move(flowsheetJson: String, id: String, x: Double, y: Double): String = edit { ok(Subflowsheets.move(fs(flowsheetJson), id, x, y)) }
+    /** What an edit made while [level] was shown belongs to it: [afterJson] with new objects on no flowsheet put there. */
+    fun adopt(beforeJson: String, afterJson: String, level: String): String =
+        if (level.isEmpty()) afterJson else out(Subflowsheets.adopt(fs(beforeJson), fs(afterJson), level))
+
     fun place(flowsheetJson: String, objectId: String, level: String): String = edit { ok(Subflowsheets.place(fs(flowsheetJson), objectId, lvl(level))) }
     fun link(flowsheetJson: String, blockId: String, innerId: String, outerId: String): String =
         edit { ok(Subflowsheets.link(fs(flowsheetJson), blockId, innerId, outerId.takeIf { it.isNotEmpty() })) }
