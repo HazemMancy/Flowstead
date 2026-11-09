@@ -11,7 +11,7 @@ import { enterToNext } from './forms.js';
  * Returns {streamAnalysis(container, id), openTools(tab), blackOilSection(container), hypotheticalSection(container)}.
  */
 export function initTools(app) {
-  const { $, Tools, Safety, Fluids, engine } = app;
+  const { $, Tools, Safety, Fluids, Dyn, Sheet, Data, engine } = app;
   const solveArgs = () => { const s = app.project().solve; return [s ? JSON.stringify(s.result) : null, s?.modelHash ?? '']; };
   const err = (text) => `<p class="rp-note error">${esc(text)}</p>`;
   const busy = (text) => `<p class="rp-note busy">${esc(text)}</p>`;
@@ -28,6 +28,8 @@ export function initTools(app) {
       // The optimiser solves the flowsheet many times: bubble and dew points are only worth their flashes if it uses one (D119).
       if (req.method === 'optimise' && req.params?.flowsheet && !/(bubble|dew)Point/.test(JSON.stringify(req.params))) req.params.flowsheet.saturationFor = [];
       if (req.method === 'optimise' && req.params?.flowsheet) req.params.flowsheet.enthalpyBasis = app.enthalpyBasis?.();
+      // A dynamic run starts from a steady solve: it needs no bubble or dew points either.
+      if (req.method === 'dynamics' && req.params?.flowsheet) req.params.flowsheet.saturationFor = [];
       const { result, ms } = await engine.call(req.method, req.params);
       out.innerHTML = renderReport(JSON.parse(report(result))) + `<p class="meta">Calculated by DWSIM in ${(ms / 1000).toFixed(1)} s.</p>`;
       return result;
@@ -113,6 +115,10 @@ export function initTools(app) {
     const body = $('toolsBody');
     if (tab === 'case') caseStudy(body);
     else if (tab === 'opt') optimiser(body);
+    else if (tab === 'dyn') dynamicsTool(body);
+    else if (tab === 'pid') pidTool(body);
+    else if (tab === 'sheet') sheetTool(body);
+    else if (tab === 'scen') scenariosTool(body);
     else safety(body, tab);
   }
   const catalogue = () => JSON.parse(Tools.catalogue(app.project().flowsheet));
@@ -405,5 +411,364 @@ export function initTools(app) {
     container.querySelectorAll('[data-hy-edit]').forEach((b) => { b.onclick = () => { hypoEditing = b.dataset.hyEdit; hypotheticalSection(container, onChange); }; });
   }
 
-  return { streamAnalysis, openTools, blackOilSection, hypotheticalSection };
+  // ---------- dynamics (D125): the app's DynamicsSheet ----------
+  // The setup lives in the flowsheet (not in the model hash); the last run is kept here with what it was run for, so a
+  // change after it marks it out of date, as the app does.
+  let dynRun = null; // {key, html}
+  /** Draws quantity fields (value and unit) and choices from the core's form items. */
+  function qField(it, i, prefix) {
+    const u = it.units.find((x) => x.id === it.unit) ?? it.units[0];
+    return `<div class="field"><label for="${prefix}${i}">${esc(it.label)}</label><div class="row"><input type="text" inputmode="decimal" id="${prefix}${i}" data-i="${i}" value="${esc(u.text)}" placeholder="${esc(it.hint ?? '—')}"/>
+      <select data-i="${i}" data-unit="1" aria-label="${esc(it.label)} unit">${it.units.map((x) => `<option value="${esc(x.id)}"${x.id === u.id ? ' selected' : ''}>${esc(x.symbol)}</option>`).join('')}</select></div></div>`;
+  }
+  const dynApply = (action, redraw) => {
+    const r = JSON.parse(Dyn.apply(app.project().flowsheet, JSON.stringify(action)));
+    if (r.error) { app.toast(r.error); return redraw(); }
+    app.commit(JSON.stringify(r.flowsheet), 'Dynamics updated');
+    redraw();
+  };
+  const ev = { time: '', objectId: '', key: '', value: '', unit: '', timeUnit: '' };
+  function dynamicsTool(body) {
+    const redraw = () => dynamicsTool(body);
+    const f = JSON.parse(Dyn.form(app.project().flowsheet));
+    ev.timeUnit ||= f.timeUnit;
+    const o = f.eventObjects.find((x) => x.id === ev.objectId);
+    const k = o?.keys.find((x) => x.key === ev.key);
+    if (k && !k.mode && !k.units.some((u) => u.id === ev.unit)) ev.unit = k.unit;
+    body.innerHTML = `<p class="fs-note">Runs the flowsheet through time from its steady state, as HYSYS's dynamics: separators hold liquid and gas, valves pass what the pressures drive through them, controllers act as PIDs, and events change things at set times.</p>
+      ${f.problem ? `<p class="fs-note warn" id="dyn_problem">${esc(f.problem)}</p>` : ''}
+      <div id="dyn_form">${f.items.map((it, i) => {
+        if (it.kind === 'label') return `<h3>${esc(it.text)}</h3>`;
+        if (it.kind === 'sub') return `<p class="sf-sub"><b>${esc(it.text)}</b></p>`;
+        if (it.kind === 'q') return qField(it, i, 'dyn_');
+        if (it.kind === 'action') return `<div class="field"><label for="dyn_${i}">${esc(it.label)}</label><select id="dyn_${i}" data-i="${i}">${opts(it.options, it.value)}</select></div>`;
+        return '';
+      }).join('')}</div>
+      <h3>Events</h3>
+      <ul class="dyn-events">${f.events.map((e, i) => `<li>${esc(e.text)} <button type="button" class="btn btn-sm" data-rmev="${i}" aria-label="Remove event ${i + 1}">Remove</button></li>`).join('') || '<li class="fs-note">None: the run holds the steady state unless something changes.</li>'}</ul>
+      <div class="field"><label for="dyn_evt">At time</label><div class="row"><input type="text" inputmode="decimal" id="dyn_evt" value="${esc(ev.time)}"/><select id="dyn_evtu" aria-label="Time unit">${f.timeUnits.map((u) => `<option value="${esc(u.id)}"${u.id === ev.timeUnit ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('')}</select></div></div>
+      <div class="field"><label for="dyn_evo">Object</label><select id="dyn_evo">${opts(f.eventObjects, ev.objectId, 'Choose…')}</select></div>
+      ${o ? `<div class="field"><label for="dyn_evk">Change</label><select id="dyn_evk">${opts(o.keys.map((x) => ({ id: x.key, label: x.label })), ev.key, 'Choose…')}</select></div>` : ''}
+      ${k ? (k.mode ? `<div class="field"><label for="dyn_evv">To</label><select id="dyn_evv">${opts([{ id: '1', label: 'Automatic' }, { id: '0', label: 'Manual' }], ev.value, 'Choose…')}</select></div>`
+        : `<div class="field"><label for="dyn_evv">To</label><div class="row"><input type="text" inputmode="decimal" id="dyn_evv" value="${esc(ev.value)}"/><select id="dyn_evvu" aria-label="Unit">${k.units.map((u) => `<option value="${esc(u.id)}"${u.id === ev.unit ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('')}</select></div></div>`) : ''}
+      <div class="actions"><button type="button" class="btn btn-sm" id="dyn_addev">Add event</button></div>
+      <div class="actions"><button type="button" class="btn btn-primary btn-sm" id="dyn_run"${f.problem ? ' disabled' : ''}>Run</button></div>
+      <div id="dyn_out" aria-live="polite"></div>`;
+    const out = body.querySelector('#dyn_out');
+    if (dynRun) out.innerHTML = (dynRun.key !== Dyn.key(app.project().flowsheet) ? '<p class="rp-note warn stale">⚠ Out of date: the flowsheet or the setup changed after this run. Run again.</p>' : '') + dynRun.html;
+    const form = body.querySelector('#dyn_form');
+    form.onchange = (e) => {
+      const el = e.target, it = f.items[Number(el.dataset.i)]; if (!it) return;
+      if (it.kind === 'action') return dynApply({ op: 'action', id: it.id, value: el.value }, redraw);
+      const input = el.closest('.row').querySelector('input'), sel = el.closest('.row').querySelector('select');
+      if (el.dataset.unit) { const u = it.units.find((x) => x.id === sel.value); it.unit = sel.value; if (u?.text) input.value = u.text; return; }
+      dynApply({ op: 'param', id: it.id, key: it.key, value: input.value, unit: sel.value }, redraw);
+    };
+    form.onkeydown = (e) => enterToNext(e, form, true);
+    body.onchange = (e) => {
+      const id = e.target.id;
+      if (id === 'dyn_evt') ev.time = e.target.value;
+      else if (id === 'dyn_evtu') ev.timeUnit = e.target.value;
+      else if (id === 'dyn_evo') { ev.objectId = e.target.value; ev.key = ''; ev.value = ''; redraw(); }
+      else if (id === 'dyn_evk') { ev.key = e.target.value; ev.value = ''; ev.unit = ''; redraw(); }
+      else if (id === 'dyn_evv') ev.value = e.target.value;
+      else if (id === 'dyn_evvu') ev.unit = e.target.value;
+    };
+    body.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.rmev) return dynApply({ op: 'removeEvent', index: Number(b.dataset.rmev) }, redraw);
+      if (b.id === 'dyn_addev') {
+        const r = JSON.parse(Dyn.apply(app.project().flowsheet, JSON.stringify({ op: 'addEvent', ...ev })));
+        if (r.error) return app.toast(r.error);
+        app.commit(JSON.stringify(r.flowsheet), 'Event added');
+        Object.assign(ev, { time: '', value: '' });
+        return redraw();
+      }
+      if (b.id === 'dyn_run') {
+        const fsj = app.project().flowsheet, key = Dyn.key(fsj);
+        b.disabled = true;
+        const res = await run(JSON.parse(Dyn.request(fsj)), out, 'Running the dynamic simulation', (result) => Dyn.report(fsj, JSON.stringify(result)));
+        if (res) dynRun = { key, html: out.innerHTML, result: res };
+        b.disabled = false;
+      }
+    };
+  }
+
+  // ---------- PID tuning from an open-loop step test (D125): the app's PidTool ----------
+  const pid = { id: '', step: '10', duration: '1800', last: null };
+  function pidTool(body) {
+    const f = JSON.parse(Dyn.form(app.project().flowsheet));
+    if (!f.controllers.some((c) => c.id === pid.id)) pid.id = f.controllers[0]?.id ?? '';
+    body.innerHTML = `<p class="fs-note">An open-loop step test in the dynamic run, as HYSYS's and DWSIM's autotuners: the controller goes to manual and its output steps; a first-order-plus-dead-time model is fitted to the response (Smith's two-point method) and four rules give the settings. The setup (volumes, valves, events) is the one in Dynamics.</p>
+      ${f.controllers.length ? `
+      <div class="field"><label for="pid_c">Controller</label><select id="pid_c">${opts(f.controllers, pid.id)}</select></div>
+      <div class="row2"><div class="field"><label for="pid_step">Output step, %</label><input type="text" inputmode="decimal" id="pid_step" value="${esc(pid.step)}"/></div>
+        <div class="field"><label for="pid_dur">Run for, s</label><input type="text" inputmode="decimal" id="pid_dur" value="${esc(pid.duration)}"/></div></div>
+      <div class="actions"><button type="button" class="btn btn-primary btn-sm" id="pid_run">Run the step test</button></div>` : '<p class="fs-note warn">Add a controller (PIC, LIC…) to the flowsheet first.</p>'}
+      <div id="pid_out" aria-live="polite"></div>`;
+    const out = body.querySelector('#pid_out');
+    // A fit belongs to the flowsheet and dynamic setup it was run on: after a change it is shown out of date and can't be used.
+    const show = (t) => {
+      const stale = t.key !== Dyn.key(app.project().flowsheet);
+      out.innerHTML = (stale ? '<p class="rp-note warn stale">⚠ Out of date: the flowsheet or the dynamics setup changed after this step test. Run it again to use its settings.</p>' : '') +
+        renderReport(t.report) + t.settings.map((s, i) => `<button type="button" class="btn btn-sm" data-use="${i}"${stale ? ' disabled' : ''}>Use ${esc(s.rule)} in ${esc(f.controllers.find((c) => c.id === t.id)?.label ?? '')}</button>`).join(' ');
+    };
+    if (pid.last && pid.last.id === pid.id) show(pid.last);
+    body.onchange = (e) => {
+      if (e.target.id === 'pid_c') { pid.id = e.target.value; pidTool(body); }
+      if (e.target.id === 'pid_step') pid.step = e.target.value;
+      if (e.target.id === 'pid_dur') pid.duration = e.target.value;
+    };
+    body.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.use && pid.last && pid.last.key === Dyn.key(app.project().flowsheet)) {
+        const s = pid.last.settings[Number(b.dataset.use)];
+        const r = JSON.parse(Dyn.applyTuning(app.project().flowsheet, pid.last.id, s.gain, s.integralTime, s.derivativeTime, s.action));
+        if (r.error) return app.toast(r.error);
+        app.commit(JSON.stringify(r.flowsheet), `${s.rule} settings put in the controller's tuning (Dynamics)`);
+        return app.toast(`${s.rule}: Kc ${s.gain.toPrecision(3)}, Ti ${s.integralTime.toFixed(1)} s${s.derivativeTime > 0 ? `, Td ${s.derivativeTime.toFixed(1)} s` : ''} are now the controller's tuning in Dynamics.`, { info: true });
+      }
+      if (b.id !== 'pid_run') return;
+      const fsj = app.project().flowsheet, id = pid.id;
+      const first = JSON.parse(Dyn.stepTestStart(fsj, id));
+      if (first.error) { out.innerHTML = err(first.error); return; }
+      b.disabled = true;
+      try {
+        await app.ready();
+        out.innerHTML = busy('Reading the controller\'s output at the steady state…');
+        first.params.flowsheet.saturationFor = [];
+        const r0 = await engine.call(first.method, first.params);
+        const req = JSON.parse(Dyn.stepTestRun(fsj, id, Number(String(pid.step).replace(',', '.')), Number(String(pid.duration).replace(',', '.')), JSON.stringify(r0.result)));
+        if (req.error) { out.innerHTML = err(req.error); return; }
+        out.innerHTML = busy('Running the step test…');
+        req.params.flowsheet.saturationFor = [];
+        const r1 = await engine.call(req.method, req.params);
+        const t = JSON.parse(Dyn.stepTestReport(fsj, id, req.stepTime, req.step, JSON.stringify(r1.result)));
+        if (t.error) { out.innerHTML = err(t.error); return; }
+        pid.last = { ...t, id, key: Dyn.key(fsj) };
+        show(pid.last);
+        out.insertAdjacentHTML('beforeend', `<p class="meta">Calculated by DWSIM in ${((r0.ms + r1.ms) / 1000).toFixed(1)} s.</p>`);
+      } catch (x) { out.innerHTML = err(`Not calculated: ${x.message}`); } finally { b.disabled = false; }
+    };
+  }
+
+  // ---------- spreadsheet (D126): the app's SpreadsheetTool ----------
+  const sh = { cell: 'A1', resObj: '', resKey: '', expObj: '', expKey: '' };
+  function sheetTool(body) {
+    const redraw = () => sheetTool(body);
+    const [solveJson, hash] = solveArgs();
+    const d = JSON.parse(Sheet.sheet(app.project().flowsheet, solveJson, hash));
+    const cat = catalogue();
+    const ro = cat.find((o) => o.id === sh.resObj);
+    const to = d.targets.find((o) => o.id === sh.expObj);
+    const cur = d.cells[sh.cell];
+    const grid = `<div class="table-wrap"><table class="props ss-grid"><thead><tr><th scope="col"></th>${d.columns.map((c) => `<th scope="col">${c}</th>`).join('')}</tr></thead><tbody>${
+      Array.from({ length: d.rows }, (_, r) => `<tr><th scope="row">${r + 1}</th>${d.columns.map((c) => {
+        const n = `${c}${r + 1}`, v = d.cells[n];
+        return `<td><button type="button" class="ss-cell${n === sh.cell ? ' on' : ''}${v?.error ? ' bad' : ''}" data-cell="${n}" aria-label="${n}${v ? `: ${esc(v.shown)}` : ''}" title="${esc(v?.raw ?? '')}">${esc(v?.shown ?? '')}</button></td>`;
+      }).join('')}</tr>`).join('')}</tbody></table></div>`;
+    body.innerHTML = `<p class="fs-note">Numbers, text or formulas, as HYSYS's spreadsheet: =A1*2, =sum(A1:A5), sqrt, exp, ln, log10, abs, min, max, average, pi; =[K-100.power] brings in a solved result in its display unit. A cell can be exported to a specification and applied.</p>
+      ${d.stale ? '<p class="fs-note warn">The flowsheet changed since the last solve: imported results are out of date until you solve again.</p>' : ''}
+      <div class="ss-bar"><label for="ss_in" class="ss-name">${sh.cell}</label><input type="text" id="ss_in" value="${esc(cur?.raw ?? '')}" autocomplete="off" spellcheck="false"/><button type="button" class="btn btn-sm" id="ss_set">Set</button></div>
+      ${cur?.error ? `<p class="fs-note warn">${sh.cell}: ${esc(cur.error)}</p>` : ''}
+      <div class="row2"><select id="ss_ro" aria-label="Insert a result: object">${opts(cat.filter((o) => o.results.length).map((o) => ({ id: o.id, label: o.tag })), sh.resObj, 'Insert a result: object…')}</select>
+        <select id="ss_rk" aria-label="Result"${ro ? '' : ' disabled'}>${opts((ro?.results ?? []).map((x) => ({ id: x.key, label: x.label + (x.symbol ? ` (${x.symbol})` : '') })), sh.resKey, 'Result…')}</select></div>
+      ${grid}
+      <h3>Exports</h3>
+      <ul class="dyn-events">${d.exports.map((e, i) => `<li>${esc(e.label)} <button type="button" class="btn btn-sm" data-rmx="${i}">Remove</button></li>`).join('') || '<li class="fs-note">None.</li>'}</ul>
+      <div class="row2"><select id="ss_xo" aria-label="Export ${sh.cell} to: object">${opts(d.targets.map((o) => ({ id: o.id, label: o.tag })), sh.expObj, `Export ${sh.cell} to: object…`)}</select>
+        <select id="ss_xk" aria-label="Specification"${to ? '' : ' disabled'}>${opts((to?.keys ?? []).map((x) => ({ id: x.key, label: `${x.label} (${x.unit})` })), sh.expKey, 'Specification…')}</select></div>
+      <div class="actions"><button type="button" class="btn btn-sm" id="ss_addx"${to && sh.expKey ? '' : ' disabled'}>Export ${sh.cell}</button>
+        ${d.exports.length ? '<button type="button" class="btn btn-primary btn-sm" id="ss_apply">Apply the exports to the flowsheet</button>' : ''}</div>`;
+    const commitSheet = (json, message) => { const r = JSON.parse(json); if (r.error) { app.toast(r.error); return false; } app.commit(JSON.stringify(r.flowsheet), message); return true; };
+    const setCell = () => { if (commitSheet(Sheet.setCell(app.project().flowsheet, sh.cell, body.querySelector('#ss_in').value), `${sh.cell} set`)) redraw(); };
+    body.onkeydown = (e) => { if (e.target.id === 'ss_in' && e.key === 'Enter') { e.preventDefault(); setCell(); body.querySelector('#ss_in')?.focus(); } };
+    body.onchange = (e) => {
+      const id = e.target.id, v = e.target.value;
+      if (id === 'ss_ro') { sh.resObj = v; sh.resKey = ''; redraw(); }
+      else if (id === 'ss_rk' && v) {
+        // Inserts [TAG.key] at the cursor of the formula, starting a formula if the cell has none.
+        const tag = cat.find((o) => o.id === sh.resObj)?.tag, input = body.querySelector('#ss_in');
+        const ref = `[${tag}.${v}]`, t = input.value;
+        input.value = t.startsWith('=') ? t + ref : `=${ref}`;
+        sh.resKey = ''; e.target.value = '';
+        input.focus();
+      } else if (id === 'ss_xo') { sh.expObj = v; sh.expKey = ''; redraw(); }
+      else if (id === 'ss_xk') { sh.expKey = v; redraw(); }
+    };
+    body.onclick = (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.cell) { sh.cell = b.dataset.cell; redraw(); return body.querySelector('#ss_in').focus(); }
+      if (b.id === 'ss_set') return setCell();
+      if (b.dataset.rmx) { commitSheet(Sheet.removeExport(app.project().flowsheet, Number(b.dataset.rmx)), 'Export removed'); return redraw(); }
+      if (b.id === 'ss_addx') { if (commitSheet(Sheet.addExport(app.project().flowsheet, sh.cell, sh.expObj, sh.expKey), `${sh.cell} exported`)) { sh.expObj = ''; sh.expKey = ''; } return redraw(); }
+      if (b.id === 'ss_apply') { if (commitSheet(Sheet.applyExports(app.project().flowsheet, ...solveArgs()), 'Spreadsheet applied to the flowsheet')) redraw(); }
+    };
+  }
+
+  // ---------- scenarios (D126): the app's ScenariosTool ----------
+  let scName = '';
+  function scenariosTool(body) {
+    const redraw = () => scenariosTool(body);
+    const d = JSON.parse(Sheet.scenarios(app.project().flowsheet));
+    body.innerHTML = `<p class="fs-note">Save the case as it stands, change it, save again, and compare. A scenario keeps every stream's conditions and flows and every unit's duty, power and pressure change from the last solve; Restore puts its specifications back.</p>
+      <div class="ss-bar"><input type="text" id="sc_name" value="${esc(scName)}" placeholder="Scenario name" aria-label="Scenario name" autocomplete="off"/><button type="button" class="btn btn-sm" id="sc_save">Save</button></div>
+      <ul class="dyn-events">${d.list.map((s, i) => `<li><span>${esc(s.name)}${s.solved ? '' : ' <small class="fs-note">(no results)</small>'}</span><span><button type="button" class="btn btn-sm" data-restore="${i}">Restore</button> <button type="button" class="btn btn-sm" data-del="${i}">Delete</button></span></li>`).join('') || '<li class="fs-note">No scenarios yet.</li>'}</ul>
+      ${d.list.length && d.rows.length ? `<h3>Comparison</h3><div class="table-wrap"><table class="props rp-table"><thead><tr><th scope="col"></th>${d.list.map((s) => `<th scope="col">${esc(s.name)}</th>`).join('')}</tr></thead><tbody>${
+        d.rows.map((r) => `<tr><th scope="row">${esc(r.label)}${r.unit ? ` (${esc(r.unit)})` : ''}</th>${r.values.map((v) => `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}`;
+    body.onchange = (e) => { if (e.target.id === 'sc_name') scName = e.target.value; };
+    const save = () => {
+      scName = body.querySelector('#sc_name').value;
+      const r = JSON.parse(Sheet.saveScenario(app.project().flowsheet, ...solveArgs(), scName, Date.now()));
+      app.commit(JSON.stringify(r.flowsheet), 'Scenario saved');
+      if (!r.solved) app.toast('Saved without results: solve first to keep this scenario\'s numbers.');
+      scName = '';
+      redraw();
+    };
+    body.onkeydown = (e) => { if (e.target.id === 'sc_name' && e.key === 'Enter') { e.preventDefault(); save(); } };
+    body.onclick = (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.id === 'sc_save') return save();
+      const r = b.dataset.restore !== undefined ? JSON.parse(Sheet.restoreScenario(app.project().flowsheet, Number(b.dataset.restore)))
+        : b.dataset.del !== undefined ? JSON.parse(Sheet.deleteScenario(app.project().flowsheet, Number(b.dataset.del))) : null;
+      if (!r) return;
+      if (r.error) return app.toast(r.error);
+      app.commit(JSON.stringify(r.flowsheet), b.dataset.restore !== undefined ? `${d.list[Number(b.dataset.restore)].name} restored` : 'Scenario deleted');
+      redraw();
+    };
+  }
+
+  // ---------- the Fluid package's compound and data tools (D127): the app's DataToolsSheet ----------
+  // Kept between redraws of the Basis: the tool shown, what was typed, and the last answer.
+  const dt = { tool: 'structure', name: '', smiles: '', query: '', found: null, foundError: '', byHand: false, groups: {}, nbp: '', structureHtml: '',
+    a: '', b: '', kind: 'txy', fixed: '', fixedUnit: '', valueUnit: '', data: '', fit: null, fitHtml: '', rxResult: null, reactionsHtml: '' };
+  function dataToolsSection(container, onChange) {
+    const redraw = () => dataToolsSection(container, onChange);
+    const fsj = app.project().flowsheet;
+    const setup = JSON.parse(Data.regressionSetup(fsj));
+    if (!setup.compounds.includes(dt.a)) dt.a = setup.compounds[0] ?? '';
+    if (!setup.compounds.includes(dt.b) || dt.b === dt.a) dt.b = setup.compounds.find((c) => c !== dt.a) ?? '';
+    const txy = dt.kind === 'txy';
+    dt.fixedUnit ||= txy ? setup.pUnit : setup.tUnit;
+    dt.valueUnit ||= txy ? setup.tUnit : setup.pUnit;
+    if (!dt.fixed) dt.fixed = txy ? (dt.fixedUnit === 'bara' ? '1.01325' : '') : (dt.fixedUnit === 'C' ? '25' : '');
+    const fixedUnits = txy ? setup.pUnits : setup.tUnits, valueUnits = txy ? setup.tUnits : setup.pUnits;
+    const uopts = (list, v) => list.map((u) => `<option value="${esc(u.id)}"${u.id === v ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('');
+    const chips = [['structure', 'Compound from structure'], ['vle', 'VLE regression'], ['rx', 'Reaction finder']]
+      .map(([k, l]) => `<button type="button" class="chip" data-dtool="${k}" aria-pressed="${dt.tool === k}">${l}</button>`).join('');
+    // The finder's answer is listed against the flowsheet as it is now, so what was added shows as added.
+    const rx = dt.rxResult ? JSON.parse(Data.reactionsList(fsj, dt.rxResult)) : null;
+    let html = `<h3>Compound and data tools</h3><div class="fs-chips">${chips}</div>`;
+    if (dt.tool === 'structure') {
+      html += `<p class="fs-note">Joback's group contributions give the boiling point, critical constants, ideal-gas heat capacity and formation energies; ω by Lee–Kesler (DWSIM's own Joback class). Give a SMILES structure, look a name up on PubChem, or count the groups by hand.</p>
+        <div class="field"><label for="dt_q">Name or CAS number (PubChem)</label><div class="row"><input type="text" id="dt_q" value="${esc(dt.query)}" autocomplete="off"/><button type="button" class="btn btn-sm" id="dt_look">Look up</button></div></div>
+        ${dt.foundError ? `<p class="fs-note warn">${esc(dt.foundError)}</p>` : ''}
+        ${(dt.found ?? []).map((c, i) => `<button type="button" class="btn btn-sm" data-use="${i}">${esc(c.label)} — use</button>`).join(' ')}
+        <div class="field"><label for="dt_name">Component name</label><input type="text" id="dt_name" value="${esc(dt.name)}" autocomplete="off"/></div>
+        <div class="field"><label for="dt_smiles">SMILES</label><input type="text" id="dt_smiles" value="${esc(dt.smiles)}" placeholder="CCCCCC, Cc1ccccc1, CCO…" autocomplete="off" spellcheck="false"/></div>
+        <button type="button" class="btn btn-sm" id="dt_hand">${dt.byHand ? 'Hide the group counts' : 'Count the groups by hand instead'}</button>
+        ${dt.byHand ? `<p class="fs-note">Used when no SMILES is given.</p><div class="dt-groups">${JSON.parse(Data.jobackGroups()).map((g) => `<label>${g.id}&nbsp; ${esc(g.name)}<input type="text" inputmode="numeric" data-grp="${g.id}" value="${esc(dt.groups[g.id] ?? '')}" aria-label="${esc(g.name)} count"/></label>`).join('')}</div>` : ''}
+        <div class="field"><label for="dt_nbp">Known normal boiling point, K (optional)</label><input type="text" inputmode="decimal" id="dt_nbp" value="${esc(dt.nbp)}" placeholder="Joback's estimate"/></div>
+        <div class="actions"><button type="button" class="btn btn-sm" id="dt_est">Estimate</button><button type="button" class="btn btn-primary btn-sm" id="dt_add">Add to components</button></div>
+        <div id="dt_out" aria-live="polite">${dt.structureHtml}</div>`;
+    } else if (dt.tool === 'vle') {
+      html += `<p class="fs-note">Fits ${esc(setup.fits)} to measured bubble points with ${esc(setup.package)}: each point's bubble ${txy ? 'temperature at its pressure' : 'pressure at its temperature'} (DWSIM's own bubble-point routines), and y when given.</p>
+        ${setup.compounds.length < 2 ? '<p class="fs-note warn">Add at least two components first.</p>' : `
+        <div class="row2"><div class="field"><label for="dt_a">First component (x, y)</label><select id="dt_a">${opts(setup.compounds.map((c) => ({ id: c, label: c })), dt.a)}</select></div>
+          <div class="field"><label for="dt_b">Second component</label><select id="dt_b">${opts(setup.compounds.map((c) => ({ id: c, label: c })), dt.b)}</select></div></div>
+        <div class="fs-chips"><button type="button" class="chip" data-kind="txy" aria-pressed="${txy}">Isobaric (T–x–y)</button><button type="button" class="chip" data-kind="pxy" aria-pressed="${!txy}">Isothermal (P–x–y)</button></div>
+        <div class="field"><label for="dt_fixed">${txy ? 'Pressure' : 'Temperature'}</label><div class="row"><input type="text" inputmode="decimal" id="dt_fixed" value="${esc(dt.fixed)}"/><select id="dt_fixedu" aria-label="Unit">${uopts(fixedUnits, dt.fixedUnit)}</select></div></div>
+        <div class="field"><label for="dt_data">x, y, ${txy ? 'T' : 'P'} — one point per line, y optional</label><div class="row"><textarea id="dt_data" rows="6" spellcheck="false" placeholder="0.2, 0.45, 75.1">${esc(dt.data)}</textarea><select id="dt_valueu" aria-label="${txy ? 'Temperature' : 'Pressure'} unit">${uopts(valueUnits, dt.valueUnit)}</select></div></div>
+        <div class="actions"><button type="button" class="btn btn-primary btn-sm" id="dt_fit">Fit</button></div>
+        <div id="dt_out" aria-live="polite">${dt.fitHtml}</div>
+        ${dt.fit ? '<div class="actions"><button type="button" class="btn btn-sm" id="dt_save">Use these parameters in the fluid</button></div>' : ''}`}`;
+    } else {
+      html += `<p class="fs-note">DWSIM's reaction finder: combustion, kinetic and catalytic reactions from its literature tables, and their Gibbs-energy equilibria, among this fluid's ${setup.compounds.length} components. Added reactions can be chosen in a reactor's worksheet.</p>
+        <div class="actions"><button type="button" class="btn btn-primary btn-sm" id="dt_find"${setup.compounds.length < 2 ? ' disabled' : ''}>Find reactions</button></div>
+        <div id="dt_out" aria-live="polite">${dt.reactionsHtml}${rx ? (rx.reactions.map((r, i) => `<div class="dt-rx"><small>${esc(r.category)} · ${esc(r.type)}</small><b>${esc(r.name)}</b><span>${esc(r.equation)}</span>${r.note ? `<small class="fs-note">${esc(r.note)}</small>` : ''}
+          <button type="button" class="btn btn-sm" data-addrx="${i}"${r.added ? ' disabled' : ''}>${r.added ? 'Added' : 'Add to the flowsheet'}</button></div>`).join('') || '<p class="fs-note">No reactions among these components.</p>')
+          + rx.warnings.map((w) => `<p class="rp-note warn">${esc(w)}</p>`).join('') : ''}</div>`;
+    }
+    container.innerHTML = html;
+    const q = (sel) => container.querySelector(sel);
+    const out = q('#dt_out');
+    const nbpK = () => { const v = Number(String(dt.nbp).replace(',', '.')); return dt.nbp.trim() && Number.isFinite(v) ? v : NaN; };
+    container.oninput = (e) => {
+      const t = e.target;
+      if (t.id === 'dt_q') dt.query = t.value; else if (t.id === 'dt_name') dt.name = t.value; else if (t.id === 'dt_smiles') dt.smiles = t.value;
+      else if (t.id === 'dt_nbp') dt.nbp = t.value; else if (t.dataset.grp) dt.groups[t.dataset.grp] = t.value;
+      else if (t.id === 'dt_fixed') dt.fixed = t.value; else if (t.id === 'dt_data') dt.data = t.value;
+    };
+    container.onchange = (e) => {
+      const t = e.target;
+      if (t.id === 'dt_a') dt.a = t.value; else if (t.id === 'dt_b') dt.b = t.value;
+      else if (t.id === 'dt_fixedu') dt.fixedUnit = t.value; else if (t.id === 'dt_valueu') dt.valueUnit = t.value;
+    };
+    container.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.dtool) { dt.tool = b.dataset.dtool; return redraw(); }
+      if (b.dataset.kind) { if (b.dataset.kind !== dt.kind) Object.assign(dt, { kind: b.dataset.kind, fixed: '', fixedUnit: '', valueUnit: '', fit: null, fitHtml: '' }); return redraw(); }
+      if (b.id === 'dt_hand') { dt.byHand = !dt.byHand; return redraw(); }
+      if (b.dataset.use) { const c = dt.found[Number(b.dataset.use)]; dt.smiles = c.smiles; if (!dt.name.trim()) dt.name = c.title || dt.query.trim(); return redraw(); }
+      if (b.id === 'dt_look') {
+        if (!dt.query.trim()) return;
+        b.disabled = true; dt.found = null; dt.foundError = '';
+        try {
+          const res = await fetch(Data.pubChemUrl(dt.query));
+          const r = JSON.parse(Data.pubChemParse(dt.query, await res.text()));
+          if (r.error) dt.foundError = r.error; else dt.found = r;
+        } catch (x) { dt.foundError = 'PubChem could not be reached from this browser. Type the SMILES instead (PubChem\'s page for the compound shows it).'; }
+        return redraw();
+      }
+      if (b.id === 'dt_est') {
+        await run(JSON.parse(Data.structureRequest(dt.name, dt.smiles, JSON.stringify(dt.groups), nbpK())), out, 'Estimating', (result) => Data.structureReport(JSON.stringify(result)));
+        dt.structureHtml = out.innerHTML;
+        return;
+      }
+      if (b.id === 'dt_add') {
+        const r = JSON.parse(Data.saveStructure(app.project().flowsheet, dt.name, dt.smiles, JSON.stringify(dt.groups), nbpK()));
+        if (r.error) return app.toast(r.error);
+        app.commit(JSON.stringify(r.flowsheet), `${dt.name.trim()} added to the components`);
+        app.toast(`${dt.name.trim()} added: a hypothetical defined by its structure; the engine estimates its properties when it solves.`, { info: true });
+        Object.assign(dt, { name: '', smiles: '', groups: {}, nbp: '', structureHtml: '', found: null });
+        return onChange();
+      }
+      if (b.id === 'dt_fit') {
+        const fs0 = app.project().flowsheet, kind = dt.kind, vu = dt.valueUnit;
+        dt.fit = null;
+        let fitted = null;
+        await run(JSON.parse(Data.regressionRequest(fs0, dt.a, dt.b, kind, dt.fixed, dt.fixedUnit, vu, dt.data)), out, 'Fitting', (result) => {
+          fitted = JSON.parse(Data.regressionReport(fs0, kind, vu, JSON.stringify(result)));
+          return JSON.stringify(fitted.report);
+        });
+        dt.fit = fitted?.parameter ?? null;
+        dt.fitHtml = out.innerHTML;
+        return redraw();
+      }
+      if (b.id === 'dt_save' && dt.fit) {
+        const r = JSON.parse(Data.saveParameter(app.project().flowsheet, JSON.stringify(dt.fit)));
+        if (r.error) return app.toast(r.error);
+        app.commit(JSON.stringify(r.flowsheet), 'Interaction parameters saved');
+        app.toast(`Saved: the fluid now uses the fitted parameters for ${dt.fit.a}–${dt.fit.b}.`, { info: true });
+        return onChange();
+      }
+      if (b.id === 'dt_find') {
+        const fs0 = app.project().flowsheet;
+        dt.rxResult = null; dt.reactionsHtml = '';
+        await run(JSON.parse(Data.reactionsRequest(fs0)), out, 'Searching DWSIM\'s tables', (result) => { dt.rxResult = JSON.stringify(result); return '{"sections":[]}'; });
+        dt.reactionsHtml = dt.rxResult ? '' : out.innerHTML;
+        return redraw();
+      }
+      if (b.dataset.addrx) {
+        const s = rx.reactions[Number(b.dataset.addrx)];
+        const r = JSON.parse(Data.addReaction(app.project().flowsheet, JSON.stringify(s.reaction)));
+        if (r.error) return app.toast(r.error);
+        app.commit(JSON.stringify(r.flowsheet), `${s.name} added`);
+        app.toast(`${s.name} added; choose it in a ${s.type.toLowerCase()} reactor's worksheet.`, { info: true });
+        return redraw();
+      }
+    };
+  }
+
+  return { dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
 }

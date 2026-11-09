@@ -153,3 +153,27 @@
 .fs-unit-grid .field{margin-top:.45rem}
 .search-results.browse{max-height:min(24rem,55dvh)}
 .search-results button[disabled]{opacity:.55;cursor:default}
+
+/* Dynamics (D125): the list of events */
+.dyn-events{list-style:none;padding:0;margin:.2rem 0 .6rem;font-size:.85rem}
+.dyn-events li{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.25rem 0;border-bottom:1px solid var(--border)}
+
+/* Spreadsheet and scenarios (D126) */
+.ss-bar{display:flex;gap:.4rem;align-items:center;margin:.4rem 0}
+.ss-bar input{flex:1;min-width:0}
+.ss-name{font-family:var(--font-mono, monospace);font-weight:600;min-width:2.2rem}
+.ss-grid th,.ss-grid td{padding:0;text-align:center;font-size:.75rem}
+.ss-grid td{border:1px solid var(--border);min-width:5.2rem}
+.ss-cell{display:block;width:100%;min-height:1.9rem;padding:.25rem .35rem;background:none;border:0;text-align:right;font:inherit;font-variant-numeric:tabular-nums;color:var(--fg);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:7rem}
+.ss-cell.on{outline:2px solid var(--primary);outline-offset:-2px}
+.ss-cell.bad{color:var(--err)}
+
+/* Compound and data tools (D127) */
+.dt-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(10rem,1fr));gap:.3rem .6rem;font-size:.75rem}
+.dt-groups label{display:flex;align-items:center;justify-content:space-between;gap:.4rem}
+.dt-groups input{width:3.2rem}
+.dt-rx{display:flex;flex-direction:column;gap:.15rem;padding:.5rem 0;border-bottom:1px solid var(--border)}
+.dt-rx small{color:var(--muted)}
+.dt-rx button{align-self:flex-start;margin-top:.2rem}
+#dt_data{flex:1;min-width:0;font-family:var(--font-mono, monospace);background:var(--bg-input);color:var(--fg);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:.45rem .6rem;font-size:.8rem}
+#dataTools .chip[aria-pressed="true"]{background:var(--primary-bg);border-color:var(--primary);color:var(--fg)}

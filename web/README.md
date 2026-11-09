@@ -35,6 +35,23 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.10**
+- **Spreadsheet** (Tools → Spreadsheet), as in HYSYS and the Android app: numbers, text and formulas (=A1*2,
+  =sum(A1:A5), sqrt, ln…); =[K-100.power] brings in a solved result in its display unit (pick it from the menu). Export a
+  cell to a specification and **Apply** it to the flowsheet.
+- **Scenarios** (Tools → Scenarios): save the case, change it, save again, and compare the results side by side;
+  **Restore** puts a scenario's specifications back.
+- **Compound and data tools** (Basis): a component from its structure (SMILES, Joback groups, or a name looked up on
+  PubChem), interaction parameters fitted to your measured VLE data, and DWSIM's reaction finder.
+
+**Web 1.9**
+- **Dynamics** (Tools → Dynamics), as in the Android app: give each separator its volume (and height), each valve its
+  Cv, each controller its tuning, add events (a feed's pressure, a valve's opening, a setpoint…) and **Run**. The trends
+  show each controller's measurement against its setpoint and its output, the separators' pressure, level and
+  temperature, the valves and the duties. The setup is saved with the case; example 20 is ready to run.
+- **PID tuning** (Tools → PID tuning): a step test on a controller in the dynamic run fits a first-order-plus-dead-time
+  model and gives SIMC, IMC, Ziegler–Nichols and Cohen–Coon settings; **Use** puts one into the controller's tuning.
+
 **Web 1.8**
 - **Select several objects**: Shift (or Ctrl) and a click adds or removes one; Shift and a drag on empty canvas draws a
   box; Ctrl+A selects everything. On a phone or tablet, press **Select** first, then drag a box or tap objects.

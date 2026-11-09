@@ -14,7 +14,11 @@
 //      outlet pressure allowed), example 21's PSV (fire needs API 526 D with water's latent heat, IAPWS 1.85–2.15 MJ/kg;
 //      the blocked outlet governs, 1E2), depressuring (the sized orifice meets API 521's 15 minutes), pipeline
 //      pressurization (the sized orifice meets its 1 h target) and the stream analysis tools on benchmark 03.
-//   6. copy and paste of several objects (D124): benchmark 06's train pasted beside itself solves to the original's numbers.
+//   6. copy and paste of several objects (D124): benchmark 06's train pasted beside itself solves to the original's numbers;
+//   7. dynamics and PID tuning (D125): benchmark 20's controllers return to their setpoints after the feed upset, the run
+//      holds the steady state with no event, and the step test's fitted model matches its own response;
+//   8. spreadsheet and scenarios (D126) on benchmark 06, against the engine's numbers and hand arithmetic;
+//   9. the compound and data tools (D127): Joback by hand, a known kij fitted back, methane combustion balanced.
 //
 //   node tests/browser.test.mjs [case-name ...]
 import http from 'node:http';
@@ -530,6 +534,234 @@ try {
     }
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} select, copy, paste, duplicate, move and delete several objects at ${width} px (copy's COOLED ${twin?.temperature?.toFixed?.(3)} K, original ${orig.temperature.toFixed(3)} K)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4h. dynamics and PID tuning through the Tools window (D125) ----------
+  // Benchmark 20: a separator under pressure and level control; the feed rises from 30 to 33 bara at 30 s. A PI
+  // controller has no offset (its integral action), so after the upset each measurement must come back to its setpoint;
+  // with no event the run must hold the steady state. The step test's model must reproduce its own response.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '20-separator-dynamics');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    await p.click('#toolsBtn');
+    await p.click('#toolsTabs [data-tab="dyn"]');
+    if (await p.isVisible('#dyn_problem')) problems.push(`benchmark 20 can't run: ${await p.textContent('#dyn_problem')}`);
+    // 40 minutes (the web's time unit), so the slow level loop (integral time 300 s) has settled too; typed as the user would.
+    const dur = p.locator('#dyn_form input').first();
+    await dur.fill('40'); await dur.press('Enter');
+    if (await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).dynamics.duration) !== 2400) problems.push('the duration typed was not kept');
+    await p.click('#dyn_run');
+    await p.waitForFunction(() => window.flowsteadFlowsheet.tools.lastDynamics() || /Not calculated/.test(document.getElementById('dyn_out')?.textContent ?? ''), null, { timeout: 600_000 });
+    const r = await p.evaluate(() => window.flowsteadFlowsheet.tools.lastDynamics());
+    const objs = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects);
+    const ctl = objs.filter((o) => o.type === 'controller');
+    const tr = (id, k) => r?.trends.find((t) => t.objectId === id && t.key === k)?.values;
+    const ends = {};
+    for (const c of ctl) {
+      const pv = tr(c.id, 'controlledValue'), sp = tr(c.id, 'target');
+      if (!pv || !sp) { problems.push(`${c.tag}: no trend`); continue; }
+      const dev = pv.map((v, i) => Math.abs(v - sp[i]));
+      const peak = Math.max(...dev);
+      const end = dev.at(-1);
+      // Integral action removes the offset: after its peak the error dies away and the output stays off its limits (no
+      // wind-up holding it). A level, an integrating process, recovers slowly: benchmark 20's peaks at about 20 min.
+      const iPeak = dev.indexOf(peak);
+      const at = (t) => dev[r.times.findIndex((x) => x >= t)];
+      const tEnd = r.times.at(-1);
+      // Falling, allowing a tenth of the peak for the small wobble of a fast loop already back at its setpoint.
+      const slack = 0.1 * peak;
+      const falling = [0.25, 0.5, 0.75].map((f) => at(r.times[iPeak] + f * (tEnd - r.times[iPeak]))).every((d, k, a) => d <= (k ? a[k - 1] : peak) + slack) && end <= at(tEnd - 600) + slack;
+      const opRange = (tr(c.id, 'output') ?? []).slice(iPeak);
+      const free = opRange.every((o) => o > 0.5 && o < 99.5);
+      ends[c.tag] = { end: pv.at(-1), sp: sp.at(-1), peak };
+      if (!(peak > 1e-3 * Math.abs(sp[0]))) problems.push(`${c.tag}: the feed upset did not move it (peak deviation ${peak})`);
+      if (!(end < 0.01 * Math.abs(sp.at(-1)) && end < 0.5 * peak && falling && free)) problems.push(`${c.tag} ends ${pv.at(-1)} against its setpoint ${sp.at(-1)} (peak deviation ${peak} at ${r.times[iPeak]} s; falling since: ${falling}; output off its limits: ${free}): a PI controller leaves no offset`);
+      // The loop's course every 5 minutes (measurement, output, the valve it moves), for the log.
+      const op = tr(c.id, 'output'), mv = tr(c.refs.manipulatedObject, 'valveOpening');
+      console.log(`     ${c.tag} every 300 s: ` + r.times.map((t, i) => [t, i]).filter(([t]) => t % 300 === 0).map(([t, i]) => `${t}s PV ${pv[i].toPrecision(5)} OP ${op?.[i]?.toFixed(1)} % valve ${mv ? (mv[i] * 100).toFixed(1) : '?'} %`).join('; '));
+    }
+    const plots = await p.locator('#dyn_out figure').count();
+    if (plots < ctl.length) problems.push(`${plots} plots for ${ctl.length} controllers`);
+    // With the event removed, the run holds the steady state: the separator pressure stays at its steady value.
+    await p.click('#toolsTabs [data-tab="dyn"]');
+    await p.click('[data-rmev="0"]');
+    if (!(await p.isVisible('#dyn_out .stale'))) problems.push('the last run is not marked out of date after the setup changed');
+    await p.click('#dyn_run');
+    await p.waitForFunction(() => !document.querySelector('#dyn_out .stale') && !/Running/.test(document.getElementById('dyn_out').textContent), null, { timeout: 600_000 });
+    const r2 = await p.evaluate(() => window.flowsteadFlowsheet.tools.lastDynamics());
+    const sepP = r2?.trends.find((t) => t.objectId === 'sep' && t.key === 'pressure')?.values ?? [];
+    const drift = sepP.length ? Math.max(...sepP.map((v) => Math.abs(v - sepP[0]))) / sepP[0] : NaN;
+    if (!(drift < 1e-3)) problems.push(`with no event the separator pressure drifts ${(drift * 100).toFixed(3)} %`);
+    // PID tuning: a step test on the pressure controller fits a model whose response matches the measured one.
+    await p.click('#toolsTabs [data-tab="pid"]');
+    const pic = ctl.find((c) => c.tag === 'PIC-100');
+    await p.selectOption('#pid_c', pic.id);
+    await p.fill('#pid_dur', '600'); await p.press('#pid_dur', 'Enter');
+    await p.click('#pid_run');
+    await p.waitForFunction(() => window.flowsteadFlowsheet.tools.lastStepTest() || /Not calculated|did not settle|no output|no measurement/.test(document.getElementById('pid_out').textContent), null, { timeout: 600_000 });
+    const st = await p.evaluate(() => window.flowsteadFlowsheet.tools.lastStepTest());
+    const kv = st && Object.fromEntries((st.report.sections.find((x) => x.kind === 'kv')?.rows ?? []).map((x) => [x.label, x.value]));
+    const plot = st?.report.sections.find((x) => x.kind === 'plot');
+    const [meas, fit] = plot ? [plot.series[0].points, plot.series[1]?.points] : [];
+    const rms = fit ? Math.sqrt(meas.reduce((a, [, y], i) => a + (y - fit[i][1]) ** 2, 0) / meas.length) : NaN;
+    const change = meas ? Math.abs(meas.at(-1)[1] - meas[0][1]) : NaN;
+    if (!kv || !(rms < 0.1 * change)) problems.push(`step test: model ${JSON.stringify(kv)}, fit rms ${rms} against a change of ${change} %`);
+    if (st) {
+      await p.click('#pid_out [data-use="0"]');
+      const g = await p.evaluate((id) => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).dynamics.parameters[id]?.gain?.si, pic.id);
+      if (!(Math.abs(g - st.settings[0].gain) < 1e-12)) problems.push(`Use put gain ${g} in the controller, the rule gives ${st.settings[0].gain}`);
+      // The tuning changed the setup: the fit is now out of date and its Use buttons are off.
+      await p.click('#toolsTabs [data-tab="pid"]');
+      if (!(await p.isVisible('#pid_out .stale')) || !(await p.locator('#pid_out [data-use="0"]').isDisabled())) problems.push('after the setup changed, the old step test can still be used');
+    }
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} dynamics (${Object.entries(ends).map(([t, e]) => `${t} ends ${e.end.toPrecision(5)} for ${e.sp.toPrecision(5)}`).join(', ')}; no-event drift ${(drift * 100).toFixed(4)} %) and PID tuning (${kv ? `K ${kv['Process gain K']}, τ ${kv['Time constant τ']} s, θ ${kv['Dead time θ']} s` : 'no model'})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4i. spreadsheet and scenarios (D126) ----------
+  // Benchmark 06 solved: a cell importing K-100's power shows the engine's number in kW; a formula is checked by hand; a
+  // cell exported to the compressor's outlet pressure and applied makes the engine solve at that pressure; two scenarios
+  // compare the engine's powers of the two cases.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '06-compressor-aftercooler');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    const solve = async () => {
+      await p.click('#solveBtn');
+      await p.waitForFunction(() => { const w = window.flowsteadFlowsheet; return w.project.solve && !w.view.stale && !document.getElementById('solveBtn').disabled; }, null, { timeout: 300_000 });
+    };
+    const power = () => p.evaluate(() => window.flowsteadFlowsheet.project.solve.result.objects.k.properties.power);
+    await solve();
+    const w1 = await power();
+    await p.evaluate(() => document.getElementById('toolsDlg').close());
+    await p.click('#toolsBtn'); await p.click('#toolsTabs [data-tab="sheet"]');
+    const setCell = async (cell, text) => { await p.click(`[data-cell="${cell}"]`); await p.fill('#ss_in', text); await p.press('#ss_in', 'Enter'); };
+    await setCell('A1', '=[K-100.power]');
+    await setCell('A2', '=A1/2 + 10');
+    await setCell('B1', '12');
+    const shown = async (c) => Number((await p.textContent(`[data-cell="${c}"]`)).replace(/,/g, ''));
+    const a1 = await shown('A1'), a2 = await shown('A2');
+    if (!(Math.abs(a1 - w1 / 1000) < 1e-3)) problems.push(`A1 shows ${a1} kW; the engine's K-100 power is ${w1 / 1000} kW`);
+    if (!(Math.abs(a2 - (a1 / 2 + 10)) < 1e-3)) problems.push(`A2 = A1/2 + 10 shows ${a2}, by hand ${a1 / 2 + 10}`);
+    await p.click('[data-cell="B1"]');
+    await p.selectOption('#ss_xo', { label: 'K-100' }); await p.selectOption('#ss_xk', 'outletPressure'); await p.click('#ss_addx');
+    // Scenario 1 at the benchmark's 15 bara, then apply 12 bara from the sheet, solve, scenario 2.
+    await p.click('#toolsTabs [data-tab="scen"]');
+    await p.fill('#sc_name', 'At 15 bara'); await p.press('#sc_name', 'Enter');
+    await p.click('#toolsTabs [data-tab="sheet"]');
+    await p.click('#ss_apply');
+    const pOut = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === 'k').specs.outletPressure.si);
+    if (pOut !== 12e5) problems.push(`applying B1 = 12 (bara) set ${pOut} Pa`);
+    await p.evaluate(() => document.getElementById('toolsDlg').close());
+    await solve();
+    const w2 = await power(), pDis = await p.evaluate(() => window.flowsteadFlowsheet.project.solve.result.objects.dis.properties.pressure);
+    if (Math.abs(pDis - 12e5) > 1) problems.push(`the engine solved DISCHARGE at ${pDis} Pa, not the 12 bara exported`);
+    if (!(w2 < w1)) problems.push(`compressing to 12 bara takes ${w2} W, not less than ${w1} W at 15 bara`);
+    await p.click('#toolsBtn'); await p.click('#toolsTabs [data-tab="sheet"]');
+    if (!(Math.abs(await shown('A1') - w2 / 1000) < 1e-3)) problems.push(`A1 did not follow the new solve (${await shown('A1')} kW, engine ${w2 / 1000} kW)`);
+    await p.click('#toolsTabs [data-tab="scen"]');
+    await p.fill('#sc_name', 'At 12 bara'); await p.press('#sc_name', 'Enter');
+    const row = await p.locator('#toolsBody table tr', { has: p.locator('th', { hasText: 'K-100 Power' }) }).locator('td').allTextContents();
+    const cmp = row.map((x) => Number(x.replace(/,/g, '')));
+    if (!(Math.abs(cmp[0] - w1 / 1000) < 0.01 && Math.abs(cmp[1] - w2 / 1000) < 0.01)) problems.push(`the comparison shows ${row.join(', ')} kW; the engine gave ${w1 / 1000} and ${w2 / 1000} kW`);
+    // Restoring the first scenario puts 15 bara back.
+    await p.click('[data-restore="0"]');
+    const back = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === 'k').specs.outletPressure.si);
+    if (back !== 15e5) problems.push(`restoring the first scenario gave ${back} Pa`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} spreadsheet and scenarios (K-100 ${(w1 / 1000).toFixed(2)} kW at 15 bara, ${(w2 / 1000).toFixed(2)} kW at 12 bara)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4j. the Fluid package's compound and data tools in Basis (D127) ----------
+  // n-Hexane from its SMILES against Joback & Reid's group values by hand (D104: Tb 336.88 K, Tc 500.27 K, Pc 31.07 bar);
+  // propane/n-pentane bubble points made by the engine with kij 0.05 and fitted back (the engine test's own check);
+  // methane's combustion found and balanced (CH4 + 2 O2 → CO2 + 2 H2O). PubChem from the visitor's browser is reported, not
+  // required: it depends on a service outside Flowstead.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [], info = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    const open = async (fs, name) => {
+      await p.setInputFiles('#openFile', { name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fs)) });
+      await p.waitForFunction((n) => window.flowsteadFlowsheet.project.name === n, name, { timeout: 30_000 });
+    };
+    const fluid = (compounds, extra = {}) => ({ schemaVersion: 1, propertyPackage: 'Peng-Robinson (PR)', compounds, atmosphericPressurePa: 101325, objects: [], connections: [], ...extra });
+    await open(fluid(['Propane', 'N-pentane']), 'vle');
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    await p.click('#basisBtn');
+    // Structure
+    await p.fill('#dt_name', 'nC6 (Joback)'); await p.fill('#dt_smiles', 'CCCCCC');
+    await p.click('#dt_est');
+    await p.waitForFunction(() => /Normal boiling point|Not calculated/.test(document.getElementById('dt_out')?.textContent ?? ''), null, { timeout: 300_000 });
+    const kv = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#dt_out tr')].map((r) => [r.querySelector('th')?.textContent, Number(r.querySelector('td')?.textContent.replace(/,/g, ''))])));
+    for (const [k, want, tol] of [['Normal boiling point', 336.88, 0.05], ['Critical temperature', 500.27, 0.05], ['Critical pressure', 31.07, 0.01]]) {
+      if (!(Math.abs(kv[k] - want) <= tol)) problems.push(`${k} ${kv[k]}; Joback by hand ${want}`);
+    }
+    await p.click('#dt_add');
+    if (!(await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).hypotheticals?.some((h) => h.smiles === 'CCCCCC')))) problems.push('Add to components did not add the structure');
+    // VLE regression: points from the engine's own T–x–y at 10 bar with kij 0.05.
+    const pts = await p.evaluate(async () => {
+      const w = window.flowsteadFlowsheet;
+      const fs = { ...JSON.parse(w.project.flowsheet), compounds: ['Propane', 'N-pentane'], hypotheticals: [], interactionParameters: [{ a: 'Propane', b: 'N-pentane', kij: 0.05 }] };
+      const { result } = await w.engine.call('binaryDiagram', { flowsheet: fs, first: 'Propane', second: 'N-pentane', kind: 'txy', pressure: 1e6, steps: 10, liquidLiquid: false });
+      return result.bubble.filter((q) => q.x > 0.01 && q.x < 0.99);
+    });
+    await p.click('[data-dtool="vle"]');
+    await p.selectOption('#dt_a', 'Propane'); await p.selectOption('#dt_b', 'N-pentane');
+    await p.fill('#dt_fixed', '10'); await p.selectOption('#dt_fixedu', 'bara');
+    await p.selectOption('#dt_valueu', 'K');
+    await p.fill('#dt_data', pts.map((q) => `${q.x}, ${q.y}`).join('\n'));
+    await p.click('#dt_fit');
+    await p.waitForFunction(() => /kij =|Not calculated/.test(document.getElementById('dt_out')?.textContent ?? ''), null, { timeout: 600_000 });
+    const kij = Number((await p.textContent('#dt_out h3'))?.match(/kij = ([-\d.]+)/)?.[1]);
+    if (!(pts.length >= 6 && Math.abs(kij - 0.05) <= 0.002)) problems.push(`fitted kij ${kij} from ${pts.length} points made with 0.05`);
+    await p.click('#dt_save');
+    const saved = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).interactionParameters?.[0]?.kij);
+    if (!(Math.abs(saved - kij) < 1e-4)) problems.push(`Use saved kij ${saved}`);
+    // Reaction finder: methane combustion.
+    await p.evaluate(() => document.getElementById('basisDlg').close());
+    await open(fluid(['Methane', 'Oxygen', 'Carbon dioxide', 'Water']), 'rx');
+    await p.click('#basisBtn');
+    await p.click('[data-dtool="rx"]');
+    await p.click('#dt_find');
+    await p.waitForFunction(() => document.querySelector('#dt_out .dt-rx') || /Not calculated|No reactions/.test(document.getElementById('dt_out')?.textContent ?? ''), null, { timeout: 300_000 });
+    const names = await p.locator('#dt_out .dt-rx').allTextContents();
+    const i = names.findIndex((n) => /combust/i.test(n) && /Methane/.test(n) && !/Ethane|Propane/.test(n));
+    if (i < 0) problems.push(`no methane combustion among ${JSON.stringify(names)}`);
+    else {
+      await p.click(`[data-addrx="${i}"]`);
+      const st = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).reactions?.[0]?.stoichiometry);
+      const want = { Methane: -1, Oxygen: -2, 'Carbon dioxide': 1, Water: 2 };
+      if (!st || Object.keys(want).some((k) => Math.abs(st[k] / -st.Methane - want[k]) > 1e-9)) problems.push(`methane combustion stoichiometry ${JSON.stringify(st)}`);
+      if (!(await p.locator(`[data-addrx="${i}"]`).isDisabled())) problems.push('the added reaction is not shown as added');
+    }
+    // PubChem from this browser (reported only).
+    await p.click('[data-dtool="structure"]');
+    await p.fill('#dt_q', 'n-hexane'); await p.click('#dt_look');
+    await p.waitForFunction(() => document.querySelector('#dataTools [data-use]') || document.querySelector('#dataTools .fs-note.warn'), null, { timeout: 60_000 }).catch(() => {});
+    info.push(await p.locator('#dataTools [data-use]').first().textContent().catch(async () => await p.locator('#dataTools .fs-note.warn').first().textContent().catch(() => 'no answer')));
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} compound and data tools (nC6 Tb ${kv['Normal boiling point']} K, Tc ${kv['Critical temperature']} K; kij ${kij} for 0.05; methane combustion). PubChem: ${info[0]}`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();
