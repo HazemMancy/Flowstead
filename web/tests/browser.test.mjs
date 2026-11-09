@@ -14,7 +14,9 @@
 //      outlet pressure allowed), example 21's PSV (fire needs API 526 D with water's latent heat, IAPWS 1.85–2.15 MJ/kg;
 //      the blocked outlet governs, 1E2), depressuring (the sized orifice meets API 521's 15 minutes), pipeline
 //      pressurization (the sized orifice meets its 1 h target) and the stream analysis tools on benchmark 03.
-//   6. copy and paste of several objects (D124): benchmark 06's train pasted beside itself solves to the original's numbers.
+//   6. copy and paste of several objects (D124): benchmark 06's train pasted beside itself solves to the original's numbers;
+//   7. dynamics and PID tuning (D125): benchmark 20's controllers return to their setpoints after the feed upset, the run
+//      holds the steady state with no event, and the step test's fitted model matches its own response.
 //
 //   node tests/browser.test.mjs [case-name ...]
 import http from 'node:http';
@@ -530,6 +532,79 @@ try {
     }
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} select, copy, paste, duplicate, move and delete several objects at ${width} px (copy's COOLED ${twin?.temperature?.toFixed?.(3)} K, original ${orig.temperature.toFixed(3)} K)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4h. dynamics and PID tuning through the Tools window (D125) ----------
+  // Benchmark 20: a separator under pressure and level control; the feed rises from 30 to 33 bara at 30 s. A PI
+  // controller has no offset (its integral action), so after the upset each measurement must come back to its setpoint;
+  // with no event the run must hold the steady state. The step test's model must reproduce its own response.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '20-separator-dynamics');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    await p.click('#toolsBtn');
+    await p.click('#toolsTabs [data-tab="dyn"]');
+    if (await p.isVisible('#dyn_problem')) problems.push(`benchmark 20 can't run: ${await p.textContent('#dyn_problem')}`);
+    // 40 minutes (the web's time unit), so the slow level loop (integral time 300 s) has settled too; typed as the user would.
+    const dur = p.locator('#dyn_form input').first();
+    await dur.fill('40'); await dur.press('Enter');
+    if (await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).dynamics.duration) !== 2400) problems.push('the duration typed was not kept');
+    await p.click('#dyn_run');
+    await p.waitForFunction(() => window.flowsteadFlowsheet.tools.lastDynamics() || /Not calculated/.test(document.getElementById('dyn_out')?.textContent ?? ''), null, { timeout: 600_000 });
+    const r = await p.evaluate(() => window.flowsteadFlowsheet.tools.lastDynamics());
+    const objs = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects);
+    const ctl = objs.filter((o) => o.type === 'controller');
+    const tr = (id, k) => r?.trends.find((t) => t.objectId === id && t.key === k)?.values;
+    const ends = {};
+    for (const c of ctl) {
+      const pv = tr(c.id, 'controlledValue'), sp = tr(c.id, 'target');
+      if (!pv || !sp) { problems.push(`${c.tag}: no trend`); continue; }
+      const peak = Math.max(...pv.map((v, i) => Math.abs(v - sp[i])));
+      const end = Math.abs(pv.at(-1) - sp.at(-1));
+      ends[c.tag] = { end: pv.at(-1), sp: sp.at(-1), peak };
+      if (!(peak > 1e-3 * Math.abs(sp[0]))) problems.push(`${c.tag}: the feed upset did not move it (peak deviation ${peak})`);
+      if (!(end < 0.01 * Math.abs(sp.at(-1)) && end < 0.2 * peak)) problems.push(`${c.tag} ends ${pv.at(-1)} against its setpoint ${sp.at(-1)} (peak deviation ${peak}): a PI controller leaves no offset`);
+    }
+    const plots = await p.locator('#dyn_out figure').count();
+    if (plots < ctl.length) problems.push(`${plots} plots for ${ctl.length} controllers`);
+    // With the event removed, the run holds the steady state: the separator pressure stays at its steady value.
+    await p.click('#toolsTabs [data-tab="dyn"]');
+    await p.click('[data-rmev="0"]');
+    if (!(await p.isVisible('#dyn_out .stale'))) problems.push('the last run is not marked out of date after the setup changed');
+    await p.click('#dyn_run');
+    await p.waitForFunction(() => !document.querySelector('#dyn_out .stale') && !/Running/.test(document.getElementById('dyn_out').textContent), null, { timeout: 600_000 });
+    const r2 = await p.evaluate(() => window.flowsteadFlowsheet.tools.lastDynamics());
+    const sepP = r2?.trends.find((t) => t.objectId === 'sep' && t.key === 'pressure')?.values ?? [];
+    const drift = sepP.length ? Math.max(...sepP.map((v) => Math.abs(v - sepP[0]))) / sepP[0] : NaN;
+    if (!(drift < 1e-3)) problems.push(`with no event the separator pressure drifts ${(drift * 100).toFixed(3)} %`);
+    // PID tuning: a step test on the pressure controller fits a model whose response matches the measured one.
+    await p.click('#toolsTabs [data-tab="pid"]');
+    const pic = ctl.find((c) => c.tag === 'PIC-100');
+    await p.selectOption('#pid_c', pic.id);
+    await p.fill('#pid_dur', '600'); await p.press('#pid_dur', 'Enter');
+    await p.click('#pid_run');
+    await p.waitForFunction(() => window.flowsteadFlowsheet.tools.lastStepTest() || /Not calculated|did not settle|no output|no measurement/.test(document.getElementById('pid_out').textContent), null, { timeout: 600_000 });
+    const st = await p.evaluate(() => window.flowsteadFlowsheet.tools.lastStepTest());
+    const kv = st && Object.fromEntries((st.report.sections.find((x) => x.kind === 'kv')?.rows ?? []).map((x) => [x.label, x.value]));
+    const plot = st?.report.sections.find((x) => x.kind === 'plot');
+    const [meas, fit] = plot ? [plot.series[0].points, plot.series[1]?.points] : [];
+    const rms = fit ? Math.sqrt(meas.reduce((a, [, y], i) => a + (y - fit[i][1]) ** 2, 0) / meas.length) : NaN;
+    const change = meas ? Math.abs(meas.at(-1)[1] - meas[0][1]) : NaN;
+    if (!kv || !(rms < 0.1 * change)) problems.push(`step test: model ${JSON.stringify(kv)}, fit rms ${rms} against a change of ${change} %`);
+    if (st) {
+      await p.click('#pid_out [data-use="0"]');
+      const g = await p.evaluate((id) => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).dynamics.parameters[id]?.gain?.si, pic.id);
+      if (!(Math.abs(g - st.settings[0].gain) < 1e-12)) problems.push(`Use put gain ${g} in the controller, the rule gives ${st.settings[0].gain}`);
+    }
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} dynamics (${Object.entries(ends).map(([t, e]) => `${t} ends ${e.end.toPrecision(5)} for ${e.sp.toPrecision(5)}`).join(', ')}; no-event drift ${(drift * 100).toFixed(4)} %) and PID tuning (${kv ? `K ${kv['Process gain K']}, τ ${kv['Time constant τ']} s, θ ${kv['Dead time θ']} s` : 'no model'})`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();

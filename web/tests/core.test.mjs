@@ -518,3 +518,74 @@ test('a drag on a selected object moves the whole selection, from its symbol or 
     assert.equal(moved('dis'), 0, `${from}: DISCHARGE was not selected`);
   }
 });
+
+const { DynamicsTools } = await import(lib);
+const dyn = DynamicsTools.getInstance();
+
+test('dynamics: the app\'s setup form, edits and engine request on benchmark 20 (D125)', () => {
+  let fsj = bench('20-separator-dynamics');
+  let f = JSON.parse(dyn.form(fsj));
+  assert.equal(f.problem, undefined, f.problem);
+  const vol = f.items.find((i) => i.kind === 'q' && i.id === 'sep' && i.key === 'volume');
+  assert.equal(Number(vol.units.find((u) => u.id === 'm3').text), 5); // the benchmark's 5 m³
+  assert.ok(f.items.some((i) => i.kind === 'action'), 'each controller has an action');
+  assert.equal(f.events.length, 1);
+  assert.match(f.events[0].text, /pressure/);
+  // A volume typed in ft³ is stored in m³: 100 ft³ = 2.8317 m³ (0.3048³ × 100, by hand).
+  fsj = JSON.stringify(JSON.parse(dyn.apply(fsj, JSON.stringify({ op: 'param', id: 'sep', key: 'volume', value: '100', unit: 'ft3' }))).flowsheet);
+  assert.ok(Math.abs(JSON.parse(fsj).dynamics.parameters.sep.volume.si - 100 * 0.3048 ** 3) < 1e-9);
+  // An event: a valve to 80 % open at 2 min.
+  const valve = JSON.parse(fsj).objects.find((o) => o.type === 'valve').id;
+  fsj = JSON.stringify(JSON.parse(dyn.apply(fsj, JSON.stringify({ op: 'addEvent', time: '2', timeUnit: 'min', objectId: valve, key: 'opening', value: '80', unit: '%' }))).flowsheet);
+  const e = JSON.parse(fsj).dynamics.events.find((x) => x.objectId === valve);
+  assert.deepEqual([e.time, e.value], [120, 0.8]);
+  fsj = JSON.stringify(JSON.parse(dyn.apply(fsj, JSON.stringify({ op: 'removeEvent', index: 1 }))).flowsheet);
+  assert.equal(JSON.parse(fsj).dynamics.events.length, 1);
+  // Clearing the volume: the app's reason the run can't start, and no engine call.
+  const cleared = JSON.stringify(JSON.parse(dyn.apply(fsj, JSON.stringify({ op: 'param', id: 'sep', key: 'volume', value: '', unit: 'm3' }))).flowsheet);
+  assert.match(JSON.parse(dyn.request(cleared)).error, /volume/);
+  const req = JSON.parse(dyn.request(fsj));
+  assert.equal(req.method, 'dynamics');
+  assert.equal(req.params.duration, 1200);
+  assert.equal(req.params.flowsheet.dynamics, undefined, 'the setup goes as the request\'s own fields');
+  assert.equal(req.params.events[0].value, 3300000);
+});
+
+test('PID tuning: an exact first-order-plus-dead-time response gives its K, τ, θ back and the rules\' settings by hand (D125)', () => {
+  const fsj = bench('20-separator-dynamics');
+  const pic = JSON.parse(fsj).objects.find((o) => o.tag === 'PIC-100');
+  // A process K 2 %/%, τ 50 s, θ 10 s answering a +10 % output step at t = 5 s; the measurement in the engine's units
+  // with the span PidTuning uses (twice the setpoint, here 20 bar → 40 bar): PV% = PV / span × 100.
+  const sp = 20e5, span = 2 * sp, K = 2, tau = 50, theta = 10, step = 10, t0 = 5;
+  const times = Array.from({ length: 601 }, (_, i) => i);
+  const pct = times.map((t) => 50 + (t - t0 <= theta ? 0 : K * step * (1 - Math.exp(-(t - t0 - theta) / tau))));
+  const result = { status: 'converged', times, elapsedMs: 0, messages: [], trends: [
+    { objectId: pic.id, key: 'controlledValue', values: pct.map((p) => p / 100 * span) },
+    { objectId: pic.id, key: 'target', values: times.map(() => sp) },
+    { objectId: pic.id, key: 'output', values: times.map((t) => (t < t0 ? 40 : 50)) },
+  ] };
+  // The step test request: the output steps from where the first run found it.
+  const run = JSON.parse(dyn.stepTestRun(fsj, pic.id, 10, 600, JSON.stringify({ ...result, times: [0, 1] })));
+  assert.equal(run.method, 'dynamics');
+  assert.deepEqual(run.params.events.map((e) => [e.time, e.key, e.value]), [[0, 'mode', 0], [run.stepTime, 'output', 50]]);
+  const near100 = JSON.parse(dyn.stepTestRun(fsj, pic.id, 10, 600, JSON.stringify({ ...result, trends: [{ objectId: pic.id, key: 'output', values: [95] }] })));
+  assert.equal(near100.step, -10, 'a step that would pass 100 % goes the other way');
+  const t = JSON.parse(dyn.stepTestReport(fsj, pic.id, t0, step, JSON.stringify(result)));
+  const kv = Object.fromEntries(t.report.sections.find((s) => s.kind === 'kv').rows.map((r) => [r.label, Number(r.value)]));
+  assert.ok(Math.abs(kv['Process gain K'] - K) / K < 0.01, `K ${kv['Process gain K']}`);
+  assert.ok(Math.abs(kv['Time constant τ'] - tau) / tau < 0.02, `τ ${kv['Time constant τ']}`);
+  assert.ok(Math.abs(kv['Dead time θ'] - theta) < 0.5, `θ ${kv['Dead time θ']}`);
+  // SIMC with τc = θ, by hand from the fitted model: Kc = τ / (K (τc + θ)), Ti = min(τ, 4 (τc + θ)).
+  const m = { K: kv['Process gain K'], tau: kv['Time constant τ'], theta: kv['Dead time θ'] };
+  const simc = t.settings.find((s) => s.rule === 'SIMC PI');
+  assert.ok(Math.abs(simc.gain - m.tau / (m.K * 2 * m.theta)) / simc.gain < 0.01, `SIMC Kc ${simc.gain}`);
+  assert.ok(Math.abs(simc.integralTime - Math.min(m.tau, 8 * m.theta)) < 0.1, `SIMC Ti ${simc.integralTime}`);
+  // Ziegler–Nichols reaction curve PID: Kc = 1.2 τ / (K θ), Ti = 2 θ, Td = θ / 2.
+  const zn = t.settings.find((s) => s.rule.startsWith('Ziegler'));
+  assert.ok(Math.abs(zn.gain - 1.2 * m.tau / (m.K * m.theta)) / zn.gain < 0.01 && Math.abs(zn.integralTime - 2 * m.theta) < 0.1 && Math.abs(zn.derivativeTime - m.theta / 2) < 0.1);
+  assert.equal(simc.action, -1, 'a positive process gain needs reverse action');
+  // Use: the settings become the controller's tuning in Dynamics.
+  const used = JSON.parse(dyn.applyTuning(fsj, pic.id, simc.gain, simc.integralTime, 0, simc.action)).flowsheet;
+  const p = used.dynamics.parameters[pic.id];
+  assert.deepEqual([p.gain.si, p.integralTime.si, p.derivativeTime.si, p.action.si], [simc.gain, simc.integralTime, 0, -1]);
+});

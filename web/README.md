@@ -35,6 +35,14 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.9**
+- **Dynamics** (Tools → Dynamics), as in the Android app: give each separator its volume (and height), each valve its
+  Cv, each controller its tuning, add events (a feed's pressure, a valve's opening, a setpoint…) and **Run**. The trends
+  show each controller's measurement against its setpoint and its output, the separators' pressure, level and
+  temperature, the valves and the duties. The setup is saved with the case; example 20 is ready to run.
+- **PID tuning** (Tools → PID tuning): a step test on a controller in the dynamic run fits a first-order-plus-dead-time
+  model and gives SIMC, IMC, Ziegler–Nichols and Cohen–Coon settings; **Use** puts one into the controller's tuning.
+
 **Web 1.8**
 - **Select several objects**: Shift (or Ctrl) and a click adds or removes one; Shift and a drag on empty canvas draws a
   box; Ctrl+A selects everything. On a phone or tablet, press **Select** first, then drag a box or tap objects.

@@ -28,12 +28,13 @@ This page adds what those files do not say: how the owner works, and what is ope
 - Web 1.6 (D120): Hold/Active solver, duplicate and copy streams, customisable property table, frozen worksheet header, framed page.
 - Web 1.7: bubble and dew points are calculated on demand (D121: they were about 80 % of a solve); HYSYS's enthalpy and entropy basis (D122); component menu and Browse-all, units for a hypothetical's constants, a unit set, Enter to the next field (D123).
 - Web 1.8 (D124): select several objects, move, delete, copy, paste and duplicate them (`web/core/src/webModel`).
+- Web 1.9 (D125): dynamics and PID tuning in the Tools window (`DynamicsTools.kt`).
 - The Android app is at 3.2.4 on `main` (D117 to D119 changed the engine's phase envelopes); the web changes did not touch it.
 
 ## Open items
 1. **Confirm the enthalpy and entropy basis against HYSYS (D122).** It is checked against NIST only. The owner will send HYSYS's molar enthalpy and entropy for the feed of `web/tests/fixtures/gas-condensate-compare-hysys.json` (Peng-Robinson; the C6+ hypothetical has NBP 373.15 K and SG 0.75; 2 % water). Our values for that feed at 35 °C and 11.013 bara are molar enthalpy −85,084 kJ/kmol and mass entropy 8.395 kJ/kg·K. If they differ, the likely cause is the C6+ heat of formation, which `Hypotheticals.cs` takes from the n-alkane series; adjust it, then lock the HYSYS values in as a test (CLAUDE.md: HYSYS parity).
 2. **The Android app still asks for bubble and dew points at every solve** and uses DWSIM's own enthalpy basis. Changing that needs edits in `android/`, which the owner has not allowed. Offer it if asked.
 3. **Browser solves are slower than the phone** because the engine runs interpreted in WebAssembly. Ahead-of-time compilation would help but makes the download much larger (not done).
-4. **Not yet in the web app**: dynamics and PID, spreadsheet and scenarios, McCabe-Thiele, fluid data tools, reactions and reactor editors, performance curves, pipe sections.
+4. **Not yet in the web app**: spreadsheet and scenarios (Web 1.10, next), McCabe-Thiele, fluid data tools, reactions and reactor editors, performance curves, pipe sections.
 5. **A results export (CSV/Excel) stays in °C, bara and SI by design**; documents and tables follow the user's unit set.
 6. Optional: re-record the getting-started video's distillation scene with a liquid stream; an Arabic version of the video.

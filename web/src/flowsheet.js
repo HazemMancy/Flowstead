@@ -14,7 +14,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools } = await import('./core/flowstead-core.mjs');
 const fluids = Fluids.getInstance();
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
@@ -999,7 +999,7 @@ $('unitGrid').addEventListener('change', (e) => {
 
 // ---------- tools (D112) ----------
 const tools = initTools({
-  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Fluids: fluids, engine, enthalpyBasis,
+  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
   project: () => project, commit: (json, message) => commit(json, message), toast,
   ready: () => engine.ready,
 });
@@ -1033,5 +1033,5 @@ renderGroups(); renderPalette();
 load();
 resize();
 view.fit(cssW, cssH); draw();
-window.flowsteadFlowsheet = { core, view, get project() { return project; } }; // for the browser tests
+window.flowsteadFlowsheet = { core, view, tools, get project() { return project; } }; // for the browser tests
 window.flowsheetReady = true;

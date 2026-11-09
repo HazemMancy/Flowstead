@@ -11,7 +11,7 @@ import { enterToNext } from './forms.js';
  * Returns {streamAnalysis(container, id), openTools(tab), blackOilSection(container), hypotheticalSection(container)}.
  */
 export function initTools(app) {
-  const { $, Tools, Safety, Fluids, engine } = app;
+  const { $, Tools, Safety, Fluids, Dyn, engine } = app;
   const solveArgs = () => { const s = app.project().solve; return [s ? JSON.stringify(s.result) : null, s?.modelHash ?? '']; };
   const err = (text) => `<p class="rp-note error">${esc(text)}</p>`;
   const busy = (text) => `<p class="rp-note busy">${esc(text)}</p>`;
@@ -28,6 +28,8 @@ export function initTools(app) {
       // The optimiser solves the flowsheet many times: bubble and dew points are only worth their flashes if it uses one (D119).
       if (req.method === 'optimise' && req.params?.flowsheet && !/(bubble|dew)Point/.test(JSON.stringify(req.params))) req.params.flowsheet.saturationFor = [];
       if (req.method === 'optimise' && req.params?.flowsheet) req.params.flowsheet.enthalpyBasis = app.enthalpyBasis?.();
+      // A dynamic run starts from a steady solve: it needs no bubble or dew points either.
+      if (req.method === 'dynamics' && req.params?.flowsheet) req.params.flowsheet.saturationFor = [];
       const { result, ms } = await engine.call(req.method, req.params);
       out.innerHTML = renderReport(JSON.parse(report(result))) + `<p class="meta">Calculated by DWSIM in ${(ms / 1000).toFixed(1)} s.</p>`;
       return result;
@@ -113,6 +115,8 @@ export function initTools(app) {
     const body = $('toolsBody');
     if (tab === 'case') caseStudy(body);
     else if (tab === 'opt') optimiser(body);
+    else if (tab === 'dyn') dynamicsTool(body);
+    else if (tab === 'pid') pidTool(body);
     else safety(body, tab);
   }
   const catalogue = () => JSON.parse(Tools.catalogue(app.project().flowsheet));
@@ -405,5 +409,143 @@ export function initTools(app) {
     container.querySelectorAll('[data-hy-edit]').forEach((b) => { b.onclick = () => { hypoEditing = b.dataset.hyEdit; hypotheticalSection(container, onChange); }; });
   }
 
-  return { streamAnalysis, openTools, blackOilSection, hypotheticalSection };
+  // ---------- dynamics (D125): the app's DynamicsSheet ----------
+  // The setup lives in the flowsheet (not in the model hash); the last run is kept here with what it was run for, so a
+  // change after it marks it out of date, as the app does.
+  let dynRun = null; // {key, html}
+  /** Draws quantity fields (value and unit) and choices from the core's form items. */
+  function qField(it, i, prefix) {
+    const u = it.units.find((x) => x.id === it.unit) ?? it.units[0];
+    return `<div class="field"><label for="${prefix}${i}">${esc(it.label)}</label><div class="row"><input type="text" inputmode="decimal" id="${prefix}${i}" data-i="${i}" value="${esc(u.text)}" placeholder="${esc(it.hint ?? '—')}"/>
+      <select data-i="${i}" data-unit="1" aria-label="${esc(it.label)} unit">${it.units.map((x) => `<option value="${esc(x.id)}"${x.id === u.id ? ' selected' : ''}>${esc(x.symbol)}</option>`).join('')}</select></div></div>`;
+  }
+  const dynApply = (action, redraw) => {
+    const r = JSON.parse(Dyn.apply(app.project().flowsheet, JSON.stringify(action)));
+    if (r.error) { app.toast(r.error); return redraw(); }
+    app.commit(JSON.stringify(r.flowsheet), 'Dynamics updated');
+    redraw();
+  };
+  const ev = { time: '', objectId: '', key: '', value: '', unit: '', timeUnit: '' };
+  function dynamicsTool(body) {
+    const redraw = () => dynamicsTool(body);
+    const f = JSON.parse(Dyn.form(app.project().flowsheet));
+    ev.timeUnit ||= f.timeUnit;
+    const o = f.eventObjects.find((x) => x.id === ev.objectId);
+    const k = o?.keys.find((x) => x.key === ev.key);
+    if (k && !k.mode && !k.units.some((u) => u.id === ev.unit)) ev.unit = k.unit;
+    body.innerHTML = `<p class="fs-note">Runs the flowsheet through time from its steady state, as HYSYS's dynamics: separators hold liquid and gas, valves pass what the pressures drive through them, controllers act as PIDs, and events change things at set times.</p>
+      ${f.problem ? `<p class="fs-note warn" id="dyn_problem">${esc(f.problem)}</p>` : ''}
+      <div id="dyn_form">${f.items.map((it, i) => {
+        if (it.kind === 'label') return `<h3>${esc(it.text)}</h3>`;
+        if (it.kind === 'sub') return `<p class="sf-sub"><b>${esc(it.text)}</b></p>`;
+        if (it.kind === 'q') return qField(it, i, 'dyn_');
+        if (it.kind === 'action') return `<div class="field"><label for="dyn_${i}">${esc(it.label)}</label><select id="dyn_${i}" data-i="${i}">${opts(it.options, it.value)}</select></div>`;
+        return '';
+      }).join('')}</div>
+      <h3>Events</h3>
+      <ul class="dyn-events">${f.events.map((e, i) => `<li>${esc(e.text)} <button type="button" class="btn btn-sm" data-rmev="${i}" aria-label="Remove event ${i + 1}">Remove</button></li>`).join('') || '<li class="fs-note">None: the run holds the steady state unless something changes.</li>'}</ul>
+      <div class="field"><label for="dyn_evt">At time</label><div class="row"><input type="text" inputmode="decimal" id="dyn_evt" value="${esc(ev.time)}"/><select id="dyn_evtu" aria-label="Time unit">${f.timeUnits.map((u) => `<option value="${esc(u.id)}"${u.id === ev.timeUnit ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('')}</select></div></div>
+      <div class="field"><label for="dyn_evo">Object</label><select id="dyn_evo">${opts(f.eventObjects, ev.objectId, 'Choose…')}</select></div>
+      ${o ? `<div class="field"><label for="dyn_evk">Change</label><select id="dyn_evk">${opts(o.keys.map((x) => ({ id: x.key, label: x.label })), ev.key, 'Choose…')}</select></div>` : ''}
+      ${k ? (k.mode ? `<div class="field"><label for="dyn_evv">To</label><select id="dyn_evv">${opts([{ id: '1', label: 'Automatic' }, { id: '0', label: 'Manual' }], ev.value, 'Choose…')}</select></div>`
+        : `<div class="field"><label for="dyn_evv">To</label><div class="row"><input type="text" inputmode="decimal" id="dyn_evv" value="${esc(ev.value)}"/><select id="dyn_evvu" aria-label="Unit">${k.units.map((u) => `<option value="${esc(u.id)}"${u.id === ev.unit ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('')}</select></div></div>`) : ''}
+      <div class="actions"><button type="button" class="btn btn-sm" id="dyn_addev">Add event</button></div>
+      <div class="actions"><button type="button" class="btn btn-primary btn-sm" id="dyn_run"${f.problem ? ' disabled' : ''}>Run</button></div>
+      <div id="dyn_out" aria-live="polite"></div>`;
+    const out = body.querySelector('#dyn_out');
+    if (dynRun) out.innerHTML = (dynRun.key !== Dyn.key(app.project().flowsheet) ? '<p class="rp-note warn stale">⚠ Out of date: the flowsheet or the setup changed after this run. Run again.</p>' : '') + dynRun.html;
+    const form = body.querySelector('#dyn_form');
+    form.onchange = (e) => {
+      const el = e.target, it = f.items[Number(el.dataset.i)]; if (!it) return;
+      if (it.kind === 'action') return dynApply({ op: 'action', id: it.id, value: el.value }, redraw);
+      const input = el.closest('.row').querySelector('input'), sel = el.closest('.row').querySelector('select');
+      if (el.dataset.unit) { const u = it.units.find((x) => x.id === sel.value); it.unit = sel.value; if (u?.text) input.value = u.text; return; }
+      dynApply({ op: 'param', id: it.id, key: it.key, value: input.value, unit: sel.value }, redraw);
+    };
+    form.onkeydown = (e) => enterToNext(e, form, true);
+    body.onchange = (e) => {
+      const id = e.target.id;
+      if (id === 'dyn_evt') ev.time = e.target.value;
+      else if (id === 'dyn_evtu') ev.timeUnit = e.target.value;
+      else if (id === 'dyn_evo') { ev.objectId = e.target.value; ev.key = ''; ev.value = ''; redraw(); }
+      else if (id === 'dyn_evk') { ev.key = e.target.value; ev.value = ''; ev.unit = ''; redraw(); }
+      else if (id === 'dyn_evv') ev.value = e.target.value;
+      else if (id === 'dyn_evvu') ev.unit = e.target.value;
+    };
+    body.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.rmev) return dynApply({ op: 'removeEvent', index: Number(b.dataset.rmev) }, redraw);
+      if (b.id === 'dyn_addev') {
+        const r = JSON.parse(Dyn.apply(app.project().flowsheet, JSON.stringify({ op: 'addEvent', ...ev })));
+        if (r.error) return app.toast(r.error);
+        app.commit(JSON.stringify(r.flowsheet), 'Event added');
+        Object.assign(ev, { time: '', value: '' });
+        return redraw();
+      }
+      if (b.id === 'dyn_run') {
+        const fsj = app.project().flowsheet, key = Dyn.key(fsj);
+        b.disabled = true;
+        const res = await run(JSON.parse(Dyn.request(fsj)), out, 'Running the dynamic simulation', (result) => Dyn.report(fsj, JSON.stringify(result)));
+        if (res) dynRun = { key, html: out.innerHTML, result: res };
+        b.disabled = false;
+      }
+    };
+  }
+
+  // ---------- PID tuning from an open-loop step test (D125): the app's PidTool ----------
+  const pid = { id: '', step: '10', duration: '1800', last: null };
+  function pidTool(body) {
+    const f = JSON.parse(Dyn.form(app.project().flowsheet));
+    if (!f.controllers.some((c) => c.id === pid.id)) pid.id = f.controllers[0]?.id ?? '';
+    body.innerHTML = `<p class="fs-note">An open-loop step test in the dynamic run, as HYSYS's and DWSIM's autotuners: the controller goes to manual and its output steps; a first-order-plus-dead-time model is fitted to the response (Smith's two-point method) and four rules give the settings. The setup (volumes, valves, events) is the one in Dynamics.</p>
+      ${f.controllers.length ? `
+      <div class="field"><label for="pid_c">Controller</label><select id="pid_c">${opts(f.controllers, pid.id)}</select></div>
+      <div class="row2"><div class="field"><label for="pid_step">Output step, %</label><input type="text" inputmode="decimal" id="pid_step" value="${esc(pid.step)}"/></div>
+        <div class="field"><label for="pid_dur">Run for, s</label><input type="text" inputmode="decimal" id="pid_dur" value="${esc(pid.duration)}"/></div></div>
+      <div class="actions"><button type="button" class="btn btn-primary btn-sm" id="pid_run">Run the step test</button></div>` : '<p class="fs-note warn">Add a controller (PIC, LIC…) to the flowsheet first.</p>'}
+      <div id="pid_out" aria-live="polite"></div>`;
+    const out = body.querySelector('#pid_out');
+    const show = (t) => {
+      out.innerHTML = renderReport(t.report) + t.settings.map((s, i) => `<button type="button" class="btn btn-sm" data-use="${i}">Use ${esc(s.rule)} in ${esc(f.controllers.find((c) => c.id === t.id)?.label ?? '')}</button>`).join(' ');
+    };
+    if (pid.last && pid.last.id === pid.id) show(pid.last);
+    body.onchange = (e) => {
+      if (e.target.id === 'pid_c') { pid.id = e.target.value; pidTool(body); }
+      if (e.target.id === 'pid_step') pid.step = e.target.value;
+      if (e.target.id === 'pid_dur') pid.duration = e.target.value;
+    };
+    body.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.use && pid.last) {
+        const s = pid.last.settings[Number(b.dataset.use)];
+        const r = JSON.parse(Dyn.applyTuning(app.project().flowsheet, pid.last.id, s.gain, s.integralTime, s.derivativeTime, s.action));
+        if (r.error) return app.toast(r.error);
+        app.commit(JSON.stringify(r.flowsheet), `${s.rule} settings put in the controller's tuning (Dynamics)`);
+        return app.toast(`${s.rule}: Kc ${s.gain.toPrecision(3)}, Ti ${s.integralTime.toFixed(1)} s${s.derivativeTime > 0 ? `, Td ${s.derivativeTime.toFixed(1)} s` : ''} are now the controller's tuning in Dynamics.`, { info: true });
+      }
+      if (b.id !== 'pid_run') return;
+      const fsj = app.project().flowsheet, id = pid.id;
+      const first = JSON.parse(Dyn.stepTestStart(fsj, id));
+      if (first.error) { out.innerHTML = err(first.error); return; }
+      b.disabled = true;
+      try {
+        await app.ready();
+        out.innerHTML = busy('Reading the controller\'s output at the steady state…');
+        first.params.flowsheet.saturationFor = [];
+        const r0 = await engine.call(first.method, first.params);
+        const req = JSON.parse(Dyn.stepTestRun(fsj, id, Number(String(pid.step).replace(',', '.')), Number(String(pid.duration).replace(',', '.')), JSON.stringify(r0.result)));
+        if (req.error) { out.innerHTML = err(req.error); return; }
+        out.innerHTML = busy('Running the step test…');
+        req.params.flowsheet.saturationFor = [];
+        const r1 = await engine.call(req.method, req.params);
+        const t = JSON.parse(Dyn.stepTestReport(fsj, id, req.stepTime, req.step, JSON.stringify(r1.result)));
+        if (t.error) { out.innerHTML = err(t.error); return; }
+        pid.last = { ...t, id };
+        show(pid.last);
+        out.insertAdjacentHTML('beforeend', `<p class="meta">Calculated by DWSIM in ${((r0.ms + r1.ms) / 1000).toFixed(1)} s.</p>`);
+      } catch (x) { out.innerHTML = err(`Not calculated: ${x.message}`); } finally { b.disabled = false; }
+    };
+  }
+
+  return { streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
 }
