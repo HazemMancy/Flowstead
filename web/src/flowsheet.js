@@ -183,8 +183,10 @@ function endPointer(e, cancelled) {
   if (g.mode === 'pan') return;
   if (g.mode === 'box') { view.endBox(g.multi || selectMode); return selectionChanged(); }
   const many = g.mode === 'move' && view.selectionCount > 1;
+  const into = g.mode === 'move' ? view.dropTarget : '';
   const r = view.endDrag(x, y);
-  if (!applyEdit(r, g.mode === 'wire' ? 'Connected' : g.mode === 'move' ? (many ? `Moved ${view.selectionCount} objects` : 'Moved') : null)) draw();
+  const message = g.mode === 'wire' ? 'Connected' : g.mode === 'move' ? (into ? `Moved ${many ? `${view.selectionCount} objects` : 'it'} into ${into}` : many ? `Moved ${view.selectionCount} objects` : 'Moved') : null;
+  if (applyEdit(r, message)) { if (into) select(null); } else draw();
 }
 canvas.addEventListener('pointerup', (e) => endPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => endPointer(e, true));
@@ -236,6 +238,7 @@ document.addEventListener('keydown', (e) => {
   else if (mod && k === 'y') { e.preventDefault(); step(redo, undo); }
   else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'c' && view.selectionCount && !String(window.getSelection?.() ?? '')) { e.preventDefault(); copySelection(); }
   else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'v' && clipboard()) { e.preventDefault(); pasteClip(); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'd' && blockSel && !view.selectionCount) { e.preventDefault(); duplicateBlock(blockSel); }
   else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'd' && view.selectionCount) { e.preventDefault(); duplicateSelection(); }
   else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'a' && objects().length) { e.preventDefault(); view.selectAll(); selectionChanged(); }
 });
@@ -352,6 +355,10 @@ function renderSelection() {
   const n = view.selectionCount;
   $('selBar').hidden = selectMode ? n < 1 : n < 2;
   $('selCount').textContent = `${n} selected`;
+  // Move into a sub-flowsheet on this flowsheet (the same as dragging the selection onto it).
+  const blocks = JSON.parse(SubTools.blocks(project.flowsheet, view.currentLevel ?? ''));
+  $('selInto').hidden = !n || !blocks.length;
+  $('selInto').innerHTML = `<option value="">Move into…</option>${blocks.map((b) => `<option value="${esc(b.id)}">${esc(b.tag)}</option>`).join('')}`;
   $('copySelBtn').disabled = !n;
   $('pasteBtn').disabled = !clipboard();
 }
@@ -700,6 +707,12 @@ $('copySelBtn').addEventListener('click', copySelection);
 $('pasteBtn').addEventListener('click', () => pasteClip());
 $('selCopy').addEventListener('click', copySelection);
 $('selDup').addEventListener('click', duplicateSelection);
+$('selInto').addEventListener('change', (e) => {
+  const id = e.target.value; if (!id) return;
+  const tag = JSON.parse(SubTools.info(project.flowsheet, id)).tag, n = view.selectionCount;
+  if (subEdit(SubTools.moveInto(project.flowsheet, view.selectedIds(), id), `Moved ${n} object${n === 1 ? '' : 's'} into ${tag}`)) select(null);
+  else renderSelection();
+});
 $('selDelete').addEventListener('click', removeSelected);
 
 // ---------- sub-flowsheets (D132): blocks that hold a flowsheet, as HYSYS's ----------
@@ -722,6 +735,14 @@ function renderLevel() {
 }
 $('levelBar').addEventListener('click', (e) => { const b = e.target.closest('[data-level]'); if (b) goLevel(b.dataset.level); });
 const lastBlockTap = { id: null, at: 0 };
+/** A copy of a sub-flowsheet with everything inside it, beside it; it is selected, and the notes are shown. */
+function duplicateBlock(id) {
+  const tag = JSON.parse(SubTools.info(project.flowsheet, id)).tag;
+  const r = subEdit(SubTools.duplicate(project.flowsheet, id), `Duplicated ${tag}`);
+  if (!r) return;
+  blockSel = r.id; view.selectedId = null; selectionChanged();
+  if (r.notes.length) toast(r.notes.join(' · '));
+}
 function subEdit(json, message) {
   const r = JSON.parse(json);
   if (r.error) { toast(r.error); return null; }
@@ -772,6 +793,7 @@ function renderBlock() {
     <div class="field"><label for="blockTag">Name</label><input id="blockTag" value="${esc(b.tag)}" autocomplete="off"></div>
     <div class="fs-row" style="display:flex;gap:.35rem;flex-wrap:wrap;margin:.4rem 0">
       <button type="button" class="btn btn-sm btn-primary" id="blockOpen">Open</button>
+      <button type="button" class="btn btn-sm" id="blockDup" title="Copy it with everything inside, beside it (Ctrl+D)">Duplicate</button>
       <button type="button" class="btn btn-sm" id="blockUngroup" title="Put its contents back on this flowsheet">Ungroup</button>
       <button type="button" class="btn btn-sm" id="blockDelete">Delete</button></div>
     <div class="field"><label for="blockFluid">Fluid package</label><select id="blockFluid">
@@ -781,7 +803,7 @@ function renderBlock() {
       <p class="fs-note">Solved on its own package: each boundary stream crosses as a feed defined by the engine’s result on the other side, by its transfer basis (T–P: temperature and pressure; P–VF: pressure and vapour fraction), with its molar flow and composition, as HYSYS’s.</p>` : '<p class="fs-note">On the parent’s package it solves with the parent as one flowsheet: the same numbers as without the block.</p>'}
     <h3 style="font-size:.85rem;margin:.6rem 0 .2rem">Streams in and out</h3>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">${adder(b.canIn, 'In', 'Add a stream in')}${adder(b.canOut, 'Out', 'Add a stream out')}</div>
-    <p class="fs-note">Or drag a stream onto the block. Inside, each one is a stream to join to the equipment there.</p>
+    <p class="fs-note">Or drag a stream onto the block. Inside, each one is a stream to join to the equipment there. Drag a unit, or a selection, onto the block to move it inside.</p>
     ${b.ports.length ? `<table class="fs-ports"><thead><tr><th>Inside</th><th></th><th>Matched to</th><th>Transfer</th><th>Values</th><th></th></tr></thead><tbody>${b.ports.map(port).join('')}</tbody></table>`
       : ''}`;
   if (keep && $(keep)) $(keep).focus();
@@ -791,6 +813,7 @@ $('blockInsp').addEventListener('click', (e) => {
   if (id === 'blockClose') { blockSel = null; return selectionChanged(); }
   if (id === 'blockOpen') return goLevel(blockSel);
   if (id === 'blockDelete') return deleteBlock(blockSel);
+  if (id === 'blockDup') return duplicateBlock(blockSel);
   if (id === 'blockUngroup') { const tag = JSON.parse(SubTools.info(project.flowsheet, blockSel)).tag; if (subEdit(SubTools.ungroup(project.flowsheet, blockSel), `Ungrouped ${tag}`)) { blockSel = null; selectionChanged(); } return; }
   if (id === 'blockBasis') return openBasis(blockSel);
   const un = e.target.closest('[data-unlink]')?.dataset.unlink;

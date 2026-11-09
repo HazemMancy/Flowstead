@@ -111,6 +111,9 @@ data class FlowsheetUi(
     val blocks: List<BlockView> = emptyList(),
     val selectedBlock: String? = null,
     val streamNotes: Map<String, String> = emptyMap(),
+    /** The Select tool (D139): taps build a selection of several objects, to move, group or drag into a block together. */
+    val selecting: Boolean = false,
+    val multiSelected: Set<String> = emptySet(),
     val status: Map<String, SpecStatus>,
     val problems: List<Pair<String?, String>>,
     /** Problems that stop any solve (no package, no components…); the rest only leave their objects out (D83). */
@@ -221,6 +224,8 @@ class FlowsheetViewModel @Inject constructor(
 
     private data class Local(
         val level: String? = null,
+        val selecting: Boolean = false,
+        val multi: Set<String> = emptySet(),
         val selectedBlock: String? = null,
         val selectedId: String? = null,
         val editingId: String? = null,
@@ -285,6 +290,8 @@ class FlowsheetViewModel @Inject constructor(
                 blocks = blockViews(fs, l.level?.takeIf { Subflowsheets.of(fs, it) != null }),
                 selectedBlock = l.selectedBlock?.takeIf { Subflowsheets.of(fs, it) != null },
                 streamNotes = streamNotes(fs, l.level),
+                selecting = l.selecting,
+                multiSelected = l.multi.filter { id -> fs.objects.any { it.id == id && it.parent == l.level } }.toSet(),
                 status = Readiness.statusOf(fs),
                 problems = Specification.problems(fs),
                 blocking = Specification.blocking(fs),
@@ -350,7 +357,59 @@ class FlowsheetViewModel @Inject constructor(
     }
 
     /** Opens a sub-flowsheet, or (null) the main flowsheet. */
-    fun openLevel(id: String?) = local.update { it.copy(level = id, selectedBlock = null, selectedId = null, editingId = null) }
+    fun openLevel(id: String?) = local.update { it.copy(level = id, selectedBlock = null, selectedId = null, editingId = null, multi = emptySet()) }
+
+    // ---- several objects at once (D139): the Select tool, then move, group, delete or drop them into a block
+
+    fun setSelecting(on: Boolean) = local.update { it.copy(selecting = on, multi = if (on) it.multi else emptySet(), selectedId = null, editingId = null) }
+    /** A tap on an object: with the Select tool it joins or leaves the selection, else its editor opens. */
+    fun tapObject(id: String?) {
+        if (local.value.selecting) { if (id != null) toggleSelected(id) } else if (id != null) openEditor(id) else select(null)
+    }
+    fun toggleSelected(id: String) = local.update { it.copy(multi = if (id in it.multi) it.multi - id else it.multi + id, selectedBlock = null) }
+    fun clearSelection() = local.update { it.copy(multi = emptySet()) }
+
+    /** Moves every object in [ids] by ([dx], [dy]), keeping their layout. */
+    fun moveMany(ids: Collection<String>, dx: Double, dy: Double) = edit { fs ->
+        ids.fold(fs) { acc, id -> acc.objects.firstOrNull { it.id == id }?.let { o -> FlowsheetEditing.move(acc, id, o.x + dx, o.y + dy) } ?: acc }
+    }
+
+    /** Moves [ids] into sub-flowsheet [blockId] (drag and drop, or Move into): streams that joined them to the rest cross its edge. */
+    fun moveIntoBlock(ids: Collection<String>, blockId: String) {
+        val fs = current ?: return
+        val tag = Subflowsheets.of(fs, blockId)?.tag ?: return
+        val before = current
+        edit { Subflowsheets.moveInto(it, ids, blockId) }
+        if (current !== before) {
+            local.update { it.copy(multi = emptySet(), selectedId = null, editingId = null) }
+            _messages.trySend("Moved ${if (ids.size == 1) fs.objects.firstOrNull { it.id == ids.first() }?.tag ?: "it" else "${ids.size} objects"} into $tag")
+        }
+    }
+
+    /** Puts the selected objects in a new sub-flowsheet where they are. */
+    fun groupSelected() {
+        val ids = local.value.multi.toList().ifEmpty { return }
+        edit { fs ->
+            val chosen = fs.objects.filter { it.id in ids }
+            val (next, b) = Subflowsheets.group(fs, ids, chosen.map { it.x }.average(), chosen.map { it.y }.average())
+            local.update { it.copy(selectedBlock = b.id, multi = emptySet(), selectedId = null, editingId = null) }
+            next
+        }
+    }
+
+    fun deleteSelected() {
+        val ids = local.value.multi.toList().ifEmpty { return }
+        edit { fs -> ids.fold(fs) { acc, id -> if (acc.objects.any { it.id == id }) FlowsheetEditing.delete(acc, id) else acc } }
+        local.update { it.copy(multi = emptySet()) }
+    }
+
+    /** A copy of sub-flowsheet [id] with everything inside it, beside it; selected, with what the user must know. */
+    fun duplicateBlock(id: String) = edit { fs ->
+        val (next, b, notes) = Subflowsheets.duplicate(fs, id)
+        local.update { it.copy(selectedBlock = b.id, selectedId = null, editingId = null) }
+        _messages.trySend((listOf("Duplicated ${Subflowsheets.of(fs, id)?.tag} as ${b.tag}") + notes).joinToString(" · "))
+        next
+    }
 
     private var lastBlockTap: Pair<String, Long> = "" to 0L
     /** A tap selects a block; a second tap on it within a moment opens it. */
@@ -398,7 +457,8 @@ class FlowsheetViewModel @Inject constructor(
             canIn && canOut -> (fs.objects.first { it.id == streamId }.x < b.x)
             canIn -> true
             canOut -> false
-            else -> throw EditRejected("$tag is joined at both ends: only a stream with a free end can go into or out of ${b.tag}")
+            // A unit, or a stream joined at both ends: it goes into the block (D139).
+            else -> return@edit Subflowsheets.moveInto(fs, listOf(streamId), blockId).also { _messages.trySend("Moved $tag into ${b.tag}") }
         }
         Subflowsheets.connect(fs, blockId, streamId, feed).first
     }

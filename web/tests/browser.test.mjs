@@ -1165,6 +1165,84 @@ try {
     await p.close();
   }
 
+  // ---------- 4o. dragging objects into a sub-flowsheet, and duplicating one (D139) ----------
+  // Benchmark 06's train with an empty block: K-100 dragged onto it with a mouse, then DISCHARGE and E-100 together with
+  // a finger. The case flattens to the train and solves to the flat train's numbers (every result of every stream and
+  // unit, the reference the engine gave without the block). The block's copy has the same contents; one undo removes it.
+  for (const touch of [false, true]) {
+    const ctx = await browser.newContext(touch ? { viewport: { width: 1024, height: 768 }, hasTouch: true } : { viewport: { width: 1280, height: 900 } });
+    const p = await ctx.newPage();
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const b06 = JSON.parse(fs.readFileSync(path.join(benchDir, '06-compressor-aftercooler', 'input.json'), 'utf8')).flowsheet;
+    const open = async (f, name) => {
+      await p.setInputFiles('#openFile', { name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(f)) });
+      await p.waitForFunction((n) => window.flowsteadFlowsheet.project.name === n, name, { timeout: 30_000 });
+    };
+    const solveNow = async () => {
+      await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+      const before = await p.evaluate(() => window.flowsteadFlowsheet.project.solve?.at ?? 0);
+      await p.click('#solveBtn');
+      await p.waitForFunction((b) => (window.flowsteadFlowsheet.project.solve?.at ?? 0) > b, before, { timeout: 600_000 });
+      return p.evaluate(() => window.flowsteadFlowsheet.project.solve.result);
+    };
+    await open(b06, 'flat');
+    const flat = await solveNow();
+    const units = b06.objects.filter((o) => o.type !== 'material_stream');
+    const k = units.find((o) => o.type === 'compressor'), e = units.find((o) => o.type === 'cooler' || o.type === 'heater');
+    const dis = b06.connections.find((c) => c.fromObject === k.id).toObject;
+    const bx = (k.x + e.x) / 2, by = Math.max(...b06.objects.map((o) => o.y)) + 240;
+    await open({ ...b06, subflowsheets: [{ id: 'blk', tag: 'SUB-1', x: bx, y: by }] }, 'blocked');
+    const scr = (x, y) => p.evaluate(([x, y]) => { const w = window.flowsteadFlowsheet, r = document.getElementById('canvas').getBoundingClientRect(); return [r.left + x * w.view.zoom + w.view.offsetX, r.top + y * w.view.zoom + w.view.offsetY]; }, [x, y]);
+    const drag = async (from, to) => {
+      if (touch) {
+        const cdp = await ctx.newCDPSession(p);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from[0], y: from[1] }] });
+        for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from[0] + (to[0] - from[0]) * i / 8, y: from[1] + (to[1] - from[1]) * i / 8 }] });
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      } else { await p.mouse.move(...from); await p.mouse.down(); await p.mouse.move(to[0], to[1], { steps: 8 }); await p.mouse.up(); }
+      await p.waitForTimeout(150);
+    };
+    const parent = (id) => p.evaluate((i) => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === i)?.parent ?? null, id);
+    const target = await scr(bx, by);
+    await drag(await scr(k.x, k.y), target);
+    if ((await parent(k.id)) !== 'blk') problems.push(`${k.tag} dragged onto SUB-1 is on ${await parent(k.id)}`);
+    await p.evaluate(([a, b]) => { const v = window.flowsteadFlowsheet.view; v.selectedId = null; v.toggleSelected(a); v.toggleSelected(b); }, [dis, e.id]);
+    await drag(await scr(e.x, e.y), target);
+    for (const id of [dis, e.id]) if ((await parent(id)) !== 'blk') problems.push(`${id} dragged with the selection is on ${await parent(id)}`);
+    const flatTags = await p.evaluate(() => { const w = window.flowsteadFlowsheet, f = JSON.parse(w.SubTools.flatten(w.project.flowsheet)), t = Object.fromEntries(f.objects.map((o) => [o.id, o.tag]));
+      return { tags: f.objects.map((o) => o.tag).sort(), links: f.connections.map((c) => `${t[c.fromObject]}>${t[c.toObject]}`).sort() }; });
+    const t06 = Object.fromEntries(b06.objects.map((o) => [o.id, o.tag]));
+    const want = { tags: b06.objects.map((o) => o.tag).sort(), links: b06.connections.map((c) => `${t06[c.fromObject]}>${t06[c.toObject]}`).sort() };
+    if (JSON.stringify(flatTags) !== JSON.stringify(want)) problems.push(`flattened ${JSON.stringify(flatTags)} for ${JSON.stringify(want)}`);
+    const grouped = await solveNow();
+    let compared = 0, worst = 0;
+    for (const o of b06.objects) for (const [key, v] of Object.entries(flat.objects[o.id]?.properties ?? {})) {
+      const w = grouped.objects[o.id]?.properties?.[key];
+      if (w === undefined) { problems.push(`${o.tag} has no ${key} after the move`); continue; }
+      compared++; worst = Math.max(worst, Math.abs(w - v) / Math.max(Math.abs(v), 1e-9));
+    }
+    if (!(compared > 30 && worst < 1e-9)) problems.push(`moved vs flat: ${compared} values, worst ${worst}`);
+    // Duplicate: the block's panel, then one undo.
+    if (touch) await p.touchscreen.tap(...target); else await p.mouse.click(...target);
+    await p.click('#blockDup');
+    const after = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
+    const copy = after.subflowsheets.find((x) => x.id !== 'blk');
+    const inside = (id) => after.objects.filter((o) => o.parent === id).map((o) => o.type).sort().join();
+    if (!copy || inside(copy.id) !== inside('blk')) problems.push(`duplicate: ${copy?.tag} holds ${inside(copy?.id)}, SUB-1 ${inside('blk')}`);
+    if (new Set(after.objects.map((o) => o.tag.toLowerCase())).size !== after.objects.length) problems.push('duplicate: tags repeat');
+    await p.click('#undoBtn');
+    if ((await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).subflowsheets.length)) !== 1) problems.push('one undo did not take the copy away');
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} into a sub-flowsheet by ${touch ? 'finger' : 'mouse'} (${compared} values against the flat case, worst ${worst.toExponential(1)}; duplicated ${copy?.tag})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await ctx.close();
+  }
+
   // ---------- 4e. bubble and dew points on demand, and HYSYS's enthalpy basis (D119, D120) ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });

@@ -80,6 +80,27 @@ class OnDeviceSubflowsheetTest {
         assertTrue(compared > 50 && worst < 1e-7, "grouped vs flat: $compared values, worst $worst")
     }
 
+    @Test
+    fun unitsDraggedIntoABlockSolveAsTheFlatCase() = runBlocking {
+        assumeTrue("build without the on-device engine", BuildConfig.LOCAL_ENGINE)
+        // Benchmark 07's right-hand units, recycle included, dragged one by one into an empty block (D139).
+        val input = FlowsheetJson.parseToJsonElement(testAssets.open("benchmarks/07-recycle-loop/input.json").bufferedReader().use { it.readText() }).jsonObject
+        val flat = FlowsheetJson.decodeFromJsonElement(Flowsheet.serializer(), input.getValue("flowsheet"))
+        val a = run(flat)
+        val units = flat.objects.filter { !it.type.isStream }.sortedBy { it.x }
+        val (empty, block) = Subflowsheets.add(flat, null, 0.0, 600.0)
+        val f = units.drop(units.size / 2).fold(empty) { acc, u -> Subflowsheets.moveInto(acc, listOf(u.id), block.id) }
+        val b = SubflowsheetSolve.solve(f, run)
+        assertEquals(SolveStatus.Converged, b.status)
+        var worst = 0.0; var compared = 0
+        for ((id, r) in a.objects) for ((k, v) in r.properties) {
+            val w = b.objects[id]?.properties?.get(k) ?: error("moved case has no $k for $id")
+            compared++
+            worst = max(worst, abs(w - v) / max(abs(v), 1e-9))
+        }
+        assertTrue(compared > 50 && worst < 1e-7, "moved vs flat: $compared values, worst $worst")
+    }
+
     // IAPWS-IF97 region 1: h = R T τ γτ, π = p / 16.53 MPa, τ = 1386 K / T.
     private val i1 = intArrayOf(0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 8, 8, 21, 23, 29, 30, 31, 32)
     private val j1 = intArrayOf(-2, -1, 0, 1, 2, 3, 4, 5, -9, -7, -1, 0, 1, 3, -3, 0, 1, 3, 17, -4, 0, 6, -5, -2, 10, -8, -11, -6, -29, -31, -38, -39, -40, -41)

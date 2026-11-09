@@ -131,6 +131,18 @@ object SubTools {
         ok(f) { put("id", b.id) }
     }
 
+    /** Moves [idsJson] (a JSON array of object ids on the block's flowsheet) into [blockId]: {flowsheet} or {error}. */
+    fun moveInto(flowsheetJson: String, idsJson: String, blockId: String): String = edit {
+        val ids = FlowsheetJson.parseToJsonElement(idsJson).jsonArray.map { it.jsonPrimitive.content }
+        ok(Subflowsheets.moveInto(fs(flowsheetJson), ids, blockId))
+    }
+
+    /** A copy of [blockId] and everything inside it, beside it: {flowsheet, id, notes} or {error}. */
+    fun duplicate(flowsheetJson: String, blockId: String): String = edit {
+        val (f, b, notes) = Subflowsheets.duplicate(fs(flowsheetJson), blockId)
+        ok(f) { put("id", b.id); putJsonArray("notes") { notes.forEach { add(JsonPrimitive(it)) } } }
+    }
+
     /** Own package on (a copy of the parent's, to edit) or off (the parent's again). */
     fun setOwnFluid(flowsheetJson: String, blockId: String, own: Boolean): String = edit {
         val f = fs(flowsheetJson)

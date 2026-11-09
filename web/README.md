@@ -36,6 +36,10 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 ## Release notes
 
 **Web 1.14**
+- **Into a sub-flowsheet by drag and drop (D139):** drag an object, or a selection, onto a block (outlined as you
+  drag over it) and it goes inside, with a mouse, a pen or a finger; or choose Move into… on the selection bar. The
+  streams joining it to the rest cross the block's edge, matched, and the case solves to the same numbers.
+- **Duplicate a sub-flowsheet** from its panel (or Ctrl+D): a copy with everything inside, beside it.
 - **Review fixes (D138):** relief and depressuring of a vessel with several feeds take them all; a standing vessel's
   bottom-head volume; a horizontal separator's mist-pad area; the oil–water level's name; near-critical tray sizing;
   pipe fittings named for what their values are (Crane TP-410); a controller back in automatic carries on without a

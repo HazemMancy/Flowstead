@@ -84,7 +84,7 @@
     </aside>
 
     <div class="fs-stage">
-      <canvas id="canvas" tabindex="0" role="application" aria-roledescription="flowsheet" aria-label="Flowsheet canvas. Use the object list to reach objects; Shift and click or Shift and drag selects several; Ctrl+C copies, Ctrl+V pastes, Ctrl+D duplicates, Ctrl+A selects all; Delete removes what is selected, arrow keys move it." aria-describedby="objects"></canvas>
+      <canvas id="canvas" tabindex="0" role="application" aria-roledescription="flowsheet" aria-label="Flowsheet canvas. Use the object list to reach objects; Shift and click or Shift and drag selects several; Ctrl+C copies, Ctrl+V pastes, Ctrl+D duplicates, Ctrl+A selects all; Delete removes what is selected, arrow keys move it; dragging the selection onto a sub-flowsheet moves it inside, also from the Move into list; Ctrl+D on a selected sub-flowsheet duplicates it." aria-describedby="objects"></canvas>
       <nav class="fs-levelbar card" id="levelBar" hidden aria-label="Sub-flowsheets"></nav>
       <aside class="fs-watch card" id="watchPanel" hidden aria-label="Watched results" aria-live="polite"></aside>
       <div class="fs-zoom card" role="group" aria-label="Zoom">
@@ -100,6 +100,7 @@
         <button type="button" class="btn btn-sm" id="selCopy" title="Copy (Ctrl+C)">Copy</button>
         <button type="button" class="btn btn-sm" id="selDup" title="Copy and paste beside them (Ctrl+D)">Duplicate</button>
         <button type="button" class="btn btn-sm" id="selGroup" title="Put the selected objects in a new sub-flowsheet">Sub-flowsheet</button>
+        <select id="selInto" class="btn btn-sm" aria-label="Move the selected objects into a sub-flowsheet" title="Move into a sub-flowsheet (or drag them onto it)" hidden></select>
         <button type="button" class="btn btn-sm" id="selDelete" title="Delete">Delete</button>
         <button type="button" class="icon-btn" id="selClear" aria-label="Clear the selection" title="Clear the selection (Esc)">✕</button>
       </div>

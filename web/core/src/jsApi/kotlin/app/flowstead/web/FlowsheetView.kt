@@ -134,6 +134,10 @@ class FlowsheetView {
     private var level: String? = null
     /** A sub-flowsheet block being moved: its id and where its centre is. */
     private var blockDrag: Pair<String, Offset>? = null
+    /** The block a move would drop the dragged objects into (drawn highlighted), or null. */
+    private var dropBlock: String? = null
+    /** The tag of the block a move is over (it goes into it when let go there), or "". */
+    val dropTarget: String get() = dropBlock?.let { Subflowsheets.of(saved, it)?.tag } ?: ""
     /** Where each property table was last drawn (screen), for hit-testing. */
     private val tableBoxes = mutableMapOf<String, Rect>()
 
@@ -284,6 +288,7 @@ class FlowsheetView {
     fun dragTo(screenX: Double, screenY: Double) {
         val world = vp.toWorld(Offset(screenX.toFloat(), screenY.toFloat()), 1f)
         dragging?.let { (id, _) -> fs.obj(id)?.let { dragging = id to (CanvasGeometry.center(it) + (world - dragStart)) } }
+        dropBlock = if (dragging != null) blockAt(world)?.id else null
         if (groupDelta != null) groupDelta = world - dragStart
         blockDrag?.let { (id, _) -> Subflowsheets.of(saved, id)?.let { b -> blockDrag = id to (Offset(b.x.toFloat(), b.y.toFloat()) + (world - dragStart)) } }
         wire?.let { (a, _) -> wire = a to world }
@@ -301,7 +306,7 @@ class FlowsheetView {
         val table = draggingTable
         val group = groupDelta != null
         val blockMoved = blockDrag
-        dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null; blockDrag = null
+        dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null; blockDrag = null; dropBlock = null
         return edit {
             when {
                 blockMoved != null -> {
@@ -311,6 +316,10 @@ class FlowsheetView {
                     if (p.x.toDouble() == b.x && p.y.toDouble() == b.y) null else Subflowsheets.move(saved, b.id, p.x.toDouble(), p.y.toDouble())
                 }
                 table != null -> FlowsheetEditing.moveTable(saved, table.first, table.second.x.toDouble(), table.second.y.toDouble())
+                // Dropped on a sub-flowsheet: what was dragged goes into it, as HYSYS's move into a sub-flowsheet, except a
+                // single stream with a free end, which becomes one of its streams in or out (below).
+                moved != null && blockAt(world) != null && (group || !freeStream(moved.first, blockAt(world)!!.id)) ->
+                    Subflowsheets.moveInto(saved, if (group) selection.toList() else listOf(moved.first), blockAt(world)!!.id)
                 moved != null && group -> {
                     // The grabbed object goes on the grid and the rest of the group moves by as much, keeping its layout.
                     val o = fs.obj(moved.first) ?: return@edit null
@@ -344,7 +353,11 @@ class FlowsheetView {
         }
     }
 
-    fun cancelDrag() { dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null; box = null; blockDrag = null }
+    fun cancelDrag() { dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null; box = null; blockDrag = null; dropBlock = null }
+
+    /** A material stream with a free end that could be one of [blockId]'s streams in or out. */
+    private fun freeStream(id: String, blockId: String) = fs.obj(id)?.type == ObjectType.MaterialStream &&
+        (Subflowsheets.connectable(saved, blockId, true).any { it.id == id } || Subflowsheets.connectable(saved, blockId, false).any { it.id == id })
 
     // ---------- selection of several objects, copy and paste (D124)
 
@@ -658,6 +671,8 @@ class FlowsheetView {
             val r = blockRect(c.x.toDouble(), c.y.toDouble())
             drawRoundRect(palette.fill, r.topLeft, r.size, CornerRadius(8f))
             drawRoundRect(if (b.fluid != null) colors.secondary else palette.stroke, r.topLeft, r.size, CornerRadius(8f), style = Stroke(2f))
+            // The drop target while objects are dragged over it.
+            if (b.id == dropBlock) drawRoundRect(colors.secondary, Offset(r.left - 4f, r.top - 4f), Size(r.width + 8f, r.height + 8f), CornerRadius(10f), style = Stroke(3f))
             drawRoundRect(palette.stroke, Offset(r.left + 5f, r.top + 5f), Size(r.width - 10f, r.height - 10f), CornerRadius(5f), style = Stroke(0.8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 3f))))
             for (p in b.ports) {
                 val outer = p.outer?.let { fs.obj(it) } ?: continue
