@@ -204,6 +204,7 @@ _Last updated: 2026-11-09_
 - **Web 1.14 (D137): re-solving only what changed works in the browser** — the downstream recalculation no longer blocks on a task (the browser cannot); a spec change re-solves what is downstream of it, as on the phone.
 - **Full review, part 1 (D138)** — sizing, relief, depressuring, curves, columns, McCabe–Thiele and PID tuning re-derived; fixed a standing vessel's head volume, multi-feed relief loads, a horizontal separator's mist-pad area, the oil–water level's name, near-critical tray sizing, and fitting names.
 - **Into a sub-flowsheet by drag and drop; duplicate a sub-flowsheet (D139)** — one object or a selection dropped on a block (or Move into…) goes inside it, streams crossing its edge matched; touch and mouse on the web, a Select tool on the phone; Duplicate copies a block with everything inside.
+- **App 3.4.1 and Web 1.14**: the review fixes (D137, D138) and drag-into and duplicate for sub-flowsheets (D139).
 - **Web 1.11 (D130):** the thermodynamics tools in Basis: binary T–x–y/P–x–y with liquid–liquid branches, ternary with tie lines, true critical point, package comparison, property charts. Checked against NIST boiling and critical points and IAPWS-95 water density.
 
 ## Next
