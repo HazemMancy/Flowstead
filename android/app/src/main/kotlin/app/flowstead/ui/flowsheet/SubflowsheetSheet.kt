@@ -78,7 +78,7 @@ fun SubflowsheetSheet(
             OutlinedTextField(
                 value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("block_name"),
-                trailingIcon = if (name.trim() != b.tag && name.isNotBlank()) ({ TextButton(onClick = { vm.renameBlock(b.id, name) }) { Text("Save") } }) else null,
+                trailingIcon = { if (name.trim() != b.tag && name.isNotBlank()) TextButton(onClick = { vm.renameBlock(b.id, name) }) { Text("Save") } },
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { vm.openLevel(b.id) }, modifier = Modifier.testTag("block_open")) { Text("Open") }
