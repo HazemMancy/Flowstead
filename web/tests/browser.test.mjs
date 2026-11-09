@@ -951,7 +951,7 @@ try {
     };
     // (a)
     const b07 = JSON.parse(fs.readFileSync(path.join(benchDir, '07-recycle-loop', 'input.json'), 'utf8'));
-    await p.setInputFiles('#openFile', { name: 'b07.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(b07)) });
+    await p.setInputFiles('#openFile', { name: 'b07.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(b07.flowsheet)) });
     await p.waitForFunction(() => window.flowsteadFlowsheet.project.name === 'b07', null, { timeout: 30_000 });
     const flat = await solveNow();
     const f07 = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
