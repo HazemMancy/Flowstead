@@ -122,11 +122,11 @@ canvas.addEventListener('pointerdown', (e) => {
   const [x, y] = local(e);
   pointers.set(e.pointerId, { x, y });
   if (pointers.size === 2) {
-    if (gesture?.mode && gesture.mode !== 'pan') view.cancelDrag();
+    if (gesture?.mode && gesture.mode !== 'pan') { view.cancelDrag(); draw(); }
     const [a, b] = [...pointers.values()];
     gesture = { mode: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
     draw();
-  } else if (pointers.size === 1) gesture = { id: e.pointerId, x0: x, y0: y, lastX: x, lastY: y, mode: null };
+  } else if (pointers.size === 1) gesture = { id: e.pointerId, x0: x, y0: y, lastX: x, lastY: y, mode: null, multi: e.shiftKey || e.ctrlKey || e.metaKey };
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!pointers.has(e.pointerId)) return;
@@ -145,9 +145,12 @@ canvas.addEventListener('pointermove', (e) => {
   if (e.pointerId !== gesture.id) return;
   if (!gesture.mode) {
     if (Math.hypot(x - gesture.x0, y - gesture.y0) < SLOP) return;
-    gesture.mode = view.beginDrag(gesture.x0, gesture.y0);
+    // On empty canvas, Shift (or the Select tool) draws a selection box (D124); otherwise the drag pans.
+    if ((gesture.multi || selectMode) && JSON.parse(view.hit(gesture.x0, gesture.y0)).kind === 'empty') { gesture.mode = 'box'; view.beginBox(gesture.x0, gesture.y0); }
+    else gesture.mode = view.beginDrag(gesture.x0, gesture.y0);
   }
-  if (gesture.mode === 'pan') view.pan(x - gesture.lastX, y - gesture.lastY);
+  if (gesture.mode === 'box') view.boxTo(x, y);
+  else if (gesture.mode === 'pan') view.pan(x - gesture.lastX, y - gesture.lastY);
   else view.dragTo(x, y);
   gesture.lastX = x; gesture.lastY = y;
   draw();
@@ -161,10 +164,12 @@ function endPointer(e, cancelled) {
   if (e.pointerId !== gesture.id) return;
   const g = gesture; gesture = null;
   if (cancelled) { view.cancelDrag(); return draw(); }
-  if (!g.mode) return tap(x, y);
+  if (!g.mode) return tap(x, y, g.multi || selectMode);
   if (g.mode === 'pan') return;
+  if (g.mode === 'box') { view.endBox(g.multi || selectMode); return selectionChanged(); }
+  const many = g.mode === 'move' && view.selectionCount > 1;
   const r = view.endDrag(x, y);
-  if (!applyEdit(r, g.mode === 'wire' ? 'Connected' : g.mode === 'move' ? 'Moved' : null)) draw();
+  if (!applyEdit(r, g.mode === 'wire' ? 'Connected' : g.mode === 'move' ? (many ? `Moved ${view.selectionCount} objects` : 'Moved') : null)) draw();
 }
 canvas.addEventListener('pointerup', (e) => endPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => endPointer(e, true));
@@ -176,18 +181,21 @@ canvas.addEventListener('wheel', (e) => {
   draw();
 }, { passive: false });
 
-function tap(x, y) {
+function tap(x, y, multi) {
   const h = JSON.parse(view.hit(x, y));
+  if (multi && h.kind !== 'empty' && h.kind !== 'table') { view.toggleSelected(h.id); return selectionChanged(); }
+  if (multi) return; // a Shift-click on empty canvas keeps the selection
   select(h.kind === 'empty' ? null : h.id);
 }
 
 // ---------- keyboard ----------
 canvas.addEventListener('keydown', (e) => {
-  const id = view.selectedId;
-  if ((e.key === 'Delete' || e.key === 'Backspace') && id) { e.preventDefault(); return removeSelected(); }
+  const id = view.selectedId, n = view.selectionCount;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && n) { e.preventDefault(); return removeSelected(); }
   if (e.key === 'Escape') return select(null);
   const d = { ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12] }[e.key];
-  if (d && id) {
+  if (d && n > 1) { e.preventDefault(); applyEdit(view.moveSelected(d[0], d[1]), `Moved ${n} objects`); }
+  else if (d && id) {
     e.preventDefault();
     const o = objects().find((x) => x.id === id);
     tryEdit(() => core.move(project.flowsheet, id, o.x + d[0], o.y + d[1]), `Moved ${o.tag}`);
@@ -196,8 +204,15 @@ canvas.addEventListener('keydown', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('input, select, textarea')) return;
   const mod = e.ctrlKey || e.metaKey;
-  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? step(redo, undo) : step(undo, redo); }
-  else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); step(redo, undo); }
+  // Ctrl+C, V, D and A act on the flowsheet only, so text on the page still copies as usual.
+  const onFlowsheet = document.activeElement === canvas || document.activeElement === document.body || $('selBar').contains(document.activeElement);
+  const k = e.key.toLowerCase();
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? step(redo, undo) : step(undo, redo); }
+  else if (mod && k === 'y') { e.preventDefault(); step(redo, undo); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'c' && view.selectionCount && !String(window.getSelection?.() ?? '')) { e.preventDefault(); copySelection(); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'v' && clipboard()) { e.preventDefault(); pasteClip(); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'd' && view.selectionCount) { e.preventDefault(); duplicateSelection(); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'a' && objects().length) { e.preventDefault(); view.selectAll(); selectionChanged(); }
 });
 
 // ---------- palette (FlowsteadCore.objectTypes: the app's types, groups and symbols) ----------
@@ -281,8 +296,20 @@ function addAt(typeId, x, y) {
 const objects = () => JSON.parse(project.flowsheet).objects ?? [];
 function select(id) {
   view.selectedId = id;
+  selectionChanged();
+}
+/** After the selection changes: one object opens its worksheet, several show the selection bar (D124). */
+function selectionChanged() {
   renderInspector();
+  renderSelection();
   draw();
+}
+function renderSelection() {
+  const n = view.selectionCount;
+  $('selBar').hidden = n < 2;
+  $('selCount').textContent = `${n} selected`;
+  $('copySelBtn').disabled = !n;
+  $('pasteBtn').disabled = !clipboard();
 }
 // The worksheet (D111): Worksheets.form builds it with the app's fields per type; changes go back through
 // Worksheets.apply, which uses the app's FlowsheetEditing. Only what the page itself must remember lives here.
@@ -300,7 +327,8 @@ function renderInspector() {
   $('tableBtn').textContent = view.hasTable(id) ? 'Edit table' : 'Show table';
   $('tableBtn').hidden = !JSON.parse(view.tableOptions(id)).keys.length;
   $('copyBtn').hidden = !isStream || !JSON.parse(view.copySources(id)).length;
-  $('dupBtn').hidden = !isStream;
+  $('dupBtn').hidden = false;
+  $('dupBtn').textContent = 'Duplicate'; $('dupBtn').title = 'A copy beside it, with all its data (Ctrl+D)';
   if (isStream) {
     const feed = view.isFeed(id);
     $('dupBtn').textContent = feed ? 'Duplicate' : 'Duplicate as a feed';
@@ -559,18 +587,73 @@ $('copyApply').addEventListener('click', () => {
 for (const b of ['copyCancel', 'copyClose']) $(b).addEventListener('click', () => $('copyDlg').close());
 $('dupBtn').addEventListener('click', () => {
   const id = view.selectedId; if (!id) return;
+  if (objects().find((x) => x.id === id)?.type !== 'material_stream') return duplicateSelection();
   const r = JSON.parse(view.duplicate(id));
   if (r.error) return toast(r.error);
   commit(JSON.stringify(r.flowsheet), 'Duplicated the stream');
   select(r.id);
 });
 function removeSelected() {
-  const id = view.selectedId; if (!id) return;
-  const tag = objects().find((x) => x.id === id)?.tag;
-  tryEdit(() => core.delete(project.flowsheet, id), `Deleted ${tag}`);
+  const n = view.selectionCount; if (!n) return;
+  if (n > 1) applyEdit(view.deleteSelected(), `Deleted ${n} objects`);
+  else {
+    const id = view.selectedId, tag = objects().find((x) => x.id === id)?.tag;
+    tryEdit(() => core.delete(project.flowsheet, id), `Deleted ${tag}`);
+  }
   select(null);
   canvas.focus();
 }
+
+// ---------- copy and paste of several objects (D124) ----------
+// The clip is the app's objects and connections as JSON, kept in this browser (so it pastes into another project or
+// tab here too). A paste on the same flowsheet goes two grid squares down and right, one step more each time.
+const CLIP_KEY = 'flowstead.web.clipboard';
+let clipMemory = null, pasteStep = 0;
+function clipboard() {
+  try { return localStorage.getItem(CLIP_KEY) ?? clipMemory; } catch (e) { return clipMemory; }
+}
+function copySelection() {
+  const r = view.copySelection();
+  const j = JSON.parse(r);
+  if (j.error) return toast(j.error);
+  clipMemory = r; pasteStep = 0;
+  try { localStorage.setItem(CLIP_KEY, r); } catch (e) {}
+  const n = j.objects.length;
+  announce(`Copied ${n} object${n === 1 ? '' : 's'}`);
+  renderSelection();
+  return r;
+}
+function pasteClip(clip = clipboard()) {
+  if (!clip) return;
+  pasteStep += 1;
+  const r = JSON.parse(view.paste(clip, cssW / 2, cssH / 2, pasteStep));
+  if (r.error) return toast(r.error);
+  commit(JSON.stringify(r.flowsheet), `Pasted ${r.ids.length} object${r.ids.length === 1 ? '' : 's'}`);
+  view.setSelectedIds(JSON.stringify(r.ids));
+  selectionChanged();
+  if (r.notes.length) toast(`Pasted ${r.ids.length}. Check:\n${r.notes.map((x) => `• ${x}`).join('\n')}`, { info: true, ms: 9000 });
+}
+/** Copy and paste in one step, leaving the clipboard as it was. */
+function duplicateSelection() {
+  const r = JSON.parse(view.copySelection());
+  if (r.error) return toast(r.error);
+  const keep = pasteStep; pasteStep = 0;
+  pasteClip(JSON.stringify(r));
+  pasteStep = keep;
+}
+let selectMode = false;
+$('selectBtn').addEventListener('click', () => {
+  selectMode = !selectMode;
+  $('selectBtn').setAttribute('aria-pressed', selectMode);
+  announce(selectMode ? 'Select: drag to draw a box, tap to add or take out an object' : 'Select off: a drag pans');
+});
+$('copySelBtn').addEventListener('click', copySelection);
+$('pasteBtn').addEventListener('click', () => pasteClip());
+$('selCopy').addEventListener('click', copySelection);
+$('selDup').addEventListener('click', duplicateSelection);
+$('selDelete').addEventListener('click', removeSelected);
+$('selClear').addEventListener('click', () => select(null));
+window.addEventListener('storage', (e) => { if (e.key === CLIP_KEY) renderSelection(); });
 
 // The objects as a list for screen readers and keyboards: each one selects its object.
 function renderObjectList() {
@@ -582,7 +665,7 @@ function refresh() {
   syncMode();
   $('empty').hidden = objects().length > 0;
   $('undoBtn').disabled = !undo.length; $('redoBtn').disabled = !redo.length;
-  renderInspector(); renderObjectList(); draw();
+  renderInspector(); renderSelection(); renderObjectList(); draw();
 }
 
 // ---------- files and examples ----------
@@ -937,11 +1020,11 @@ $('themeBtn').addEventListener('click', () => {
   paintTiles(); draw();
 });
 let toastTimer = 0;
-function toast(text) {
+function toast(text, { info = false, ms = 5000 } = {}) {
   let t = document.querySelector('.fs-toast');
   if (!t) { t = Object.assign(document.createElement('div'), { className: 'fs-toast', role: 'alert' }); document.body.appendChild(t); }
-  t.textContent = text; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
+  t.textContent = text; t.hidden = false; t.classList.toggle('info', info);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 function announce(text) { $('announce').textContent = text; }
 

@@ -35,6 +35,17 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.8**
+- **Select several objects**: Shift (or Ctrl) and a click adds or removes one; Shift and a drag on empty canvas draws a
+  box; Ctrl+A selects everything. On a phone or tablet, press **Select** first, then drag a box or tap objects.
+- Several selected move together (drag one, or the arrow keys) and Delete removes them all.
+- **Copy** (Ctrl+C) and **Paste** (Ctrl+V), in the toolbar too: the copies keep every specification and the streams
+  between them, get the next free tags (K-101, E-101…) and land beside the originals; they paste into another project
+  in this browser as well. **Duplicate** (Ctrl+D, or a unit's own Duplicate button) does both at once.
+- A copied stream whose source unit was not copied becomes a feed at its solved temperature, pressure, flow and
+  composition. An Adjust or Set whose target was not copied must be pointed again. A note after the paste says which.
+- Results are not copied: solve to see the copies' numbers.
+
 **Web 1.7**
 - **Faster solves**: bubble and dew points are no longer calculated at every solve (they were most of its time). A stream's
   worksheet, a table that shows them and the results documents ask for them when needed.

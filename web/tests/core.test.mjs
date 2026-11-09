@@ -462,3 +462,38 @@ test('a hypothetical takes its critical constants in the unit chosen for them (D
   const units = JSON.parse(fluids.hypotheticals(f)).fields.find((x) => x.key === 'pc').units.map((u) => u.id);
   assert.ok(units.includes('psia') && units.includes('bara') && !units.includes('barg') && !units.includes('psig'));
 });
+
+test('select several objects, copy and paste them as the page does (D124)', () => {
+  const v = new FlowsheetView();
+  const fsj = bench('06-compressor-aftercooler');
+  v.setFlowsheet(fsj); v.setViewport(0, 0, 1);
+  v.selectAll();
+  assert.equal(v.selectionCount, 5);
+  assert.equal(v.selectedId, null, 'several selected: no single worksheet');
+  const clip = v.copySelection();
+  // Pasted on the same flowsheet: two grid squares (48) down and right, each paste one step further.
+  const r = JSON.parse(v.paste(clip, 400, 300, 1));
+  assert.equal(r.ids.length, 5);
+  assert.deepEqual(r.notes, []);
+  const f = r.flowsheet, orig = JSON.parse(fsj);
+  for (const [i, o] of orig.objects.entries()) {
+    const c = f.objects.find((x) => x.id === r.ids[i]);
+    assert.equal(c.type, o.type); assert.deepEqual(c.specs ?? {}, o.specs ?? {}); assert.deepEqual(c.composition ?? {}, o.composition ?? {});
+    assert.equal(c.x, o.x + 48); assert.equal(c.y, o.y + 48);
+  }
+  assert.equal(f.connections.length, 8);
+  assert.equal(JSON.parse(v.paste(clip, 400, 300, 2)).flowsheet.objects.find((x) => x.id !== r.ids[0] && x.type === 'material_stream' && x.x === orig.objects[0].x + 96) !== undefined, true);
+  // Into a flowsheet without the components the streams use: refused, naming them.
+  const other = new FlowsheetView();
+  other.setFlowsheet(core.newFlowsheet('Peng-Robinson (PR)')); other.setViewport(0, 0, 1);
+  assert.match(JSON.parse(other.paste(clip, 400, 300, 1)).error, /Methane/);
+  // A box round K-100 and DISCHARGE (world 120 and 240, y 0, at zoom 1 with no pan) selects those two.
+  v.setFlowsheet(fsj); v.selectedId = null;
+  v.beginBox(80, -60); v.boxTo(280, 60);
+  assert.equal(v.endBox(false), 2);
+  assert.deepEqual(JSON.parse(v.selectedIds()).sort(), ['dis', 'k']);
+  // Moved and deleted together.
+  const moved = JSON.parse(v.moveSelected(24, 0)).flowsheet;
+  assert.deepEqual(moved.objects.filter((o) => ['k', 'dis'].includes(o.id)).map((o) => o.x), [144, 264]);
+  assert.deepEqual(JSON.parse(v.deleteSelected()).flowsheet.objects.map((o) => o.id), ['suc', 'e', 'out']);
+});

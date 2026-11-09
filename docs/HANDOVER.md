@@ -27,6 +27,7 @@ This page adds what those files do not say: how the owner works, and what is ope
 ## State at Web 1.7 (D121 to D123)
 - Web 1.6 (D120): Hold/Active solver, duplicate and copy streams, customisable property table, frozen worksheet header, framed page.
 - Web 1.7: bubble and dew points are calculated on demand (D121: they were about 80 % of a solve); HYSYS's enthalpy and entropy basis (D122); component menu and Browse-all, units for a hypothetical's constants, a unit set, Enter to the next field (D123).
+- Web 1.8 (D124): select several objects, move, delete, copy, paste and duplicate them (`web/core/src/webModel`).
 - The Android app is at 3.2.4 on `main` (D117 to D119 changed the engine's phase envelopes); the web changes did not touch it.
 
 ## Open items

@@ -14,6 +14,7 @@
 //      outlet pressure allowed), example 21's PSV (fire needs API 526 D with water's latent heat, IAPWS 1.85–2.15 MJ/kg;
 //      the blocked outlet governs, 1E2), depressuring (the sized orifice meets API 521's 15 minutes), pipeline
 //      pressurization (the sized orifice meets its 1 h target) and the stream analysis tools on benchmark 03.
+//   6. copy and paste of several objects (D124): benchmark 06's train pasted beside itself solves to the original's numbers.
 //
 //   node tests/browser.test.mjs [case-name ...]
 import http from 'node:http';
@@ -422,6 +423,113 @@ try {
     if ((await p.inputValue('#unitPreset')) !== 'Field') problems.push('the unit set was not kept across a reload');
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} Enter to the next field, component menu and browse, hypothetical units, unit set (D121)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4g. select several objects, copy, paste, duplicate, move and delete them (D124) ----------
+  // The reference for a copy is its original: benchmark 06's train pasted beside itself must solve to the original's
+  // numbers, and a stream pasted without its source unit must be a feed at the engine's solved conditions.
+  for (const width of [1280, 390]) {
+    const p = await browser.newPage({ viewport: { width, height: 800 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.evaluate(() => { try { localStorage.removeItem('flowstead.web.clipboard'); } catch (e) {} });
+    await p.selectOption('#examples', '06-compressor-aftercooler');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    const objs = () => p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects);
+    const solve = async () => {
+      await p.click('#solveBtn');
+      await p.waitForFunction(() => { const w = window.flowsteadFlowsheet; return w.project.solve && !w.view.stale && !document.getElementById('solveBtn').disabled; }, null, { timeout: 300_000 });
+    };
+    // Where an object is on the screen (its centre), from the view's own viewport.
+    const screen = (id) => p.evaluate((i) => { const w = window.flowsteadFlowsheet, o = JSON.parse(w.project.flowsheet).objects.find((x) => x.id === i), r = document.getElementById('canvas').getBoundingClientRect();
+      return { x: r.left + o.x * w.view.zoom + w.view.offsetX, y: r.top + o.y * w.view.zoom + w.view.offsetY }; }, id);
+    await solve();
+    const props = (id) => p.evaluate((i) => window.flowsteadFlowsheet.project.solve.result.objects[i]?.properties, id);
+    const orig = await props('out');
+
+    // Ctrl+A, Ctrl+C, Ctrl+V on the canvas: five copies, selected, with the next free tags.
+    await p.focus('#canvas');
+    await p.keyboard.press('Control+a');
+    if (await p.evaluate(() => window.flowsteadFlowsheet.view.selectionCount) !== 5 || await p.isHidden('#selBar')) problems.push('Ctrl+A did not select the five objects and show the selection bar');
+    await p.keyboard.press('Control+c');
+    if (await p.isDisabled('#pasteBtn')) problems.push('Paste is not offered after a copy');
+    await p.keyboard.press('Control+v');
+    let all = await objs();
+    const copies = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.view.selectedIds()));
+    if (all.length !== 10 || copies.length !== 5) problems.push(`paste: ${all.length} objects, ${copies.length} selected`);
+    const tags = copies.map((id) => all.find((o) => o.id === id)?.tag);
+    if (JSON.stringify(tags) !== JSON.stringify(['1', 'K-101', '2', 'E-101', '3'])) problems.push(`pasted tags ${JSON.stringify(tags)}`);
+    // Solved, the copy gives the original's numbers.
+    await solve();
+    const twin = await props(copies[4]);
+    for (const k of ['temperature', 'pressure', 'molarFlow', 'massFlow']) {
+      if (!(Math.abs(twin?.[k] - orig[k]) <= 1e-9 * Math.max(1, Math.abs(orig[k])))) problems.push(`copied COOLED ${k} ${twin?.[k]}, original ${orig[k]}`);
+    }
+    const power = [(await props('k'))?.power, (await props(copies[1]))?.power];
+    if (!(Math.abs(power[0] - power[1]) <= 1e-9 * Math.abs(power[0]))) problems.push(`compressor power ${power[1]} W for the copy, ${power[0]} W for the original`);
+    // Undo takes the whole paste away in one step.
+    await p.click('#undoBtn');
+    if ((await objs()).length !== 5) problems.push('one undo did not remove the whole paste');
+    await solve();
+    const dis = await props('dis');
+
+    // Shift and a drag on empty canvas draws a box: DISCHARGE, E-100 and COOLED.
+    await p.evaluate(() => { const w = window.flowsteadFlowsheet; w.view.selectedId = null; });
+    const a = await screen('dis'), b = await screen('out');
+    await p.keyboard.down('Shift');
+    await p.mouse.move(a.x - 40, a.y - 60); await p.mouse.down();
+    await p.mouse.move((a.x + b.x) / 2, a.y + 20, { steps: 4 }); await p.mouse.move(b.x + 40, b.y + 60, { steps: 4 });
+    await p.mouse.up();
+    await p.keyboard.up('Shift');
+    const boxed = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.view.selectedIds()).sort());
+    if (JSON.stringify(boxed) !== JSON.stringify(['dis', 'e', 'out'])) problems.push(`the box selected ${JSON.stringify(boxed)}`);
+    // Shift and a click takes one out and puts it back.
+    const e = await screen('e');
+    await p.keyboard.down('Shift'); await p.mouse.click(e.x, e.y); await p.keyboard.up('Shift');
+    if (await p.evaluate(() => window.flowsteadFlowsheet.view.isSelected('e'))) problems.push('Shift and a click did not take E-100 out of the selection');
+    await p.keyboard.down('Shift'); await p.mouse.click(e.x, e.y); await p.keyboard.up('Shift');
+    // Duplicate from the selection bar: DISCHARGE has lost its compressor, so it is a feed at the engine's solved state.
+    await p.click('#selDup');
+    all = await objs();
+    const sel = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.view.selectedIds()));
+    const feed = all.find((o) => o.id === sel[0]);
+    if (!feed || Math.abs(feed.specs?.temperature?.si - dis.temperature) > 1e-9 || Math.abs(feed.specs?.pressure?.si - dis.pressure) > 1e-6 || Math.abs(feed.specs?.molarFlow?.si - dis.molarFlow) > 1e-12)
+      problems.push(`the cut stream's specs ${JSON.stringify(feed?.specs)}, DISCHARGE solved ${dis.temperature} K, ${dis.pressure} Pa, ${dis.molarFlow} mol/s`);
+    if (!/feed with the solved/.test(await p.textContent('.fs-toast') ?? '')) problems.push('no note that the pasted stream is now a feed');
+    await solve();
+    const cooled2 = await props(sel[2]);
+    if (!(Math.abs(cooled2?.temperature - orig.temperature) < 1e-6 && Math.abs(cooled2?.pressure - orig.pressure) < 1e-3)) problems.push(`the duplicated cooler's outlet ${cooled2?.temperature} K, ${cooled2?.pressure} Pa; the original's ${orig.temperature} K, ${orig.pressure} Pa`);
+    // Arrow keys move the group; Delete removes it.
+    const xs = (await objs()).filter((o) => sel.includes(o.id)).map((o) => o.x);
+    await p.focus('#canvas'); await p.keyboard.press('ArrowRight');
+    const xs2 = (await objs()).filter((o) => sel.includes(o.id)).map((o) => o.x);
+    if (!xs.every((x, i) => xs2[i] === x + 12)) problems.push(`arrow key moved the group ${JSON.stringify(xs)} → ${JSON.stringify(xs2)}`);
+    await p.keyboard.press('Delete');
+    if ((await objs()).length !== 5) problems.push('Delete did not remove the three selected objects');
+    // A unit's own Duplicate button: a cooler beside it with the same specifications.
+    await p.evaluate(() => document.querySelector('#objects [data-id="e"]').click());
+    await p.click('#dupBtn');
+    all = await objs();
+    const cool = all.filter((o) => o.type === 'cooler');
+    if (cool.length !== 2 || JSON.stringify(cool[0].specs) !== JSON.stringify(cool[1].specs)) problems.push(`Duplicate on a unit: ${JSON.stringify(cool.map((c) => c.tag))}`);
+    // On a phone: the Select tool makes a drag draw the box (no Shift key).
+    if (width < 600) {
+      await p.click('#undoBtn');
+      await p.evaluate(() => { window.flowsteadFlowsheet.view.selectedId = null; });
+      await p.click('#selectBtn');
+      const k = await screen('k'), d2 = await screen('dis');
+      await p.mouse.move(k.x - 40, k.y - 60); await p.mouse.down(); await p.mouse.move(d2.x + 40, d2.y + 60, { steps: 6 }); await p.mouse.up();
+      const ph = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.view.selectedIds()).sort());
+      if (JSON.stringify(ph) !== JSON.stringify(['dis', 'k'])) problems.push(`the Select tool's box selected ${JSON.stringify(ph)}`);
+      await p.click('#selectBtn');
+    }
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} select, copy, paste, duplicate, move and delete several objects at ${width} px (copy's COOLED ${twin?.temperature?.toFixed?.(3)} K, original ${orig.temperature.toFixed(3)} K)`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();

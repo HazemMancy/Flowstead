@@ -55,6 +55,8 @@ import app.flowstead.core.model.streamAt
 import app.flowstead.core.units.Quantity
 import app.flowstead.core.units.UnitSet
 import app.flowstead.core.units.Units
+import app.flowstead.web.model.Clip
+import app.flowstead.web.model.FlowsheetClipboard
 import app.flowstead.ui.flowsheet.CanvasGeometry
 import app.flowstead.ui.flowsheet.Hit
 import app.flowstead.ui.flowsheet.IconPalette
@@ -108,7 +110,16 @@ class FlowsheetView {
     private var colors = CanvasColors(dark = true)
     private var vp = Viewport()
 
-    var selectedId: String? = null
+    /** The selected objects (D124), in the order chosen. The inspector shows one; several make a group to move, copy or delete. */
+    private val selection = linkedSetOf<String>()
+    /** The one selected object, or null when none or several are; setting it selects just that object. */
+    var selectedId: String?
+        get() = selection.singleOrNull()
+        set(value) { selection.clear(); value?.let { selection.add(it) } }
+    /** A group move in progress: how far the grabbed object has gone; every selected object follows. */
+    private var groupDelta: Offset? = null
+    /** A selection box in progress (screen units): its first corner and the pointer. */
+    private var box: Pair<Offset, Offset>? = null
     /** Drawing for print (the PFD, D114): no grid, no selection, no status badges, as the app's PfdPdf. */
     var print: Boolean = false
     private var dragging: Pair<String, Offset>? = null
@@ -133,7 +144,7 @@ class FlowsheetView {
         status = saved.objects.associate { it.id to Specification.status(saved, it) }
         notReady = Readiness.of(saved).notReady
         results = ResultView(solve, saved.modelHash())
-        if (selectedId != null && saved.obj(selectedId!!) == null) selectedId = null
+        selection.retainAll(saved.objects.map { it.id }.toSet())
     }
 
     /** A solve's result (the engine's JSON) and the model hash taken when it ran; null clears it. */
@@ -214,6 +225,7 @@ class FlowsheetView {
             }
             is Hit.OnObject -> {
                 dragging = h.objectId to CanvasGeometry.center(fs.obj(h.objectId) ?: return "pan")
+                if (selection.size > 1 && h.objectId in selection) groupDelta = Offset.Zero
                 return "move"
             }
             Hit.Empty -> return "pan"
@@ -223,6 +235,7 @@ class FlowsheetView {
     fun dragTo(screenX: Double, screenY: Double) {
         val world = vp.toWorld(Offset(screenX.toFloat(), screenY.toFloat()), 1f)
         dragging?.let { (id, _) -> fs.obj(id)?.let { dragging = id to (CanvasGeometry.center(it) + (world - dragStart)) } }
+        if (groupDelta != null) groupDelta = world - dragStart
         wire?.let { (a, _) -> wire = a to world }
         draggingTable?.let { (id, _) -> draggingTable = id to (tableStart + (world - dragStart)) }
     }
@@ -236,10 +249,18 @@ class FlowsheetView {
         val moved = dragging
         val from = wireFrom
         val table = draggingTable
-        dragging = null; wire = null; wireFrom = null; draggingTable = null
+        val group = groupDelta != null
+        dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null
         return edit {
             when {
                 table != null -> FlowsheetEditing.moveTable(saved, table.first, table.second.x.toDouble(), table.second.y.toDouble())
+                moved != null && group -> {
+                    // The grabbed object goes on the grid and the rest of the group moves by as much, keeping its layout.
+                    val o = fs.obj(moved.first) ?: return@edit null
+                    val p = CanvasGeometry.snap(fs, o, moved.second)
+                    val c = CanvasGeometry.center(o)
+                    if (p == c) null else FlowsheetClipboard.moveAll(saved, selection.toList(), (p.x - c.x).toDouble(), (p.y - c.y).toDouble())
+                }
                 moved != null -> {
                     val o = fs.obj(moved.first) ?: return@edit null
                     // Dropped on the grid and lined up with what it connects to, so its lines run straight.
@@ -252,7 +273,77 @@ class FlowsheetView {
         }
     }
 
-    fun cancelDrag() { dragging = null; wire = null; wireFrom = null; draggingTable = null }
+    fun cancelDrag() { dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null; box = null }
+
+    // ---------- selection of several objects, copy and paste (D124)
+
+    /** The selected objects' ids, as a JSON array. */
+    fun selectedIds(): String = buildJsonArray { selection.forEach { add(it) } }.toString()
+    val selectionCount: Int get() = selection.size
+    fun isSelected(id: String): Boolean = id in selection
+    /** Adds [id] to the selection, or takes it out (Shift or Ctrl and a tap). */
+    fun toggleSelected(id: String) { if (saved.obj(id) != null && !selection.remove(id)) selection.add(id) }
+    fun selectAll() { selection.clear(); selection.addAll(saved.objects.map { it.id }) }
+    fun setSelectedIds(idsJson: String) {
+        selection.clear()
+        val known = saved.objects.map { it.id }.toSet()
+        FlowsheetJson.parseToJsonElement(idsJson).jsonArray.map { it.jsonPrimitive.content }.filter { it in known }.forEach { selection.add(it) }
+    }
+
+    /** Starts a selection box at a screen point (Shift and a drag on empty canvas, or the Select tool). */
+    fun beginBox(screenX: Double, screenY: Double) { val p = Offset(screenX.toFloat(), screenY.toFloat()); box = p to p }
+    fun boxTo(screenX: Double, screenY: Double) { box = box?.let { it.first to Offset(screenX.toFloat(), screenY.toFloat()) } }
+    /**
+     * Ends the box: every object whose symbol lies wholly inside it is selected, added to the selection when [add].
+     * Returns how many are selected.
+     */
+    fun endBox(add: Boolean): Int {
+        val b = box ?: return selection.size
+        box = null
+        val a = vp.toWorld(b.first, 1f)
+        val z = vp.toWorld(b.second, 1f)
+        val r = Rect(minOf(a.x, z.x), minOf(a.y, z.y), maxOf(a.x, z.x), maxOf(a.y, z.y))
+        val inside = fs.objects.filter { o -> CanvasGeometry.bounds(o).let { r.contains(it.topLeft) && r.contains(it.bottomRight) } }.map { it.id }
+        if (!add) selection.clear()
+        selection.addAll(inside)
+        return selection.size
+    }
+
+    /** The selection as a clip (JSON) for the clipboard, or {error}. */
+    fun copySelection(): String = try {
+        FlowsheetJson.encodeToString(Clip.serializer(), FlowsheetClipboard.copy(saved, selection, results, displayUnits))
+    } catch (e: IllegalArgumentException) { buildJsonObject { put("error", e.message ?: "Not allowed") }.toString() }
+
+    /**
+     * Pastes a clip: [step] grid squares down and right of the originals when they are on this flowsheet (each paste
+     * one step further), else centred on the screen point ([screenX], [screenY]). Selects the copies. Returns
+     * {flowsheet, ids, notes} or {error}.
+     */
+    fun paste(clipJson: String, screenX: Double, screenY: Double, step: Int): String = try {
+        val clip = try { FlowsheetJson.decodeFromString(Clip.serializer(), clipJson) } catch (e: Exception) { throw EditRejected("Nothing to paste") }
+        val (dx, dy) = if (clip.objects.all { saved.obj(it.id) != null }) {
+            val d = FlowsheetEditing.GRID * 2 * step.coerceAtLeast(1)
+            d to d
+        } else {
+            val boxes = clip.objects.map { CanvasGeometry.bounds(it) }
+            val cx = (boxes.minOf { it.left } + boxes.maxOf { it.right }) / 2
+            val cy = (boxes.minOf { it.top } + boxes.maxOf { it.bottom }) / 2
+            val w = vp.toWorld(Offset(screenX.toFloat(), screenY.toFloat()), 1f)
+            (w.x - cx).toDouble() to (w.y - cy).toDouble()
+        }
+        val r = FlowsheetClipboard.paste(saved, clip, dx, dy)
+        buildJsonObject {
+            put("flowsheet", FlowsheetJson.encodeToJsonElement(Flowsheet.serializer(), r.flowsheet))
+            putJsonArray("ids") { r.ids.forEach { add(it) } }
+            putJsonArray("notes") { r.notes.forEach { add(it) } }
+        }.toString()
+    } catch (e: IllegalArgumentException) { buildJsonObject { put("error", e.message ?: "Not allowed") }.toString() }
+
+    /** Deletes every selected object; {flowsheet}, {error} or {}. */
+    fun deleteSelected(): String = edit { if (selection.isEmpty()) null else FlowsheetClipboard.deleteAll(saved, selection.toList()) }
+
+    /** Moves every selected object by ([dx], [dy]) world units (arrow keys); {flowsheet}, {error} or {}. */
+    fun moveSelected(dx: Double, dy: Double): String = edit { if (selection.isEmpty()) null else FlowsheetClipboard.moveAll(saved, selection.toList(), dx, dy) }
 
     /** Shows or hides the object's property table on the canvas (the app's defaults: conditions and flows, or its first results). */
     fun toggleTable(id: String): String = edit {
@@ -399,7 +490,10 @@ class FlowsheetView {
 
     // ---------- drawing
 
-    private fun positionOf(o: SimObject): Offset = dragging?.takeIf { it.first == o.id }?.second ?: CanvasGeometry.center(o)
+    private fun positionOf(o: SimObject): Offset {
+        groupDelta?.let { d -> if (o.id in selection) return CanvasGeometry.center(o) + d }
+        return dragging?.takeIf { it.first == o.id }?.second ?: CanvasGeometry.center(o)
+    }
 
     private fun streamColor(o: SimObject): Color = when (o.type) {
         ObjectType.EnergyStream -> colors.energy
@@ -433,6 +527,11 @@ class FlowsheetView {
         }
         labels(ctx)
         tables(ctx, d)
+        box?.let { (a, b) ->
+            val r = Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y))
+            d.drawRect(colors.secondary, r.topLeft, r.size, alpha = 0.10f)
+            d.drawRect(colors.secondary, r.topLeft, r.size, style = Stroke(1.2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 4f))))
+        }
     }
 
     private fun world(d: DrawScope, palette: IconPalette) = with(d) {
@@ -446,7 +545,7 @@ class FlowsheetView {
         for (o in fs.objects) {
             val at = positionOf(o)
             val s = CanvasGeometry.size(o.type)
-            if (o.id == selectedId && !print) {
+            if (o.id in selection && !print) {
                 val b = CanvasGeometry.bounds(o, at).inflate(6f)
                 drawRoundRect(colors.secondary, b.topLeft, b.size, CornerRadius(10f), style = Stroke(2.5f))
             }
@@ -552,7 +651,7 @@ class FlowsheetView {
             val box = Rect(topLeft, Size(bw, bh))
             tableBoxes[t.objectId] = box
             d.drawRect(colors.surface, box.topLeft, box.size)
-            d.drawRect(if (t.objectId == selectedId) colors.secondary else colors.outline, box.topLeft, box.size, style = Stroke(1.2f))
+            d.drawRect(if (t.objectId in selection) colors.secondary else colors.outline, box.topLeft, box.size, style = Stroke(1.2f))
             ctx.font = font(size, bold = true); ctx.fillStyle = colors.onSurface.css(); ctx.textAlign = "left"
             ctx.fillText(o.tag, box.left + pad, box.top + pad)
             d.drawLine(colors.outlineVariant, Offset(box.left, box.top + pad + rowH), Offset(box.right, box.top + pad + rowH), 1f)
