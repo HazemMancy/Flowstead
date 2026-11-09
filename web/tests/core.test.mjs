@@ -692,3 +692,44 @@ test('compound and data tools: PubChem, the structure request, the VLE points in
   assert.notEqual(JSON.parse(withRx).reactions[0].id, 'r1');
   assert.equal(JSON.parse(dataT.reactionsList(withRx, finder)).reactions[0].added, true);
 });
+
+const { ThermoTools } = await import(lib);
+const thermo = ThermoTools.getInstance();
+
+test('thermodynamics tools: requests in SI, a stream\'s composition, the reports in display units (D130)', () => {
+  const fsj = bench('06-compressor-aftercooler');
+  const st = JSON.parse(thermo.setup(fsj, null, ''));
+  assert.deepEqual(st.compounds, ['Methane', 'Ethane', 'Propane']);
+  assert.ok(st.streams.some((x) => x.id === 'suc'), 'a feed gives its composition without a solve');
+  assert.ok(!st.pUnits.some((u) => u.id.endsWith('g')), 'no gauge pressures for a fluid property');
+  const req = (tool, p) => JSON.parse(thermo.request(tool, fsj, null, '', JSON.stringify(p)));
+  // Binary T–x–y at 2 bara: 2 × 10⁵ Pa; P–x–y at 25 °C: 298.15 K, by hand.
+  const b = req('binary', { a: 'Methane', b: 'Propane', kind: 'txy', lle: false, pressure: { value: '2', unit: 'bara' } });
+  assert.deepEqual([b.method, b.params.first, b.params.second, b.params.kind, b.params.pressure, b.params.liquidLiquid], ['binaryDiagram', 'Methane', 'Propane', 'txy', 2e5, false]);
+  assert.equal(req('binary', { a: 'Methane', b: 'Propane', kind: 'pxy', temperature: { value: '25', unit: 'C' } }).params.temperature, 298.15);
+  assert.match(req('binary', { a: 'Methane', b: 'Methane', kind: 'txy', pressure: { value: '2', unit: 'bara' } }).error, /different/);
+  // Ternary, critical point (equal amounts, or SUCTION's composition), comparison, chart along pressure in bara.
+  const t = req('ternary', { a: 'Methane', b: 'Ethane', c: 'Propane', temperature: { value: '-50', unit: 'C' }, pressure: { value: '20', unit: 'bara' }, step: '0.05' });
+  assert.deepEqual([t.method, t.params.compounds, t.params.pressure, t.params.step], ['ternary', ['Methane', 'Ethane', 'Propane'], 2e6, 0.05]);
+  assert.ok(Math.abs(t.params.temperature - 223.15) < 1e-9);
+  assert.deepEqual(req('critical', {}).params.composition, { Methane: 1 / 3, Ethane: 1 / 3, Propane: 1 / 3 });
+  const suc = JSON.parse(fsj).objects.find((o) => o.id === 'suc').composition;
+  assert.deepEqual(req('critical', { source: 'suc' }).params.composition, suc);
+  const c = req('compare', { packages: ['Peng-Robinson (PR)', 'Soave-Redlich-Kwong (SRK)'], temperature: { value: '0', unit: 'C' }, pressure: { value: '50', unit: 'bara' } });
+  assert.deepEqual([c.method, c.params.packages.length, c.params.temperature, c.params.pressure], ['comparePackages', 2, 273.15, 5e6]);
+  assert.match(req('compare', { packages: [], temperature: { value: '0', unit: 'C' }, pressure: { value: '5', unit: 'bara' } }).error, /package/);
+  const ch = req('chart', { variable: 'pressure', from: { value: '1', unit: 'bara' }, to: { value: '100', unit: 'bara' }, temperature: { value: '20', unit: 'C' } });
+  assert.deepEqual([ch.method, ch.params.variable, ch.params.from, ch.params.to, ch.params.fixed, ch.params.points], ['propertySweep', 'pressure', 1e5, 1e7, 293.15, 25]);
+  // Reports: a critical point in °C and bara (190.58 K, 46.00 bar: −36.57 °C), the triangle's corners (top (0.5, √3/2)).
+  const crit = JSON.parse(thermo.report('critical', fsj, '{}', JSON.stringify({ points: [{ temperature: 190.58, pressure: 46e5, molarVolume: 9.86e-5 }] })));
+  const kv = Object.fromEntries(crit.sections.find((s) => s.kind === 'kv').rows.map((r) => [r.label, r.value]));
+  assert.equal(Number(kv['Critical temperature']), +(190.58 - 273.15).toFixed(2));
+  assert.equal(Number(kv['Critical pressure']), 46);
+  const tern = JSON.parse(thermo.report('ternary', fsj, '{}', JSON.stringify({ compounds: ['A', 'B', 'C'], points: [
+    { feed: [1, 0, 0], vapourFraction: 0 }, { feed: [0, 0.5, 0.5], vapourFraction: 0.3 },
+    { feed: [0.2, 0.4, 0.4], vapourFraction: 0, liquid1: [0, 1, 0], liquid2: [0, 0, 1], liquid2Fraction: 0.5 },
+  ] }))).ternary;
+  assert.ok(Math.abs(tern.liquid[0][0] - 0.5) < 1e-12 && Math.abs(tern.liquid[0][1] - Math.sqrt(3) / 2) < 1e-12);
+  assert.deepEqual(tern.vapour, [[0.5, 0]]);
+  assert.deepEqual(tern.ties, [[[0, 0], [1, 0]]]);
+});

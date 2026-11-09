@@ -3,7 +3,7 @@
 Flowstead in the browser, for anyone who can't install the Android app (iPhone, iPad, desktop):
 **https://hazemmancy.github.io/Flowstead/**. Part of the portfolio at https://hazemmancy.github.io/.
 
-The engine is the one the app and the server run: DWSIM 10.2.12 built from the pinned source with every patch in
+The engine is the one the app and the server run: DWSIM 10 (10.2.12) built from the pinned source with every patch in
 `engine/patches`, plus Flowstead's engine code, compiled to WebAssembly. It runs in a Web Worker on the visitor's
 device. There is no server, and nothing the user types leaves the browser. See `docs/DECISIONS.md` D108.
 
@@ -34,6 +34,17 @@ engine/scripts/build-web.sh            # builds DWSIM if needed, then web/dist
 In the repository's settings, **Pages → Build and deployment → Source** must be **GitHub Actions**.
 
 ## Release notes
+
+**Web 1.11**
+- **Thermodynamics tools** (Basis), as in the Android app: a **binary diagram** (T–x–y or P–x–y, with the liquid–liquid
+  region), a **ternary** with tie lines, the mixture's true **critical point**, one composition **compared** across up to
+  eight property packages, and a **property chart** along temperature or pressure. All DWSIM's own calculations.
+
+**Web 1.10.2**
+- **Tab** moves to the next field in the Tools forms (Safety, Dynamics…) and keeps what you typed; forms that redraw
+  after a change keep your place.
+- **Spreadsheet**: a cell that imports a bubble or dew point now gets it from the engine instead of showing #ERR.
+- The engine is shown as **DWSIM 10**; documents carry the current Flowstead Web version.
 
 **Web 1.10.1**
 - The title bar of every window (Units, Basis, Export, Tools…) no longer covers the first line of text under it.

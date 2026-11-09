@@ -179,3 +179,16 @@
 .dt-rx button{align-self:flex-start;margin-top:.2rem}
 #dt_data{flex:1;min-width:0;font-family:var(--font-mono, monospace);background:var(--bg-input);color:var(--fg);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:.45rem .6rem;font-size:.8rem}
 #dataTools .chip[aria-pressed="true"]{background:var(--primary-bg);border-color:var(--primary);color:var(--fg)}
+
+/* Thermodynamics tools (D130): the ternary triangle */
+.th-tern svg{max-width:32rem}
+.th-tern .edge{fill:none;stroke:var(--muted);stroke-width:1.5}
+.th-tern .tie{stroke:var(--warn);stroke-width:1.2}
+.th-tern .l1{fill:var(--primary);opacity:.45}
+.th-tern .l2{fill:var(--primary)}
+.th-tern .v{fill:none;stroke:var(--vap);stroke-width:1.4}
+.th-tern text{fill:var(--fg);font-size:13px}
+.th-tern .legend i.l1{background:var(--primary);opacity:.45}.th-tern .legend i.l2{background:var(--primary)}.th-tern .legend i.v{background:none;border:1.5px solid var(--vap)}
+#thermoTools .chip[aria-pressed="true"]{background:var(--primary-bg);border-color:var(--primary);color:var(--fg)}
+/* On a phone, paired quantity fields (value and unit each) stack instead of squeezing their values (D130). */
+@media(max-width:560px){#thermoTools .row2,#thermoTools .row3,#dataTools .row2{grid-template-columns:1fr}}

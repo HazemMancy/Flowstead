@@ -225,7 +225,7 @@ object FlowsteadCore {
     // [solvedModelHash] is the model hash taken when the solve ran (as the app's StoredSolve keeps it), not the current
     // one: if the flowsheet changed since, the workbook says its results are out of date.
     private fun sheets(projectName: String, flowsheetJson: String, solveResultJson: String, solvedModelHash: String, solvedAtMillis: Double) =
-        ResultsWorkbook.build(projectName, fs(flowsheetJson), StoredSolve(FlowsheetJson.decodeFromString(SolveResult.serializer(), solveResultJson),
+        ResultsWorkbook.build(projectName, fs(flowsheetJson), StoredSolve(majorOnly(FlowsheetJson.decodeFromString(SolveResult.serializer(), solveResultJson)),
             solvedModelHash, solvedAtMillis.toLong()), UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara))
 
     /** Results workbook (.xlsx bytes) for a stored solve, SI with °C and bara, as the app exports it. */

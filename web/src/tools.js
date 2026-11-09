@@ -4,14 +4,14 @@
 // inputs, calls the engine worker and lays the reports out. Every number shown is one the engine returned.
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { esc, renderReport } from './report.js';
-import { enterToNext } from './forms.js';
+import { enterToNext, redrawKeepingFocus } from './forms.js';
 
 /**
  * [app]: {$, Tools, Safety, engine, project() → {flowsheet, solve}, commit(json, message), toast(text), ready() → Promise}
  * Returns {streamAnalysis(container, id), openTools(tab), blackOilSection(container), hypotheticalSection(container)}.
  */
 export function initTools(app) {
-  const { $, Tools, Safety, Fluids, Dyn, Sheet, Data, engine } = app;
+  const { $, Tools, Safety, Fluids, Dyn, Sheet, Data, Thermo, engine } = app;
   const solveArgs = () => { const s = app.project().solve; return [s ? JSON.stringify(s.result) : null, s?.modelHash ?? '']; };
   const err = (text) => `<p class="rp-note error">${esc(text)}</p>`;
   const busy = (text) => `<p class="rp-note busy">${esc(text)}</p>`;
@@ -155,7 +155,7 @@ export function initTools(app) {
       const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
       setPath(cs, p, v);
       if (p.endsWith('.objectId')) setPath(cs, p.replace('objectId', 'key'), '');
-      if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') caseStudy(body);
+      if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') redrawKeepingFocus(body, () => caseStudy(body));
     };
     body.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
@@ -211,7 +211,7 @@ export function initTools(app) {
       const p = e.target.dataset.p; if (!p) return;
       setPath(op, p, e.target.type === 'checkbox' ? e.target.checked : e.target.value);
       if (p.endsWith('.objectId')) setPath(op, p.replace('objectId', 'key'), '');
-      if (e.target.tagName === 'SELECT') optimiser(body);
+      if (e.target.tagName === 'SELECT') redrawKeepingFocus(body, () => optimiser(body));
     };
     body.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
@@ -292,9 +292,9 @@ export function initTools(app) {
     out.innerHTML = renderReport(JSON.parse(Safety.report(app.project().flowsheet, kind, id)));
     const apply = (action) => {
       const r = JSON.parse(Safety.apply(app.project().flowsheet, ...solveArgs(), kind, id, JSON.stringify(action)));
-      if (r.error) { app.toast(r.error); return redraw(); }
+      if (r.error) { app.toast(r.error); return redrawKeepingFocus($('toolsBody'), redraw); }
       app.commit(JSON.stringify(r.flowsheet), 'Updated');
-      redraw();
+      redrawKeepingFocus($('toolsBody'), redraw);
     };
     form.onchange = (e) => {
       const el = e.target, it = f.items[Number(el.dataset.i)]; if (!it) return;
@@ -311,7 +311,7 @@ export function initTools(app) {
       if (it.kind === 'check') return apply({ ...it.op, on: el.checked });
       if (it.kind === 'choice' && el.value !== '') return apply({ ...it.op, value: el.value });
     };
-    form.onkeydown = (e) => enterToNext(e, form, true);
+    form.onkeydown = (e) => { enterToNext(e, form, true); }; // braces: an on… handler that returns false cancels the key (Tab did nothing)
     form.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.del) return apply({ op: 'delete' });
@@ -423,9 +423,9 @@ export function initTools(app) {
   }
   const dynApply = (action, redraw) => {
     const r = JSON.parse(Dyn.apply(app.project().flowsheet, JSON.stringify(action)));
-    if (r.error) { app.toast(r.error); return redraw(); }
+    if (r.error) { app.toast(r.error); return redrawKeepingFocus($('toolsBody'), redraw); }
     app.commit(JSON.stringify(r.flowsheet), 'Dynamics updated');
-    redraw();
+    redrawKeepingFocus($('toolsBody'), redraw);
   };
   const ev = { time: '', objectId: '', key: '', value: '', unit: '', timeUnit: '' };
   function dynamicsTool(body) {
@@ -464,13 +464,13 @@ export function initTools(app) {
       if (el.dataset.unit) { const u = it.units.find((x) => x.id === sel.value); it.unit = sel.value; if (u?.text) input.value = u.text; return; }
       dynApply({ op: 'param', id: it.id, key: it.key, value: input.value, unit: sel.value }, redraw);
     };
-    form.onkeydown = (e) => enterToNext(e, form, true);
+    form.onkeydown = (e) => { enterToNext(e, form, true); }; // braces: an on… handler that returns false cancels the key (Tab did nothing)
     body.onchange = (e) => {
       const id = e.target.id;
       if (id === 'dyn_evt') ev.time = e.target.value;
       else if (id === 'dyn_evtu') ev.timeUnit = e.target.value;
-      else if (id === 'dyn_evo') { ev.objectId = e.target.value; ev.key = ''; ev.value = ''; redraw(); }
-      else if (id === 'dyn_evk') { ev.key = e.target.value; ev.value = ''; ev.unit = ''; redraw(); }
+      else if (id === 'dyn_evo') { ev.objectId = e.target.value; ev.key = ''; ev.value = ''; redrawKeepingFocus(body, redraw); }
+      else if (id === 'dyn_evk') { ev.key = e.target.value; ev.value = ''; ev.unit = ''; redrawKeepingFocus(body, redraw); }
       else if (id === 'dyn_evv') ev.value = e.target.value;
       else if (id === 'dyn_evvu') ev.unit = e.target.value;
     };
@@ -553,7 +553,7 @@ export function initTools(app) {
   }
 
   // ---------- spreadsheet (D126): the app's SpreadsheetTool ----------
-  const sh = { cell: 'A1', resObj: '', resKey: '', expObj: '', expKey: '' };
+  const sh = { cell: 'A1', resObj: '', resKey: '', expObj: '', expKey: '', satAsked: new Set() };
   function sheetTool(body) {
     const redraw = () => sheetTool(body);
     const [solveJson, hash] = solveArgs();
@@ -562,6 +562,15 @@ export function initTools(app) {
     const ro = cat.find((o) => o.id === sh.resObj);
     const to = d.targets.find((o) => o.id === sh.expObj);
     const cur = d.cells[sh.cell];
+    // Bubble and dew points are calculated on demand (D121): a cell that imports one asks the engine for that stream's,
+    // once per solve, and the sheet is drawn again with the answer (Web 1.10.2).
+    const satIds = [...new Set(Object.values(d.cells).flatMap((c) => [...String(c.raw).matchAll(/\[([^\]]+?)\.((?:bubble|dew)Point\w+)\]/g)]
+      .map((m) => cat.find((o) => o.tag.trim() === m[1].trim())?.id)).filter(Boolean))];
+    const want = satIds.filter((id) => !sh.satAsked.has(`${hash}|${id}`));
+    if (hash && want.length && app.ensureSaturation) {
+      want.forEach((id) => sh.satAsked.add(`${hash}|${id}`));
+      Promise.resolve(app.ensureSaturation(want)).then(() => { if (dlg.open && tab === 'sheet') redraw(); });
+    }
     const grid = `<div class="table-wrap"><table class="props ss-grid"><thead><tr><th scope="col"></th>${d.columns.map((c) => `<th scope="col">${c}</th>`).join('')}</tr></thead><tbody>${
       Array.from({ length: d.rows }, (_, r) => `<tr><th scope="row">${r + 1}</th>${d.columns.map((c) => {
         const n = `${c}${r + 1}`, v = d.cells[n];
@@ -585,7 +594,7 @@ export function initTools(app) {
     body.onkeydown = (e) => { if (e.target.id === 'ss_in' && e.key === 'Enter') { e.preventDefault(); setCell(); body.querySelector('#ss_in')?.focus(); } };
     body.onchange = (e) => {
       const id = e.target.id, v = e.target.value;
-      if (id === 'ss_ro') { sh.resObj = v; sh.resKey = ''; redraw(); }
+      if (id === 'ss_ro') { sh.resObj = v; sh.resKey = ''; redrawKeepingFocus(body, redraw); }
       else if (id === 'ss_rk' && v) {
         // Inserts [TAG.key] at the cursor of the formula, starting a formula if the cell has none.
         const tag = cat.find((o) => o.id === sh.resObj)?.tag, input = body.querySelector('#ss_in');
@@ -593,8 +602,8 @@ export function initTools(app) {
         input.value = t.startsWith('=') ? t + ref : `=${ref}`;
         sh.resKey = ''; e.target.value = '';
         input.focus();
-      } else if (id === 'ss_xo') { sh.expObj = v; sh.expKey = ''; redraw(); }
-      else if (id === 'ss_xk') { sh.expKey = v; redraw(); }
+      } else if (id === 'ss_xo') { sh.expObj = v; sh.expKey = ''; redrawKeepingFocus(body, redraw); }
+      else if (id === 'ss_xk') { sh.expKey = v; redrawKeepingFocus(body, redraw); }
     };
     body.onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;
@@ -770,5 +779,118 @@ export function initTools(app) {
     };
   }
 
-  return { dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
+  // ---------- the Fluid package's thermodynamics tools (D130): the app's ThermoToolsSheet ----------
+  const th = { tool: 'binary', a: '', b: '', c: '', kind: 'txy', lle: true, t: { value: '', unit: '' }, p: { value: '', unit: '' }, step: '0.1',
+    source: '', packages: null, variable: 'temperature', from: { value: '', unit: '' }, to: { value: '', unit: '' }, property: '', html: '', svg: '', started: false };
+  /** The ternary triangle: one-liquid points, points with vapour (hollow), and each two-liquid point's tie line. */
+  function ternarySvg(t) {
+    const W = 520, H = 470, pad = 30, side = W - 2 * pad, h = side * Math.sqrt(3) / 2;
+    const at = ([x, y]) => [pad + x * side, pad + h - y * side];
+    const [top, left, right] = [at([0.5, Math.sqrt(3) / 2]), at([0, 0]), at([1, 0])];
+    const pt = (q, cls, r) => { const [x, y] = at(q); return `<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}"/>`; };
+    return `<figure class="plot rp-plot th-tern"><figcaption>Ternary at the given temperature and pressure (mole fractions)</figcaption>
+      <svg viewBox="0 0 ${W} ${H + pad}" role="img" aria-label="Ternary diagram of ${esc(t.compounds.join(', '))} with ${t.ties.length} tie lines">
+        <polygon points="${[top, left, right].map((q) => q.join(',')).join(' ')}" class="edge"/>
+        ${t.ties.map(([a, b]) => { const [x1, y1] = at(a), [x2, y2] = at(b); return `<line class="tie" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`; }).join('')}
+        ${t.ties.flatMap(([a, b]) => [pt(a, 'l2', 3.5), pt(b, 'l2', 3.5)]).join('')}
+        ${t.liquid.map((q) => pt(q, 'l1', 2.5)).join('')}${t.vapour.map((q) => pt(q, 'v', 3)).join('')}
+        <text x="${top[0]}" y="${top[1] - 8}" text-anchor="middle">${esc(t.compounds[0] ?? '')}</text>
+        <text x="${left[0]}" y="${left[1] + 18}" text-anchor="start">${esc(t.compounds[1] ?? '')}</text>
+        <text x="${right[0]}" y="${right[1] + 18}" text-anchor="end">${esc(t.compounds[2] ?? '')}</text>
+      </svg>
+      <div class="legend"><span><i class="l1"></i>One liquid</span><span><i class="l2"></i>Two liquids (tie lines)</span><span><i class="v"></i>With vapour</span></div></figure>`;
+  }
+  function thermoSection(container) {
+    const redraw = () => thermoSection(container);
+    const fsj = app.project().flowsheet;
+    const [solveJson, hash] = solveArgs();
+    const st = JSON.parse(Thermo.setup(fsj, solveJson, hash));
+    const cs = st.compounds;
+    const pick = (k, i) => { if (!cs.includes(th[k])) th[k] = cs[i] ?? ''; };
+    pick('a', 0); pick('b', 1); pick('c', 2);
+    if (!th.started) {
+      th.started = true;
+      Object.assign(th, { t: { value: st.tDefault, unit: st.tUnit }, p: { value: st.pDefault, unit: st.pUnit }, from: { value: st.tFrom, unit: st.tUnit }, to: { value: st.tTo, unit: st.tUnit } });
+    }
+    if (!st.streams.some((x) => x.id === th.source)) th.source = '';
+    const pkgs = (app.packages?.() ?? []).map((x) => x.name);
+    // The packages compared start from this fluid's own, and start again when the fluid's package changes.
+    if (th.pkgFor !== st.package) { th.pkgFor = st.package; th.packages = st.package ? [st.package] : []; }
+    th.property ||= st.properties[0];
+    const copt = (k) => opts(cs.map((c) => ({ id: c, label: c })), th[k]);
+    const uopts = (list, v) => list.map((u) => `<option value="${esc(u.id)}"${u.id === v ? ' selected' : ''}>${esc(u.symbol)}</option>`).join('');
+    const q = (k, label, units) => `<div class="field"><label for="th_${k}">${label}</label><div class="row"><input type="text" inputmode="decimal" id="th_${k}" value="${esc(th[k].value)}"/><select id="th_${k}u" aria-label="${label} unit">${uopts(units, th[k].unit)}</select></div></div>`;
+    const source = `<div class="field"><label for="th_src">Composition</label><select id="th_src">${opts(st.streams.map((x) => ({ id: x.id, label: `Stream ${x.label}` })), th.source, 'Equal amounts of every component')}</select></div>`;
+    const chips = [['binary', 'Binary diagram'], ['ternary', 'Ternary'], ['critical', 'Critical point'], ['compare', 'Compare packages'], ['chart', 'Property chart']]
+      .map(([k, l]) => `<button type="button" class="chip" data-ttool="${k}" aria-pressed="${th.tool === k}">${l}</button>`).join('');
+    let html = `<h3>Thermodynamics tools</h3><p class="fs-note">With ${esc(st.package || 'no package yet')} and this fluid's components: DWSIM's own calculations, nothing added.</p><div class="fs-chips">${chips}</div>`;
+    const need = { binary: 2, ternary: 3 }[th.tool] ?? 1;
+    if (cs.length < need) html += `<p class="fs-note warn">Add at least ${need} components first.</p>`;
+    else if (th.tool === 'binary') {
+      html += `<div class="row2"><div class="field"><label for="th_a">First component (x axis)</label><select id="th_a">${copt('a')}</select></div><div class="field"><label for="th_b">Second component</label><select id="th_b">${copt('b')}</select></div></div>
+        <div class="fs-chips"><button type="button" class="chip" data-tkind="txy" aria-pressed="${th.kind === 'txy'}">T–x–y at a pressure</button><button type="button" class="chip" data-tkind="pxy" aria-pressed="${th.kind === 'pxy'}">P–x–y at a temperature</button></div>
+        ${th.kind === 'txy' ? q('p', 'Pressure', st.pUnits) : q('t', 'Temperature', st.tUnits)}
+        <label class="chip-check"><input type="checkbox" id="th_lle"${th.lle ? ' checked' : ''}/> Also the liquid–liquid region</label>`;
+    } else if (th.tool === 'ternary') {
+      html += `<div class="row3"><div class="field"><label for="th_a">Top corner</label><select id="th_a">${copt('a')}</select></div><div class="field"><label for="th_b">Bottom left</label><select id="th_b">${copt('b')}</select></div><div class="field"><label for="th_c">Bottom right</label><select id="th_c">${copt('c')}</select></div></div>
+        <div class="row2">${q('t', 'Temperature', st.tUnits)}${q('p', 'Pressure', st.pUnits)}</div>
+        <div class="fs-chips">${['0.1', '0.05'].map((x) => `<button type="button" class="chip" data-tstep="${x}" aria-pressed="${th.step === x}">Grid ${x}</button>`).join('')}</div>`;
+    } else if (th.tool === 'critical') {
+      html += source;
+    } else if (th.tool === 'compare') {
+      html += `${source}<div class="row2">${q('t', 'Temperature', st.tUnits)}${q('p', 'Pressure', st.pUnits)}</div>
+        <p class="fs-note">Up to eight packages, each with its own defaults; your kij go only with the package they were set for.</p>
+        <div class="fs-chips">${(pkgs.length ? pkgs : th.packages).map((x) => `<label class="chip-check"><input type="checkbox" data-tpkg="${esc(x)}"${th.packages.includes(x) ? ' checked' : ''}/> ${esc(x)}</label>`).join('')}</div>`;
+    } else {
+      const temp = th.variable === 'temperature';
+      html += `${source}<div class="fs-chips"><button type="button" class="chip" data-tvar="temperature" aria-pressed="${temp}">Along temperature</button><button type="button" class="chip" data-tvar="pressure" aria-pressed="${!temp}">Along pressure</button></div>
+        <div class="row2">${q('from', 'From', temp ? st.tUnits : st.pUnits)}${q('to', 'To', temp ? st.tUnits : st.pUnits)}</div>
+        ${temp ? q('p', 'At pressure', st.pUnits) : q('t', 'At temperature', st.tUnits)}
+        <div class="field"><label for="th_prop">Property</label><select id="th_prop">${opts(st.properties.map((x) => ({ id: x, label: x })), th.property)}</select></div>`;
+    }
+    html += `<div class="actions"><button type="button" class="btn btn-primary btn-sm" id="th_run"${cs.length < need ? ' disabled' : ''}>${{ binary: 'Draw', ternary: 'Draw', critical: 'Find the critical point', compare: 'Compare', chart: 'Chart' }[th.tool]}</button></div>
+      <div id="th_out" aria-live="polite">${th.html}${th.svg}</div>`;
+    container.innerHTML = html;
+    const val = (k) => ({ value: th[k].value, unit: th[k].unit });
+    container.oninput = (e) => { const m = /^th_(t|p|from|to)$/.exec(e.target.id); if (m) th[m[1]].value = e.target.value; };
+    container.onchange = (e) => {
+      const id = e.target.id, v = e.target.value;
+      const m = /^th_(t|p|from|to)u$/.exec(id);
+      if (m) th[m[1]].unit = v;
+      else if (/^th_[abc]$/.test(id)) th[id.slice(3)] = v;
+      else if (id === 'th_lle') th.lle = e.target.checked;
+      else if (id === 'th_src') th.source = v;
+      else if (id === 'th_prop') th.property = v;
+      else if (e.target.dataset.tpkg) { const x = e.target.dataset.tpkg; th.packages = e.target.checked ? [...new Set([...th.packages, x])].slice(0, 8) : th.packages.filter((y) => y !== x); redrawKeepingFocus(container, redraw); }
+    };
+    container.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.ttool) { th.tool = b.dataset.ttool; th.html = ''; th.svg = ''; return redraw(); }
+      if (b.dataset.tkind) { th.kind = b.dataset.tkind; return redraw(); }
+      if (b.dataset.tstep) { th.step = b.dataset.tstep; return redraw(); }
+      if (b.dataset.tvar) {
+        th.variable = b.dataset.tvar;
+        Object.assign(th, th.variable === 'temperature' ? { from: { value: st.tFrom, unit: st.tUnit }, to: { value: st.tTo, unit: st.tUnit } } : { from: { value: st.pFrom, unit: st.pUnit }, to: { value: st.pTo, unit: st.pUnit } });
+        return redraw();
+      }
+      if (b.id !== 'th_run') return;
+      const fs0 = app.project().flowsheet, tool = th.tool;
+      const params = JSON.stringify({ a: th.a, b: th.b, c: th.c, kind: th.kind, lle: th.lle, temperature: val('t'), pressure: val('p'), step: th.step, source: th.source,
+        packages: th.packages, variable: th.variable, from: val('from'), to: val('to'), property: th.property });
+      const out = container.querySelector('#th_out');
+      th.svg = ''; let tern = null;
+      b.disabled = true;
+      await run(JSON.parse(Thermo.request(tool, fs0, ...solveArgs(), params)), out, { binary: 'Tracing', ternary: 'Flashing the grid', critical: 'Calculating', compare: 'Solving with each package', chart: 'Flashing' }[tool], (result) => {
+        const r = JSON.parse(Thermo.report(tool, fs0, params, JSON.stringify(result)));
+        th.last = r;
+        tern = r.ternary ?? null;
+        return JSON.stringify(r);
+      });
+      th.html = out.innerHTML;
+      if (tern) { th.svg = ternarySvg(tern); out.insertAdjacentHTML('beforeend', th.svg); }
+      b.disabled = false;
+    };
+  }
+
+  return { lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
 }
