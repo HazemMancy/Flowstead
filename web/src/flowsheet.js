@@ -1085,9 +1085,11 @@ async function solve(auto) {
     return showSolve('warning', [`Nothing is ready to solve yet: ${prep.problems[0] ?? 'complete a feed stream'}`]);
   }
   busy = true; $('solveBtn').disabled = true; setStatus('loading', auto ? 'Solving (active)…' : 'Solving…');
+  const solving = project; // another case opened meanwhile must not get this one's results
   try {
     // Bubble and dew points are four flashes a stream, most of a solve's time; they are asked for the streams you open (D119).
     const { result, ms } = await engine.call('solve', { ...prep.solvable, saturationFor: [], enthalpyBasis: enthalpyBasis() });
+    if (project !== solving) return;
     project.solve = { result, modelHash: prep.modelHash, at: Date.now() };
     view.setSolve(JSON.stringify(result), prep.modelHash, project.solve.at);
     persist(); refresh();
@@ -1102,6 +1104,7 @@ async function solve(auto) {
     setStatus('ready', auto ? `Active · ${head}` : head);
     const t = tableStreams(); if (t.length) ensureSaturation(t);
   } catch (e) {
+    if (project !== solving) return;
     showSolve('error', [`Not solved: ${e.message}`]);
     setStatus('failed', 'Not solved');
   } finally {
