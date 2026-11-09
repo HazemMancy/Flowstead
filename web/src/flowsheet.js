@@ -15,7 +15,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools, SubTools: SubToolsObject } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools, EquipmentTools, SubTools: SubToolsObject } = await import('./core/flowstead-core.mjs');
 const fluids = Fluids.getInstance();
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
@@ -384,6 +384,9 @@ function renderInspector() {
   $('inspector').classList.toggle('wide', ui.tab === 'analysis');
   $('tabDesign').setAttribute('aria-selected', ui.tab === 'design'); $('tabResults').setAttribute('aria-selected', ui.tab === 'results'); $('tabAnalysis').setAttribute('aria-selected', ui.tab === 'analysis');
   $('inspForm').hidden = ui.tab !== 'design'; $('inspResults').hidden = ui.tab !== 'results'; $('inspAnalysis').hidden = ui.tab !== 'analysis';
+  $('inspEquip').hidden = ui.tab !== 'design';
+  // A pump's or compressor's curve, a pipe's sections (D136): kept while it has the keyboard, redrawn otherwise.
+  if (ui.tab === 'design' && (!$('inspEquip').contains(document.activeElement) || $('inspEquip').dataset.id !== id)) tools.equipmentSection($('inspEquip'), id);
   if (ui.tab === 'analysis') {
     const hash = core.modelHash(project.flowsheet);
     if ($('inspAnalysis').dataset.id !== id) { $('inspAnalysis').dataset.id = id; tools.streamAnalysis($('inspAnalysis'), id); }
@@ -1172,7 +1175,7 @@ $('unitGrid').addEventListener('change', (e) => {
 
 // ---------- tools (D112) ----------
 const tools = initTools({
-  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Data: DataTools.getInstance(), Thermo: ThermoTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
+  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Data: DataTools.getInstance(), Thermo: ThermoTools.getInstance(), Equip: EquipmentTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
   project: () => project, commit: (json, message) => commit(json, message), toast,
   ready: () => engine.ready, ensureSaturation: (ids) => ensureSaturation(ids), packages: () => packages,
   // The check opens what it reports on: on its own flowsheet (a sub-flowsheet's object opens that sub-flowsheet).

@@ -11,7 +11,7 @@ import { enterToNext, redrawKeepingFocus } from './forms.js';
  * Returns {streamAnalysis(container, id), openTools(tab), blackOilSection(container), hypotheticalSection(container)}.
  */
 export function initTools(app) {
-  const { $, Tools, Safety, Fluids, Dyn, Sheet, Data, Thermo, engine } = app;
+  const { $, Tools, Safety, Fluids, Dyn, Sheet, Data, Thermo, Equip, engine } = app;
   const solveArgs = () => { const s = app.project().solve; return [s ? JSON.stringify(s.result) : null, s?.modelHash ?? '']; };
   const err = (text) => `<p class="rp-note error">${esc(text)}</p>`;
   const busy = (text) => `<p class="rp-note busy">${esc(text)}</p>`;
@@ -649,6 +649,65 @@ export function initTools(app) {
       app.commit(Sheet.toggleWatch(app.project().flowsheet, id, key), 'No longer watched'); redraw();
     };
   }
+  // ---------- a pump's or compressor's curve and a pipe's sections (D136, the app's CurveSection and PipeSectionsSection) ----------
+  function equipmentSection(el, id) {
+    el.dataset.id = id;
+    const fsj = app.project().flowsheet;
+    const cv = JSON.parse(Equip.curve(fsj, id, ...solveArgs()));
+    const ps = JSON.parse(Equip.sections(fsj, id));
+    const cell = (label, value, attrs) => `<label class="eq-cell"><span>${esc(label)}</span><input type="text" inputmode="decimal" value="${esc(value)}" ${attrs} autocomplete="off"/></label>`;
+    let html = '';
+    if (cv.kind) {
+      const pump = cv.kind === 'pump', u = cv.units;
+      html += `<h3>Performance curve</h3><label class="fs-switch"><input type="checkbox" id="eq_curve"${cv.on ? ' checked' : ''}/> Run on a performance curve</label>
+        <p class="fs-note">${pump ? 'Head, efficiency and NPSH required against actual inlet flow; the outlet pressure follows.' : 'Adiabatic head and efficiency against actual inlet flow; the lowest flow is the surge limit.'}</p>`;
+      if (cv.on) {
+        const rows = (pts, line) => pts.map((p, i) => `<div class="eq-row">${cell(`Flow, ${u.flow}`, p.flow, `data-cv="point" data-line="${line}" data-i="${i}" data-f="flow"`)}${cell(`Head, ${u.head}`, p.head, `data-cv="point" data-line="${line}" data-i="${i}" data-f="head"`)}${
+          cell('Eff, %', p.eff, `data-cv="point" data-line="${line}" data-i="${i}" data-f="eff"`)}${pump ? cell(`NPSHr, ${u.head}`, p.npshr, `data-cv="point" data-line="${line}" data-i="${i}" data-f="npshr"`) : ''}
+          <button type="button" class="icon-btn" data-cvop="removePoint" data-line="${line}" data-i="${i}" aria-label="Remove point ${i + 1}">✕</button></div>`).join('') +
+          `<button type="button" class="btn btn-sm" data-cvop="addPoint" data-line="${line}">Add point</button>`;
+        html += (cv.problem ? `<p class="fs-note warn">${esc(cv.problem)}</p>` : '') + rows(cv.points, -1) +
+          `<div class="fs-seg" role="radiogroup" aria-label="How the points are joined"><button type="button" role="radio" aria-checked="${!cv.fit}" data-cvfit="">Straight lines</button><button type="button" role="radio" aria-checked="${cv.fit === 'polynomial'}" data-cvfit="polynomial">Polynomial fit</button></div>` +
+          (cv.fit === 'polynomial' ? `<div class="eq-row">${cell('Order', cv.order, 'data-cv="field" data-f="order"')}</div>` : '') +
+          `<h3>Speed</h3><div class="eq-row">${cell('Curve speed, rpm', cv.speed, 'data-cv="field" data-f="speed"')}${cell('Runs at, rpm', cv.operatingSpeed, 'data-cv="field" data-f="operatingSpeed"')}</div>` +
+          (cv.solvesSpeed ? `<p class="fs-note">Variable speed: give the outlet pressure and the engine finds the speed${cv.solvedSpeed ? ` (${esc(cv.solvedSpeed)} rpm in the last solve)` : ''}; or type the speed it runs at.</p>` : '') +
+          cv.lines.map((l, k) => `<div class="eq-row">${cell('Curve at, rpm', l.speed, `data-cv="lineSpeed" data-line="${k}"`)}<button type="button" class="icon-btn" data-cvop="removeLine" data-line="${k}" aria-label="Remove the curve at ${esc(l.speed)} rpm">✕</button></div>${rows(l.points, k)}`).join('') +
+          (cv.points.length >= 2 ? `<button type="button" class="btn btn-sm" data-cvop="addLine">Add a curve at another speed</button>` : '') +
+          (cv.plot ? renderReport({ sections: [cv.plot] }) : '');
+      }
+    }
+    if (ps.pipe) {
+      const u = ps.units;
+      html += `<h3>Sections and fittings</h3><label class="fs-switch"><input type="checkbox" id="eq_sections"${ps.on ? ' checked' : ''}/> Sections and fittings</label>
+        <p class="fs-note">Several runs (each with its own length, rise and, if it differs, size) with elbows, valves, tees, entrances and exits between them.</p>`;
+      if (ps.on) {
+        html += ps.items.map((s, i) => `<div class="eq-sec"><div class="eq-head"><b>${i + 1}. ${esc(s.name)}</b><button type="button" class="icon-btn" data-psop="remove" data-i="${i}" aria-label="Remove section ${i + 1}">✕</button></div><div class="eq-row">${
+          s.fitting ? cell('Number', s.count, `data-ps="count" data-i="${i}"`) + cell(`Inside diameter, ${u.small}`, s.id, `data-ps="id" data-i="${i}"`)
+            : cell(`Length, ${u.length}`, s.length, `data-ps="length" data-i="${i}"`) + cell(`Rise, ${u.length}`, s.rise, `data-ps="rise" data-i="${i}"`) + cell(`Inside diameter, ${u.small}`, s.id, `data-ps="id" data-i="${i}"`) + cell('Increments', s.increments, `data-ps="increments" data-i="${i}"`)}</div></div>`).join('') +
+          `<div class="eq-row"><button type="button" class="btn btn-sm" data-psop="addRun">Add straight run</button><select id="eq_fitting" aria-label="Add a fitting"><option value="">Add a fitting…</option>${ps.fittings.map((k) => `<option value="${esc(k.id)}">${esc(k.label)}</option>`).join('')}</select></div>` +
+          (ps.totals ? `<p class="fs-note">${esc(ps.totals)}</p>` : '');
+      }
+    }
+    el.innerHTML = html;
+    const curveEdit = (op, msg) => { const r = JSON.parse(Equip.curveEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
+    const secEdit = (op, msg) => { const r = JSON.parse(Equip.sectionsEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
+    el.onchange = (e) => {
+      const t = e.target;
+      if (t.id === 'eq_curve') return curveEdit({ op: t.checked ? 'on' : 'off' }, t.checked ? 'Runs on its curve' : 'Curve off');
+      if (t.id === 'eq_sections') return secEdit({ op: t.checked ? 'on' : 'off' }, t.checked ? 'Sections and fittings on' : 'One straight run');
+      if (t.id === 'eq_fitting' && t.value) return secEdit({ op: 'addFitting', value: t.value }, 'Fitting added');
+      if (t.dataset.cv) return curveEdit({ op: t.dataset.cv, line: Number(t.dataset.line ?? -1), index: Number(t.dataset.i ?? 0), field: t.dataset.f, value: t.value }, 'Curve changed');
+      if (t.dataset.ps) return secEdit({ op: 'set', index: Number(t.dataset.i), field: t.dataset.ps, value: t.value }, 'Section changed');
+    };
+    el.onclick = (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.cvop) return curveEdit({ op: b.dataset.cvop, line: Number(b.dataset.line ?? -1), index: Number(b.dataset.i ?? 0) }, 'Curve changed');
+      if (b.dataset.cvfit !== undefined) return curveEdit({ op: 'field', field: 'fit', value: b.dataset.cvfit }, 'Curve changed');
+      if (b.dataset.psop) return secEdit({ op: b.dataset.psop, index: Number(b.dataset.i ?? 0) }, 'Sections changed');
+    };
+    el.onkeydown = (e) => { if (e.key === 'Enter' && e.target.matches('input[type=text]')) { e.preventDefault(); e.target.blur(); } };
+  }
+
   /** The watch panel over the canvas: shown when something is watched. */
   function renderWatch() {
     const el = $('watchPanel'); if (!el) return;
@@ -933,5 +992,5 @@ export function initTools(app) {
     };
   }
 
-  return { renderWatch, lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
+  return { renderWatch, equipmentSection, lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
 }

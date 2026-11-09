@@ -359,7 +359,7 @@ private class Form(val fs: Flowsheet, val obj: SimObject, val ctx: UnitContext) 
         if (!obj.type.isStream && Ports.of(obj.type).isNotEmpty()) connections()
     }
 
-    private fun curveNote() { if (obj.curve != null) note("This machine runs on a performance curve, edited in the Android app.") }
+    private fun curveNote() { if (obj.curve != null) note("This machine runs on its performance curve, below.") }
 
     /** A feed: conditions (give two), flow (give one), composition (the app's FeedStreamEditor). */
     private fun feed() {
@@ -386,7 +386,7 @@ private class Form(val fs: Flowsheet, val obj: SimObject, val ctx: UnitContext) 
         if (!sections) spec(SpecKey.ELEVATION_CHANGE, "0 (horizontal) if empty")
         spec(SpecKey.ROUGHNESS, "0.0457 mm (commercial steel) if empty")
         if (!sections) spec(SpecKey.INCREMENTS, "10 if empty; 20–50 for long gas lines")
-        if (sections) note("This line has ${obj.pipeSections!!.size} sections with fittings, edited in the Android app.")
+        if (sections) note("This line has ${obj.pipeSections!!.size} sections with fittings, below.")
         label("Flow model")
         note("All gas or all liquid: Darcy–Weisbach with the Chen friction factor, applied in every increment; gas density is re-evaluated along the line. When gas and liquid flow together, the correlation below applies.")
         method("Two-phase correlation", ChoiceKey.PIPE_CORRELATION, ChoiceKey.PIPE_CORRELATIONS)
