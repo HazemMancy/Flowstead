@@ -3,7 +3,7 @@
 Flowstead in the browser, for anyone who can't install the Android app (iPhone, iPad, desktop):
 **https://hazemmancy.github.io/Flowstead/**. Part of the portfolio at https://hazemmancy.github.io/.
 
-The engine is the one the app and the server run: DWSIM 10 (10.2.12) built from the pinned source with every patch in
+The engine is the one the app and the server run: DWSIM 10 (10.2.15) built from the pinned source with every patch in
 `engine/patches`, plus Flowstead's engine code, compiled to WebAssembly. It runs in a Web Worker on the visitor's
 device. There is no server, and nothing the user types leaves the browser. See `docs/DECISIONS.md` D108.
 

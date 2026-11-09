@@ -215,7 +215,7 @@ _Last updated: 2026-11-09_
 
 - The dev sandbox can't reach Google Maven or the Android SDK. `:app` is compiled, linted and tested only in GitHub Actions. `:core` builds and tests locally (`gradle -p android/core test`).
 - The engine Docker image is verified in CI only (no Docker daemon in the sandbox).
-- The engine is built from the pinned DWSIM 10.2.12 source (D94); upstream updates are taken deliberately (ENGINE_VERSION.md).
+- The engine is built from the pinned DWSIM 10.2.15 source (D94, D131); upstream updates are taken deliberately (ENGINE_VERSION.md).
 - DWSIM's rigorous PR VLLE flash did not find the water phase in benchmark 04; Flowstead uses DWSIM's free-water flash instead (D17). Glycol/amine systems still use rigorous VLLE and need checking case by case.
 - DWSIM absolute enthalpy uses a different reference state from HYSYS. Compare duties and ΔH, not absolute H (`docs/engine-spike.md`).
 - The brief's amber/green value colours fail 4.5:1 as text. Darker text variants are used (D14).
