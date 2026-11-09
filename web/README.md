@@ -35,6 +35,11 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.11**
+- **Thermodynamics tools** (Basis), as in the Android app: a **binary diagram** (T–x–y or P–x–y, with the liquid–liquid
+  region), a **ternary** with tie lines, the mixture's true **critical point**, one composition **compared** across up to
+  eight property packages, and a **property chart** along temperature or pressure. All DWSIM's own calculations.
+
 **Web 1.10.2**
 - **Tab** moves to the next field in the Tools forms (Safety, Dynamics…) and keeps what you typed; forms that redraw
   after a change keep your place.

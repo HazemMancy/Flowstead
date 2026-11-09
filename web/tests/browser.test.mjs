@@ -814,6 +814,95 @@ try {
     await p.close();
   }
 
+  // ---------- 4l. the thermodynamics tools in Basis (D130), against independent data as the app's D100 ----------
+  // n-hexane/n-heptane T–x–y at 1 atm ends at NIST's normal boiling points (341.88, 371.58 K); pure methane's critical
+  // point is NIST's (190.56 K, 45.99 bar); water at 25 °C and 1 bar with the steam tables is IAPWS-95's 997.05 kg/m³; a
+  // vapour-fraction chart of n-hexane at 1 atm steps from 0 to 1 across its boiling point; water/n-hexane/ethanol (NRTL,
+  // 25 °C) splits into two liquids.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [], got = {};
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const open = async (pkg, compounds, name) => {
+      const fs = { schemaVersion: 1, propertyPackage: pkg, compounds, atmosphericPressurePa: 101325, objects: [], connections: [] };
+      await p.evaluate(() => document.getElementById('basisDlg').open && document.getElementById('basisDlg').close());
+      await p.setInputFiles('#openFile', { name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fs)) });
+      await p.waitForFunction((n) => window.flowsteadFlowsheet.project.name === n, name, { timeout: 30_000 });
+      await p.click('#basisBtn');
+    };
+    const runTool = async (tool) => {
+      await p.click(`[data-ttool="${tool}"]`);
+      return async () => {
+        await p.click('#th_run');
+        await p.waitForFunction(() => /Calculated by DWSIM|Not calculated|did not|no critical|returned no/.test(document.getElementById('th_out')?.textContent ?? ''), null, { timeout: 600_000 });
+      };
+    };
+    // Binary: the plot's x is the mole fraction of n-hexane; T in °C. The ends are the pure boiling points.
+    await open('Peng-Robinson (PR)', ['N-hexane', 'N-heptane'], 'binary');
+    let go = await runTool('binary');
+    await p.selectOption('#th_a', 'N-hexane'); await p.selectOption('#th_b', 'N-heptane');
+    await p.selectOption('#th_pu', 'bara'); await p.fill('#th_p', '1.01325');
+    await go();
+    const bin = await p.evaluate(() => window.flowsteadFlowsheet.tools.lastThermo?.());
+    const bubble = bin?.sections?.find((x) => x.kind === 'plot')?.series?.find((x) => /bubble/i.test(x.label))?.points ?? [];
+    const tAt = (x) => bubble.reduce((best, q) => (Math.abs(q[0] - x) < Math.abs(best[0] - x) ? q : best), [9, 0]);
+    const [t0, t1] = [tAt(0), tAt(1)];
+    got.binary = [t1[1], t0[1]];
+    if (!(Math.abs(t1[0] - 1) < 0.03 && Math.abs(t1[1] - (341.88 - 273.15)) < 1 && Math.abs(t0[0]) < 0.03 && Math.abs(t0[1] - (371.58 - 273.15)) < 1))
+      problems.push(`binary ends ${JSON.stringify([t1, t0])} °C; NIST ${341.88 - 273.15} and ${371.58 - 273.15} °C`);
+    // Chart: n-hexane's vapour fraction along T at 1 atm: 0 below its boiling point, 1 above.
+    await open('Peng-Robinson (PR)', ['N-hexane'], 'chart');
+    go = await runTool('chart');
+    await p.selectOption('#th_fromu', 'C'); await p.fill('#th_from', '40'); await p.selectOption('#th_tou', 'C'); await p.fill('#th_to', '100');
+    await p.selectOption('#th_pu', 'bara'); await p.fill('#th_p', '1.01325');
+    await p.selectOption('#th_prop', 'Vapour fraction');
+    await go();
+    const vf = (await p.evaluate(() => window.flowsteadFlowsheet.tools.lastThermo?.()))?.sections?.find((x) => x.kind === 'plot')?.series?.[0]?.points ?? [];
+    const below = vf.filter(([t, v]) => v < 0.5).map(([t]) => t), above = vf.filter(([t, v]) => v > 0.5).map(([t]) => t);
+    got.chart = [Math.max(...below), Math.min(...above)];
+    const nbp = 341.88 - 273.15;
+    if (!(vf.length >= 20 && Math.max(...below) < nbp + 1 && Math.min(...above) > nbp - 1)) problems.push(`n-hexane's vapour fraction steps between ${got.chart.join(' and ')} °C; NIST boils it at ${nbp.toFixed(2)} °C`);
+    // Critical point of pure methane.
+    await open('Peng-Robinson (PR)', ['Methane'], 'crit');
+    go = await runTool('critical');
+    await go();
+    const ck = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#th_out tr')].map((r) => [r.querySelector('th')?.textContent, Number(r.querySelector('td')?.textContent)])));
+    got.critical = [ck['Critical temperature'], ck['Critical pressure']];
+    const tcC = await p.evaluate(() => document.querySelector('#th_out tr td.unit')?.textContent);
+    if (!(Math.abs(ck['Critical temperature'] - (190.56 - 273.15)) < 0.5 && Math.abs(ck['Critical pressure'] - 45.99) < 0.5)) problems.push(`methane's critical point ${JSON.stringify(ck)} (${tcC}); NIST −82.59 °C, 45.99 bar`);
+    // Compare: water at 25 °C, 1 bar with the steam tables.
+    await open('Steam Tables (IAPWS-IF97)', ['Water'], 'cmp');
+    go = await runTool('compare');
+    await p.waitForSelector('[data-tpkg="Peng-Robinson (PR)"]');
+    await p.check('[data-tpkg="Peng-Robinson (PR)"]');
+    await p.fill('#th_t', '25'); await p.selectOption('#th_tu', 'C'); await p.selectOption('#th_pu', 'bara'); await p.fill('#th_p', '1');
+    await go();
+    const tbl = await p.evaluate(() => { const t = document.querySelector('#th_out table'); if (!t) return null; const cols = [...t.querySelectorAll('thead th')].map((x) => x.textContent);
+      const rows = [...t.querySelectorAll('tbody tr')];
+      const row = rows.find((r) => /^Liquid density/.test(r.cells[0].textContent)) ?? rows.find((r) => /^Mixture density/.test(r.cells[0].textContent));
+      return { cols, row: row ? [...row.cells].map((c) => c.textContent) : null }; });
+    const iSteam = tbl?.cols.findIndex((c) => /Steam/.test(c)) ?? -1;
+    const rho = Number(tbl?.row?.[iSteam]?.replace(/,/g, ''));
+    got.water = rho;
+    if (!(Math.abs(rho - 997.05) < 0.5 && tbl.cols.some((c) => /Peng/.test(c)))) problems.push(`steam-table water at 25 °C, 1 bar: ${JSON.stringify(tbl)}; IAPWS-95 997.05 kg/m³`);
+    // Ternary: water, n-hexane, ethanol with NRTL at 25 °C, 1 atm: two liquids, with tie lines.
+    await open('NRTL', ['Water', 'N-hexane', 'Ethanol'], 'tern');
+    go = await runTool('ternary');
+    await p.selectOption('#th_a', 'Ethanol'); await p.selectOption('#th_b', 'Water'); await p.selectOption('#th_c', 'N-hexane');
+    await p.fill('#th_t', '25'); await p.selectOption('#th_tu', 'C'); await p.selectOption('#th_pu', 'bara'); await p.fill('#th_p', '1.01325');
+    await go();
+    got.ties = await p.locator('#th_out .th-tern line.tie').count();
+    if (!(got.ties >= 3)) problems.push(`the water/n-hexane/ethanol ternary shows ${got.ties} tie lines`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} thermodynamics tools (C6/C7 ends ${got.binary?.map((x) => x?.toFixed?.(2)).join(', ')} °C; C6 boils between ${got.chart?.join(' and ')} °C; methane critical ${got.critical?.join(' °C, ')} bar; water ${got.water} kg/m³; ${got.ties} tie lines)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4e. bubble and dew points on demand, and HYSYS's enthalpy basis (D119, D120) ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
