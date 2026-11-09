@@ -36,6 +36,12 @@
 .fs-ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:50;opacity:.85}
 .fs-toast{position:fixed;left:50%;bottom:1.5rem;transform:translateX(-50%);z-index:60;max-width:min(32rem,calc(100% - 2rem));background:var(--bg-card);border:1px solid color-mix(in srgb,var(--err) 50%,transparent);color:var(--fg);padding:.6rem .9rem;border-radius:var(--radius);font-size:.8rem;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .fs-toast[hidden]{display:none}
+.fs-toast.info{border-color:color-mix(in srgb,var(--primary) 50%,transparent);white-space:pre-line;pointer-events:none} /* a note to read: taps go through to the page */
+/* An open worksheet is above the solve panel: on a phone they overlap, and the object just tapped is what the user wants (D124). */
+.fs-inspector{z-index:6}
+.fs-selbar{position:absolute;left:50%;top:.6rem;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:.35rem;padding:.3rem .4rem .3rem .7rem;font-size:.8rem;width:max-content;max-width:calc(100% - 1rem);flex-wrap:wrap;white-space:nowrap}
+.fs-selbar[hidden]{display:none}
+#selectBtn[aria-pressed="true"]{background:var(--primary-bg);border-color:var(--primary)}
 /* Phone: the palette is a strip under the canvas, as in the app. */
 @media(max-width:760px){
   .fs-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}

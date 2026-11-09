@@ -462,3 +462,59 @@ test('a hypothetical takes its critical constants in the unit chosen for them (D
   const units = JSON.parse(fluids.hypotheticals(f)).fields.find((x) => x.key === 'pc').units.map((u) => u.id);
   assert.ok(units.includes('psia') && units.includes('bara') && !units.includes('barg') && !units.includes('psig'));
 });
+
+test('select several objects, copy and paste them as the page does (D124)', () => {
+  const v = new FlowsheetView();
+  const fsj = bench('06-compressor-aftercooler');
+  v.setFlowsheet(fsj); v.setViewport(0, 0, 1);
+  v.selectAll();
+  assert.equal(v.selectionCount, 5);
+  assert.equal(v.selectedId, null, 'several selected: no single worksheet');
+  const clip = v.copySelection();
+  // Pasted on the same flowsheet: two grid squares (48) down and right, each paste one step further.
+  const r = JSON.parse(v.paste(clip, 400, 300, 1));
+  assert.equal(r.ids.length, 5);
+  assert.deepEqual(r.notes, []);
+  const f = r.flowsheet, orig = JSON.parse(fsj);
+  for (const [i, o] of orig.objects.entries()) {
+    const c = f.objects.find((x) => x.id === r.ids[i]);
+    assert.equal(c.type, o.type); assert.deepEqual(c.specs ?? {}, o.specs ?? {}); assert.deepEqual(c.composition ?? {}, o.composition ?? {});
+    assert.equal(c.x, o.x + 48); assert.equal(c.y, o.y + 48);
+  }
+  assert.equal(f.connections.length, 8);
+  assert.equal(JSON.parse(v.paste(clip, 400, 300, 2)).flowsheet.objects.find((x) => x.id !== r.ids[0] && x.type === 'material_stream' && x.x === orig.objects[0].x + 96) !== undefined, true);
+  // Into a flowsheet without the components the streams use: refused, naming them.
+  const other = new FlowsheetView();
+  other.setFlowsheet(core.newFlowsheet('Peng-Robinson (PR)')); other.setViewport(0, 0, 1);
+  assert.match(JSON.parse(other.paste(clip, 400, 300, 1)).error, /Methane/);
+  // A box round K-100 and DISCHARGE (world 120 and 240, y 0, at zoom 1 with no pan) selects those two.
+  v.setFlowsheet(fsj); v.selectedId = null;
+  v.beginBox(80, -60); v.boxTo(280, 60);
+  assert.equal(v.endBox(false), 2);
+  assert.deepEqual(JSON.parse(v.selectedIds()).sort(), ['dis', 'k']);
+  // Moved and deleted together.
+  const moved = JSON.parse(v.moveSelected(24, 0)).flowsheet;
+  assert.deepEqual(moved.objects.filter((o) => ['k', 'dis'].includes(o.id)).map((o) => o.x), [144, 264]);
+  assert.deepEqual(JSON.parse(v.deleteSelected()).flowsheet.objects.map((o) => o.id), ['suc', 'e', 'out']);
+});
+
+test('a drag on a selected object moves the whole selection, from its symbol or from a port in use (D124)', () => {
+  const fsj = bench('06-compressor-aftercooler');
+  for (const from of ['symbol', 'port']) {
+    const v = new FlowsheetView();
+    v.setFlowsheet(fsj); v.setViewport(0, 0, 1);
+    v.setSelectedIds(JSON.stringify(['k', 'e']));
+    const k = JSON.parse(fsj).objects.find((o) => o.id === 'k');
+    // K-100's inlet nozzle carries SUCTION (in use): find it by hit-testing left of the symbol's centre.
+    let x = k.x, y = k.y;
+    if (from === 'port') { for (let dx = 0; dx < 60; dx++) { const h = JSON.parse(v.hit(k.x - dx, k.y)); if (h.kind === 'port' && h.id === 'k') { x = k.x - dx; break; } } }
+    assert.equal(JSON.parse(v.hit(x, y)).kind, from === 'port' ? 'port' : 'object', from);
+    assert.equal(v.beginDrag(x, y), 'move');
+    v.dragTo(x, y + 96);
+    const f = JSON.parse(v.endDrag(x, y + 96)).flowsheet;
+    const moved = (id) => f.objects.find((o) => o.id === id).y - JSON.parse(fsj).objects.find((o) => o.id === id).y;
+    assert.equal(moved('k'), moved('e'), `${from}: K-100 and E-100 move together`);
+    assert.ok(moved('k') > 0, from);
+    assert.equal(moved('dis'), 0, `${from}: DISCHARGE was not selected`);
+  }
+});

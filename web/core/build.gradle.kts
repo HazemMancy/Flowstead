@@ -52,6 +52,7 @@ kotlin {
         commonMain {
             kotlin.srcDir(coreSrc.map { it.dir("main") })
             kotlin.srcDir("src/compat/kotlin")
+            kotlin.srcDir("src/webModel/kotlin") // web-only model code on the app's Flowsheet (D124: copy and paste)
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
