@@ -20,6 +20,9 @@ import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.FlowsheetJson
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.PropertyTable
+import app.flowstead.core.model.Reaction
+import app.flowstead.core.model.ReactionType
+import app.flowstead.core.model.ReactorKeys
 import app.flowstead.core.model.Readiness
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SimObject
@@ -183,5 +186,38 @@ class FlowsheetClipboardTest {
         val gone = FlowsheetClipboard.deleteAll(train, listOf("k", "dis"))
         assertEquals(listOf("suc", "e", "out"), gone.objects.map { it.id })
         assertEquals(1, gone.connections.size)
+    }
+
+    @Test
+    fun aTagIsNeverGivenTwiceIgnoringCase() {
+        // Tags are unique ignoring case (rename's rule): a compressor renamed k-100 must not get a copy tagged K-100.
+        val fs = train.copy(objects = train.objects.map { if (it.id == "k") it.copy(tag = "k-100") else it })
+        val clip = FlowsheetClipboard.copy(fs, listOf("k"), ResultView(null, fs.modelHash()), units)
+        val tags = mutableListOf<String>()
+        var f = fs
+        repeat(2) { val r = FlowsheetClipboard.paste(f, clip, 48.0, 48.0); f = r.flowsheet; tags += f.obj(r.ids.single())!!.tag }
+        assertEquals(listOf("K-101", "K-102"), tags)
+        assertEquals(f.objects.size, f.objects.map { it.tag.lowercase() }.toSet().size)
+    }
+
+    @Test
+    fun aReactorBringsItsReactionsToAnotherProject() {
+        val rx = Reaction("rx1", "Ethane cracking", ReactionType.Conversion, mapOf("Ethane" to -1.0, "Methane" to 2.0), baseCompound = "Ethane", conversion = 0.5)
+        val (withR, reactor) = FlowsheetEditing.add(train.copy(reactions = listOf(rx)), ObjectType.ConversionReactor, 600.0, 0.0)
+        val fs = withR.copy(objects = withR.objects.map { if (it.id == reactor.id) it.copy(refs = mapOf(ReactorKeys.REACTIONS to "rx1")) else it })
+        val clip = FlowsheetClipboard.copy(fs, listOf(reactor.id), ResultView(null, fs.modelHash()), units)
+        // Another project with the components but no reactions: the reaction comes with the reactor, and the note says so.
+        val other = Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = train.compounds)
+        val r = FlowsheetClipboard.paste(other, clip, 0.0, 0.0)
+        assertEquals(listOf(rx), r.flowsheet.reactions)
+        assertEquals("rx1", r.flowsheet.obj(r.ids.single())!!.refs[ReactorKeys.REACTIONS])
+        assertTrue(r.notes.single().contains("Ethane cracking"), r.notes.toString())
+        // On its own flowsheet the reaction is already there: not added twice, no note.
+        val same = FlowsheetClipboard.paste(fs, clip, 48.0, 48.0)
+        assertEquals(1, same.flowsheet.reactions.size)
+        assertTrue(same.notes.isEmpty(), same.notes.toString())
+        // A project without a component the reaction uses: refused, naming it.
+        val lean = Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"))
+        assertTrue("Ethane" in assertFailsWith<EditRejected> { FlowsheetClipboard.paste(lean, clip, 0.0, 0.0) }.message!!)
     }
 }

@@ -44,6 +44,7 @@ In the repository's settings, **Pages → Build and deployment → Source** must
   in this browser as well. **Duplicate** (Ctrl+D, or a unit's own Duplicate button) does both at once.
 - A copied stream whose source unit was not copied becomes a feed at its solved temperature, pressure, flow and
   composition. An Adjust or Set whose target was not copied must be pointed again. A note after the paste says which.
+- A reactor brings the reactions it uses into another project.
 - Results are not copied: solve to see the copies' numbers.
 
 **Web 1.7**

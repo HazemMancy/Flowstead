@@ -11,6 +11,8 @@ import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.PropertyTable
+import app.flowstead.core.model.Reaction
+import app.flowstead.core.model.Reactors
 import app.flowstead.core.model.ReliefDeviceDef
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SetKeys
@@ -41,6 +43,8 @@ data class Clip(
     val feedSpecs: Map<String, FeedSpec> = emptyMap(),
     /** Calculated streams that paste as feeds with nothing to define them: no current results when copied. */
     val unspecified: List<String> = emptyList(),
+    /** The reactions the copied reactors use, so a reactor pastes into another project ready to solve. */
+    val reactions: List<Reaction> = emptyList(),
 ) {
     companion object { const val KIND = "flowstead.clip.v1" }
 }
@@ -78,6 +82,7 @@ object FlowsheetClipboard {
             dynamics = fs.dynamics?.parameters.orEmpty().filterKeys { it in inside },
             feedSpecs = feedSpecs,
             unspecified = unspecified,
+            reactions = chosen.flatMap { Reactors.reactionIds(it) }.distinct().mapNotNull { fs.reaction(it) },
         )
     }
 
@@ -89,16 +94,22 @@ object FlowsheetClipboard {
      */
     fun paste(fs: Flowsheet, clip: Clip, dx: Double, dy: Double): Pasted {
         if (clip.kind != Clip.KIND || clip.objects.isEmpty()) throw EditRejected("Nothing to paste")
-        val missing = clip.objects.flatMap { it.composition.keys }.plus(clip.feedSpecs.values.flatMap { it.composition.keys })
-            .filter { it !in fs.compounds }.distinct()
-        if (missing.isNotEmpty()) throw EditRejected("Add ${missing.joinToString(", ")} to the components first: the copied streams use ${if (missing.size == 1) "it" else "them"}")
+        // Reactions the target does not have yet come with the reactors that use them (same id: the target's is kept).
+        val newReactions = clip.reactions.filter { fs.reaction(it.id) == null }
+        val missing = (clip.objects.flatMap { it.composition.keys } + clip.feedSpecs.values.flatMap { it.composition.keys } +
+            newReactions.flatMap { it.stoichiometry.keys }).filter { it !in fs.compounds }.distinct()
+        if (missing.isNotEmpty()) throw EditRejected("Add ${missing.joinToString(", ")} to the components first: the copied streams or reactions use ${if (missing.size == 1) "it" else "them"}")
         val notes = mutableListOf<String>()
+        newReactions.forEach { notes += "Added reaction ${it.name}, which the copied reactors use" }
         val newIds = clip.objects.associate { it.id to FlowsheetEditing.newId() }
-        var out = fs
+        var out = if (newReactions.isEmpty()) fs else fs.copy(reactions = fs.reactions + newReactions)
         val pasted = mutableListOf<SimObject>()
         for (o in clip.objects) {
+            // Tags are unique ignoring case (FlowsheetEditing.rename). The palette's tags are upper case (K-101, 3), so
+            // the next one is found among the existing tags in upper case: a "k-100" keeps K-100 from being given again.
             val used = out.objects.map { it.tag.lowercase() }.toSet()
-            val tag = if (o.tag.lowercase() !in used) o.tag else FlowsheetEditing.nextTag(out, o.type)
+            val tag = if (o.tag.lowercase() !in used) o.tag
+                else FlowsheetEditing.nextTag(out.copy(objects = out.objects.map { it.copy(tag = it.tag.uppercase()) }), o.type)
             var refs = o.refs.mapValues { (_, v) -> newIds[v] ?: v }
             for (k in OBJECT_REFS) {
                 val v = o.refs[k] ?: continue
