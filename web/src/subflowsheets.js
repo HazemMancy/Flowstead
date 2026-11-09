@@ -50,11 +50,16 @@ export function withSubflowsheets(engine, Sub) {
           const v = JSON.parse(Sub.transfer(JSON.stringify(t), src ? JSON.stringify(src) : null, tagOf.get(t.sourceStream) ?? t.sourceStream, rf));
           if (v.error) throw new Error(v.error);
           if (v.missing) {
-            if (results.has(t.sourceRegion)) throw new Error(`${tagOf.get(t.sourceStream) ?? 'A boundary stream'} has no result, so ${tagOf.get(t.targetStream) ?? 'the stream it feeds'} can't be defined`);
-            // A loop between packages: the first sweep starts from the target stream's own estimate.
+            if (results.has(t.sourceRegion) && sweeps > 1) throw new Error(`${tagOf.get(t.sourceStream) ?? 'A boundary stream'} has no result, so ${tagOf.get(t.targetStream) ?? 'the stream it feeds'} can't be defined`);
+            if (values.has(i)) { rf = Sub.apply(rf, t.targetStream, values.get(i)); continue; }
+            // Its source runs later in this sweep: the first sweep starts from the stream's own estimate when it has
+            // one, else leaves it out (what it feeds solves on the next sweep). A loop that never fills is reported.
             const own = f.objects.find((o) => o.id === t.targetStream);
-            if (!(own?.specs && Object.keys(own.specs).length >= 3 && Object.keys(own.composition ?? {}).length))
-              throw new Error(`${tagOf.get(t.targetStream) ?? 'A boundary stream'} closes a loop between fluid packages: give it an estimate (temperature, pressure, flow and composition)`);
+            if (!(own?.specs && Object.keys(own.specs).length >= 3 && Object.keys(own.composition ?? {}).length)) {
+              if (sweeps > 1) throw new Error(`${tagOf.get(t.targetStream) ?? 'A boundary stream'} closes a loop between fluid packages: give it an estimate (temperature, pressure, flow and composition)`);
+              const r0 = JSON.parse(rf);
+              rf = JSON.stringify({ ...r0, objects: r0.objects.filter((o) => o.id !== t.targetStream), connections: r0.connections.filter((c) => c.fromObject !== t.targetStream && c.toObject !== t.targetStream) });
+            }
             moved = Infinity;
             continue;
           }

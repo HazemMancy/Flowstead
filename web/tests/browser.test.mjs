@@ -1011,7 +1011,7 @@ try {
     const o = r?.objects ?? {};
     const duty = o.h?.properties?.duty;
     got.b = { status: r?.status, duty, dutyRef };
-    if (r?.status !== 'converged') problems.push(`steam sub-flowsheet: ${r?.status} ${JSON.stringify(r?.messages ?? [])}`);
+    if (r?.status !== 'converged') problems.push(`steam sub-flowsheet: ${r?.status} ${JSON.stringify(r?.messages ?? [])} ${await p.evaluate(() => document.getElementById('solveMsgs')?.textContent ?? '')}`);
     if (!(Math.abs(duty - dutyRef) / dutyRef < 5e-4)) problems.push(`duty ${duty} W; IAPWS-IF97 ${dutyRef.toFixed(1)} W`);
     const pr = (id, k) => o[id]?.properties?.[k];
     for (const [a, b] of [['feed', 'in'], ['out', 'prod']]) for (const k of ['temperature', 'pressure'])
