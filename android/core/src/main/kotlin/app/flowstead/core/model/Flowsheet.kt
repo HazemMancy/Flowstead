@@ -212,18 +212,21 @@ data class PipeSegmentSection(
 }
 
 /**
- * DWSIM's pipe fittings (D98), as the engine's PipeFittings: [value] is an equivalent length L/D or, when not
- * [lOverD], a resistance coefficient K on the velocity head.
+ * DWSIM's 28 pipe fittings (Pipe.vb Kfit), with DWSIM's own values: the engine sends the fitting's index and DWSIM
+ * applies the value, so these are descriptions. Labels say what each value is in Crane TP-410 terms (DWSIM's
+ * "normal" entrance, K 0.78, is Crane's inward-projecting one; its "Borda", K 0.25, a rounded one; its "normal 90°
+ * curve", L/D 14, a long-radius welded elbow), so the right one is picked; a flush square-edged entrance (Crane K 0.5)
+ * has no DWSIM fitting: the nearest are 0.78 (conservative) and 0.25.
  */
 object PipeFittings {
     data class Kind(val id: String, val name: String, val value: Double, val lOverD: Boolean)
 
     val ALL: List<Kind> = listOf(
-        Kind("elbow_90", "Standard elbow 90°", 14.0, true),
-        Kind("elbow_45", "Standard elbow 45°", 16.0, true),
+        Kind("elbow_90", "Elbow 90°, long radius (welded, r/d 1.5)", 14.0, true),
+        Kind("elbow_45", "Elbow 45°, standard", 16.0, true),
         Kind("return_bend", "Return bend 180°", 50.0, true),
         Kind("mitre_elbow_90", "Mitre elbow 90°", 60.0, true),
-        Kind("threaded_elbow_90", "Threaded elbow 90°", 30.0, true),
+        Kind("threaded_elbow_90", "Elbow 90°, standard (threaded)", 30.0, true),
         Kind("tee_run", "Tee, flow through run", 20.0, true),
         Kind("tee_branch", "Tee, flow through branch", 60.0, true),
         Kind("gate_valve", "Gate valve (open)", 8.0, true),
@@ -235,10 +238,10 @@ object PipeFittings {
         Kind("lift_check_valve", "Lift check valve", 600.0, true),
         Kind("stop_check_valve", "Stop-check valve (globe)", 400.0, true),
         Kind("foot_valve", "Foot valve (poppet disc)", 420.0, true),
-        Kind("entrance_normal", "Entrance, normal", 0.78, false),
-        Kind("entrance_borda", "Entrance, Borda", 0.25, false),
-        Kind("exit_normal", "Exit, normal", 1.0, false),
-        Kind("exit_borda", "Exit, Borda", 1.0, false),
+        Kind("entrance_normal", "Entrance, inward-projecting (Borda)", 0.78, false),
+        Kind("entrance_borda", "Entrance, rounded", 0.25, false),
+        Kind("exit_normal", "Exit, square-edged", 1.0, false),
+        Kind("exit_borda", "Exit, projecting", 1.0, false),
         Kind("contraction_3_4", "Sudden contraction d/D = 3/4", 1.11, false),
         Kind("contraction_1_2", "Sudden contraction d/D = 1/2", 9.6, false),
         Kind("contraction_1_4", "Sudden contraction d/D = 1/4", 96.0, false),

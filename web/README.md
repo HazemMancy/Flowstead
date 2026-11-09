@@ -36,6 +36,9 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 ## Release notes
 
 **Web 1.14**
+- **Review fixes (D138):** relief and depressuring of a vessel with several feeds take them all; a standing vessel's
+  bottom-head volume; a horizontal separator's mist-pad area; the oil–water level's name; near-critical tray sizing;
+  pipe fittings named for what their values are (Crane TP-410).
 - **The app's remaining tools, now on the web:** a pump's or compressor's **performance curve** (points, polynomial
   fit, variable speed with curves at other speeds, the operating point on the chart), a pipe's **sections and
   fittings** (Crane L/D or K), **reactors** with their **reactions** (conversion, equilibrium, kinetic, catalytic),

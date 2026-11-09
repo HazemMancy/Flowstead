@@ -48,6 +48,29 @@ class SafetyTest {
     }
 
     @Test
+    fun aBlockedOutletRelievesEveryFeedOfTheVessel() {
+        // Two feeds into V-100: 2 kg/s of propane (10 mol/s) and 1 kg/s of butane (5 mol/s); its gas leaves at 310 K, 7.9 bar.
+        fun stream(t: Double, p: Double, w: Double, n: Double, x: Map<String, Double>) = ObjectResult(ObjectStatus.Solved,
+            properties = mapOf("temperature" to t, "pressure" to p, "massFlow" to w, "molarFlow" to n), phases = mapOf("overall" to PhaseResult(composition = x)))
+        val two = Flowsheet(compounds = listOf("Propane", "n-Butane"),
+            objects = listOf(feed, SimObject("f2", "FEED 2", ObjectType.MaterialStream), sep, SimObject("g", "GAS", ObjectType.MaterialStream)),
+            connections = listOf(Connection("f", 0, "v", 0), Connection("f2", 0, "v", 1), Connection("v", 0, "g", 0)))
+        val r = ResultView(StoredSolve(SolveResult(SolveStatus.Converged, objects = mapOf(
+            "f" to stream(300.0, 8e5, 2.0, 10.0, mapOf("Propane" to 1.0)),
+            "f2" to stream(320.0, 8e5, 1.0, 5.0, mapOf("n-Butane" to 1.0)),
+            "g" to stream(310.0, 7.9e5, 2.5, 13.0, mapOf("Propane" to 0.8, "n-Butane" to 0.2)),
+        )), two.modelHash(), 0), two.modelHash())
+        val req = Safety.request(two, r, ReliefDeviceDef("d", "PSV-100", protectedId = "v", setPressure = 18e5,
+            scenarios = listOf(ReliefScenario(ReliefScenarioKinds.BLOCKED_OUTLET))))
+        // Hand mixture: 10/15 propane, 5/15 butane; the whole 3 kg/s; the vessel's own state.
+        assertEquals(2.0 / 3, req.composition.getValue("Propane"), 1e-12)
+        assertEquals(1.0 / 3, req.composition.getValue("n-Butane"), 1e-12)
+        assertEquals(3.0, req.scenarios.single().massFlow)
+        assertEquals(310.0, req.operatingTemperature)
+        assertEquals(7.9e5, req.operatingPressure)
+    }
+
+    @Test
     fun editingAValveDropsItsResultButRenamingKeepsIt() {
         val d = ReliefDeviceDef("d", "PSV-100", protectedId = "v", setPressure = 18e5)
         var f = FlowsheetEditing.upsertReliefDevice(fs, d)

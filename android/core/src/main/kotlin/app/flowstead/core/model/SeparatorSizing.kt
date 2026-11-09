@@ -243,7 +243,9 @@ object SeparatorSizing {
             nozzles += nozzle("Water outlet", sqrt(4 * loads.waterVolumeFlow / (PI * LIQUID_OUTLET_VELOCITY)), "v ≤ $LIQUID_OUTLET_VELOCITY m/s")
         } else if (ql > 0) nozzles += nozzle("Liquid outlet", sqrt(4 * ql / (PI * LIQUID_OUTLET_VELOCITY)), "v ≤ $LIQUID_OUTLET_VELOCITY m/s")
         val dIn = inlet.insideDiameter ?: inlet.requiredDiameter
-        val meArea = if (input.mistEliminator != MistEliminator.None && qg > 0) qg / vMax else null
+        // The pad sees vertical up-flow: its face area takes the pad's own K (no horizontal-flow factor).
+        val padK = input.k ?: (input.mistEliminator.k * pressureFactor(loads.pressure))
+        val meArea = if (input.mistEliminator != MistEliminator.None && qg > 0 && rhoL > rhoG) qg / (padK * sqrt((rhoL - rhoG) / rhoG)) else null
 
         return if (!input.horizontal) {
             var dReq = if (qg > 0) sqrt(4 * qg / (PI * vMax)) else 0.3
@@ -256,7 +258,7 @@ object SeparatorSizing {
             levels += Level("Low liquid level (LLL)", h)
             if (water) {
                 h += loads.waterVolumeFlow * input.waterRetention / a
-                levels += Level("Oil–water oilWater", h)
+                levels += Level("Oil–water interface", h)
                 h += loads.oilVolumeFlow * input.oilRetention / a
                 levels += Level("Normal liquid level (NLL)", h)
             } else {
@@ -312,7 +314,7 @@ object SeparatorSizing {
             if (gasOk && liquidOk && layersOk) {
                 val length = roundUp(l, 0.1)
                 val levels = mutableListOf(Level("Low liquid level (LLL)", LOW_LEVEL_HORIZONTAL))
-                oilWater?.let { levels += Level("Oil–water oilWater", it) }
+                oilWater?.let { levels += Level("Oil–water interface", it) }
                 val nll = if (water) height(segment(oilWater!!, d) + loads.oilVolumeFlow * input.oilRetention / length, d)
                 else height(aLow + ql * input.holdupTime / length, d)
                 levels += Level("Normal liquid level (NLL)", nll)

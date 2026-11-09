@@ -566,25 +566,7 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
     }
 
     /// <summary>The vessel's volume below a height h from its bottom (m³).</summary>
-    private double VolumeTo(double h)
-    {
-        var g = req.Vessel;
-        var r = g.Diameter / 2;
-        if (g.Lying)
-        {
-            var hh = Math.Clamp(h, 0, g.Diameter);
-            var segment = r * r * Math.Acos((r - hh) / r) - (r - hh) * Math.Sqrt(Math.Max(0, 2 * r * hh - hh * hh));
-            // 2:1 heads: the same fraction of their volume as a sphere filled to hh would have.
-            var heads = g.HeadFactor * 2 * Math.PI * Math.Pow(g.Diameter, 3) / 24 * hh * hh * (3 * r - hh) / (4 * r * r * r);
-            return segment * g.Length + heads;
-        }
-        var headDepth = g.Diameter / 4;
-        var headVolume = Math.PI * Math.Pow(g.Diameter, 3) / 24;
-        double Head(double y) => headVolume * Math.Pow(y / headDepth, 2) * (3 - 2 * y / headDepth); // bottom head filled to y
-        if (h <= headDepth) return Head(Math.Max(h, 0));
-        var top = h - headDepth - g.Length;
-        return headVolume + Math.PI * r * r * Math.Min(h - headDepth, g.Length) + (top > 0 ? headVolume - Head(Math.Max(headDepth - top, 0)) : 0);
-    }
+    private double VolumeTo(double h) => ReliefMath.VolumeBelow(req.Vessel, h);
 
     // ------------------------------------------------------------------ helpers
 

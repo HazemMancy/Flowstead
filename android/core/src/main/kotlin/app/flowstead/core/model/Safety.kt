@@ -195,16 +195,37 @@ object Safety {
     /** The vessel's contents in normal operation: its first inlet stream's solved state and composition. */
     data class Contents(val composition: Map<String, Double>, val temperature: Double, val pressure: Double, val massFlow: Double?)
 
+    /**
+     * With one feed, its state and composition. With several, the vessel holds their mixture: the molar-flow-weighted
+     * composition, every feed's mass flow (a blocked outlet relieves them all, API 521 §4.4.2), and the vessel's own
+     * temperature and pressure, read from its first outlet stream (the engine's flash of the mixed feed).
+     */
     fun contents(fs: Flowsheet, results: ResultView, protectedId: String?): Contents? {
         val id = protectedId ?: return null
-        val feed = fs.connections.filter { it.toObject == id }.map { it.fromObject }
-            .firstOrNull { s -> fs.objects.any { it.id == s && it.type == ObjectType.MaterialStream } } ?: id.takeIf { fs.objects.any { o -> o.id == id && o.type == ObjectType.MaterialStream } }
-            ?: return null
-        val t = (results.value(feed, "temperature") as? DisplayValue.Calculated)?.si ?: return null
-        val p = (results.value(feed, "pressure") as? DisplayValue.Calculated)?.si ?: return null
-        val x = fs.compounds.associateWith { c -> (results.composition(feed, Phases.OVERALL, c) as? DisplayValue.Calculated)?.si ?: 0.0 }.filterValues { it > 0 }
+        fun calc(obj: String, key: String) = (results.value(obj, key) as? DisplayValue.Calculated)?.si
+        fun isStream(s: String) = fs.objects.any { it.id == s && it.type == ObjectType.MaterialStream }
+        fun composition(s: String) = fs.compounds.associateWith { c -> (results.composition(s, Phases.OVERALL, c) as? DisplayValue.Calculated)?.si ?: 0.0 }
+        val feeds = fs.connections.filter { it.toObject == id }.map { it.fromObject }.filter(::isStream).distinct()
+            .ifEmpty { listOfNotNull(id.takeIf(::isStream)) }
+        if (feeds.isEmpty()) return null
+        if (feeds.size == 1) {
+            val feed = feeds.single()
+            val t = calc(feed, "temperature") ?: return null
+            val p = calc(feed, "pressure") ?: return null
+            val x = composition(feed).filterValues { it > 0 }
+            if (x.isEmpty()) return null
+            return Contents(x, t, p, calc(feed, "massFlow"))
+        }
+        val flows = feeds.map { calc(it, "molarFlow") ?: return null }
+        val total = flows.sum()
+        if (!(total > 0)) return null
+        val x = fs.compounds.associateWith { c -> feeds.indices.sumOf { i -> flows[i] * (composition(feeds[i])[c] ?: 0.0) } / total }.filterValues { it > 0 }
         if (x.isEmpty()) return null
-        val w = (results.value(feed, "massFlow") as? DisplayValue.Calculated)?.si
+        val outlet = fs.connections.filter { it.fromObject == id }.map { it.toObject }.firstOrNull(::isStream)
+        val state = outlet?.takeIf { calc(it, "temperature") != null && calc(it, "pressure") != null } ?: feeds.first()
+        val t = calc(state, "temperature") ?: return null
+        val p = calc(state, "pressure") ?: return null
+        val w = feeds.map { calc(it, "massFlow") }.takeIf { m -> m.all { it != null } }?.sumOf { it!! }
         return Contents(x, t, p, w)
     }
 
