@@ -497,3 +497,24 @@ test('select several objects, copy and paste them as the page does (D124)', () =
   assert.deepEqual(moved.objects.filter((o) => ['k', 'dis'].includes(o.id)).map((o) => o.x), [144, 264]);
   assert.deepEqual(JSON.parse(v.deleteSelected()).flowsheet.objects.map((o) => o.id), ['suc', 'e', 'out']);
 });
+
+test('a drag on a selected object moves the whole selection, from its symbol or from a port in use (D124)', () => {
+  const fsj = bench('06-compressor-aftercooler');
+  for (const from of ['symbol', 'port']) {
+    const v = new FlowsheetView();
+    v.setFlowsheet(fsj); v.setViewport(0, 0, 1);
+    v.setSelectedIds(JSON.stringify(['k', 'e']));
+    const k = JSON.parse(fsj).objects.find((o) => o.id === 'k');
+    // K-100's inlet nozzle carries SUCTION (in use): find it by hit-testing left of the symbol's centre.
+    let x = k.x, y = k.y;
+    if (from === 'port') { for (let dx = 0; dx < 60; dx++) { const h = JSON.parse(v.hit(k.x - dx, k.y)); if (h.kind === 'port' && h.id === 'k') { x = k.x - dx; break; } } }
+    assert.equal(JSON.parse(v.hit(x, y)).kind, from === 'port' ? 'port' : 'object', from);
+    assert.equal(v.beginDrag(x, y), 'move');
+    v.dragTo(x, y + 96);
+    const f = JSON.parse(v.endDrag(x, y + 96)).flowsheet;
+    const moved = (id) => f.objects.find((o) => o.id === id).y - JSON.parse(fsj).objects.find((o) => o.id === id).y;
+    assert.equal(moved('k'), moved('e'), `${from}: K-100 and E-100 move together`);
+    assert.ok(moved('k') > 0, from);
+    assert.equal(moved('dis'), 0, `${from}: DISCHARGE was not selected`);
+  }
+});

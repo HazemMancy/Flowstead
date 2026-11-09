@@ -221,6 +221,7 @@ class FlowsheetView {
                 return "wire"
             } else {
                 dragging = h.objectId to CanvasGeometry.center(fs.obj(h.objectId) ?: return "pan")
+                if (selection.size > 1 && h.objectId in selection) groupDelta = Offset.Zero
                 return "move"
             }
             is Hit.OnObject -> {
