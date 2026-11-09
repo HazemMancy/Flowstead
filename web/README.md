@@ -35,6 +35,13 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.14**
+- **The app's remaining tools, now on the web:** a pump's or compressor's **performance curve** (points, polynomial
+  fit, variable speed with curves at other speeds, the operating point on the chart), a pipe's **sections and
+  fittings** (Crane L/D or K), **reactors** with their **reactions** (conversion, equilibrium, kinetic, catalytic),
+  **McCabe–Thiele** for a binary column, the flowsheet **check**, and the **watch panel** over the flowsheet.
+- Sub-flowsheets on several fluid packages are solved by the app's own code (one implementation for app and web).
+
 **Web 1.13**
 - **Comfortable on every screen, with a finger or a mouse.** On a phone the toolbar is two lines (the name, Hold or
   Active, Solve; then one strip of every other button that scrolls sideways), so the flowsheet keeps most of the

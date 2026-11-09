@@ -119,6 +119,7 @@ export function initTools(app) {
     else if (tab === 'opt') optimiser(body);
     else if (tab === 'dyn') dynamicsTool(body);
     else if (tab === 'pid') pidTool(body);
+    else if (tab === 'mccabe') mcCabeTool(body);
     else if (tab === 'sheet') sheetTool(body);
     else if (tab === 'scen') scenariosTool(body);
     else safety(body, tab);
@@ -649,6 +650,38 @@ export function initTools(app) {
       app.commit(Sheet.toggleWatch(app.project().flowsheet, id, key), 'No longer watched'); redraw();
     };
   }
+  // ---------- McCabe–Thiele (D106, D136): the app's McCabeTool, on the engine's T–x–y at the column pressure ----------
+  const mt = { a: '', b: '', p: '1.01325', pu: 'bara', xD: '0.95', xB: '0.05', zF: '0.5', q: '1', reflux: '2', html: '' };
+  let mtLast = null;
+  function mcCabeTool(body) {
+    const comps = JSON.parse(app.project().flowsheet).compounds ?? [];
+    if (!comps.includes(mt.a)) mt.a = comps[0] ?? '';
+    if (!comps.includes(mt.b) || mt.b === mt.a) mt.b = comps.find((c) => c !== mt.a) ?? '';
+    const pu = [{ id: 'bara', label: 'bara' }, { id: 'kPa', label: 'kPa' }, { id: 'atm', label: 'atm' }, { id: 'psia', label: 'psia' }];
+    const num = (k, label, hint = '') => `<div class="field"><label for="mt_${k}">${esc(label)}</label><input type="text" id="mt_${k}" inputmode="decimal" value="${esc(mt[k])}"${hint ? ` placeholder="${esc(hint)}"` : ''} autocomplete="off"/></div>`;
+    body.innerHTML = `<p class="fs-note">A binary column stage by stage on the engine's equilibrium curve at the column pressure: constant molar overflow, total condenser, partial reboiler counted as a stage.</p>
+      <div class="row2"><div class="field"><label for="mt_a">Light key</label><select id="mt_a">${opts(comps.map((c) => ({ id: c, label: c })), mt.a)}</select></div>
+      <div class="field"><label for="mt_b">Heavy key</label><select id="mt_b">${opts(comps.map((c) => ({ id: c, label: c })), mt.b)}</select></div></div>
+      <div class="row2">${num('p', 'Column pressure')}<div class="field"><label for="mt_pu">Unit</label><select id="mt_pu">${opts(pu, mt.pu)}</select></div></div>
+      <div class="row2">${num('xD', 'xD (light key in the distillate)')}${num('xB', 'xB (in the bottoms)')}</div>
+      <div class="row2">${num('zF', 'zF (in the feed)')}${num('q', 'Feed q', '1 = saturated liquid')}</div>
+      ${num('reflux', 'Reflux ratio L/D')}
+      <button type="button" class="btn btn-sm btn-primary" id="mt_run"${comps.length < 2 ? ' disabled' : ''}>Trace the equilibrium curve</button>
+      <div id="mt_out" aria-live="polite">${mt.html}</div>`;
+    body.onchange = body.oninput = (e) => { const k = e.target.id?.replace(/^mt_/, ''); if (k && k in mt && k !== 'html') mt[k] = e.target.value; };
+    const params = () => JSON.stringify({ a: mt.a, b: mt.b, pressure: { value: mt.p, unit: mt.pu }, xD: mt.xD, xB: mt.xB, zF: mt.zF, q: mt.q, reflux: mt.reflux });
+    body.onclick = async (e) => {
+      if (e.target.id !== 'mt_run') return;
+      const fs0 = app.project().flowsheet, out = body.querySelector('#mt_out');
+      await run(JSON.parse(Thermo.request('mccabe', fs0, ...solveArgs(), params())), out, 'Tracing the equilibrium', (result) => {
+        mtLast = result;
+        return Thermo.report('mccabe', fs0, params(), JSON.stringify(result));
+      });
+      mt.html = out.innerHTML;
+    };
+    body.onkeydown = (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); body.querySelector('#mt_run').click(); } };
+  }
+
   // ---------- a pump's or compressor's curve and a pipe's sections (D136, the app's CurveSection and PipeSectionsSection) ----------
   let rxOpen = null;
   function equipmentSection(el, id) {
@@ -1027,5 +1060,5 @@ export function initTools(app) {
     };
   }
 
-  return { renderWatch, equipmentSection, lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
+  return { lastMcCabe: () => mtLast, renderWatch, equipmentSection, lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
 }

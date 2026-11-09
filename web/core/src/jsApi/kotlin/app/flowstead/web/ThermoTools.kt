@@ -27,6 +27,7 @@ import app.flowstead.core.api.TernaryResult
 import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.Flowsheet
+import app.flowstead.core.model.McCabeThiele
 import app.flowstead.core.model.FlowsheetJson
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.ThermoPlots
@@ -117,6 +118,14 @@ object ThermoTools {
                     if (txy) pr() else 101325.0, if (txy) 298.15 else t(), 40, p["lle"]?.jsonPrimitive?.booleanOrNull ?: true,
                 )))
             }
+            // McCabe–Thiele (D106, D136): the engine's T–x–y at the column pressure, as the app's McCabeTool asks for it.
+            "mccabe" -> {
+                val a = compound("a"); val b = compound("b")
+                if (a == b) throw EditRejected("Choose two different components")
+                call("binaryDiagram", FlowsheetJson.encodeToJsonElement(BinaryDiagramRequest.serializer(), BinaryDiagramRequest(
+                    f, a, b, BinaryDiagramKinds.TXY, pr(), 298.15, 60, false,
+                )))
+            }
             "ternary" -> {
                 val three = listOf(compound("a"), compound("b"), compound("c"))
                 if (three.distinct().size < 3) throw EditRejected("Choose three different components")
@@ -158,6 +167,30 @@ object ThermoTools {
                 val r = FlowsheetJson.decodeFromString(BinaryDiagramResult.serializer(), resultJson)
                 ThermoPlots.binary(r, p["a"]?.jsonPrimitive?.content ?: "")?.let { rep.plot(it) } ?: rep.note("DWSIM traced no curve for this pair.", "warn")
                 r.warnings.forEach { rep.note(it, "warn") }
+            }
+            // Stepped by the app's own McCabeThiele on the engine's equilibrium curve.
+            "mccabe" -> {
+                val r = FlowsheetJson.decodeFromString(BinaryDiagramResult.serializer(), resultJson)
+                fun d(k: String) = p[k]?.jsonPrimitive?.content?.trim()?.replace(',', '.')?.toDoubleOrNull()
+                val curve = McCabeThiele.equilibrium(r)
+                val xD = d("xD"); val xB = d("xB"); val zF = d("zF"); val q = d("q"); val reflux = d("reflux")
+                val res = if (curve.isNotEmpty() && listOf(xD, xB, zF, q, reflux).all { it != null }) McCabeThiele.solve(curve, xD!!, xB!!, zF!!, q!!, reflux!!) else null
+                when {
+                    curve.isEmpty() -> rep.note("DWSIM traced no equilibrium curve for this pair at this pressure.", "warn")
+                    res == null -> rep.note("Give 0 < xB < zF < xD < 1 and a positive reflux ratio.", "warn")
+                    else -> {
+                        if (res.stages.isNotEmpty()) rep.plot(McCabeThiele.plot(res, xD!!, xB!!, reflux!!, p["a"]?.jsonPrimitive?.content ?: ""))
+                        rep.kv(listOfNotNull(
+                            if (res.stages.isNotEmpty()) Triple("Theoretical stages (reboiler included)", ValueFormat.number(res.theoreticalStages, 2), "") else null,
+                            if (res.stages.isNotEmpty()) Triple("Feed stage (from the top)", res.feedStage.toString(), "") else null,
+                            Triple("Minimum stages (total reflux)", ValueFormat.number(res.minimumStages, 2), ""),
+                            res.minimumReflux?.let { Triple("Minimum reflux ratio", ValueFormat.number(it, 3), "") },
+                        ))
+                        res.warnings.forEach { rep.note(it, "warn") }
+                    }
+                }
+                r.warnings.forEach { rep.note(it, "warn") }
+                rep.note("Constant molar overflow, a total condenser and a partial reboiler counted as a stage, on DWSIM's equilibrium curve at the column pressure.")
             }
             "ternary" -> {
                 val r = FlowsheetJson.decodeFromString(TernaryResult.serializer(), resultJson)

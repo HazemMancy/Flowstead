@@ -1030,6 +1030,136 @@ try {
     await p.close();
   }
 
+  // ---------- 4n. the app's tools now on the web (D136), against independent references ----------
+  // (a) A pump on its curve, set through the worksheet: water (steam tables) at 1 bar, 25 °C, 27.7 kg/s; curve 60 m at
+  //     no flow, 40 m at 200 m³/h (straight line). The head is the curve at the actual flow, Q = m/ρ with IAPWS-95's
+  //     997.05 kg/m³ (100.0 m³/h → 50.0 m), and the pressure rise is ρgH.
+  // (b) A conversion reactor: methane combustion at 60 % conversion (benchmark 13 edited through the reactor editor):
+  //     the outlet methane is 40 % of the inlet methane (hand mass balance).
+  // (c) A pipe with a 90° elbow (Crane L/D 14) drops as much as a straight pipe 14 diameters longer; the straight
+  //     pipe's drop is Darcy–Weisbach with Colebrook's friction factor, by hand (water, IAPWS ρ and μ).
+  // (d) McCabe–Thiele, benzene/toluene at 1 atm: the minimum stages agree with Fenske on α from NIST's Antoine
+  //     vapour pressures at the top and bottom temperatures.
+  // (e) The watch panel shows the engine's value; the check lists nothing for a solved, complete case.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [], got = {};
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const open = async (fs, name) => {
+      await p.setInputFiles('#openFile', { name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fs)) });
+      await p.waitForFunction((n) => window.flowsteadFlowsheet.project.name === n, name, { timeout: 30_000 });
+    };
+    const solveNow = async () => {
+      await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+      const before = await p.evaluate(() => window.flowsteadFlowsheet.project.solve?.at ?? 0);
+      await p.click('#solveBtn');
+      await p.waitForFunction((b) => (window.flowsteadFlowsheet.project.solve?.at ?? 0) > b || /Not solved|Fix /.test(document.getElementById('solveMsgs')?.textContent ?? ''), before, { timeout: 600_000 });
+      return p.evaluate(() => window.flowsteadFlowsheet.project.solve?.result);
+    };
+    const openObject = (id) => p.evaluate((x) => [...document.querySelectorAll('#objects button')].find((b) => b.dataset.id === x)?.click(), id);
+    const S = (si, unit) => ({ si, unit });
+    const water = { Water: 1 };
+    // (a)
+    const m = 27.7, rho = 997.05;
+    await open({ schemaVersion: 1, propertyPackage: 'Steam Tables (IAPWS-IF97)', compounds: ['Water'], atmosphericPressurePa: 101325,
+      objects: [
+        { id: 'w', tag: 'WATER', type: 'material_stream', x: 0, y: 0, specs: { temperature: S(298.15, 'C'), pressure: S(1e5, 'bara'), massFlow: S(m, 'kg/s') }, composition: water },
+        { id: 'p', tag: 'P-100', type: 'pump', x: 120, y: 0 },
+        { id: 'd', tag: 'DIS', type: 'material_stream', x: 240, y: 0 }],
+      connections: [{ fromObject: 'w', fromPort: 0, toObject: 'p', toPort: 0 }, { fromObject: 'p', fromPort: 0, toObject: 'd', toPort: 0 }] }, 'pump');
+    await openObject('p');
+    await p.check('#eq_curve');
+    await p.click('[data-cvop="addPoint"]');
+    const setCell = async (sel, v) => { await p.fill(sel, v); await p.press(sel, 'Enter'); await p.waitForTimeout(80); };
+    await setCell('[data-cv="point"][data-i="0"][data-f="flow"]', '0');
+    await setCell('[data-cv="point"][data-i="0"][data-f="head"]', '60');
+    await p.click('[data-cvop="addPoint"]');
+    await setCell('[data-cv="point"][data-i="1"][data-f="flow"]', '200');
+    await setCell('[data-cv="point"][data-i="1"][data-f="head"]', '40');
+    await setCell('[data-cv="point"][data-i="0"][data-f="eff"]', '70');
+    await setCell('[data-cv="point"][data-i="1"][data-f="eff"]', '70');
+    const curve = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === 'p').curve);
+    const ra = await solveNow();
+    const qh = m / rho * 3600, hRef = 60 - 0.1 * qh, head = ra?.objects?.p?.properties?.head;
+    const rise = (ra?.objects?.d?.properties?.pressure ?? NaN) - 1e5;
+    got.pump = { head, hRef, rise, rhoGH: rho * 9.80665 * hRef };
+    if (!(curve?.points?.length === 2 && Math.abs(curve.points[1].flow - 200 / 3600) < 1e-12 && curve.points[1].head === 40)) problems.push(`curve as saved: ${JSON.stringify(curve)}`);
+    if (!(Math.abs(head - hRef) / hRef < 2e-3)) problems.push(`pump head ${head} m; the curve at ${qh.toFixed(2)} m³/h gives ${hRef.toFixed(3)} m`);
+    if (!(Math.abs(rise - rho * 9.80665 * hRef) / rise < 3e-3)) problems.push(`pressure rise ${rise} Pa; ρgH ${rho * 9.80665 * hRef} Pa`);
+    // (b)
+    const b13 = JSON.parse(fs.readFileSync(path.join(benchDir, '13-conversion-reactor', 'input.json'), 'utf8')).flowsheet;
+    await open(b13, 'rx');
+    const fsr = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
+    const reactor = fsr.objects.find((o) => o.type === 'conversion_reactor');
+    await openObject(reactor.id);
+    const rid = fsr.reactions[0].id;
+    await p.click(`[data-rxopen="${rid}"]`);
+    await setCell(`[data-rx="conversion"][data-r="${rid}"]`, '60');
+    const conv = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).reactions[0].conversion);
+    const rb = await solveNow();
+    const ch4 = (id) => (rb?.objects?.[id]?.properties?.molarFlow ?? 0) * (rb?.objects?.[id]?.phases?.overall?.composition?.Methane ?? 0);
+    const inlet = fsr.connections.filter((c) => c.toObject === reactor.id).map((c) => c.fromObject).filter((id) => fsr.objects.find((o) => o.id === id)?.type === 'material_stream');
+    const outlets = fsr.connections.filter((c) => c.fromObject === reactor.id).map((c) => c.toObject).filter((id) => fsr.objects.find((o) => o.id === id)?.type === 'material_stream');
+    const nin = inlet.reduce((a, id) => a + ch4(id), 0), nout = outlets.reduce((a, id) => a + ch4(id), 0);
+    got.reactor = { conv, nin, nout };
+    if (!(conv === 0.6 && rb?.status === 'converged' && nin > 0 && Math.abs(nout / nin - 0.4) < 1e-4)) problems.push(`reactor: ${JSON.stringify(got.reactor)} ${rb?.status}`);
+    // (c)
+    const pipe = (id, len, withElbow) => ({ schemaVersion: 1, propertyPackage: 'Steam Tables (IAPWS-IF97)', compounds: ['Water'], atmosphericPressurePa: 101325,
+      objects: [
+        { id: 'f', tag: 'FEED', type: 'material_stream', x: 0, y: 0, specs: { temperature: S(298.15, 'C'), pressure: S(5e5, 'bara'), massFlow: S(10, 'kg/s') }, composition: water },
+        { id: 'l', tag: 'L-100', type: 'pipe_segment', x: 120, y: 0, specs: { length: S(len, 'm'), innerDiameter: S(0.1, 'mm'), roughness: S(4.6e-5, 'mm'), elevationChange: S(0, 'm') },
+          ...(withElbow ? { pipeSections: [{ length: len, count: 1 }, { fitting: 'elbow_90', count: 1 }] } : {}) },
+        { id: 'o', tag: 'OUT', type: 'material_stream', x: 240, y: 0 }],
+      connections: [{ fromObject: 'f', fromPort: 0, toObject: 'l', toPort: 0 }, { fromObject: 'l', fromPort: 0, toObject: 'o', toPort: 0 }] });
+    await open(pipe('a', 100, true), 'elbow');
+    const rc1 = await solveNow();
+    await open(pipe('b', 101.4, false), 'straight');
+    const rc2 = await solveNow();
+    const dp1 = rc1?.objects?.l?.properties?.pressureDrop, dp2 = rc2?.objects?.l?.properties?.pressureDrop;
+    // Darcy–Weisbach, Colebrook (iterated), IAPWS water at 25 °C: ρ 997.05 kg/m³, μ 890.02 µPa·s.
+    const D = 0.1, A = Math.PI * D * D / 4, v = 10 / rho / A, Re = rho * v * D / 890.02e-6, eps = 4.6e-5;
+    let ff = 0.02; for (let i = 0; i < 50; i++) ff = (-2 * Math.log10(eps / D / 3.7 + 2.51 / (Re * Math.sqrt(ff)))) ** -2;
+    const dpHand = ff * 101.4 / D * rho * v * v / 2;
+    got.pipe = { dp1, dp2, dpHand };
+    if (!(Math.abs(dp1 - dp2) / dp2 < 5e-3)) problems.push(`elbow pipe ${dp1} Pa vs straight pipe 14 D longer ${dp2} Pa`);
+    if (!(Math.abs(dp2 - dpHand) / dpHand < 0.03)) problems.push(`straight pipe ${dp2} Pa; Darcy–Weisbach with Colebrook ${dpHand.toFixed(0)} Pa`);
+    // (d)
+    await open({ schemaVersion: 1, propertyPackage: 'Peng-Robinson (PR)', compounds: ['Benzene', 'Toluene'], atmosphericPressurePa: 101325, objects: [], connections: [] }, 'mccabe');
+    await p.click('#toolsBtn'); await p.click('#toolsTabs [data-tab="mccabe"]');
+    await p.selectOption('#mt_a', 'Benzene'); await p.selectOption('#mt_b', 'Toluene');
+    await p.click('#mt_run');
+    await p.waitForFunction(() => /Calculated by DWSIM|Not calculated/.test(document.getElementById('mt_out')?.textContent ?? ''), null, { timeout: 300_000 });
+    const kv = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#mt_out tr')].map((r) => [r.querySelector('th')?.textContent, Number(r.querySelector('td')?.textContent)])));
+    const antoine = (A, B, C, T) => 10 ** (A - B / (T + C)); // bar, K (NIST)
+    const alpha = (T) => antoine(4.01814, 1203.835, -53.226, T) / antoine(4.07827, 1343.943, -53.773, T);
+    const aAvg = Math.sqrt(alpha(354) * alpha(382));
+    const fenske = Math.log((0.95 / 0.05) * (0.95 / 0.05)) / Math.log(aAvg);
+    const nmin = kv['Minimum stages (total reflux)'], n = kv['Theoretical stages (reboiler included)'];
+    got.mccabe = { nmin, fenske, n };
+    if (!(Math.abs(nmin - fenske) / fenske < 0.06 && n > nmin)) problems.push(`McCabe–Thiele ${JSON.stringify(kv)}; Fenske ${fenske.toFixed(2)} (α ${aAvg.toFixed(3)})`);
+    await p.click('#toolsClose');
+    // (e)
+    await open(pipe('b', 101.4, false), 'watch');
+    await solveNow();
+    await p.click('#toolsBtn'); await p.click('#toolsTabs [data-tab="watch"]');
+    await p.selectOption('#wt_obj', 'l'); await p.selectOption('#wt_key', 'pressureDrop');
+    await p.click('#toolsTabs [data-tab="check"]');
+    const check = await p.$eval('#toolsBody', (e) => e.textContent);
+    await p.click('#toolsClose');
+    const panel = await p.$eval('#watchPanel', (e) => (e.hidden ? '' : e.textContent));
+    got.watch = panel;
+    if (!/L-100.*Pressure drop/i.test(panel) || !/\d/.test(panel)) problems.push(`watch panel: "${panel}"`);
+    if (!/Nothing to report/.test(check)) problems.push(`check: "${check.slice(0, 200)}"`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} app tools on the web (pump ${got.pump?.head?.toFixed?.(3)} m for ${got.pump?.hRef?.toFixed?.(3)} m; reactor CH4 out/in ${(got.reactor?.nout / got.reactor?.nin).toFixed?.(4)}; elbow ${got.pipe?.dp1?.toFixed?.(0)} vs ${got.pipe?.dp2?.toFixed?.(0)} Pa, hand ${got.pipe?.dpHand?.toFixed?.(0)} Pa; Nmin ${got.mccabe?.nmin} vs Fenske ${got.mccabe?.fenske?.toFixed?.(2)}; watch "${(got.watch ?? '').trim()}")`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4e. bubble and dew points on demand, and HYSYS's enthalpy basis (D119, D120) ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
