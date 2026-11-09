@@ -432,6 +432,34 @@ try {
     await p.close();
   }
 
+  // ---------- 4k. every window's title bar sits at its top and covers no text, at rest and scrolled (Web 1.10.1) ----------
+  // A sticky bar sticks inside its scroller's padding: with top 0 in a padded dialog it sat 1.1rem down, over the first
+  // line (owner's screenshots of Units, Basis and Export).
+  for (const width of [1280, 390]) {
+    const p = await browser.newPage({ viewport: { width, height: 700 } });
+    const problems = [];
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '20-separator-dynamics');
+    await p.waitForFunction(() => window.flowsteadFlowsheet.project.flowsheet.includes('LIC-100'), null, { timeout: 60_000 });
+    const found = await p.evaluate(() => [...document.querySelectorAll('dialog')].filter((d) => d.querySelector(':scope > .fs-insp-head')).map((d) => {
+      d.showModal();
+      if (d.id === 'toolsDlg') document.querySelector('#toolsTabs [data-tab="dyn"]').click(); // a long one, to scroll
+      const h = d.querySelector(':scope > .fs-insp-head'), next = h.nextElementSibling;
+      const top = () => h.getBoundingClientRect().top - d.getBoundingClientRect().top - d.clientTop;
+      const r = { id: d.id, top: top(), gap: next.getBoundingClientRect().top - h.getBoundingClientRect().bottom };
+      d.scrollTop = 400; r.scrolled = d.scrollTop > 0 ? top() : 0; d.scrollTop = 0;
+      d.close();
+      return r;
+    }));
+    for (const r of found) if (Math.abs(r.top) > 1 || r.gap < 0 || Math.abs(r.scrolled) > 1) problems.push(`${r.id}: title ${r.top.toFixed(1)} px from the top, ${r.gap.toFixed(1)} px above the first line, ${r.scrolled.toFixed(1)} px scrolled`);
+    if (found.length < 7) problems.push(`only ${found.length} windows checked`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} window title bars at ${width} px (${found.length} windows)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4g. select several objects, copy, paste, duplicate, move and delete them (D124) ----------
   // The reference for a copy is its original: benchmark 06's train pasted beside itself must solve to the original's
   // numbers, and a stream pasted without its source unit must be a feed at the engine's solved conditions.

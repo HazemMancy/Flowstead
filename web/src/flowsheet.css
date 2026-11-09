@@ -120,7 +120,9 @@
 .fs-insp-top{position:sticky;top:0;z-index:4;background:var(--bg-card);margin:0 -1.2rem;padding:.9rem 1.2rem 0}
 .fs-insp-top .fs-insp-head h2{margin-bottom:0}
 .fs-insp-top .fs-tabs{margin-bottom:0}
-.fs-dialog>.fs-insp-head{position:sticky;top:0;z-index:4;background:var(--bg-card);margin:-1.1rem -1.2rem .5rem;padding:1rem 1.2rem .6rem;border-bottom:1px solid var(--border)}
+/* A sticky box sticks inside its scroller's padding: top is minus the dialog's 1.1rem top padding, or the bar sits that far
+   down over the first line of text (owner's screenshots, Web 1.10). */
+.fs-dialog>.fs-insp-head{position:sticky;top:-1.1rem;z-index:4;background:var(--bg-card);margin:-1.1rem -1.2rem .5rem;padding:1rem 1.2rem .6rem;border-bottom:1px solid var(--border)}
 .fs-solve .fs-insp-head{position:sticky;top:-1.1rem;z-index:4;background:var(--bg-card);margin:-1.1rem -1.2rem 0;padding:1rem 1.2rem .4rem}
 .fs-desc{margin-bottom:.2rem}
 /* Table and copy windows */

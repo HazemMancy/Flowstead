@@ -69,7 +69,8 @@ object DynamicsTools {
         fun label(t: String) { items += buildJsonObject { put("kind", "label"); put("text", t) } }
         fun sub(t: String) { items += buildJsonObject { put("kind", "sub"); put("text", t) } }
         fun q(id: String, key: String, label: String, si: Double?, quantity: Quantity, hint: String? = null) {
-            val def = if (key in SECONDS) Units.second else unitFor(quantity)
+            // A starting level and opening read as their hints do ("50 %"), in %.
+            val def = if (key in SECONDS) Units.second else if (key == DynamicKey.INITIAL_LEVEL || key == DynamicKey.OPENING) Units.percent else unitFor(quantity)
             items += buildJsonObject {
                 put("kind", "q"); put("id", id); put("key", key); put("label", label); put("unit", def.id)
                 putJsonArray("units") {

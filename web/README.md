@@ -35,6 +35,10 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.10.1**
+- The title bar of every window (Units, Basis, Export, Tools…) no longer covers the first line of text under it.
+- Dynamics: a separator's starting level and a valve's starting opening are typed in %.
+
 **Web 1.10**
 - **Spreadsheet** (Tools → Spreadsheet), as in HYSYS and the Android app: numbers, text and formulas (=A1*2,
   =sum(A1:A5), sqrt, ln…); =[K-100.power] brings in a solved result in its display unit (pick it from the menu). Export a
