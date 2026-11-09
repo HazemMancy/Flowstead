@@ -1031,8 +1031,8 @@ try {
   }
 
   // ---------- 4n. the app's tools now on the web (D136), against independent references ----------
-  // (a) A pump on its curve, set through the worksheet: water (steam tables) at 1 bar, 25 °C, 27.7 kg/s; curve 60 m at
-  //     no flow, 40 m at 200 m³/h (straight line). The head is the curve at the actual flow, Q = m/ρ with IAPWS-95's
+  // (a) A pump on its curve, set through the worksheet: water (steam tables) at 1 bar, 25 °C, 27.7 kg/s; curve 55 m at
+  //     50 m³/h, 40 m at 200 m³/h (the line H = 60 − 0.1 Q; the app takes points at positive flows only). The head is the curve at the actual flow, Q = m/ρ with IAPWS-95's
   //     997.05 kg/m³ (100.0 m³/h → 50.0 m), and the pressure rise is ρgH.
   // (b) A conversion reactor: methane combustion at 60 % conversion (benchmark 13 edited through the reactor editor):
   //     the outlet methane is 40 % of the inlet methane (hand mass balance).
@@ -1074,8 +1074,8 @@ try {
     await p.check('#eq_curve');
     await p.click('[data-cvop="addPoint"]');
     const setCell = async (sel, v) => { await p.fill(sel, v); await p.press(sel, 'Enter'); await p.waitForTimeout(80); };
-    await setCell('[data-cv="point"][data-i="0"][data-f="flow"]', '0');
-    await setCell('[data-cv="point"][data-i="0"][data-f="head"]', '60');
+    await setCell('[data-cv="point"][data-i="0"][data-f="flow"]', '50');
+    await setCell('[data-cv="point"][data-i="0"][data-f="head"]', '55');
     await p.click('[data-cvop="addPoint"]');
     await setCell('[data-cv="point"][data-i="1"][data-f="flow"]', '200');
     await setCell('[data-cv="point"][data-i="1"][data-f="head"]', '40');

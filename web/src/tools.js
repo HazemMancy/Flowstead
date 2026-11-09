@@ -13,6 +13,8 @@ import { enterToNext, redrawKeepingFocus } from './forms.js';
 export function initTools(app) {
   const { $, Tools, Safety, Fluids, Dyn, Sheet, Data, Thermo, Equip, engine } = app;
   const solveArgs = () => { const s = app.project().solve; return [s ? JSON.stringify(s.result) : null, s?.modelHash ?? '']; };
+  /** Commits what a tool's edit returned: {flowsheet} or {error}. */
+  const commitSheet = (json, message) => { const r = JSON.parse(json); if (r.error) { app.toast(r.error); return false; } app.commit(JSON.stringify(r.flowsheet), message); return true; };
   const err = (text) => `<p class="rp-note error">${esc(text)}</p>`;
   const busy = (text) => `<p class="rp-note busy">${esc(text)}</p>`;
   const opts = (list, value, placeholder) => (placeholder ? `<option value="">${esc(placeholder)}</option>` : '') +
@@ -592,7 +594,6 @@ export function initTools(app) {
         <select id="ss_xk" aria-label="Specification"${to ? '' : ' disabled'}>${opts((to?.keys ?? []).map((x) => ({ id: x.key, label: `${x.label} (${x.unit})` })), sh.expKey, 'Specification…')}</select></div>
       <div class="actions"><button type="button" class="btn btn-sm" id="ss_addx"${to && sh.expKey ? '' : ' disabled'}>Export ${sh.cell}</button>
         ${d.exports.length ? '<button type="button" class="btn btn-primary btn-sm" id="ss_apply">Apply the exports to the flowsheet</button>' : ''}</div>`;
-    const commitSheet = (json, message) => { const r = JSON.parse(json); if (r.error) { app.toast(r.error); return false; } app.commit(JSON.stringify(r.flowsheet), message); return true; };
     const setCell = () => { if (commitSheet(Sheet.setCell(app.project().flowsheet, sh.cell, body.querySelector('#ss_in').value), `${sh.cell} set`)) redraw(); };
     body.onkeydown = (e) => { if (e.target.id === 'ss_in' && e.key === 'Enter') { e.preventDefault(); setCell(); body.querySelector('#ss_in')?.focus(); } };
     body.onchange = (e) => {
@@ -642,12 +643,12 @@ export function initTools(app) {
         : '<p class="fs-note">Solve the flowsheet to pick results.</p>'}`;
     body.onchange = (e) => {
       if (e.target.id === 'wt_obj') { watchPick = e.target.value; return redraw(); }
-      if (e.target.id === 'wt_key' && e.target.value) { app.commit(Sheet.toggleWatch(app.project().flowsheet, watchPick, e.target.value), 'Watching it'); redraw(); }
+      if (e.target.id === 'wt_key' && e.target.value) { commitSheet(Sheet.toggleWatch(app.project().flowsheet, watchPick, e.target.value), 'Watching it'); redraw(); }
     };
     body.onclick = (e) => {
       const b = e.target.closest('[data-unwatch]'); if (!b) return;
       const [id, key] = b.dataset.unwatch.split('|');
-      app.commit(Sheet.toggleWatch(app.project().flowsheet, id, key), 'No longer watched'); redraw();
+      commitSheet(Sheet.toggleWatch(app.project().flowsheet, id, key), 'No longer watched'); redraw();
     };
   }
   // ---------- McCabe–Thiele (D106, D136): the app's McCabeTool, on the engine's T–x–y at the column pressure ----------
