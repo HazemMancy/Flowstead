@@ -15,10 +15,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools, SubTools } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools, SubTools: SubToolsObject } = await import('./core/flowstead-core.mjs');
 const fluids = Fluids.getInstance();
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
+const SubTools = SubToolsObject.getInstance();
 const view = new FlowsheetView();
 const types = JSON.parse(core.objectTypes());
 const typeById = new Map(types.map((t) => [t.id, t]));
@@ -184,6 +185,14 @@ canvas.addEventListener('wheel', (e) => {
 
 function tap(x, y, multi) {
   const h = JSON.parse(view.hit(x, y));
+  if (h.kind === 'block' && !multi) {
+    // A second tap on the same block within a moment opens it (works with a mouse, a pen or a finger).
+    const now = Date.now();
+    if (lastBlockTap.id === h.id && now - lastBlockTap.at < 450) { lastBlockTap.id = null; return goLevel(h.id); }
+    lastBlockTap.id = h.id; lastBlockTap.at = now;
+    view.selectedId = null; blockSel = h.id; return selectionChanged();
+  }
+  blockSel = null;
   if (multi && h.kind !== 'empty' && h.kind !== 'table') { view.toggleSelected(h.id); return selectionChanged(); }
   if (multi) return; // a Shift-click on empty canvas keeps the selection
   select(h.kind === 'empty' ? null : h.id);
@@ -192,8 +201,10 @@ function tap(x, y, multi) {
 // ---------- keyboard ----------
 canvas.addEventListener('keydown', (e) => {
   const id = view.selectedId, n = view.selectionCount;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && blockSel && !n) { e.preventDefault(); return deleteBlock(blockSel); }
   if ((e.key === 'Delete' || e.key === 'Backspace') && n) { e.preventDefault(); return removeSelected(); }
-  if (e.key === 'Escape') return select(null);
+  if (e.key === 'Enter' && blockSel) { e.preventDefault(); return goLevel(blockSel); }
+  if (e.key === 'Escape') { if (!n && !blockSel && level) return goLevel(SubTools.levelOf(project.flowsheet, level)); blockSel = null; return select(null); }
   const d = { ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12] }[e.key];
   if (d && n > 1) { e.preventDefault(); applyEdit(view.moveSelected(d[0], d[1]), `Moved ${n} objects`); }
   else if (d && id) {
@@ -288,7 +299,9 @@ $('items').addEventListener('keydown', (e) => {
 function addAt(typeId, x, y) {
   try {
     const r = JSON.parse(core.add(project.flowsheet, typeId, x, y));
-    commit(JSON.stringify(r.flowsheet), `Added ${typeById.get(typeId).label}`);
+    // On the flowsheet shown: inside a sub-flowsheet the new object is one of its own (D132).
+    const placed = level ? JSON.parse(SubTools.place(JSON.stringify(r.flowsheet), r.id, level)).flowsheet : r.flowsheet;
+    commit(JSON.stringify(placed), `Added ${typeById.get(typeId).label}`);
     select(r.id);
   } catch (e) { toast(errorText(e)); }
 }
@@ -297,10 +310,12 @@ function addAt(typeId, x, y) {
 const objects = () => JSON.parse(project.flowsheet).objects ?? [];
 function select(id) {
   view.selectedId = id;
+  if (id) blockSel = null;
   selectionChanged();
 }
 /** After the selection changes: one object opens its worksheet, several show the selection bar (D124). */
 function selectionChanged() {
+  renderBlock();
   renderInspector();
   renderSelection();
   draw();
@@ -653,18 +668,119 @@ $('pasteBtn').addEventListener('click', () => pasteClip());
 $('selCopy').addEventListener('click', copySelection);
 $('selDup').addEventListener('click', duplicateSelection);
 $('selDelete').addEventListener('click', removeSelected);
+
+// ---------- sub-flowsheets (D132): blocks that hold a flowsheet, as HYSYS's ----------
+let level = '', blockSel = null;
+const levelObjects = () => objects().filter((o) => (o.parent ?? '') === level);
+function goLevel(id) {
+  view.setLevel(id ?? '');
+  level = view.currentLevel; blockSel = null;
+  select(null); renderLevel();
+  view.fit(cssW, cssH); refresh();
+  announce(level ? `Opened ${JSON.parse(SubTools.path(project.flowsheet, level)).at(-1)?.tag}` : 'Main flowsheet');
+}
+function renderLevel() {
+  const path = JSON.parse(SubTools.path(project.flowsheet, level));
+  $('levelBar').hidden = !level && !SubTools.has(project.flowsheet);
+  const crumbs = [{ id: '', tag: 'Main' }, ...path];
+  $('levelBar').innerHTML = crumbs.map((c, i) => i === crumbs.length - 1
+    ? `<span aria-current="page">${esc(c.tag)}</span>` : `<button type="button" data-level="${esc(c.id)}">${esc(c.tag)}</button><span class="sep" aria-hidden="true">›</span>`).join('')
+    + (level ? '' : '<small style="opacity:.7;margin-left:.4rem">Double-click a block to open it</small>');
+}
+$('levelBar').addEventListener('click', (e) => { const b = e.target.closest('[data-level]'); if (b) goLevel(b.dataset.level); });
+const lastBlockTap = { id: null, at: 0 };
+function subEdit(json, message) {
+  const r = JSON.parse(json);
+  if (r.error) { toast(r.error); return null; }
+  commit(JSON.stringify(r.flowsheet), message);
+  return r;
+}
+function addBlock() {
+  const n = view.selectionCount;
+  if (n) {
+    const ids = JSON.parse(view.selectedIds());
+    const os = objects().filter((o) => ids.includes(o.id));
+    const x = os.reduce((a, o) => a + o.x, 0) / os.length, y = os.reduce((a, o) => a + o.y, 0) / os.length;
+    const r = subEdit(SubTools.group(project.flowsheet, JSON.stringify(ids), Math.round(x / 12) * 12, Math.round(y / 12) * 12), `Put ${n} object${n === 1 ? '' : 's'} in a sub-flowsheet`);
+    if (r) { view.selectedId = null; blockSel = r.id; selectionChanged(); }
+    return;
+  }
+  const r = subEdit(SubTools.add(project.flowsheet, level, Math.round(view.worldX(cssW / 2) / 12) * 12, Math.round(view.worldY(cssH / 2) / 12) * 12), 'Added a sub-flowsheet');
+  if (r) { blockSel = r.id; selectionChanged(); }
+}
+$('subBtn').addEventListener('click', addBlock);
+$('selGroup').addEventListener('click', addBlock);
+function deleteBlock(id) {
+  const tag = JSON.parse(SubTools.info(project.flowsheet, id))?.tag;
+  if (subEdit(SubTools.delete(project.flowsheet, id), `Deleted ${tag} and what was in it (Undo brings it back)`)) { blockSel = null; selectionChanged(); }
+}
+/** A block's inspector: its name, its fluid package, its boundary streams matched to the parent's, and their values. */
+function renderBlock() {
+  const b = blockSel && JSON.parse(SubTools.info(project.flowsheet, blockSel));
+  $('blockInsp').hidden = !b;
+  if (!b) return;
+  if (!$('inspector').hidden) $('inspector').hidden = true;
+  const keep = document.activeElement?.id;
+  const stale = view.stale || !project.solve;
+  const vals = (id) => {
+    if (stale) return '';
+    const rows = JSON.parse(view.summary(id)).filter((r) => /^(Temperature|Pressure|Mass flow)$/.test(r.label) && r.value !== '—');
+    return rows.map((r) => `${esc(r.value)} ${esc(r.unit)}`).join(' · ');
+  };
+  const port = (p) => `<tr><td>${esc(p.innerTag)}</td><td>${p.feed ? 'In' : 'Out'}</td>
+    <td><select data-link="${esc(p.inner)}" aria-label="${esc(p.innerTag)} is matched to"><option value="">Not matched</option>${p.outer && !p.candidates.some((c) => c.id === p.outer) ? `<option value="${esc(p.outer)}" selected>${esc(p.outerTag)}</option>` : ''}${
+      p.candidates.map((c) => `<option value="${esc(c.id)}"${c.id === p.outer ? ' selected' : ''}>${esc(c.tag)}</option>`).join('')}</select></td>
+    <td>${b.differs && !p.energy ? `<select data-basis="${esc(p.inner)}" aria-label="Transfer basis of ${esc(p.innerTag)}"><option value="tp"${p.basis !== 'pvf' ? ' selected' : ''}>T–P</option><option value="pvf"${p.basis === 'pvf' ? ' selected' : ''}>P–VF</option></select>` : '—'}</td>
+    <td>${vals(p.inner)}</td></tr>`;
+  $('blockInsp').innerHTML = `<div class="fs-insp-head"><h2 id="blockTitle">Sub-flowsheet</h2><button type="button" class="icon-btn" id="blockClose" aria-label="Close">✕</button></div>
+    <div class="field"><label for="blockTag">Name</label><input id="blockTag" value="${esc(b.tag)}" autocomplete="off"></div>
+    <div class="fs-row" style="display:flex;gap:.35rem;flex-wrap:wrap;margin:.4rem 0">
+      <button type="button" class="btn btn-sm btn-primary" id="blockOpen">Open</button>
+      <button type="button" class="btn btn-sm" id="blockUngroup" title="Put its contents back on this flowsheet">Ungroup</button>
+      <button type="button" class="btn btn-sm" id="blockDelete">Delete</button></div>
+    <div class="field"><label for="blockFluid">Fluid package</label><select id="blockFluid">
+      <option value="parent"${b.own ? '' : ' selected'}>The parent’s (${esc(b.parentPackage || '—')})</option>
+      <option value="own"${b.own ? ' selected' : ''}>Its own${b.own ? `: ${esc(b.package || '—')}` : ''}</option></select></div>
+    ${b.own ? `<p class="fs-note">${esc(b.package || 'No package')} · ${b.compounds.length} component${b.compounds.length === 1 ? '' : 's'} <button type="button" class="btn btn-sm" id="blockBasis">Edit its basis</button></p>
+      <p class="fs-note">Solved on its own package: each boundary stream crosses as a feed defined by the engine’s result on the other side, by its transfer basis (T–P: temperature and pressure; P–VF: pressure and vapour fraction), with its molar flow and composition, as HYSYS’s.</p>` : '<p class="fs-note">On the parent’s package it solves with the parent as one flowsheet: the same numbers as without the block.</p>'}
+    <h3 style="font-size:.85rem;margin:.6rem 0 .2rem">Boundary streams</h3>
+    ${b.ports.length ? `<table class="fs-ports"><thead><tr><th>Inside</th><th></th><th>Matched to</th><th>Transfer</th><th>Values</th></tr></thead><tbody>${b.ports.map(port).join('')}</tbody></table>`
+      : '<p class="fs-note">None yet. Open the block and add streams with one open end: each is a feed or a product to match to a stream here.</p>'}`;
+  if (keep && $(keep)) $(keep).focus();
+}
+$('blockInsp').addEventListener('click', (e) => {
+  const id = e.target.id;
+  if (id === 'blockClose') { blockSel = null; return selectionChanged(); }
+  if (id === 'blockOpen') return goLevel(blockSel);
+  if (id === 'blockDelete') return deleteBlock(blockSel);
+  if (id === 'blockUngroup') { const tag = JSON.parse(SubTools.info(project.flowsheet, blockSel)).tag; if (subEdit(SubTools.ungroup(project.flowsheet, blockSel), `Ungrouped ${tag}`)) { blockSel = null; selectionChanged(); } return; }
+  if (id === 'blockBasis') return openBasis(blockSel);
+});
+$('blockInsp').addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.id === 'blockTag') return subEdit(SubTools.rename(project.flowsheet, blockSel, t.value), `Renamed to ${t.value.trim()}`);
+  if (t.id === 'blockFluid') {
+    const own = t.value === 'own';
+    if (subEdit(SubTools.setOwnFluid(project.flowsheet, blockSel, own), own ? 'Own fluid package: a copy of the parent’s to edit' : 'Uses the parent’s fluid package') && own) openBasis(blockSel);
+    return;
+  }
+  if (t.dataset.link !== undefined) return subEdit(SubTools.link(project.flowsheet, blockSel, t.dataset.link, t.value), t.value ? 'Matched the boundary stream' : 'Unmatched the boundary stream');
+  if (t.dataset.basis !== undefined) return subEdit(SubTools.setBasis(project.flowsheet, blockSel, t.dataset.basis, t.value), `Transfer basis ${t.value === 'pvf' ? 'P–VF' : 'T–P'}`);
+});
 $('selClear').addEventListener('click', () => select(null));
 window.addEventListener('storage', (e) => { if (e.key === CLIP_KEY) renderSelection(); });
 
 // The objects as a list for screen readers and keyboards: each one selects its object.
 function renderObjectList() {
-  $('objects').innerHTML = objects().map((o) => `<li><button type="button" data-id="${esc(o.id)}">${esc(view.describe(o.id))}</button></li>`).join('');
+  $('objects').innerHTML = levelObjects().map((o) => `<li><button type="button" data-id="${esc(o.id)}">${esc(view.describe(o.id))}</button></li>`).join('');
 }
 $('objects').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (b) { select(b.dataset.id); canvas.focus(); } });
 
 function refresh() {
   syncMode();
-  $('empty').hidden = objects().length > 0;
+  level = view.currentLevel;
+  $('empty').hidden = levelObjects().length > 0 || JSON.parse(SubTools.blocks(project.flowsheet, level)).length > 0;
+  renderLevel(); renderBlock();
   $('undoBtn').disabled = !undo.length; $('redoBtn').disabled = !redo.length;
   renderInspector(); renderSelection(); renderObjectList(); draw();
 }
@@ -730,11 +846,21 @@ $('examples').addEventListener('change', async () => {
 
 // ---------- basis: property package and components (Worksheets.basis, setPropertyPackage, add/removeCompound) ----------
 let packages = null;
-function openBasis() { renderBasis(); $('basisDlg').showModal(); $('compSearch').focus(); }
-$('basisBtn').addEventListener('click', openBasis);
+function openBasis(blockId = null) { basisTarget = blockId; renderBasis(); $('basisDlg').showModal(); $('compSearch').focus(); }
+$('basisBtn').addEventListener('click', () => openBasis(null));
+// A sub-flowsheet with its own fluid package (D132) is edited in the same dialog: on a view of the case with the
+// block's package in the case's fields, written back into the block.
+let basisTarget = null;
+const basisGet = () => (basisTarget ? SubTools.fluidView(project.flowsheet, basisTarget) : project.flowsheet);
+function basisCommit(next, message) {
+  if (!basisTarget) return commit(next, message);
+  const r = JSON.parse(SubTools.setFluidFrom(project.flowsheet, basisTarget, next));
+  if (r.error) return toast(r.error);
+  commit(JSON.stringify(r.flowsheet), message);
+}
 $('basisClose').addEventListener('click', () => $('basisDlg').close());
 function renderBasis() {
-  const b = JSON.parse(sheets.basis(project.flowsheet));
+  const b = JSON.parse(sheets.basis(basisGet()));
   const opt = (p) => `<option value="${esc(p.name)}"${p.name === b.propertyPackage ? ' selected' : ''}>${esc(p.name)}</option>`;
   if (packages) {
     const checked = packages.filter((p) => p.mvp), other = packages.filter((p) => !p.mvp);
@@ -752,10 +878,15 @@ function renderBasis() {
     ? (project.basis === 'dwsim' ? 'DWSIM’s reference: enthalpy and entropy are zero for an ideal gas at 25 °C. Differences (duties) are the same on either basis.'
       : 'As HYSYS: each compound’s ideal-gas heat of formation and absolute entropy are included, so absolute values compare with HYSYS. Differences (duties) are the same on either basis.')
     : 'This property package has its own reference for enthalpy and entropy: the choice applies to Peng-Robinson, SRK and Lee-Kesler.';
-  tools.hypotheticalSection($('hypos'), renderBasis);
-  tools.blackOilSection($('blackOils'), renderBasis);
-  tools.thermoSection($('thermoTools'));
-  tools.dataToolsSection($('dataTools'), renderBasis);
+  const blockTag = basisTarget && JSON.parse(SubTools.info(project.flowsheet, basisTarget))?.tag;
+  $('basisTitle').textContent = blockTag ? `Basis of ${blockTag} (its own fluid package)` : 'Basis';
+  for (const id of ['hypos', 'blackOils', 'thermoTools', 'dataTools']) $(id).hidden = !!basisTarget;
+  if (!basisTarget) {
+    tools.hypotheticalSection($('hypos'), renderBasis);
+    tools.blackOilSection($('blackOils'), renderBasis);
+    tools.thermoSection($('thermoTools'));
+    tools.dataToolsSection($('dataTools'), renderBasis);
+  }
   $('compCount').textContent = `(${b.compounds.length})`;
   $('compList').innerHTML = b.compounds.length ? b.compounds.map((c) => `<li><span>${esc(c)}${b.hypotheticals.includes(c) ? ' <small>Hypo</small>' : b.blackOils.includes(c) ? ' <small>Black oil</small>' : ''}</span>${b.usedBy[c] ? `<small>in ${b.usedBy[c]} stream${b.usedBy[c] > 1 ? 's' : ''}</small>` : ''}<button type="button" class="btn btn-sm" data-remove="${esc(c)}" aria-label="Remove ${esc(c)}">Remove</button></li>`).join('')
     : '<li class="empty">No components yet: search below.</li>';
@@ -764,16 +895,16 @@ $('basisSel').addEventListener('change', () => {
   project.basis = $('basisSel').value;
   project.solve = null; view.setSolve(null, '', 0); satAsked.clear(); // results on the other basis are not these results
   persist(); refresh(); renderBasis();
-  if (hasEnergySpecs(project.flowsheet)) toast('Typed enthalpy and entropy values are now read on the other basis.');
+  if (hasEnergySpecs(basisGet())) toast('Typed enthalpy and entropy values are now read on the other basis.');
   queueSolve(0, true);
 });
-$('pkgSel').addEventListener('change', () => { const r = JSON.parse(sheets.setPropertyPackage(project.flowsheet, $('pkgSel').value)); if (r.flowsheet) commit(JSON.stringify(r.flowsheet), `Package ${$('pkgSel').value}`); renderBasis(); });
+$('pkgSel').addEventListener('change', () => { const r = JSON.parse(sheets.setPropertyPackage(basisGet(), $('pkgSel').value)); if (r.flowsheet) basisCommit(JSON.stringify(r.flowsheet), `Package ${$('pkgSel').value}`); renderBasis(); });
 $('compList').addEventListener('click', (e) => {
   const name = e.target.closest('[data-remove]')?.dataset.remove; if (!name) return;
-  const used = JSON.parse(sheets.basis(project.flowsheet)).usedBy[name];
-  const r = JSON.parse(sheets.removeCompound(project.flowsheet, name));
+  const used = JSON.parse(sheets.basis(basisGet())).usedBy[name];
+  const r = JSON.parse(sheets.removeCompound(basisGet(), name));
   if (r.error) return toast(r.error);
-  commit(JSON.stringify(r.flowsheet), `Removed ${name}`);
+  basisCommit(JSON.stringify(r.flowsheet), `Removed ${name}`);
   if (used) toast(`Removed ${name} from ${used} stream composition(s); check that they still add up to 1`);
   renderBasis(); renderInspectorForce();
 });
@@ -787,7 +918,7 @@ $('compSearch').addEventListener('input', () => {
     try {
       const { result } = await engine.call('searchCompounds', { query: q, limit: 12 });
       if (seq !== searchSeq) return;
-      const have = new Set(JSON.parse(sheets.basis(project.flowsheet)).compounds);
+      const have = new Set(JSON.parse(sheets.basis(basisGet())).compounds);
       $('compResults').innerHTML = result.length
         ? result.map((c) => `<li><button type="button" data-add="${esc(c.name)}"${have.has(c.name) ? ' disabled' : ''}><span>${esc(c.name)}${have.has(c.name) ? ' (added)' : ''}</span><small>${esc(c.formula || '')} · ${c.molecularWeight ? core.formatNumber(c.molecularWeight, 2) : '—'} kg/kmol</small></button></li>`).join('')
         : '<li class="empty" style="padding:.4rem .6rem">No match in DWSIM’s databases.</li>';
@@ -804,9 +935,9 @@ const COMMON = [
 ];
 $('compPick').innerHTML = '<option value="">Choose a component…</option>' + COMMON.map(([g, names]) => `<optgroup label="${esc(g)}">${names.map((n) => `<option>${esc(n)}</option>`).join('')}</optgroup>`).join('');
 function addCompound(name) {
-  const r = JSON.parse(sheets.addCompound(project.flowsheet, name));
+  const r = JSON.parse(sheets.addCompound(basisGet(), name));
   if (r.error) return toast(r.error);
-  commit(JSON.stringify(r.flowsheet), `Added ${name}`);
+  basisCommit(JSON.stringify(r.flowsheet), `Added ${name}`);
   renderBasis(); renderInspectorForce();
 }
 $('compPick').addEventListener('change', async () => {
@@ -829,7 +960,7 @@ async function browseLoad(reset) {
     await engine.ready;
     const { result } = await engine.call('searchCompounds', { query: browse.query, limit: 100, offset: browse.offset });
     if (seq !== browse.seq) return;
-    const have = new Set(JSON.parse(sheets.basis(project.flowsheet)).compounds);
+    const have = new Set(JSON.parse(sheets.basis(basisGet())).compounds);
     $('browseList').insertAdjacentHTML('beforeend', result.map((c) => `<li><button type="button" data-add="${esc(c.name)}"${have.has(c.name) ? ' disabled' : ''}><span>${esc(c.name)}${have.has(c.name) ? ' (added)' : ''}</span><small>${esc(c.formula || '')} · ${c.molecularWeight ? core.formatNumber(c.molecularWeight, 2) : '—'} kg/kmol</small></button></li>`).join(''));
     browse.offset += result.length;
     $('browseMore').hidden = result.length < 100;
@@ -847,9 +978,9 @@ $('browseList').addEventListener('click', (e) => {
 });
 $('compResults').addEventListener('click', (e) => {
   const name = e.target.closest('[data-add]')?.dataset.add; if (!name) return;
-  const r = JSON.parse(sheets.addCompound(project.flowsheet, name));
+  const r = JSON.parse(sheets.addCompound(basisGet(), name));
   if (r.error) return toast(r.error);
-  commit(JSON.stringify(r.flowsheet), `Added ${name}`);
+  basisCommit(JSON.stringify(r.flowsheet), `Added ${name}`);
   $('compSearch').value = ''; $('compResults').innerHTML = ''; $('compSearch').focus();
   renderBasis(); renderInspectorForce();
 });

@@ -26,6 +26,8 @@ import app.flowstead.core.api.SolveResult
 import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.EditRejected
+import app.flowstead.web.model.Subflowsheets
+import kotlin.math.roundToInt
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.FlowsheetJson
@@ -128,6 +130,10 @@ class FlowsheetView {
     private var draggingTable: Pair<String, Offset>? = null
     private var tableStart: Offset = Offset.Zero
     private var wire: Pair<Offset, Offset>? = null
+    /** The flowsheet shown (D132): null the main one, else a sub-flowsheet's id. Only its objects and blocks are drawn. */
+    private var level: String? = null
+    /** A sub-flowsheet block being moved: its id and where its centre is. */
+    private var blockDrag: Pair<String, Offset>? = null
     /** Where each property table was last drawn (screen), for hit-testing. */
     private val tableBoxes = mutableMapOf<String, Rect>()
 
@@ -140,12 +146,37 @@ class FlowsheetView {
     /** The flowsheet to show and edit, in the app's JSON. Keeps the stored solve: its results go out of date when the model changes. */
     fun setFlowsheet(json: String) {
         saved = FlowsheetJson.decodeFromString(Flowsheet.serializer(), json)
-        fs = PortAlignment.align(saved)
-        status = saved.objects.associate { it.id to Specification.status(saved, it) }
-        notReady = Readiness.of(saved).notReady
+        if (level != null && Subflowsheets.of(saved, level) == null) level = null
+        fs = PortAlignment.align(levelView(saved))
+        // A matched boundary stream is defined by its partner (D132): checked on the case flattened.
+        val pairs = saved.subflowsheets.flatMap { b -> b.ports.mapNotNull { p -> p.outer?.let { p.inner to it } } }.toMap()
+        val flat = Subflowsheets.flatten(saved)
+        status = saved.objects.associate { o -> o.id to Specification.status(flat, flat.obj(pairs[o.id] ?: o.id) ?: o) }
+        notReady = Readiness.of(flat).notReady.let { nr -> nr + pairs.mapNotNull { (i, o) -> nr[o]?.let { i to it } } }
         results = ResultView(solve, saved.modelHash())
-        selection.retainAll(saved.objects.map { it.id }.toSet())
+        selection.retainAll(fs.objects.map { it.id }.toSet())
     }
+
+    /** [f] as drawn on the current level: its objects, the connections between them and their tables. */
+    private fun levelView(f: Flowsheet): Flowsheet {
+        if (!Subflowsheets.has(f) && level == null) return f
+        val objs = f.objects.filter { it.parent == level }
+        val ids = objs.map { it.id }.toSet()
+        return f.copy(objects = objs, connections = f.connections.filter { it.fromObject in ids && it.toObject in ids }, tables = f.tables.filter { it.objectId in ids })
+    }
+
+    /** Opens a sub-flowsheet ([id]) or, with "", the main flowsheet. */
+    fun setLevel(id: String) {
+        level = id.takeIf { it.isNotEmpty() && Subflowsheets.of(saved, it) != null }
+        selection.clear()
+        fs = PortAlignment.align(levelView(saved))
+    }
+    val currentLevel: String get() = level ?: ""
+
+    private val blockSize = Size(128f, 80f)
+    private fun blockRect(x: Double, y: Double) = Rect(Offset(x.toFloat() - blockSize.width / 2, y.toFloat() - blockSize.height / 2), blockSize)
+    private fun blockCenter(b: app.flowstead.web.model.Subflowsheet) = blockDrag?.takeIf { it.first == b.id }?.second ?: Offset(b.x.toFloat(), b.y.toFloat())
+    private fun blockAt(world: Offset) = Subflowsheets.blocksAt(saved, level).lastOrNull { b -> blockCenter(b).let { c -> blockRect(c.x.toDouble(), c.y.toDouble()) }.contains(world) }
 
     /** A solve's result (the engine's JSON) and the model hash taken when it ran; null clears it. */
     fun setSolve(resultJson: String?, solvedModelHash: String, solvedAtMillis: Double) {
@@ -170,8 +201,8 @@ class FlowsheetView {
 
     /** Fits every object (with its tag) in a [width] × [height] view, no closer than zoom 1.5. */
     fun fit(width: Double, height: Double) {
-        if (fs.objects.isEmpty()) { vp = Viewport(Offset((width / 2).toFloat(), (height / 2).toFloat()), 1f); return }
-        val boxes = fs.objects.map { CanvasGeometry.bounds(it) }
+        val boxes = fs.objects.map { CanvasGeometry.bounds(it) } + Subflowsheets.blocksAt(saved, level).map { blockRect(it.x, it.y) }
+        if (boxes.isEmpty()) { vp = Viewport(Offset((width / 2).toFloat(), (height / 2).toFloat()), 1f); return }
         val l = boxes.minOf { it.left } - 32f
         val t = boxes.minOf { it.top } - 32f
         val r = boxes.maxOf { it.right } + 32f
@@ -195,7 +226,8 @@ class FlowsheetView {
                 putJsonObject("port") { put("side", h.port.side.name); put("kind", h.port.kind.name); put("index", h.port.index); put("label", h.port.label) }
             }
             is Hit.OnObject -> buildJsonObject { put("kind", "object"); put("id", h.objectId) }
-            Hit.Empty -> buildJsonObject { put("kind", "empty") }
+            Hit.Empty -> blockAt(vp.toWorld(Offset(screenX.toFloat(), screenY.toFloat()), 1f))?.let { b -> buildJsonObject { put("kind", "block"); put("id", b.id) } }
+                ?: buildJsonObject { put("kind", "empty") }
         }.toString()
     }
 
@@ -229,7 +261,11 @@ class FlowsheetView {
                 if (selection.size > 1 && h.objectId in selection) groupDelta = Offset.Zero
                 return "move"
             }
-            Hit.Empty -> return "pan"
+            Hit.Empty -> {
+                val b = blockAt(world) ?: return "pan"
+                blockDrag = b.id to Offset(b.x.toFloat(), b.y.toFloat())
+                return "move"
+            }
         }
     }
 
@@ -237,6 +273,7 @@ class FlowsheetView {
         val world = vp.toWorld(Offset(screenX.toFloat(), screenY.toFloat()), 1f)
         dragging?.let { (id, _) -> fs.obj(id)?.let { dragging = id to (CanvasGeometry.center(it) + (world - dragStart)) } }
         if (groupDelta != null) groupDelta = world - dragStart
+        blockDrag?.let { (id, _) -> Subflowsheets.of(saved, id)?.let { b -> blockDrag = id to (Offset(b.x.toFloat(), b.y.toFloat()) + (world - dragStart)) } }
         wire?.let { (a, _) -> wire = a to world }
         draggingTable?.let { (id, _) -> draggingTable = id to (tableStart + (world - dragStart)) }
     }
@@ -251,9 +288,16 @@ class FlowsheetView {
         val from = wireFrom
         val table = draggingTable
         val group = groupDelta != null
-        dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null
+        val blockMoved = blockDrag
+        dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null; blockDrag = null
         return edit {
             when {
+                blockMoved != null -> {
+                    val g = FlowsheetEditing.GRID.toFloat()
+                    val p = Offset((blockMoved.second.x / g).roundToInt() * g, (blockMoved.second.y / g).roundToInt() * g)
+                    val b = Subflowsheets.of(saved, blockMoved.first) ?: return@edit null
+                    if (p.x.toDouble() == b.x && p.y.toDouble() == b.y) null else Subflowsheets.move(saved, b.id, p.x.toDouble(), p.y.toDouble())
+                }
                 table != null -> FlowsheetEditing.moveTable(saved, table.first, table.second.x.toDouble(), table.second.y.toDouble())
                 moved != null && group -> {
                     // The grabbed object goes on the grid and the rest of the group moves by as much, keeping its layout.
@@ -274,7 +318,7 @@ class FlowsheetView {
         }
     }
 
-    fun cancelDrag() { dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null; box = null }
+    fun cancelDrag() { dragging = null; wire = null; wireFrom = null; draggingTable = null; groupDelta = null; box = null; blockDrag = null }
 
     // ---------- selection of several objects, copy and paste (D124)
 
@@ -284,10 +328,10 @@ class FlowsheetView {
     fun isSelected(id: String): Boolean = id in selection
     /** Adds [id] to the selection, or takes it out (Shift or Ctrl and a tap). */
     fun toggleSelected(id: String) { if (saved.obj(id) != null && !selection.remove(id)) selection.add(id) }
-    fun selectAll() { selection.clear(); selection.addAll(saved.objects.map { it.id }) }
+    fun selectAll() { selection.clear(); selection.addAll(fs.objects.map { it.id }) }
     fun setSelectedIds(idsJson: String) {
         selection.clear()
-        val known = saved.objects.map { it.id }.toSet()
+        val known = fs.objects.map { it.id }.toSet()
         FlowsheetJson.parseToJsonElement(idsJson).jsonArray.map { it.jsonPrimitive.content }.filter { it in known }.forEach { selection.add(it) }
     }
 
@@ -333,8 +377,10 @@ class FlowsheetView {
             (w.x - cx).toDouble() to (w.y - cy).toDouble()
         }
         val r = FlowsheetClipboard.paste(saved, clip, dx, dy)
+        // The copies go on the flowsheet shown (D132).
+        val placed = r.flowsheet.copy(objects = r.flowsheet.objects.map { if (it.id in r.ids) it.copy(parent = level) else it })
         buildJsonObject {
-            put("flowsheet", FlowsheetJson.encodeToJsonElement(Flowsheet.serializer(), r.flowsheet))
+            put("flowsheet", FlowsheetJson.encodeToJsonElement(Flowsheet.serializer(), placed))
             putJsonArray("ids") { r.ids.forEach { add(it) } }
             putJsonArray("notes") { r.notes.forEach { add(it) } }
         }.toString()
@@ -543,6 +589,22 @@ class FlowsheetView {
             val color = if (energy) palette.energy else stream?.let { streamColor(it) } ?: palette.stroke
             drawPath(polyline(pts), color, style = Stroke(width = 2f, cap = StrokeCap.Round, pathEffect = if (energy) PathEffect.dashPathEffect(floatArrayOf(6f, 5f)) else null))
         }
+        // Sub-flowsheet blocks (D132), with a dashed line from each matched stream of this flowsheet to the block.
+        for (b in Subflowsheets.blocksAt(saved, level)) {
+            val c = blockCenter(b)
+            val r = blockRect(c.x.toDouble(), c.y.toDouble())
+            drawRoundRect(palette.fill, r.topLeft, r.size, CornerRadius(8f))
+            drawRoundRect(if (b.fluid != null) colors.secondary else palette.stroke, r.topLeft, r.size, CornerRadius(8f), style = Stroke(2f))
+            drawRoundRect(palette.stroke, Offset(r.left + 5f, r.top + 5f), Size(r.width - 10f, r.height - 10f), CornerRadius(5f), style = Stroke(0.8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 3f))))
+            for (p in b.ports) {
+                val outer = p.outer?.let { fs.obj(it) } ?: continue
+                val feed = saved.connections.none { it.toObject == p.inner }
+                val at = positionOf(outer)
+                val edge = Offset(if (feed) r.left else r.right, at.y.coerceIn(r.top + 8f, r.bottom - 8f))
+                drawLine(streamColor(outer), at, edge, 2f, StrokeCap.Round, PathEffect.dashPathEffect(floatArrayOf(4f, 4f)))
+                drawCircle(streamColor(outer), 3.5f, edge)
+            }
+        }
         for (o in fs.objects) {
             val at = positionOf(o)
             val s = CanvasGeometry.size(o.type)
@@ -626,7 +688,30 @@ class FlowsheetView {
             val anchor = vp.toScreen(Offset(b.center.x, b.bottom + 4f), 1f)
             ctx.fillText(o.tag, anchor.x, anchor.y)
         }
+        // Blocks: tag, and the package when it has its own; inside one, each matched boundary stream names its partner.
+        for (b in Subflowsheets.blocksAt(saved, level)) {
+            val c = vp.toScreen(blockCenter(b), 1f)
+            ctx.textAlign = "center"; ctx.textBaseline = "middle"
+            ctx.fillStyle = colors.onSurface.css(); ctx.font = font((13f * vp.zoom).coerceIn(9f, 18f), bold = true)
+            ctx.fillText(b.tag, c.x, c.y - (if (b.fluid != null) 7f * vp.zoom else 0f))
+            if (b.fluid != null) {
+                ctx.fillStyle = colors.secondary.css(); ctx.font = font((10f * vp.zoom).coerceIn(7f, 13f))
+                ctx.fillText((b.fluid.propertyPackage ?: "").substringBefore(" ("), c.x, c.y + 9f * vp.zoom)
+            }
+        }
+        Subflowsheets.of(saved, level)?.let { blk ->
+            ctx.textBaseline = "top"; ctx.textAlign = "center"; ctx.fillStyle = colors.secondary.css(); ctx.font = font((10f * vp.zoom).coerceIn(7f, 13f))
+            for (p in blk.ports) {
+                val inner = fs.obj(p.inner) ?: continue
+                val outerTag = p.outer?.let { saved.obj(it)?.tag } ?: continue
+                val feed = saved.connections.none { it.toObject == p.inner }
+                val bx = CanvasGeometry.bounds(inner, positionOf(inner))
+                val a = vp.toScreen(Offset(bx.center.x, bx.bottom + 4f), 1f)
+                ctx.fillText(if (feed) "from $outerTag" else "to $outerTag", a.x, a.y + fontSize + 2f)
+            }
+        }
         ctx.textAlign = "left"
+        ctx.textBaseline = "top"
     }
 
     /** Property tables, in screen space; they scale with the zoom and stay put when their object moves. */

@@ -265,7 +265,8 @@ object Subflowsheets {
             if (fromIn == toIn) continue
             val inside = f.objects.first { it.id == if (fromIn) c.fromObject else c.toObject }
             val outside = f.objects.first { it.id == if (fromIn) c.toObject else c.fromObject }
-            val mid = (inside.x + outside.x) / 2 to (inside.y + outside.y) / 2
+            // Each level is its own canvas: a twin takes the place of the stream it stands for.
+            val mid = (if (isStream(outside)) outside.x to outside.y else inside.x to inside.y)
             if (isStream(outside)) {
                 // A stream outside joins a unit inside: the stream stays, a boundary stream inside takes its place.
                 val twin = outside.copy(id = FlowsheetEditing.newId(), tag = tagLike(outside.tag), parent = block.id, x = mid.first, y = mid.second,

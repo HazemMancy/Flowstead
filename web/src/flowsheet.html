@@ -66,6 +66,7 @@
       <button type="button" class="btn btn-sm" id="selectBtn" aria-pressed="false" title="Select: drag on the flowsheet to draw a box round objects, tap to add or take one out (or Shift and drag, Shift and click)">Select</button>
       <button type="button" class="btn btn-sm" id="copySelBtn" disabled title="Copy the selected objects (Ctrl+C)">Copy</button>
       <button type="button" class="btn btn-sm" id="pasteBtn" disabled title="Paste what you copied (Ctrl+V)">Paste</button>
+      <button type="button" class="btn btn-sm" id="subBtn" title="Add a sub-flowsheet: a block holding a flowsheet of its own, as HYSYS's. Select objects first to put them in it.">Sub-flowsheet</button>
     </span>
     <button type="button" class="btn btn-sm mode" id="modeBtn" aria-pressed="false" title="Hold: nothing solves until you press Solve. Active: the flowsheet solves a moment after each change."><span class="dot" aria-hidden="true"></span><span id="modeText">Hold</span></button>
     <button type="button" class="btn btn-sm btn-primary" id="solveBtn">Solve</button>
@@ -81,6 +82,7 @@
 
     <div class="fs-stage">
       <canvas id="canvas" tabindex="0" role="application" aria-roledescription="flowsheet" aria-label="Flowsheet canvas. Use the object list to reach objects; Shift and click or Shift and drag selects several; Ctrl+C copies, Ctrl+V pastes, Ctrl+D duplicates, Ctrl+A selects all; Delete removes what is selected, arrow keys move it." aria-describedby="objects"></canvas>
+      <nav class="fs-levelbar card" id="levelBar" hidden aria-label="Sub-flowsheets"></nav>
       <div class="fs-empty" id="empty">
         <p><b>An empty flowsheet.</b> Add a stream or a unit from the palette, or open an example.</p>
       </div>
@@ -88,9 +90,11 @@
         <span id="selCount"></span>
         <button type="button" class="btn btn-sm" id="selCopy" title="Copy (Ctrl+C)">Copy</button>
         <button type="button" class="btn btn-sm" id="selDup" title="Copy and paste beside them (Ctrl+D)">Duplicate</button>
+        <button type="button" class="btn btn-sm" id="selGroup" title="Put the selected objects in a new sub-flowsheet">Sub-flowsheet</button>
         <button type="button" class="btn btn-sm" id="selDelete" title="Delete">Delete</button>
         <button type="button" class="icon-btn" id="selClear" aria-label="Clear the selection" title="Clear the selection (Esc)">✕</button>
       </div>
+      <section class="fs-inspector card" id="blockInsp" hidden aria-labelledby="blockTitle"></section>
       <section class="fs-inspector card" id="inspector" hidden aria-labelledby="inspTitle">
         <div class="fs-insp-top">
           <div class="fs-insp-head">

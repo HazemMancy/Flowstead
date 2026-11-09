@@ -192,3 +192,12 @@
 #thermoTools .chip[aria-pressed="true"]{background:var(--primary-bg);border-color:var(--primary);color:var(--fg)}
 /* On a phone, paired quantity fields (value and unit each) stack instead of squeezing their values (D130). */
 @media(max-width:560px){#thermoTools .row2,#thermoTools .row3,#dataTools .row2{grid-template-columns:1fr}}
+/* Sub-flowsheets (D132): where you are, and a block's inspector */
+.fs-levelbar{position:absolute;left:.6rem;bottom:.6rem;z-index:15;display:flex;align-items:center;gap:.25rem;padding:.25rem .5rem;font-size:.8rem;max-width:calc(100% - 1.2rem);flex-wrap:wrap}
+.fs-levelbar button{background:none;border:0;color:var(--accent,inherit);cursor:pointer;padding:.15rem .25rem;font:inherit;text-decoration:underline}
+.fs-levelbar [aria-current]{font-weight:700;text-decoration:none;color:inherit;cursor:default}
+.fs-levelbar .sep{opacity:.6}
+.fs-ports{width:100%;border-collapse:collapse;font-size:.8rem;margin:.3rem 0}
+.fs-ports th,.fs-ports td{text-align:left;padding:.25rem .3rem;border-bottom:1px solid var(--line,#8884);vertical-align:middle}
+.fs-ports select{max-width:100%}
+@media (max-width:600px){.fs-ports thead{display:none}.fs-ports tr{display:grid;grid-template-columns:1fr 1fr;gap:.2rem;padding:.3rem 0;border-bottom:1px solid var(--line,#8884)}.fs-ports td{border:0}}
