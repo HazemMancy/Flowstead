@@ -321,13 +321,16 @@ object Subflowsheets {
      * inside to one outside stays outside and gets a boundary stream inside, matched to it, and a stream inside that ran
      * to a unit outside gets a matching stream outside. Results are unchanged: the case solves as before.
      */
-    fun group(fs: Flowsheet, ids: Collection<String>, x: Double, y: Double): Pair<Flowsheet, Subflowsheet> {
+    fun group(fs: Flowsheet, ids: Collection<String>, x: Double, y: Double): Pair<Flowsheet, Subflowsheet> = group(fs, ids, x, y, null)
+
+    /** [group], allowing streams matched to [into] (the block [moveInto] then folds the new one into). */
+    private fun group(fs: Flowsheet, ids: Collection<String>, x: Double, y: Double, into: String?): Pair<Flowsheet, Subflowsheet> {
         val chosen = fs.objects.filter { it.id in ids }
         if (chosen.isEmpty()) throw EditRejected("Select the equipment to put in the sub-flowsheet")
         val level = chosen.first().parent
         if (chosen.any { it.parent != level }) throw EditRejected("Select objects on one flowsheet")
         val inSet = chosen.map { it.id }.toSet()
-        partnerOfAnotherBlock(fs, inSet, null)?.let { throw EditRejected(it) }
+        partnerOfAnotherBlock(fs, inSet, into)?.let { throw EditRejected(it) }
         var (f, block) = add(fs, level, x, y)
         val ports = ArrayList<SubPort>()
         var conns = f.connections
@@ -395,7 +398,7 @@ object Subflowsheets {
         val compounds = fluidAt(fs, blockId).compounds.toSet()
         val missing = chosen.flatMap { it.composition.filterValues { x -> x > 0 }.keys }.filter { it !in compounds }.distinct()
         if (missing.isNotEmpty()) throw EditRejected("${b.tag}'s fluid package has no ${missing.joinToString(", ")}: add ${if (missing.size == 1) "it" else "them"} there first")
-        val (grouped, tmp0) = group(fs, chosen.map { it.id }, b.x, b.y)
+        val (grouped, tmp0) = group(fs, chosen.map { it.id }, b.x, b.y, blockId)
         var f = grouped
         val tmp = of(f, tmp0.id)!!
         val target = of(f, blockId)!!

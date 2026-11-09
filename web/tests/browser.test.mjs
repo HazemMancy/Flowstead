@@ -1214,10 +1214,14 @@ try {
     await drag(await scr(k.x, k.y), target);
     if ((await parent(k.id)) !== 'blk') problems.push(`${k.tag} dragged onto SUB-1 is on ${await parent(k.id)}`);
     await p.evaluate(([a, b]) => { const v = window.flowsteadFlowsheet.view; v.selectedId = null; v.toggleSelected(a); v.toggleSelected(b); }, [dis, e.id]);
+    // What the drop did: the view's answer, the block it was over, and any message shown.
+    await p.evaluate(() => { const v = window.flowsteadFlowsheet.view, end = v.endDrag.bind(v); window.__drops = [];
+      v.endDrag = (x, y) => { const over = v.dropTarget, r = end(x, y); window.__drops.push(`${over || 'no block'} → ${String(r).slice(0, 160)}`); return r; }; });
     const fromE = await scr(e.x, e.y);
     const seen = `${await under(fromE)} at ${e.tag}, ${await under(target)} at SUB-1, ${await p.evaluate(() => window.flowsteadFlowsheet.view.selectionCount)} selected`;
     await drag(fromE, target);
-    for (const id of [dis, e.id]) if ((await parent(id)) !== 'blk') problems.push(`${id} dragged with the selection is on ${await parent(id)} (${seen})`);
+    const drops = await p.evaluate(() => (window.__drops ?? []).join(' ; ') + ' | toast: ' + [...document.querySelectorAll('.fs-toast,.toast')].map((x) => x.textContent).join(' / '));
+    for (const id of [dis, e.id]) if ((await parent(id)) !== 'blk') problems.push(`${id} dragged with the selection is on ${await parent(id)} (${seen}; ${drops})`);
     const flatTags = await p.evaluate(() => { const w = window.flowsteadFlowsheet, f = JSON.parse(w.SubTools.flatten(w.project.flowsheet)), t = Object.fromEntries(f.objects.map((o) => [o.id, o.tag]));
       return { tags: f.objects.map((o) => o.tag).sort(), links: f.connections.map((c) => `${t[c.fromObject]}>${t[c.toObject]}`).sort() }; });
     const t06 = Object.fromEntries(b06.objects.map((o) => [o.id, o.tag]));

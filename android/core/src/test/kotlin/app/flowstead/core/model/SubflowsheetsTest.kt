@@ -229,6 +229,14 @@ class SubflowsheetsTest {
         assertEquals(setOf("suc", "out"), Subflowsheets.of(m, block.id)!!.ports.map { it.outer }.toSet())
         // The engine sees exactly the flowsheet it solved before: same numbers.
         assertEquals(shape(train), shape(Subflowsheets.flatten(m)))
+        // The other way round (browser test 4o): K-100 dragged into an empty block, then DISCHARGE, which the block now
+        // gives out, and E-100 dragged in together.
+        val (e0, b2) = Subflowsheets.add(train, null, 240.0, 240.0)
+        val k1 = Subflowsheets.moveInto(e0, listOf("k"), b2.id)
+        val k2 = Subflowsheets.moveInto(k1, listOf("dis", "e"), b2.id)
+        assertEquals(listOf(b2.id, b2.id, b2.id), listOf("k", "dis", "e").map { k2.obj(it)!!.parent })
+        assertEquals("DISCHARGE", k2.obj("dis")!!.tag)
+        assertEquals(shape(train), shape(Subflowsheets.flatten(k2)))
     }
 
     @Test
