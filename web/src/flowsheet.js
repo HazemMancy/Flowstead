@@ -816,6 +816,7 @@ $('objects').addEventListener('click', (e) => { const b = e.target.closest('[dat
 
 function refresh() {
   syncMode();
+  if (typeof tools !== 'undefined') tools.renderWatch();
   level = view.currentLevel;
   $('empty').hidden = levelObjects().length > 0 || JSON.parse(SubTools.blocks(project.flowsheet, level)).length > 0;
   renderLevel(); renderBlock();
@@ -1174,6 +1175,8 @@ const tools = initTools({
   $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Data: DataTools.getInstance(), Thermo: ThermoTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
   project: () => project, commit: (json, message) => commit(json, message), toast,
   ready: () => engine.ready, ensureSaturation: (ids) => ensureSaturation(ids), packages: () => packages,
+  // The check opens what it reports on: on its own flowsheet (a sub-flowsheet's object opens that sub-flowsheet).
+  openObject: (id) => { const lv = SubTools.levelOf(project.flowsheet, id); if (lv !== level) goLevel(lv); select(id); },
 });
 $('toolsBtn').addEventListener('click', () => tools.openTools());
 const documents = initDocuments({

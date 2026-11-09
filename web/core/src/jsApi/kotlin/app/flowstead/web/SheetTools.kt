@@ -14,6 +14,8 @@ import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.CellValue
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.EditRejected
+import app.flowstead.core.model.FlowsheetCheck
+import app.flowstead.core.model.WatchItem
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.FlowsheetJson
@@ -142,6 +144,55 @@ object SheetTools {
             FlowsheetEditing.setSpec(acc, e.objectId, e.key, Spec(u.toSi(n, ctx), u.id))
         })
     } catch (e: IllegalArgumentException) { err(e.message ?: "Not allowed") }
+
+    // ---------- the check and the watch panel (D136, the app's CheckTool and WatchTool) ----------
+
+    /** The flowsheet check: [{level: error|warning|info, text, objectId?}], as the app's FlowsheetCheck. */
+    fun check(flowsheetJson: String, solveJson: String?, solvedHash: String): String {
+        val f = fs(flowsheetJson)
+        return kotlinx.serialization.json.buildJsonArray {
+            FlowsheetCheck.run(f, view(f, solveJson, solvedHash)).forEach { c ->
+                addJsonObject { put("level", c.level.name.lowercase()); put("text", c.text); c.objectId?.let { put("objectId", it) } }
+            }
+        }.toString()
+    }
+
+    /**
+     * The watch panel: {items: [{objectId, key, label, value, unit}], stale, targets: [{id, tag, keys: [{key, label}]}]};
+     * each value the engine's from the last solve in the user's display units ("—" when it gave none).
+     */
+    fun watch(flowsheetJson: String, solveJson: String?, solvedHash: String): String {
+        val f = fs(flowsheetJson)
+        val results = view(f, solveJson, solvedHash)
+        return buildJsonObject {
+            put("stale", results.stale)
+            putJsonArray("items") {
+                f.watch.forEach { w ->
+                    val o = f.obj(w.objectId) ?: return@forEach
+                    val u = displayUnits.unitFor(ResultKeys.quantityFor(o, w.key))
+                    addJsonObject {
+                        put("objectId", w.objectId); put("key", w.key); put("label", "${o.tag} ${ResultKeys.label(w.key)}"); put("unit", u.symbol)
+                        put("value", shown(f, results, w.objectId, w.key)?.let { ValueFormat.number(it, 3) } ?: "—")
+                    }
+                }
+            }
+            putJsonArray("targets") {
+                f.objects.filter { results.propertyKeys(it.id).isNotEmpty() }.forEach { o ->
+                    addJsonObject {
+                        put("id", o.id); put("tag", o.tag)
+                        putJsonArray("keys") { results.propertyKeys(o.id).forEach { k -> addJsonObject { put("key", k); put("label", ResultKeys.label(k)) } } }
+                    }
+                }
+            }
+        }.toString()
+    }
+
+    /** Adds a result to the watch panel, or takes it off. */
+    fun toggleWatch(flowsheetJson: String, objectId: String, key: String): String {
+        val f = fs(flowsheetJson)
+        val item = WatchItem(objectId, key)
+        return out(f.copy(watch = if (item in f.watch) f.watch - item else f.watch + item))
+    }
 
     // ---------- scenarios (the app's ScenariosTool) ----------
 

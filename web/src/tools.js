@@ -113,7 +113,9 @@ export function initTools(app) {
   function renderTools() {
     for (const b of $('toolsTabs').querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', b.dataset.tab === tab);
     const body = $('toolsBody');
-    if (tab === 'case') caseStudy(body);
+    if (tab === 'check') checkTool(body);
+    else if (tab === 'watch') watchTool(body);
+    else if (tab === 'case') caseStudy(body);
     else if (tab === 'opt') optimiser(body);
     else if (tab === 'dyn') dynamicsTool(body);
     else if (tab === 'pid') pidTool(body);
@@ -617,6 +619,45 @@ export function initTools(app) {
 
   // ---------- scenarios (D126): the app's ScenariosTool ----------
   let scName = '';
+  // ---------- the check and the watch panel (D136, the app's CheckTool and WatchTool) ----------
+  function checkTool(body) {
+    const items = JSON.parse(Sheet.check(app.project().flowsheet, ...solveArgs()));
+    const tag = (id) => JSON.parse(app.project().flowsheet).objects.find((o) => o.id === id)?.tag;
+    body.innerHTML = items.length ? `<ul class="ck-list">${items.map((c) => `<li${c.objectId ? ` data-id="${esc(c.objectId)}" tabindex="0" role="button" title="Open ${esc(tag(c.objectId) ?? '')}"` : ''}><span class="${c.level}">${c.level[0].toUpperCase() + c.level.slice(1)}</span><span>${esc(c.text)}</span></li>`).join('')}</ul>`
+      : '<p class="fs-note">Nothing to report: the flowsheet is specified, connected and solved without warnings.</p>';
+    const open = (e) => { const li = e.target.closest('[data-id]'); if (!li) return; dlg.close(); app.openObject?.(li.dataset.id); };
+    body.onclick = open;
+    body.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); } };
+  }
+  let watchPick = '';
+  function watchTool(body) {
+    const redraw = () => watchTool(body);
+    const w = JSON.parse(Sheet.watch(app.project().flowsheet, ...solveArgs()));
+    const t = w.targets.find((x) => x.id === watchPick);
+    body.innerHTML = `<p class="fs-note">Results kept in view on the flowsheet, updated after every solve.</p>
+      <ul class="dyn-events">${w.items.map((i) => `<li><span>${esc(i.label)}</span><span><b>${esc(i.value)}</b> ${esc(i.unit)} <button type="button" class="btn btn-sm" data-unwatch="${esc(i.objectId)}|${esc(i.key)}">Remove</button></span></li>`).join('') || '<li class="fs-note">Nothing watched yet.</li>'}</ul>
+      ${w.targets.length ? `<div class="row2"><select id="wt_obj" aria-label="Object to watch">${opts(w.targets.map((x) => ({ id: x.id, label: x.tag })), watchPick, 'Object…')}</select>
+      <select id="wt_key" aria-label="Result to watch"${t ? '' : ' disabled'}>${t ? opts(t.keys.map((k) => ({ id: k.key, label: k.label })), '', 'Result…') : '<option>Result…</option>'}</select></div>`
+        : '<p class="fs-note">Solve the flowsheet to pick results.</p>'}`;
+    body.onchange = (e) => {
+      if (e.target.id === 'wt_obj') { watchPick = e.target.value; return redraw(); }
+      if (e.target.id === 'wt_key' && e.target.value) { app.commit(Sheet.toggleWatch(app.project().flowsheet, watchPick, e.target.value), 'Watching it'); redraw(); }
+    };
+    body.onclick = (e) => {
+      const b = e.target.closest('[data-unwatch]'); if (!b) return;
+      const [id, key] = b.dataset.unwatch.split('|');
+      app.commit(Sheet.toggleWatch(app.project().flowsheet, id, key), 'No longer watched'); redraw();
+    };
+  }
+  /** The watch panel over the canvas: shown when something is watched. */
+  function renderWatch() {
+    const el = $('watchPanel'); if (!el) return;
+    const w = JSON.parse(Sheet.watch(app.project().flowsheet, ...solveArgs()));
+    el.hidden = !w.items.length;
+    el.classList.toggle('stale', w.stale);
+    el.innerHTML = w.items.map((i) => `<div><span>${esc(i.label)}</span><span><b>${esc(i.value)}</b> ${esc(i.unit)}</span></div>`).join('');
+  }
+
   function scenariosTool(body) {
     const redraw = () => scenariosTool(body);
     const d = JSON.parse(Sheet.scenarios(app.project().flowsheet));
@@ -892,5 +933,5 @@ export function initTools(app) {
     };
   }
 
-  return { lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
+  return { renderWatch, lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
 }

@@ -86,6 +86,7 @@
     <div class="fs-stage">
       <canvas id="canvas" tabindex="0" role="application" aria-roledescription="flowsheet" aria-label="Flowsheet canvas. Use the object list to reach objects; Shift and click or Shift and drag selects several; Ctrl+C copies, Ctrl+V pastes, Ctrl+D duplicates, Ctrl+A selects all; Delete removes what is selected, arrow keys move it." aria-describedby="objects"></canvas>
       <nav class="fs-levelbar card" id="levelBar" hidden aria-label="Sub-flowsheets"></nav>
+      <aside class="fs-watch card" id="watchPanel" hidden aria-label="Watched results" aria-live="polite"></aside>
       <div class="fs-zoom card" role="group" aria-label="Zoom">
         <button type="button" class="icon-btn" id="zoomOut" aria-label="Zoom out" title="Zoom out">−</button>
         <button type="button" class="icon-btn" id="zoomIn" aria-label="Zoom in" title="Zoom in">+</button>
@@ -200,6 +201,8 @@
   <dialog class="fs-dialog fs-tools card" id="toolsDlg" aria-labelledby="toolsTitle">
     <div class="fs-insp-head"><h2 id="toolsTitle">Tools</h2><button type="button" class="icon-btn" id="toolsClose" aria-label="Close">✕</button></div>
     <div class="fs-tabs" role="tablist" id="toolsTabs" aria-label="Tools">
+      <button type="button" role="tab" data-tab="check">Check</button>
+      <button type="button" role="tab" data-tab="watch">Watch</button>
       <button type="button" role="tab" data-tab="case">Case study</button>
       <button type="button" role="tab" data-tab="opt">Optimiser</button>
       <button type="button" role="tab" data-tab="dyn">Dynamics</button>
