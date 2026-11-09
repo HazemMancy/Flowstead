@@ -1257,6 +1257,8 @@ fun ObjectQuickActions(
     onTable: (() -> Unit)? = null,
     hasTable: Boolean = false,
     onDuplicate: (() -> Unit)? = null,
+    /** Puts the unit in a new sub-flowsheet (D133). */
+    onGroup: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -1267,6 +1269,7 @@ fun ObjectQuickActions(
                     "Edit" to onEdit,
                     onDuplicate?.let { "Duplicate (all its data)" to it },
                     onTable?.let { (if (hasTable) "Edit table on flowsheet…" else "Show table on flowsheet…") to it },
+                    onGroup?.let { "Put in a new sub-flowsheet" to it },
                     "Disconnect all" to onDisconnect,
                     "Delete" to onDelete,
                 ).forEach { (label, action) ->

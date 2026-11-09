@@ -22,7 +22,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object ProjectsRoute
 @Serializable data class FlowsheetRoute(val projectId: String)
-@Serializable data class FluidRoute(val projectId: String)
+@Serializable data class FluidRoute(val projectId: String, val blockId: String? = null)
 @Serializable data class ResultsRoute(val projectId: String, val log: Boolean = false)
 @Serializable data object SettingsRoute
 @Serializable data object AboutRoute
@@ -46,6 +46,7 @@ fun FlowsteadNavHost() {
             FlowsheetScreen(
                 onBack = { nav.popBackStack() },
                 onOpenFluid = { nav.navigate(FluidRoute(route.projectId)) },
+                onOpenBlockFluid = { nav.navigate(FluidRoute(route.projectId, it)) },
                 onOpenResults = { nav.navigate(ResultsRoute(route.projectId)) },
                 onOpenLog = { nav.navigate(ResultsRoute(route.projectId, log = true)) },
                 onOpenHelp = { nav.navigate(HelpRoute(it)) },

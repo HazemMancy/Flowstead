@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import app.flowstead.core.model.Subflowsheets
 import app.flowstead.core.model.DocumentInfo
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
@@ -96,13 +97,21 @@ object PfdPdf {
     fun write(fs: Flowsheet, view: ResultView, units: UnitSet, header: Header, out: OutputStream) {
         val doc = PdfDocument()
         try {
-            val page = doc.startPage(PdfDocument.PageInfo.Builder(PAGE_W.toInt(), PAGE_H.toInt(), 1).create())
-            val c = page.canvas
-            c.drawRect(MARGIN, MARGIN, PAGE_W - MARGIN, PAGE_H - MARGIN, frame)
-            val area = Rect(MARGIN + GAP, MARGIN + GAP, PAGE_W - MARGIN - GAP, PAGE_H - MARGIN - TITLE_H - GAP)
-            drawing(c, fs, view, units, area)
-            titleBlock(c, header)
-            doc.finishPage(page)
+            // The main flowsheet, then a page for each sub-flowsheet (D133), each with its blocks drawn as boxes.
+            val levels = listOf<String?>(null) + fs.subflowsheets.map { it.id }
+            levels.forEachIndexed { i, level ->
+                val page = doc.startPage(PdfDocument.PageInfo.Builder(PAGE_W.toInt(), PAGE_H.toInt(), i + 1).create())
+                val c = page.canvas
+                c.drawRect(MARGIN, MARGIN, PAGE_W - MARGIN, PAGE_H - MARGIN, frame)
+                val area = Rect(MARGIN + GAP, MARGIN + GAP + (if (level != null) TAG_SIZE * 2 else 0f), PAGE_W - MARGIN - GAP, PAGE_H - MARGIN - TITLE_H - GAP)
+                level?.let { id ->
+                    val path = Subflowsheets.path(fs, id).joinToString(" › ") { it.tag }
+                    c.drawText("Sub-flowsheet $path", MARGIN + GAP, MARGIN + GAP + TAG_SIZE, paint(TAG_SIZE * 1.2f, bold = true))
+                }
+                drawing(c, fs, level, view, units, area)
+                titleBlock(c, header)
+                doc.finishPage(page)
+            }
             doc.writeTo(out)
         } finally {
             doc.close()
@@ -121,10 +130,11 @@ object PfdPdf {
     private val tableCell = paint(TABLE_SIZE, mono = true)
     private val tableUnit = paint(TABLE_SIZE, mono = true, color = muted)
 
-    private fun drawing(c: Canvas, saved: Flowsheet, view: ResultView, units: UnitSet, area: Rect) {
-        // Lined up as on the canvas.
-        val fs = PortAlignment.align(saved)
-        if (fs.objects.isEmpty()) {
+    private fun drawing(c: Canvas, whole: Flowsheet, level: String?, view: ResultView, units: UnitSet, area: Rect) {
+        // Lined up as on the canvas; only what is on this flowsheet, its sub-flowsheets as boxes.
+        val fs = PortAlignment.align(Subflowsheets.levelView(whole, level))
+        val blocks = Subflowsheets.blocksAt(whole, level).map { it.tag to Rect(it.x.toFloat() - 64f, it.y.toFloat() - 40f, it.x.toFloat() + 64f, it.y.toFloat() + 40f) }
+        if (fs.objects.isEmpty() && blocks.isEmpty()) {
             val p = paint(14f, color = muted)
             val msg = "The flowsheet is empty."
             c.drawText(msg, area.center.x - p.measureText(msg) / 2, area.center.y, p)
@@ -146,7 +156,7 @@ object PfdPdf {
             val b = CanvasGeometry.bounds(o)
             val half = maxOf(b.width, tag.measureText(o.tag)) / 2
             Rect(b.center.x - half, b.top, b.center.x + half, b.bottom + 4f + TAG_SIZE * 1.3f)
-        }.reduce(::union)
+        }.plus(blocks.map { it.second }).reduce(::union)
         tables.forEach { bounds = union(bounds, Rect(it.x, it.y, it.x + it.w, it.y + it.h)) }
 
         val scale = minOf(area.width / bounds.width.coerceAtLeast(1f), area.height / bounds.height.coerceAtLeast(1f), MAX_SCALE)
@@ -189,7 +199,12 @@ object PfdPdf {
                 if (!o.type.isStream) drawNozzles(o.type, at, size, palette, strokeWidth = 1.4f)
                 drawUnitIcon(o.type, at, size, palette, strokeWidth = 1.4f, streamColor = streamColor(o, palette, view, twoPhase))
             }
+            for ((_, r) in blocks) {
+                drawRoundRect(palette.fill, r.topLeft, r.size, androidx.compose.ui.geometry.CornerRadius(6f))
+                drawRoundRect(palette.stroke, r.topLeft, r.size, androidx.compose.ui.geometry.CornerRadius(6f), style = Stroke(1.4f))
+            }
         }
+        for ((name, r) in blocks) c.drawText(name, r.center.x - tag.measureText(name) / 2, r.center.y + TAG_SIZE / 3, tag)
         for (o in fs.objects) {
             val b = CanvasGeometry.bounds(o)
             if (o.type == ObjectType.Controller) {

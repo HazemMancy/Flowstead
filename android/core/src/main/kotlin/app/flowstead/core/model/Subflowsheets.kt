@@ -102,6 +102,14 @@ object Subflowsheets {
     fun blocksAt(fs: Flowsheet, level: String?) = fs.subflowsheets.filter { it.parent == level }
     fun objectsAt(fs: Flowsheet, level: String?) = fs.objects.filter { it.parent == level }
 
+    /** [fs] as drawn on [level]: its objects, the connections between them and their tables (blocks are drawn apart). */
+    fun levelView(fs: Flowsheet, level: String?): Flowsheet {
+        if (!has(fs) && level == null) return fs
+        val objs = fs.objects.filter { it.parent == level }
+        val ids = objs.map { it.id }.toSet()
+        return fs.copy(objects = objs, connections = fs.connections.filter { it.fromObject in ids && it.toObject in ids }, tables = fs.tables.filter { it.objectId in ids })
+    }
+
     /** The path from the main flowsheet down to [level], outermost first. */
     fun path(fs: Flowsheet, level: String?): List<Subflowsheet> {
         val out = ArrayList<Subflowsheet>()
