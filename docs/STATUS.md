@@ -199,6 +199,7 @@ _Last updated: 2026-11-09_
 - **Web 1.12 (D132): sub-flowsheets** as HYSYS's: blocks that open to their own flowsheet, boundary streams matched to the parent's, group and ungroup, and each block on the parent's fluid package or its own (any package), solved flat on one package or region by region with HYSYS's transfer basis (T–P or P–VF). Grouped case = flat case on benchmark 07; a steam-tables block's duty = IAPWS-IF97. Web only for now; the Android app comes later.
 - **3.4.0 and Web 1.12.1 (D133): sub-flowsheets in the app**, sharing the web's model and solve (now in the app's core): blocks, breadcrumb, streams in and out picked as HYSYS's Connections or dragged onto a block, own fluid package per block, PFD page per sub-flowsheet. Web: the same Connections, blocks in free space, finger selection with the Select tool.
 - **Web 1.13 (D134): every screen and pointer.** Two-line toolbar with a sideways strip on phones, folding palette, bottom-sheet worksheets, full-screen dialogs, a palette column on phones on their side, zoom buttons, touch-sized targets and 16 px fields.
+- **D135: one sub-flowsheet solve for app and web** (the web calls the app core's `SubflowsheetSolve`), and the sub-flowsheet reference checks run on the phone's engine as well (`OnDeviceSubflowsheetTest`).
 - **Web 1.11 (D130):** the thermodynamics tools in Basis: binary T–x–y/P–x–y with liquid–liquid branches, ternary with tie lines, true critical point, package comparison, property charts. Checked against NIST boiling and critical points and IAPWS-95 water density.
 
 ## Next
