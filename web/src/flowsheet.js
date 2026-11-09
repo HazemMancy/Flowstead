@@ -14,7 +14,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools } = await import('./core/flowstead-core.mjs');
 const fluids = Fluids.getInstance();
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
@@ -753,6 +753,7 @@ function renderBasis() {
     : 'This property package has its own reference for enthalpy and entropy: the choice applies to Peng-Robinson, SRK and Lee-Kesler.';
   tools.hypotheticalSection($('hypos'), renderBasis);
   tools.blackOilSection($('blackOils'), renderBasis);
+  tools.dataToolsSection($('dataTools'), renderBasis);
   $('compCount').textContent = `(${b.compounds.length})`;
   $('compList').innerHTML = b.compounds.length ? b.compounds.map((c) => `<li><span>${esc(c)}${b.hypotheticals.includes(c) ? ' <small>Hypo</small>' : b.blackOils.includes(c) ? ' <small>Black oil</small>' : ''}</span>${b.usedBy[c] ? `<small>in ${b.usedBy[c]} stream${b.usedBy[c] > 1 ? 's' : ''}</small>` : ''}<button type="button" class="btn btn-sm" data-remove="${esc(c)}" aria-label="Remove ${esc(c)}">Remove</button></li>`).join('')
     : '<li class="empty">No components yet: search below.</li>';
@@ -999,7 +1000,7 @@ $('unitGrid').addEventListener('change', (e) => {
 
 // ---------- tools (D112) ----------
 const tools = initTools({
-  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
+  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Data: DataTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
   project: () => project, commit: (json, message) => commit(json, message), toast,
   ready: () => engine.ready,
 });
@@ -1033,5 +1034,5 @@ renderGroups(); renderPalette();
 load();
 resize();
 view.fit(cssW, cssH); draw();
-window.flowsteadFlowsheet = { core, view, tools, get project() { return project; } }; // for the browser tests
+window.flowsteadFlowsheet = { core, view, tools, engine, get project() { return project; } }; // for the browser tests
 window.flowsheetReady = true;

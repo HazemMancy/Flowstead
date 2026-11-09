@@ -54,7 +54,7 @@
       <input type="file" id="openFile" accept=".json,application/json,.dwxmz,.dwxml" hidden />
     </span>
     <button type="button" class="btn btn-sm" id="basisBtn" title="Property package and components">Basis</button>
-    <button type="button" class="btn btn-sm" id="toolsBtn" title="Case studies, optimiser, dynamics, PID tuning and safety analysis">Tools</button>
+    <button type="button" class="btn btn-sm" id="toolsBtn" title="Case studies, optimiser, dynamics, PID tuning, spreadsheet, scenarios and safety analysis">Tools</button>
     <button type="button" class="btn btn-sm" id="unitsBtn" title="The units you work in: temperature, pressure, flows and more">Units</button>
     <button type="button" class="btn btn-sm" id="exportBtn" title="PFD, heat and material balance, data sheets, results, DWSIM file">Export</button>
     <span class="fs-group">
@@ -145,6 +145,7 @@
     <ul class="search-results" id="compResults" aria-label="Matching components"></ul>
     <div id="hypos" class="fs-form"></div>
     <div id="blackOils" class="fs-form"></div>
+    <div id="dataTools" class="fs-form"></div>
   </dialog>
 
   <dialog class="fs-dialog card" id="tableDlg" aria-labelledby="tableTitle">
@@ -190,6 +191,8 @@
       <button type="button" role="tab" data-tab="opt">Optimiser</button>
       <button type="button" role="tab" data-tab="dyn">Dynamics</button>
       <button type="button" role="tab" data-tab="pid">PID tuning</button>
+      <button type="button" role="tab" data-tab="sheet">Spreadsheet</button>
+      <button type="button" role="tab" data-tab="scen">Scenarios</button>
       <button type="button" role="tab" data-tab="relief">Relief valves</button>
       <button type="button" role="tab" data-tab="depressuring">Depressuring</button>
       <button type="button" role="tab" data-tab="pressurization">Pressurization</button>

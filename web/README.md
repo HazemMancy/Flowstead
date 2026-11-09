@@ -35,6 +35,15 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.10**
+- **Spreadsheet** (Tools → Spreadsheet), as in HYSYS and the Android app: numbers, text and formulas (=A1*2,
+  =sum(A1:A5), sqrt, ln…); =[K-100.power] brings in a solved result in its display unit (pick it from the menu). Export a
+  cell to a specification and **Apply** it to the flowsheet.
+- **Scenarios** (Tools → Scenarios): save the case, change it, save again, and compare the results side by side;
+  **Restore** puts a scenario's specifications back.
+- **Compound and data tools** (Basis): a component from its structure (SMILES, Joback groups, or a name looked up on
+  PubChem), interaction parameters fitted to your measured VLE data, and DWSIM's reaction finder.
+
 **Web 1.9**
 - **Dynamics** (Tools → Dynamics), as in the Android app: give each separator its volume (and height), each valve its
   Cv, each controller its tuning, add events (a feed's pressure, a valve's opening, a setpoint…) and **Run**. The trends

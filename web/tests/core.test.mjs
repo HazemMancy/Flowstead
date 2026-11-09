@@ -589,3 +589,106 @@ test('PID tuning: an exact first-order-plus-dead-time response gives its K, τ, 
   const p = used.dynamics.parameters[pic.id];
   assert.deepEqual([p.gain.si, p.integralTime.si, p.derivativeTime.si, p.action.si], [simc.gain, simc.integralTime, 0, -1]);
 });
+
+const { SheetTools } = await import(lib);
+const sheetT = SheetTools.getInstance();
+
+test('spreadsheet: formulas on the engine\'s results in display units, exports into specifications (D126)', () => {
+  let fsj = bench('06-compressor-aftercooler');
+  // A solve as the engine returns it (SI): K-100 power 568.96 kW, DISCHARGE at 404.76 K.
+  const solve = JSON.stringify({ status: 'converged', objects: {
+    k: { status: 'solved', properties: { power: 568960 } },
+    dis: { status: 'solved', properties: { temperature: 404.76 } },
+  } });
+  const set = (cell, text) => { fsj = JSON.stringify(JSON.parse(sheetT.setCell(fsj, cell, text)).flowsheet); };
+  set('A1', '=[K-100.power]');           // in kW, the display unit
+  set('A2', '=[DISCHARGE.temperature]'); // in °C
+  set('A3', '=A1*2 + sqrt(16)');         // 2 × 568.96 + 4 = 1141.92
+  set('A4', '=sum(A1:A3)');              // 568.96 + 131.61 + 1141.92 = 1842.49
+  set('B1', '=B2+1'); set('B2', '=B1+1'); // circular
+  set('C1', 'Power');
+  const d = JSON.parse(sheetT.sheet(fsj, solve, core.modelHash(fsj)));
+  const n = (c) => Number(d.cells[c].shown.replace(/,/g, ''));
+  assert.equal(n('A1'), 568.96);
+  assert.ok(Math.abs(n('A2') - (404.76 - 273.15)) < 1e-9);
+  assert.ok(Math.abs(n('A3') - 1141.92) < 1e-9);
+  assert.ok(Math.abs(n('A4') - (568.96 + 131.61 + 1141.92)) < 1e-6);
+  assert.match(d.cells.B1.error, /circular/);
+  assert.equal(d.cells.C1.shown, 'Power');
+  assert.equal(d.stale, false);
+  // With no solve, an import is an error, never a number.
+  assert.ok(JSON.parse(sheetT.sheet(fsj, null, '')).cells.A1.error);
+  // Export D1 (20, in bara: the display unit) to K-100's outlet pressure and apply: 20 bara = 2.0e6 Pa.
+  set('D1', '20');
+  fsj = JSON.stringify(JSON.parse(sheetT.addExport(fsj, 'D1', 'k', 'outletPressure')).flowsheet);
+  assert.match(JSON.parse(sheetT.sheet(fsj, solve, core.modelHash(fsj))).exports[0].label, /D1 → K-100 Outlet pressure \(bara\)/);
+  const applied = JSON.parse(sheetT.applyExports(fsj, solve, core.modelHash(fsj))).flowsheet;
+  assert.equal(applied.objects.find((o) => o.id === 'k').specs.outletPressure.si, 2e6);
+  // An export of a cell that holds no number is refused, naming it.
+  set('D1', 'twenty');
+  assert.match(JSON.parse(sheetT.applyExports(fsj, solve, core.modelHash(fsj))).error, /D1/);
+});
+
+test('scenarios: saved with the engine\'s results, compared in display units, restored (D126)', () => {
+  let fsj = bench('06-compressor-aftercooler');
+  const solveAt = (power) => JSON.stringify({ status: 'converged', objects: { k: { status: 'solved', properties: { power } } } });
+  let r = JSON.parse(sheetT.saveScenario(fsj, solveAt(568960), core.modelHash(fsj), 'Base', 0));
+  assert.equal(r.solved, true);
+  fsj = JSON.stringify(r.flowsheet);
+  // Change the compressor's outlet pressure, save again with that case's solve.
+  const f = JSON.parse(fsj); f.objects.find((o) => o.id === 'k').specs.outletPressure.si = 2e6; fsj = JSON.stringify(f);
+  r = JSON.parse(sheetT.saveScenario(fsj, solveAt(700000), core.modelHash(fsj), '', 0));
+  fsj = JSON.stringify(r.flowsheet);
+  // Saved with the previous case's solve (out of date): specifications only.
+  const stale = JSON.parse(sheetT.saveScenario(fsj, solveAt(1), 'not-this-model', 'Stale', 0));
+  assert.equal(stale.solved, false);
+  const d = JSON.parse(sheetT.scenarios(fsj));
+  assert.deepEqual(d.list.map((s) => s.name), ['Base', 'Scenario 2']);
+  const power = d.rows.find((x) => x.label === 'K-100 Power');
+  assert.deepEqual([power.unit, ...power.values], ['kW', '568.96', '700.00']);
+  // Restore Base: K-100's outlet pressure comes back.
+  const back = JSON.parse(sheetT.restoreScenario(fsj, 0)).flowsheet;
+  assert.equal(back.objects.find((o) => o.id === 'k').specs.outletPressure.si, JSON.parse(bench('06-compressor-aftercooler')).objects.find((o) => o.id === 'k').specs.outletPressure.si);
+  assert.equal(JSON.parse(sheetT.deleteScenario(fsj, 0)).flowsheet.scenarios.length, 1);
+});
+
+const { DataTools } = await import(lib);
+const dataT = DataTools.getInstance();
+
+test('compound and data tools: PubChem, the structure request, the VLE points in SI, saving and adding (D127)', () => {
+  // PubChem's answer for n-hexane, as its PUG REST service returns it (2025 property names).
+  const body = JSON.stringify({ PropertyTable: { Properties: [{ CID: 8058, Title: 'Hexane', MolecularFormula: 'C6H14', MolecularWeight: '86.18', SMILES: 'CCCCCC' }] } });
+  const found = JSON.parse(dataT.pubChemParse('hexane', body));
+  assert.deepEqual([found[0].cid, found[0].smiles, found[0].formula], [8058, 'CCCCCC', 'C6H14']);
+  assert.match(JSON.parse(dataT.pubChemParse('xyzzy', JSON.stringify({ Fault: { Code: 'PUGREST.NotFound', Message: 'No CID found' } }))).error, /PubChem/);
+  assert.match(dataT.pubChemUrl('n-hexane'), /^https:\/\/pubchem\.ncbi\.nlm\.nih\.gov\/rest\/pug\/compound\/name\/n-hexane\/property\//);
+  // The structure request: a SMILES, or the group counts when there is none (n-hexane: 2 × -CH3, 4 × -CH2-).
+  assert.equal(JSON.parse(dataT.structureRequest('C6', 'CCCCCC', '{}', NaN)).params.compound.smiles, 'CCCCCC');
+  const byHand = JSON.parse(dataT.structureRequest('C6', '', '{"1":2,"2":4}', 341.88)).params.compound;
+  assert.deepEqual([byHand.jobackGroups, byHand.normalBoilingPoint], [{ 1: 2, 2: 4 }, 341.88]);
+  assert.match(JSON.parse(dataT.structureRequest('C6', '', '{}', NaN)).error, /SMILES/);
+  let fsj = JSON.stringify({ ...JSON.parse(core.newFlowsheet('Peng-Robinson (PR)')), compounds: ['Propane', 'N-pentane'] });
+  const added = JSON.parse(dataT.saveStructure(fsj, 'C6', 'CCCCCC', '{}', NaN)).flowsheet;
+  assert.ok(added.compounds.includes('C6') && added.hypotheticals[0].smiles === 'CCCCCC');
+  // VLE points: x, T in °C at 10 bara → SI (T + 273.15, 10 × 10⁵ Pa), by hand.
+  const req = JSON.parse(dataT.regressionRequest(fsj, 'Propane', 'N-pentane', 'txy', '10', 'bara', 'C', '0.2, 80.5\n0.5 0.8 55\n# a comment\n0.8;30.25'));
+  assert.equal(req.method, 'regressVle');
+  assert.equal(req.params.parameters, 'kij', 'Peng-Robinson fits kij');
+  assert.deepEqual(req.params.points.map((p) => [p.x, p.y ?? null, +(p.temperature - 273.15).toFixed(10), p.pressure]), [[0.2, null, 80.5, 1e6], [0.5, 0.8, 55, 1e6], [0.8, null, 30.25, 1e6]]);
+  assert.match(JSON.parse(dataT.regressionRequest(fsj, 'Propane', 'N-pentane', 'txy', '10', 'bara', 'C', '0.2')).error, /Each line/);
+  assert.match(JSON.parse(dataT.regressionRequest(fsj, 'Propane', 'Propane', 'txy', '10', 'bara', 'C', '0.2, 1\n0.3, 2')).error, /two different/);
+  // The fit's report and saving the parameters into the fluid.
+  const fit = JSON.parse(dataT.regressionReport(fsj, 'txy', 'C', JSON.stringify({ parameter: { a: 'Propane', b: 'N-pentane', kij: 0.05 }, deviationBefore: 1.2, deviationAfter: 0.01, evaluations: 40,
+    after: [{ x: 0.2, measured: 353.65, calculated: 353.66 }] })));
+  assert.equal(fit.report.sections[0].text, 'kij = 0.05000');
+  assert.deepEqual(fit.report.sections.find((s) => s.kind === 'table').rows[0], ['0.2000', '80.50', '80.51', '—']);
+  const saved = JSON.parse(dataT.saveParameter(fsj, JSON.stringify(fit.parameter))).flowsheet;
+  assert.deepEqual(saved.interactionParameters, [{ a: 'Propane', b: 'N-pentane', kij: 0.05 }]);
+  // A suggested reaction is added under a fresh id and then shows as added.
+  const finder = JSON.stringify({ reactions: [{ category: 'combustion', name: 'Propane combustion', equation: '', reaction: { id: 'r1', name: 'Propane combustion', type: 'conversion', stoichiometry: { Propane: -1, 'N-pentane': 1 }, baseCompound: 'Propane', conversion: 1 } }] });
+  assert.equal(JSON.parse(dataT.reactionsList(fsj, finder)).reactions[0].added, false);
+  const withRx = JSON.stringify(JSON.parse(dataT.addReaction(fsj, JSON.stringify(JSON.parse(finder).reactions[0].reaction))).flowsheet);
+  assert.equal(JSON.parse(withRx).reactions.length, 1);
+  assert.notEqual(JSON.parse(withRx).reactions[0].id, 'r1');
+  assert.equal(JSON.parse(dataT.reactionsList(withRx, finder)).reactions[0].added, true);
+});
