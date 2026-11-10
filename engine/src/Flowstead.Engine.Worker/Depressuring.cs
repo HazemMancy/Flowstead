@@ -260,10 +260,13 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         _warnings.RemoveAll(w => w.StartsWith("DWSIM's flashes did not settle"));
         var orifice = Math.PI * diameter * diameter / 4;
         var designT = req.DesignPressure is { } dp ? Math.Max(dp, sup.Pressure) - Patm : 1.1 * (sup.Pressure - Patm);
-        var tgt = Open(req.Composition, req.InitialTemperature, req.InitialPressure, req.Vessel, req.WallThickness, designT, req.HeatTransferCoefficient,
-            req.AmbientTemperature ?? req.InitialTemperature);
         var src = Open(sup.Composition, sup.Temperature, sup.Pressure, sup.Vessel!, sup.WallThickness, 1.1 * (sup.Pressure - Patm), sup.HeatTransferCoefficient,
             req.AmbientTemperature ?? sup.Temperature);
+        // What is filled starts holding the gas the source sends (its vapour), not the source's whole contents: a
+        // separator's liquid would otherwise start condensed in a line at atmospheric pressure.
+        var sent = src.Vap.Empty ? req.Composition : Fractions(src.Vap.Moles);
+        var tgt = Open(sent, req.InitialTemperature, req.InitialPressure, req.Vessel, req.WallThickness, designT, req.HeatTransferCoefficient,
+            req.AmbientTemperature ?? req.InitialTemperature);
         var gap0 = src.P - tgt.P;
         double t = 0;
         double? reached = null, equalised = null, pEq = null;
@@ -282,7 +285,8 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
             // estimate gap / (Ps/Ms + Pt/Mt)), so the pressures close without crossing.
             var toEqualise = gap / (src.P / src.Mass + tgt.P / tgt.Mass);
             var dm = Math.Min(Math.Min(0.04 * Math.Min(src.Mass, tgt.Mass), 0.2 * toEqualise), 0.5 * src.Outlet.M);
-            var dt = Math.Clamp(dm / w, 0.05, 60);
+            // The floor is small so the limit on dm, not the clock, decides the step: no step carries the pressures past each other.
+            var dt = Math.Clamp(dm / w, 1e-3, 60);
             if (t + dt > req.Duration) dt = req.Duration - t;
             dm = Math.Min(w * dt, 0.5 * src.Outlet.M);
 

@@ -509,6 +509,28 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.True(low.TimeToTarget < low.TimeToEqualise);
     }
 
+    [Fact]
+    public async Task ASeparatorSourceSendsItsGasAndWhatItFillsStartsDry()
+    {
+        // A two-phase source (methane–propane at 20 bara, 0.5 m of liquid in a 1 m × 3 m vessel): what is filled starts
+        // with the source's vapour at 1 atm, so it holds no liquid to begin with; the gas off the top equalises the two.
+        var mix = new Dictionary<string, double> { ["Methane"] = 0.5, ["Propane"] = 0.5 };
+        var req = new DepressuringRequest
+        {
+            Flowsheet = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane", "Propane"] }, Composition = mix,
+            InitialPressure = 101325, InitialTemperature = 300, Vessel = new VesselGeometry(1.0, 3.0), Duration = 4 * 3600,
+            Supply = new PressurizationSupply { Composition = mix, Pressure = 20e5, Temperature = 300, OrificeDiameter = 0.01, Vessel = new VesselGeometry(1.0, 3.0, LiquidLevel: 0.5) },
+        };
+        var res = await engine.Authed(15).PostAsJsonAsync("/depressuring", req, Json.Options);
+        Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+        var r = await EngineFixture.Json<DepressuringResult>(res);
+        output.WriteLine($"equalised at {r.EqualisingPressure / 1e5:0.###} bar after {r.TimeToEqualise:0} s; filled LF {r.LiquidVolumeFraction[0]:0.####}; {r.Time.Count} steps | " + string.Join(" | ", r.Warnings));
+        Assert.Equal(0, r.LiquidVolumeFraction[0]);
+        Assert.NotNull(r.EqualisingPressure);
+        Assert.InRange(r.EqualisingPressure!.Value, 101325, 20e5);
+        Assert.Equal(r.Inventory[^1] - r.Inventory[0], r.MassTransferred!.Value, r.MassTransferred.Value * 0.01);
+    }
+
     private async Task<DepressuringResult> Pressurize(PressurizationSupply supply, double? target = null, double targetTime = 3600)
     {
         var gas = new Dictionary<string, double> { ["Methane"] = 0.92, ["Ethane"] = 0.05, ["Propane"] = 0.03 };
