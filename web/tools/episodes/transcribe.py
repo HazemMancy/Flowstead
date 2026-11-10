@@ -1,12 +1,15 @@
 # Flowstead — the narration's words and their times (faster-whisper), to check the read against the script and to cut
 # the video to it. SPDX-License-Identifier: GPL-3.0-or-later
 #   python3 -I web/tools/episodes/transcribe.py <audio> <script.txt> <out.json>
-import json, re, sys, difflib
+import json, re, subprocess, sys, difflib
+import numpy as np
 from faster_whisper import WhisperModel
 
 audio, script_path, out = sys.argv[1:4]
 model = WhisperModel("medium.en", device="cpu", compute_type="int8")
-segs, _ = model.transcribe(audio, word_timestamps=True, language="en", beam_size=5, vad_filter=False)
+pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", audio, "-f", "s16le", "-ac", "1", "-ar", "16000", "-"], check=True, capture_output=True).stdout
+samples = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
+segs, _ = model.transcribe(samples, word_timestamps=True, language="en", beam_size=5, vad_filter=False)
 words = [{"w": w.word.strip(), "s": round(w.start, 3), "e": round(w.end, 3)} for s in segs for w in s.words]
 
 norm = lambda t: re.sub(r"[^a-z0-9]+", "", t.lower())
