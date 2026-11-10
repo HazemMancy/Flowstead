@@ -733,3 +733,57 @@ test('thermodynamics tools: requests in SI, a stream\'s composition, the reports
   assert.deepEqual(tern.vapour, [[0.5, 0]]);
   assert.deepEqual(tern.ties, [[[0, 0], [1, 0]]]);
 });
+
+test('automation interface, model side (D140): describe, units by id or symbol, results as the engine gave them, sizing, refusals', async () => {
+  const { Automation } = await import(lib);
+  const A = Automation.getInstance();
+  assert.equal(A.VERSION, '1.0');
+  // The skill carries the interface's reference: the same file as docs/automation.md, for the same version.
+  const doc = fs.readFileSync(new URL('../../docs/automation.md', import.meta.url), 'utf8');
+  assert.equal(fs.readFileSync(new URL('../../skills/flowstead-automation/references/api.md', import.meta.url), 'utf8'), doc);
+  assert.match(doc, /version 1\.0/);
+  const d = JSON.parse(A.describe());
+  const k = d.types.find((t) => t.id === 'compressor');
+  assert.ok(k.specs.some((s) => s.key === 'outletPressure' && s.quantity === 'Pressure'));
+  assert.ok(k.results.some((r) => r.key === 'power' && r.quantity === 'Power'));
+  assert.ok(d.units.Pressure.includes('barg') && d.units.Temperature.includes('C'));
+  // Units by id or symbol, within the specification's quantity: 0.5 bar of drop is 50 000 Pa; 40 °C is 313.15 K.
+  let fsj = bench('06-compressor-aftercooler');
+  fsj = JSON.stringify(JSON.parse(A.setSpec(fsj, 'E-100', 'pressureDrop', 0.5, 'bar')).flowsheet);
+  fsj = JSON.stringify(JSON.parse(A.setSpec(fsj, 'E-100', 'outletTemperature', 40, '°C')).flowsheet);
+  const e = JSON.parse(fsj).objects.find((o) => o.tag === 'E-100');
+  assert.equal(e.specs.pressureDrop.si, 50000);
+  assert.ok(Math.abs(e.specs.outletTemperature.si - 313.15) < 1e-9);
+  // An exclusive specification replaces its partner: a pressure rise takes the outlet pressure's place.
+  const k2 = JSON.parse(A.setSpec(fsj, 'K-100', 'pressureRise', 10, 'bar')).flowsheet.objects.find((o) => o.tag === 'K-100');
+  assert.ok('pressureRise' in k2.specs && !('outletPressure' in k2.specs));
+  // Refusals carry the reason.
+  assert.match(JSON.parse(A.setSpec(fsj, 'E-100', 'pressureDrop', 1, 'kg/s')).error, /not a unit of PressureDifference/);
+  assert.match(JSON.parse(A.setSpec(fsj, 'NOPE', 'pressureDrop', 1, 'bar')).error, /No object 'NOPE'/);
+  assert.match(JSON.parse(A.setSpec(fsj, 'E-100', 'length', 1, 'm')).error, /E-100 takes no 'length'/);
+  assert.match(JSON.parse(A.setComposition(fsj, 'SUCTION', JSON.stringify({ Methane: 0.5, Ethane: 0.2 }))).error, /add up to 0.7/);
+  // Results: the engine's numbers, SI and display, current for the case it solved and stale after an edit.
+  const base = bench('06-compressor-aftercooler');
+  const result = fs.readFileSync(new URL('../../shared/fixtures/solve-result-06.json', import.meta.url), 'utf8');
+  const raw = JSON.parse(result).objects.k.properties;
+  const r = JSON.parse(A.results(base, result, core.modelHash(base), 'K-100'));
+  assert.equal(r.stale, false);
+  assert.equal(r.properties.power.si, raw.power);
+  assert.equal(r.properties.power.siUnit, 'W');
+  assert.equal(JSON.parse(A.results(fsj, result, core.modelHash(base), 'K-100')).stale, true);
+  // Sizing on them: the driver at API 617's 110 % of the engine's power (hand), refused when stale.
+  const s = JSON.parse(A.sizing(base, result, core.modelHash(base), 'K-100'));
+  assert.equal(s.kind, 'equipment');
+  const driver = s.lines.find((l) => l.label === 'Driver at least').si;
+  assert.ok(Math.abs(driver - 1.1 * Math.abs(raw.power)) <= 1e-9 * driver, `${driver} for 1.1 × ${raw.power}`);
+  assert.match(JSON.parse(A.sizing(fsj, result, core.modelHash(base), 'K-100')).error, /solve first/);
+  // Building: a stream on a port, tagged; a relief valve defined whole with equipment by tag.
+  const n = JSON.parse(A.connectNew(base, 'E-100', 'outlet', 0, 'material', 'X'));
+  assert.match(n.error ?? '', /in use|already|joined|port/i, 'E-100\'s outlet already carries COOLED');
+  const sep = JSON.parse(A.add(base, 'separator', 600, 0, 'V-100'));
+  assert.equal(sep.tag, 'V-100');
+  const psv = JSON.parse(A.safetyCase(JSON.stringify(sep.flowsheet), 'relief', JSON.stringify({ protectedId: 'V-100', setPressure: 2e6, scenarios: [{ kind: 'fire' }] })));
+  const dev = psv.flowsheet.safety.devices[0];
+  assert.equal(dev.protectedId, sep.id);
+  assert.equal(dev.tag, 'PSV-100');
+});

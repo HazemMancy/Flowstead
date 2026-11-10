@@ -9,13 +9,14 @@ import { initTools } from './tools.js';
 import { initDocuments, importDwsim } from './documents.js';
 import { enterToNext } from './forms.js';
 import { withSubflowsheets } from './subflowsheets.js';
+import { installAutomation } from './automation.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools, EquipmentTools, SubTools: SubToolsObject } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools, EquipmentTools, Automation, SubTools: SubToolsObject } = await import('./core/flowstead-core.mjs');
 const fluids = Fluids.getInstance();
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
@@ -1238,4 +1239,16 @@ load();
 resize();
 view.fit(cssW, cssH); draw();
 window.flowsteadFlowsheet = { core, view, tools, engine, SubTools, Equip: EquipmentTools.getInstance(), Thermo: ThermoTools.getInstance(), get project() { return project; } }; // for the browser tests
+// The automation interface (D140): window.flowstead.api, for an agent in the browser or a script (docs/automation.md).
+window.flowstead = {
+  api: installAutomation({
+    A: Automation.getInstance(), core, sheets, view, engine, SubTools, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(),
+    Thermo: ThermoTools.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Docs: Documents.getInstance(),
+    project: () => project, commit: (json, message) => commit(json, message), replace: (name, f) => replace(name, f),
+    solve: () => solve(false), busy: () => busy, ready: () => engine.ready, enthalpyBasis, ensureSaturation: (ids) => ensureSaturation(ids),
+    goLevel: (id) => goLevel(id), undo: () => step(undo, redo), redo: () => step(redo, undo),
+    basis: () => project.basis ?? 'hysys',
+    setBasis: (b) => { if (b === (project.basis ?? 'hysys')) return; $('basisSel').value = b; $('basisSel').dispatchEvent(new Event('change')); },
+  }),
+};
 window.flowsheetReady = true;
