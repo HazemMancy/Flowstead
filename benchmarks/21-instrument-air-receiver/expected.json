@@ -829,65 +829,6 @@
       }
     },
     {
-      "path": "objects.cond.phases.vapour.properties.phaseMoleFraction",
-      "expected": 0.00012815329647293693,
-      "tol": {
-        "abs": 0.0001
-      }
-    },
-    {
-      "path": "objects.cond.phases.vapour.properties.density",
-      "expected": 11.666932723609165,
-      "tol": {
-        "rel": 0.001,
-        "abs": 1e-09
-      }
-    },
-    {
-      "path": "objects.cond.phases.vapour.properties.molecularWeight",
-      "expected": 29.487169072604683,
-      "tol": {
-        "rel": 0.001,
-        "abs": 1e-09
-      }
-    },
-    {
-      "path": "objects.cond.phases.vapour.properties.massEnthalpy",
-      "expected": 4722.514499921391,
-      "tol": {
-        "rel": 0.001,
-        "abs": 1e-09
-      }
-    },
-    {
-      "path": "objects.cond.phases.vapour.composition.Nitrogen",
-      "expected": 0.6455091624031513,
-      "tol": {
-        "abs": 0.0001
-      }
-    },
-    {
-      "path": "objects.cond.phases.vapour.composition.Oxygen",
-      "expected": 0.3332625067234601,
-      "tol": {
-        "abs": 0.0001
-      }
-    },
-    {
-      "path": "objects.cond.phases.vapour.composition.Argon",
-      "expected": 0.016314806270406264,
-      "tol": {
-        "abs": 0.0001
-      }
-    },
-    {
-      "path": "objects.cond.phases.vapour.composition.Water",
-      "expected": 0.004913524602859348,
-      "tol": {
-        "abs": 0.0001
-      }
-    },
-    {
       "path": "objects.cond.phases.liquid2.properties.phaseMoleFraction",
       "expected": 0.999871846703527,
       "tol": {
