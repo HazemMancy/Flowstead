@@ -1,21 +1,23 @@
 diff --git a/engine/DWSIM.Thermodynamics/FlashAlgorithms/NestedLoopsImmiscible.vb b/engine/DWSIM.Thermodynamics/FlashAlgorithms/NestedLoopsImmiscible.vb
-index 5b2f9bf..3dd66bb 100644
+index 5b2f9bf..bee9b45 100644
 --- a/engine/DWSIM.Thermodynamics/FlashAlgorithms/NestedLoopsImmiscible.vb
 +++ b/engine/DWSIM.Thermodynamics/FlashAlgorithms/NestedLoopsImmiscible.vb
-@@ -198,48 +198,89 @@ Namespace PropertyPackages.Auxiliary.FlashAlgorithms
+@@ -198,48 +198,138 @@ Namespace PropertyPackages.Auxiliary.FlashAlgorithms
                  End If
              Next
  
 -            'supercritical gases solubility
-+            'Flowstead (D150): the gases dissolved in the free water, with every compound's balance kept.
-+            '  - A compound with a Henry's constant (IAPWS G7-04, or DWSIM's table) dissolves by Henry's law, x = p / kH, with
-+            '    p its partial pressure, whatever its critical temperature: CO2 and ethane are subcritical in cold water and got
-+            '    no solubility, or a fixed one, before.
++            'Flowstead (D150): the gases dissolved in the free water, in equilibrium with the vapour and with every
++            'compound's balance kept.
++            '  - A compound with a Henry's constant (IAPWS G7-04, or DWSIM's table) follows Henry's law, x = y P / kH,
++            '    whatever its critical temperature: CO2 and ethane are subcritical in cold water and got no solubility, or
++            '    a fixed one, before.
 +            '  - A hydrocarbon without one takes DWSIM's correlation (its solubility in water saturated with the pure
-+            '    hydrocarbon) times its fugacity relative to that saturated liquid, p / Psat, at most 1.
-+            '  - The dissolved moles come out of the vapour, then the hydrocarbon liquid. Before, they were added to the water
-+            '    phase on top of the feed while the water phase kept only its water's moles: the outlets held more of each gas
-+            '    than came in, and less water.
++            '    hydrocarbon) times its fugacity relative to that saturated liquid: x = sol y P / Psat.
++            '  - Each compound's vapour moles m split between the vapour Vf and the water A as y = m / (Vf + A/K), K = y/x;
++            '    Vf is where the vapour's fractions add up to one (with its water at Psat/P). Before, the dissolved gases
++            '    were added to the water on top of the feed while the water kept only its water's moles: the outlets held
++            '    more of each gas than came in, and less water.
  
              Dim VTc = PP.RET_VTC()
  
@@ -24,22 +26,23 @@ index 5b2f9bf..3dd66bb 100644
 -                    Vx2(i) = Vy(i) * P / PP.AUX_KHenry(Vn(i), T)
 -                End If
 -            Next
+-
+-            'hydrocarbon solubility
 +            If xl2 > 0 Then
  
--            'hydrocarbon solubility
-+                Dim isPF As Boolean
-+                Dim sumd As Double = 0.0#
- 
 -            Dim isPF As Boolean
--
++                Dim Kd(n) As Double
++                Dim isPF As Boolean
++                Dim anyd As Boolean = False
+ 
 -            For i = 0 To n
 -                If Vprops(i).IsPF Then
 -                    isPF = True
 -                Else
 -                    If Vprops(i).Elements.Count = 2 And Vprops(i).Elements.ContainsKey("C") And Vprops(i).Elements.ContainsKey("H") Then
 +                For i = 0 To n
++                    Kd(i) = 0.0#
 +                    If i = wid OrElse Vz(i) <= 0.0# Then Continue For
-+                    Dim ppi As Double = If(V > 0, Vy(i) * P, Vx1(i) * PP.AUX_PVAPi(i, T))
 +                    If Vprops(i).IsPF Then
                          isPF = True
                      Else
@@ -53,8 +56,10 @@ index 5b2f9bf..3dd66bb 100644
 +                        henry = PP.CurrentMaterialStream IsNot Nothing AndAlso PP.HasHenryConstants(Vn(i))
 +                    Catch ex As Exception
 +                    End Try
-+                    If henry Then
-+                        Vx2(i) = ppi / PP.AUX_KHenry(Vn(i), T)
++                    ' x/y in the water: P / kH (Henry) or sol P / Psat (the correlation).
++                    Dim xy As Double = 0.0#
++                    If henry OrElse (Not (nC > 0 And isPF) And T / VTc(i) > 1.0) Then
++                        xy = P / PP.AUX_KHenry(Vn(i), T)
 +                    ElseIf nC > 0 And isPF Then
 +                        Dim sol = Math.Exp(-1.6708 - 0.6386 * nC - 0.5538 * nC ^ 2)
 +                        Dim sT1 = Math.Exp(19.76 - 30125 / (1.8 * T) + 8649917 / (1.8 * T) ^ 2)
@@ -64,37 +69,81 @@ index 5b2f9bf..3dd66bb 100644
 +                        Dim xs = sol + sol * dSdT * (T - 298.15)
 +                        If xs < 0.0 Then xs = sol
 +                        Dim psat = PP.AUX_PVAPi(i, T)
-+                        Vx2(i) = xs * If(psat > 0, Math.Min(1.0#, ppi / psat), 1.0#)
-+                    ElseIf T / VTc(i) > 1.0 Then
-+                        Vx2(i) = ppi / PP.AUX_KHenry(Vn(i), T)
++                        If psat > 0 Then xy = xs * P / psat
 +                    End If
-+                    If Not Double.IsFinite(Vx2(i)) OrElse Vx2(i) < 0.0# Then Vx2(i) = 0.0#
-+                    sumd += Vx2(i)
++                    If Double.IsFinite(xy) AndAlso xy > 0.0# Then
++                        Kd(i) = 1.0# / xy
++                        anyd = True
++                    End If
 +                Next
 +
-+                If sumd > 0.0# And sumd < 0.5 Then
++                If anyd And V > 0 Then
 +
-+                    ' On the feed's basis: the free water's own water (xl2 = nWx) with the gases it holds.
-+                    Dim A As Double = xl2 / (1.0# - sumd)
-+                    Dim nV(n), nL(n), d(n) As Double
++                    ' On the feed's basis. m: each compound's vapour moles; W: all the water; yw: water's fraction in the vapour.
++                    Dim m(n) As Double
 +                    For i = 0 To n
-+                        nV(i) = V * Vy(i)
-+                        nL(i) = xl1 * Vx1(i)
-+                        If i = wid Then Continue For
-+                        d(i) = Math.Min(A * Vx2(i), nV(i) + nL(i))
-+                        Dim fromV = Math.Min(d(i), nV(i))
-+                        nV(i) -= fromV
-+                        nL(i) -= d(i) - fromV
++                        m(i) = If(i = wid, 0.0#, V * Vy(i))
 +                    Next
-+                    d(wid) = xl2
-+                    V = nV.Sum()
-+                    xl1 = nL.Sum()
-+                    xl2 = d.Sum()
-+                    For i = 0 To n
-+                        Vy(i) = If(V > 0, nV(i) / V, 0.0#)
-+                        Vx1(i) = If(xl1 > 0, nL(i) / xl1, 0.0#)
-+                        Vx2(i) = d(i) / xl2
++                    Dim W As Double = nwm, yw As Double = Vy(wid)
++                    Dim A As Double = xl2, Vf As Double = V
++                    Dim sumY = Function(vv As Double, aa As Double) As Double
++                                   Dim s As Double = 0.0#
++                                   For j As Integer = 0 To n
++                                       If j = wid OrElse m(j) <= 0.0# Then Continue For
++                                       s += m(j) / (vv + If(Kd(j) > 0, aa / Kd(j), 0.0#))
++                                   Next
++                                   Return s
++                               End Function
++                    For iter As Integer = 1 To 20
++                        If sumY(0.0#, A) <= 1.0# - yw Then
++                            Vf = 0.0#
++                        Else
++                            Dim lo As Double = 0.0#, hi As Double = V
++                            For bis As Integer = 1 To 100
++                                Dim vm = 0.5 * (lo + hi)
++                                If sumY(vm, A) > 1.0# - yw Then lo = vm Else hi = vm
++                            Next
++                            Vf = 0.5 * (lo + hi)
++                        End If
++                        Dim dissolved As Double = 0.0#
++                        For j As Integer = 0 To n
++                            If j = wid OrElse m(j) <= 0.0# OrElse Kd(j) <= 0.0# Then Continue For
++                            dissolved += m(j) * (A / Kd(j)) / (Vf + A / Kd(j))
++                        Next
++                        Dim Anew = Math.Max(0.0#, W - yw * Vf) + dissolved
++                        If Math.Abs(Anew - A) <= 1.0E-12 * Math.Max(1.0#, A) Then
++                            A = Anew
++                            Exit For
++                        End If
++                        A = Anew
 +                    Next
++                    If Vf > 0 Then
++                        For j As Integer = 0 To n
++                            If j = wid Then
++                                Vy(j) = yw
++                                Vx2(j) = (W - yw * Vf) / A
++                            ElseIf m(j) > 0 Then
++                                Dim den = Vf + If(Kd(j) > 0, A / Kd(j), 0.0#)
++                                Vy(j) = m(j) / den
++                                Vx2(j) = If(Kd(j) > 0, Vy(j) / Kd(j), 0.0#)
++                            Else
++                                Vy(j) = 0.0#
++                                Vx2(j) = 0.0#
++                            End If
++                        Next
++                        V = Vf
++                        xl2 = A
++                    Else
++                        ' Everything the vapour held dissolves: no vapour is left.
++                        For j As Integer = 0 To n
++                            Vx2(j) = If(j = wid, W, m(j)) / A
++                            Vy(j) = 0.0#
++                        Next
++                        Vy(wid) = 1.0#
++                        V = 0.0#
++                        xl2 = A
++                    End If
++                    Vx2 = Vx2.NormalizeY()
 +
 +                Else
 +
