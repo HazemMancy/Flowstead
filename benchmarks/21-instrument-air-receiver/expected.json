@@ -4,7 +4,7 @@
   "generatedWith": {
     "engine": "0.2.0",
     "dwsim": "10.2.15",
-    "date": "2026-11-09"
+    "date": "2026-11-10"
   },
   "status": "converged",
   "checks": [
@@ -338,7 +338,7 @@
     },
     {
       "path": "objects.wet.properties.temperature",
-      "expected": 305.8452008724027,
+      "expected": 305.84604173411,
       "tol": {
         "abs": 0.01
       }
@@ -353,7 +353,7 @@
     },
     {
       "path": "objects.wet.properties.vapourFraction",
-      "expected": 0.9938445398967771,
+      "expected": 0.9938439848664717,
       "tol": {
         "abs": 0.0001
       }
@@ -376,7 +376,7 @@
     },
     {
       "path": "objects.wet.properties.massEnthalpy",
-      "expected": -4589.834870335892,
+      "expected": -4589.834870362173,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -391,7 +391,7 @@
     },
     {
       "path": "objects.wet.phases.overall.properties.density",
-      "expected": 11.465190438468293,
+      "expected": 11.465160933467427,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -407,7 +407,7 @@
     },
     {
       "path": "objects.wet.phases.overall.properties.massEnthalpy",
-      "expected": -4589.834870335892,
+      "expected": -4589.834870362173,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -443,14 +443,14 @@
     },
     {
       "path": "objects.wet.phases.vapour.properties.phaseMoleFraction",
-      "expected": 0.9938445398967771,
+      "expected": 0.9938439848664717,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.vapour.properties.density",
-      "expected": 11.421605904765206,
+      "expected": 11.421572566544377,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -458,7 +458,7 @@
     },
     {
       "path": "objects.wet.phases.vapour.properties.molecularWeight",
-      "expected": 28.905154742423523,
+      "expected": 28.9051517166186,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -466,7 +466,7 @@
     },
     {
       "path": "objects.wet.phases.vapour.properties.massEnthalpy",
-      "expected": 5046.831916735581,
+      "expected": 5047.6923839654455,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -474,42 +474,42 @@
     },
     {
       "path": "objects.wet.phases.vapour.composition.Nitrogen",
-      "expected": 0.7773326834760982,
+      "expected": 0.7773326051258294,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.vapour.composition.Oxygen",
-      "expected": 0.2084628740248881,
+      "expected": 0.208462725870352,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.vapour.composition.Argon",
-      "expected": 0.009253960517572596,
+      "expected": 0.009253952733421127,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.vapour.composition.Water",
-      "expected": 0.004950481981440929,
+      "expected": 0.0049507162703974865,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.liquid2.properties.phaseMoleFraction",
-      "expected": 0.006155460103222848,
+      "expected": 0.006156015133528071,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.liquid2.properties.density",
-      "expected": 994.0881743589559,
+      "expected": 994.0878901534235,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -517,7 +517,7 @@
     },
     {
       "path": "objects.wet.phases.liquid2.properties.molecularWeight",
-      "expected": 18.016750160401426,
+      "expected": 18.0167503324033,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -525,7 +525,7 @@
     },
     {
       "path": "objects.wet.phases.liquid2.properties.massEnthalpy",
-      "expected": -2500814.212997809,
+      "expected": -2500810.342779574,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -533,35 +533,35 @@
     },
     {
       "path": "objects.wet.phases.liquid2.composition.Nitrogen",
-      "expected": 8.272412706544823e-05,
+      "expected": 8.273389993834735e-05,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.liquid2.composition.Oxygen",
-      "expected": 4.2708688827445724e-05,
+      "expected": 4.2713622605882055e-05,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.liquid2.composition.Argon",
-      "expected": 2.0907962048699043e-06,
+      "expected": 2.09103784972685e-06,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.wet.phases.liquid2.composition.Water",
-      "expected": 0.9998724763879022,
+      "expected": 0.9998724614396061,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.gas.properties.temperature",
-      "expected": 305.8452008724027,
+      "expected": 305.84604173411,
       "tol": {
         "abs": 0.01
       }
@@ -583,7 +583,7 @@
     },
     {
       "path": "objects.gas.properties.molarFlow",
-      "expected": 6.227529271447197,
+      "expected": 6.227525793571799,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -591,7 +591,7 @@
     },
     {
       "path": "objects.gas.properties.massFlow",
-      "expected": 0.18000769725415325,
+      "expected": 0.18000757788234853,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -599,7 +599,7 @@
     },
     {
       "path": "objects.gas.properties.massEnthalpy",
-      "expected": 5046.831916735581,
+      "expected": 5047.6923839654455,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -614,7 +614,7 @@
     },
     {
       "path": "objects.gas.phases.overall.properties.density",
-      "expected": 11.421605904765206,
+      "expected": 11.421572566544375,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -622,7 +622,7 @@
     },
     {
       "path": "objects.gas.phases.overall.properties.molecularWeight",
-      "expected": 28.905154742423523,
+      "expected": 28.9051517166186,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -630,7 +630,7 @@
     },
     {
       "path": "objects.gas.phases.overall.properties.massEnthalpy",
-      "expected": 5046.831916735581,
+      "expected": 5047.6923839654455,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -638,28 +638,28 @@
     },
     {
       "path": "objects.gas.phases.overall.composition.Nitrogen",
-      "expected": 0.7773326834760982,
+      "expected": 0.7773326051258294,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.gas.phases.overall.composition.Oxygen",
-      "expected": 0.2084628740248881,
+      "expected": 0.208462725870352,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.gas.phases.overall.composition.Argon",
-      "expected": 0.009253960517572596,
+      "expected": 0.009253952733421127,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.gas.phases.overall.composition.Water",
-      "expected": 0.004950481981440929,
+      "expected": 0.0049507162703974865,
       "tol": {
         "abs": 0.0001
       }
@@ -673,7 +673,7 @@
     },
     {
       "path": "objects.gas.phases.vapour.properties.density",
-      "expected": 11.421605904765206,
+      "expected": 11.421572566544377,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -681,7 +681,7 @@
     },
     {
       "path": "objects.gas.phases.vapour.properties.molecularWeight",
-      "expected": 28.905154742423523,
+      "expected": 28.9051517166186,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -689,7 +689,7 @@
     },
     {
       "path": "objects.gas.phases.vapour.properties.massEnthalpy",
-      "expected": 5046.831916735581,
+      "expected": 5047.6923839654455,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -697,35 +697,35 @@
     },
     {
       "path": "objects.gas.phases.vapour.composition.Nitrogen",
-      "expected": 0.7773326834760982,
+      "expected": 0.7773326051258294,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.gas.phases.vapour.composition.Oxygen",
-      "expected": 0.2084628740248881,
+      "expected": 0.208462725870352,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.gas.phases.vapour.composition.Argon",
-      "expected": 0.009253960517572596,
+      "expected": 0.009253952733421127,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.gas.phases.vapour.composition.Water",
-      "expected": 0.004950481981440929,
+      "expected": 0.0049507162703974865,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.properties.temperature",
-      "expected": 305.71212714184134,
+      "expected": 305.84604173411,
       "tol": {
         "abs": 0.01
       }
@@ -740,14 +740,14 @@
     },
     {
       "path": "objects.cond.properties.vapourFraction",
-      "expected": 0.00012815329647293693,
+      "expected": 0,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.properties.molarFlow",
-      "expected": 0.03857072855280468,
+      "expected": 0.03857420642820025,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -755,7 +755,7 @@
     },
     {
       "path": "objects.cond.properties.massFlow",
-      "expected": 0.0006949191798405437,
+      "expected": 0.0006949818464874703,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -763,7 +763,7 @@
     },
     {
       "path": "objects.cond.properties.massEnthalpy",
-      "expected": -2500814.2094448977,
+      "expected": -2500810.342779574,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -778,7 +778,7 @@
     },
     {
       "path": "objects.cond.phases.overall.properties.density",
-      "expected": 976.8832599290077,
+      "expected": 994.0878901534235,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -786,7 +786,7 @@
     },
     {
       "path": "objects.cond.phases.overall.properties.molecularWeight",
-      "expected": 18.016750160401426,
+      "expected": 18.016750332403298,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -794,7 +794,7 @@
     },
     {
       "path": "objects.cond.phases.overall.properties.massEnthalpy",
-      "expected": -2500814.2094448977,
+      "expected": -2500810.342779574,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -802,42 +802,42 @@
     },
     {
       "path": "objects.cond.phases.overall.composition.Nitrogen",
-      "expected": 8.272412706544824e-05,
+      "expected": 8.273389993834734e-05,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.phases.overall.composition.Oxygen",
-      "expected": 4.2708688827445724e-05,
+      "expected": 4.271362260588204e-05,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.phases.overall.composition.Argon",
-      "expected": 2.0907962048699043e-06,
+      "expected": 2.0910378497268495e-06,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.phases.overall.composition.Water",
-      "expected": 0.9998724763879022,
+      "expected": 0.999872461439606,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.phases.liquid2.properties.phaseMoleFraction",
-      "expected": 0.999871846703527,
+      "expected": 0.9999999999999999,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.phases.liquid2.properties.density",
-      "expected": 994.1356605703447,
+      "expected": 994.0878901534235,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -845,7 +845,7 @@
     },
     {
       "path": "objects.cond.phases.liquid2.properties.molecularWeight",
-      "expected": 18.01700526825333,
+      "expected": 18.0167503324033,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -853,7 +853,7 @@
     },
     {
       "path": "objects.cond.phases.liquid2.properties.massEnthalpy",
-      "expected": -2501339.786852997,
+      "expected": -2500810.342779574,
       "tol": {
         "rel": 0.001,
         "abs": 1e-09
@@ -861,28 +861,28 @@
     },
     {
       "path": "objects.cond.phases.liquid2.composition.Nitrogen",
-      "expected": 6.879584926374672e-05,
+      "expected": 8.273389993834735e-05,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.phases.liquid2.composition.Oxygen",
-      "expected": 6.83984826468658e-05,
+      "expected": 4.271362260588205e-05,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.phases.liquid2.composition.Argon",
-      "expected": 3.692544601202917e-06,
+      "expected": 2.09103784972685e-06,
       "tol": {
         "abs": 0.0001
       }
     },
     {
       "path": "objects.cond.phases.liquid2.composition.Water",
-      "expected": 0.9998591131234883,
+      "expected": 0.9998724614396061,
       "tol": {
         "abs": 0.0001
       }
