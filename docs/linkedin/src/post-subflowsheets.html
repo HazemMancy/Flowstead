@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- LinkedIn feed post image, 4:5 (1200x1500): sub-flowsheets, as in HYSYS (D132–D139). The flowsheets are the app's own,
+     drawn by its canvas code (render-subflowsheet.mjs: benchmark 06 with its cooler grouped into a block by the app's
+     Subflowsheets.group, then the flowsheet inside it); no result numbers appear.
+     Render: node src/render.js -->
+<html><head><meta charset="utf-8"><script src="mark.js"></script><style>
+@font-face{font-family:Inter;font-weight:700;src:url(../../../android/app/src/main/res/font/inter_bold.ttf)}
+@font-face{font-family:Inter;font-weight:600;src:url(../../../android/app/src/main/res/font/inter_semibold.ttf)}
+@font-face{font-family:Inter;font-weight:500;src:url(../../../android/app/src/main/res/font/inter_medium.ttf)}
+html,body{margin:0;width:1200px;height:1500px;overflow:hidden;background:#02172C}
+.wrap{position:relative;width:1200px;height:1500px;overflow:hidden;
+  background:radial-gradient(ellipse 80% 55% at 50% 62%,#0A3466 0%,#04224A 45%,#02142A 85%)}
+.grid{position:absolute;inset:0;background-image:radial-gradient(#5A9FF2 1px,transparent 1.2px);background-size:28px 28px;opacity:.10}
+.lock{position:absolute;left:80px;top:80px;display:flex;align-items:center;gap:20px}
+.name{font:700 60px/1 Inter;color:#fff;letter-spacing:-1.4px}
+.name span{color:#14D3CF}
+.sub{margin-top:9px;font:500 13px/1 Inter;color:#C9D6E2;letter-spacing:4.4px}
+h1{position:absolute;left:80px;top:205px;margin:0;width:1040px;font:700 66px/1.08 Inter;color:#fff;letter-spacing:-1.6px}
+h1 span{color:#14D3CF}
+.lead{position:absolute;left:80px;top:300px;width:1000px;font:500 26px/1.45 Inter;color:#C9D6E2}
+.panel{position:absolute;border-radius:24px;background:rgba(3,16,34,.72);border:1px solid rgba(90,159,242,.28);box-shadow:0 30px 70px rgba(0,0,0,.45);overflow:hidden}
+.panel .bar{display:flex;align-items:center;gap:10px;padding:16px 22px;font:600 18px/1 Inter;color:#C9D6E2;border-bottom:1px solid rgba(255,255,255,.08)}
+.panel .bar b{color:#fff}
+.panel .bar .crumb{color:#8FA6BF}
+.panel .bar .here{color:#14D3CF}
+.panel img{display:block}
+.main{left:60px;top:430px;width:1080px}
+.inside{left:300px;top:850px;width:840px;border-color:rgba(20,211,207,.55)}
+.link{position:absolute;left:0;top:0;width:1200px;height:1500px;pointer-events:none}
+.chips{position:absolute;left:60px;top:1272px;width:1080px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.chip{display:flex;align-items:center;gap:14px;font:600 21px/1.25 Inter;color:#E8F4FA;padding:16px 20px;border-radius:16px;background:rgba(20,211,207,.10);border:1px solid rgba(20,211,207,.38)}
+.chip i{width:10px;height:10px;border-radius:50%;background:#14D3CF;flex:none}
+.foot{position:absolute;left:0;right:0;bottom:34px;text-align:center;font:500 16px/1 Inter;color:#8FA6BF;letter-spacing:.3px}
+</style></head><body><div class="wrap">
+<div class="grid"></div>
+<div class="lock"><svg width="96" height="73" viewBox="10 9.5 151 114" id="mk"></svg>
+<div><div class="name">Flow<span>stead</span></div><div class="sub">PROCESS ENGINEERING WORKBENCH</div></div></div>
+<h1>Sub-flowsheets, <span>as in HYSYS.</span></h1>
+<div class="lead">Put part of your plant in a block, open it, and work on a flowsheet of its own. The case still solves as one.</div>
+
+<div class="panel main"><div class="bar"><b>Main flowsheet</b></div><img src="sub-main.png" width="1080" height="426"></div>
+<svg class="link"><path d="M 905 760 C 905 800, 905 820, 905 850" stroke="#14D3CF" stroke-width="3" stroke-dasharray="8 7" fill="none"/>
+  <circle cx="905" cy="760" r="6" fill="#14D3CF"/></svg>
+<div class="panel inside"><div class="bar"><span class="crumb">Main</span><span class="crumb">›</span><span class="here">AFTERCOOLER</span><span style="margin-left:auto;color:#8FA6BF;font-weight:500">inside the block</span></div><img src="sub-inside.png" width="840" height="345"></div>
+
+<div class="chips">
+  <div class="chip"><i></i>Its own fluid package, or the parent's</div>
+  <div class="chip"><i></i>Drag units in, by mouse or finger</div>
+  <div class="chip"><i></i>Streams in and out, matched for you</div>
+  <div class="chip"><i></i>Duplicate a whole block in one tap</div>
+</div>
+<div class="foot">Free &amp; open source (GPL-3.0) · Powered by DWSIM · Android and the web · github.com/HazemMancy/Flowstead</div>
+</div>
+<script>document.getElementById('mk').innerHTML = flowsteadMark(BLUE_OUTLET);</script></body></html>

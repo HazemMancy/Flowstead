@@ -692,10 +692,20 @@ export function initTools(app) {
     const ps = JSON.parse(Equip.sections(fsj, id));
     const cell = (label, value, attrs) => `<label class="eq-cell"><span>${esc(label)}</span><input type="text" inputmode="decimal" value="${esc(value)}" ${attrs} autocomplete="off"/></label>`;
     let html = '';
+    const sz = JSON.parse(Equip.sizing(fsj, id, ...solveArgs()));
+    if (sz.applies) {
+      const fld = (f) => f.kind === 'bool' ? `<label class="fs-switch"><input type="checkbox" data-sz="${esc(f.key)}"${f.value ? ' checked' : ''}/> ${esc(f.label)}</label>`
+        : f.kind === 'choice' ? `<label class="eq-cell eq-wide"><span>${esc(f.label)}</span><select data-sz="${esc(f.key)}">${f.options.map((o) => `<option value="${esc(o.id)}"${o.id === f.value ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select></label>`
+          : cell(f.label + (f.unit ? `, ${f.unit}` : ''), f.value, `data-sz="${esc(f.key)}" placeholder="${esc(f.hint ?? 'library')}"`);
+      html += `<h3>${sz.kind === 'line' ? 'Line sizing' : 'Sizing'}</h3><div class="eq-sz">${renderReport(sz.report)}</div>
+        <h3>Sizing basis</h3>${sz.kind === 'line' ? '<p class="fs-note">Criteria apply to every line of the service in the case; empty: not checked.</p>' : '<p class="fs-note">Empty fields take the library value shown.</p>'}
+        <div class="eq-row">${sz.fields.map(fld).join('')}</div>`;
+    }
     if (cv.kind) {
       const pump = cv.kind === 'pump', u = cv.units;
       html += `<h3>Performance curve</h3><label class="fs-switch"><input type="checkbox" id="eq_curve"${cv.on ? ' checked' : ''}/> Run on a performance curve</label>
-        <p class="fs-note">${pump ? 'Head, efficiency and NPSH required against actual inlet flow; the outlet pressure follows.' : 'Adiabatic head and efficiency against actual inlet flow; the lowest flow is the surge limit.'}</p>`;
+        <p class="fs-note">${pump ? 'Head, efficiency and NPSH required against actual inlet flow; the outlet pressure follows.' : `${cv.path === 'polytropic' ? 'Polytropic' : 'Adiabatic'} head and efficiency against actual inlet flow; the lowest flow is the surge limit.`}</p>`;
+      if (cv.on && !pump) html += `<div class="fs-seg" role="radiogroup" aria-label="The path the curve is drawn on"><button type="button" role="radio" aria-checked="${cv.path === 'polytropic'}" data-cvpath="polytropic">Polytropic</button><button type="button" role="radio" aria-checked="${cv.path !== 'polytropic'}" data-cvpath="adiabatic">Adiabatic</button></div>`;
       if (cv.on) {
         const rows = (pts, line) => pts.map((p, i) => `<div class="eq-row">${cell(`Flow, ${u.flow}`, p.flow, `data-cv="point" data-line="${line}" data-i="${i}" data-f="flow"`)}${cell(`Head, ${u.head}`, p.head, `data-cv="point" data-line="${line}" data-i="${i}" data-f="head"`)}${
           cell('Eff, %', p.eff, `data-cv="point" data-line="${line}" data-i="${i}" data-f="eff"`)}${pump ? cell(`NPSHr, ${u.head}`, p.npshr, `data-cv="point" data-line="${line}" data-i="${i}" data-f="npshr"`) : ''}
@@ -717,7 +727,7 @@ export function initTools(app) {
         <p class="fs-note">Several runs (each with its own length, rise and, if it differs, size) with elbows, valves, tees, entrances and exits between them.</p>`;
       if (ps.on) {
         html += ps.items.map((s, i) => `<div class="eq-sec"><div class="eq-head"><b>${i + 1}. ${esc(s.name)}</b><button type="button" class="icon-btn" data-psop="remove" data-i="${i}" aria-label="Remove section ${i + 1}">✕</button></div><div class="eq-row">${
-          s.fitting ? cell('Number', s.count, `data-ps="count" data-i="${i}"`) + cell(`Inside diameter, ${u.small}`, s.id, `data-ps="id" data-i="${i}"`)
+          s.fitting ? cell('Number', s.count, `data-ps="count" data-i="${i}"`) + (s.fitting === 'user_k' ? cell('K (velocity heads)', s.k, `data-ps="k" data-i="${i}"`) : '') + cell(`Inside diameter, ${u.small}`, s.id, `data-ps="id" data-i="${i}"`)
             : cell(`Length, ${u.length}`, s.length, `data-ps="length" data-i="${i}"`) + cell(`Rise, ${u.length}`, s.rise, `data-ps="rise" data-i="${i}"`) + cell(`Inside diameter, ${u.small}`, s.id, `data-ps="id" data-i="${i}"`) + cell('Increments', s.increments, `data-ps="increments" data-i="${i}"`)}</div></div>`).join('') +
           `<div class="eq-row"><button type="button" class="btn btn-sm" data-psop="addRun">Add straight run</button><select id="eq_fitting" aria-label="Add a fitting"><option value="">Add a fitting…</option>${ps.fittings.map((k) => `<option value="${esc(k.id)}">${esc(k.label)}</option>`).join('')}</select></div>` +
           (ps.totals ? `<p class="fs-note">${esc(ps.totals)}</p>` : '');
@@ -755,8 +765,10 @@ export function initTools(app) {
     const rxEdit = (op, msg) => { const r = JSON.parse(Equip.reactionEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); if (r.reaction) rxOpen = r.reaction; app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     const curveEdit = (op, msg) => { const r = JSON.parse(Equip.curveEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     const secEdit = (op, msg) => { const r = JSON.parse(Equip.sectionsEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
+    const szEdit = (op, msg) => { const r = JSON.parse(Equip.sizingEdit(app.project().flowsheet, id, JSON.stringify(op), ...solveArgs())); if (r.error) { app.toast(r.error); return equipmentSection(el, id); } app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     el.onchange = (e) => {
       const t = e.target;
+      if (t.dataset.sz) return szEdit({ key: t.dataset.sz, value: t.type === 'checkbox' ? String(t.checked) : t.value }, 'Sizing basis changed');
       if (t.id === 'eq_curve') return curveEdit({ op: t.checked ? 'on' : 'off' }, t.checked ? 'Runs on its curve' : 'Curve off');
       if (t.id === 'eq_sections') return secEdit({ op: t.checked ? 'on' : 'off' }, t.checked ? 'Sections and fittings on' : 'One straight run');
       if (t.id === 'eq_fitting' && t.value) return secEdit({ op: 'addFitting', value: t.value }, 'Fitting added');
@@ -772,6 +784,7 @@ export function initTools(app) {
       if (b.dataset.rxop === 'delete') { rxOpen = null; return rxEdit({ op: 'delete', reaction: b.dataset.r }, 'Reaction deleted'); }
       if (b.dataset.cvop) return curveEdit({ op: b.dataset.cvop, line: Number(b.dataset.line ?? -1), index: Number(b.dataset.i ?? 0) }, 'Curve changed');
       if (b.dataset.cvfit !== undefined) return curveEdit({ op: 'field', field: 'fit', value: b.dataset.cvfit }, 'Curve changed');
+      if (b.dataset.cvpath) return curveEdit({ op: 'field', field: 'path', value: b.dataset.cvpath }, b.dataset.cvpath === 'polytropic' ? 'Polytropic curve' : 'Adiabatic curve');
       if (b.dataset.psop) return secEdit({ op: b.dataset.psop, index: Number(b.dataset.i ?? 0) }, 'Sections changed');
     };
     el.onkeydown = (e) => { if (e.key === 'Enter' && e.target.matches('input[type=text]')) { e.preventDefault(); e.target.blur(); } };

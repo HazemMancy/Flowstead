@@ -1334,6 +1334,29 @@ try {
         }
         const sep = await p.evaluate(() => { try { return window.flowstead.api.sizing('V-100'); } catch (e) { return { error: e.message }; } });
         if (sep.error || !(sep.diameter_m > 0)) problems.push(`separator sizing: ${JSON.stringify(sep).slice(0, 200)}`);
+        // The Design tab's sizing (D141): the same numbers as the API, and the basis typed there drives them. Souders–Brown:
+        // the allowable gas velocity is K·√((ρL − ρG)/ρG), so half the K halves it exactly.
+        const id = await p.evaluate(() => window.flowstead.api.case().objects.find((o) => o.tag === 'V-100').id);
+        await p.evaluate((i) => document.querySelector(`#objects [data-id="${i}"]`).click(), id);
+        await p.click('#tabDesign');
+        await p.waitForSelector('#inspEquip [data-sz="k"]', { timeout: 30_000 });
+        const shown = async (label) => p.evaluate((l) => {
+          const row = [...document.querySelectorAll('#inspEquip .eq-sz tr')].find((r) => r.querySelector('th')?.textContent.trim() === l);
+          return row ? Number(row.querySelector('td').textContent.replace(/,/g, '')) : NaN;
+        }, label);
+        const d1 = await shown('Diameter'), v1 = await shown('Allowable gas velocity');
+        if (!(Math.abs(d1 - sep.diameter_m * 1000) <= 1 || Math.abs(d1 - sep.diameter_m) <= 0.01)) problems.push(`Design tab diameter ${d1} for the API's ${sep.diameter_m} m`);
+        const kUnit = await p.evaluate(() => document.querySelector('#inspEquip [data-sz="k"]').closest('label').textContent);
+        if (!/m\/s/.test(kUnit)) problems.push(`K field in ${kUnit}`);
+        await p.fill('#inspEquip [data-sz="k"]', String(sep.k_m_s / 2));
+        await p.dispatchEvent('#inspEquip [data-sz="k"]', 'change');
+        await p.waitForFunction(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.tag === 'V-100').sizing?.k > 0, null, { timeout: 10_000 });
+        const sep2 = await p.evaluate(() => window.flowstead.api.sizing('V-100'));
+        const v2 = await shown('Allowable gas velocity');
+        if (!(Math.abs(sep2.maxGasVelocity_m_s - sep.maxGasVelocity_m_s / 2) <= 1e-9 * sep.maxGasVelocity_m_s)) problems.push(`K halved: ${sep2.maxGasVelocity_m_s} m/s for ${sep.maxGasVelocity_m_s / 2}`);
+        if (!(Math.abs(v2 - v1 / 2) <= 0.02 * v1)) problems.push(`Design tab allowable velocity ${v2} after halving K (was ${v1})`);
+        if (!(sep2.diameter_m >= sep.diameter_m)) problems.push(`a lower K gave a smaller vessel (${sep2.diameter_m} m for ${sep.diameter_m} m)`);
+        await p.evaluate(() => window.flowstead.api.undo());
       }
       if (name === '09-pipe-and-orifice') {
         const line = await p.evaluate(() => { const api = window.flowstead.api; api.setLineCriteria('liquid', { maxVelocity: 3 }); return { s: api.sizing('PIPE-100'), v: api.results('PIPE-100').properties.maxVelocity?.si }; });

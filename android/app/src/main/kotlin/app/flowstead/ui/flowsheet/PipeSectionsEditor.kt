@@ -72,7 +72,7 @@ internal fun PipeSectionsSection(obj: SimObject, unitSet: UnitSet, ctx: UnitCont
         val kind = PipeFittings.get(s.fitting)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "${i + 1}. " + (kind?.let { "${it.name} · ${PipeFittings.describe(it)}" } ?: "Straight run"),
+                "${i + 1}. " + (kind?.let { "${it.name} · ${PipeFittings.describe(s)}" } ?: "Straight run"),
                 style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f),
             )
             IconButton(onClick = { save(sections.filterIndexed { j, _ -> j != i }) }, modifier = Modifier.testTag("pipe_section_delete_$i")) {
@@ -82,6 +82,9 @@ internal fun PipeSectionsSection(obj: SimObject, unitSet: UnitSet, ctx: UnitCont
         if (kind != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 CurveCell("Number", s.count.toDouble(), null, ctx, "pipe_section_count_$i", Modifier.weight(1f)) { replace(i, s.copy(count = (it ?: 1.0).toInt())) }
+                if (s.fitting == PipeFittings.USER_K) {
+                    CurveCell("K", s.k, null, ctx, "pipe_section_k_$i", Modifier.weight(1f)) { replace(i, s.copy(k = it?.takeIf { v -> v > 0 })) }
+                }
                 CurveCell("Inside diameter, ${small.symbol}", s.innerDiameter, small, ctx, "pipe_section_id_$i", Modifier.weight(1.4f)) { replace(i, s.copy(innerDiameter = it)) }
             }
         } else {
@@ -113,12 +116,12 @@ internal fun PipeSectionsSection(obj: SimObject, unitSet: UnitSet, ctx: UnitCont
     val run = sections.filter { !it.isFitting }.sumOf { (it.length ?: 0.0) * it.count }
     val rise = sections.filter { !it.isFitting }.sumOf { (it.elevationChange ?: 0.0) * it.count }
     val equivalent = sections.mapNotNull { s -> PipeFittings.get(s.fitting)?.takeIf { it.lOverD }?.let { k -> (s.innerDiameter ?: d0)?.let { k.value * it * s.count } } }.sum()
-    val k = sections.mapNotNull { s -> PipeFittings.get(s.fitting)?.takeIf { !it.lOverD }?.let { it.value * s.count } }.sum()
+    val k = sections.mapNotNull { s -> PipeFittings.kOf(s)?.let { it * s.count } }.sum()
     Calculated(
         "Straight length ${fmt(run, length, ctx)} ${length.symbol}, rise ${fmt(rise, length, ctx)} ${length.symbol}" +
             (if (equivalent > 0) "; fittings as ${fmt(equivalent, length, ctx)} ${length.symbol} more pipe" else "") +
             (if (k > 0) "; K ${ValueFormat.number(k, 2)} velocity heads" else "") +
-            ". Each fitting's loss is DWSIM's (Crane L/D or K); the profile shows it as a step.",
+            ". Each fitting's loss is DWSIM's (Crane L/D or K, or the K you give); the profile shows it as a step.",
     )
 }
 

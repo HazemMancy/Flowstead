@@ -100,6 +100,8 @@ data class EquipmentSizingInput(
     /** Heater, cooler or air cooler: the utility's (or air's) inlet and outlet temperatures; equal for condensing steam. */
     val utilityIn: Double? = null,
     val utilityOut: Double? = null,
+    /** Air cooler: tube passes, for the crossflow F (D143); null is 1, the lowest F. */
+    val tubePasses: Int? = null,
     /** Driver margin over the shaft power, as a factor; null is API 610 / 617's. */
     val margin: Double? = null,
     /** Tank: working liquid residence time, and the fraction of the volume the working liquid fills. */
@@ -315,12 +317,24 @@ object EquipmentSizing {
         lines += SizingLine("LMTD (counter-current)", lm, Quantity.TemperatureDifference)
         // Isothermal on one side (condensing steam): any arrangement is true counter-current.
         val isothermal = abs(hotIn - hotOut) < 0.01 || abs(coldIn - coldOut) < 0.01
-        val shellsF = if (isothermal) 1 to 1.0 else shells(hotIn, hotOut, coldIn, coldOut)
-        if (shellsF == null) {
-            warnings += "No arrangement of up to 6 shells in series gets F to 0.75: a true counter-current exchanger is needed."
+        val shellsF = if (type == ObjectType.AirCooler) {
+            // Crossflow, both unmixed, in counter-cross passes (D143). The process is the hot side.
+            val passes = input.tubePasses ?: 1
+            val f = if (isothermal) 1.0 else CrossflowF.f(hotIn, hotOut, coldIn, coldOut, passes)
+            if (f == null) warnings += "No crossflow bundle of $passes tube pass${if (passes > 1) "es" else ""} does this duty against this air: more passes, or more air (a lower air outlet temperature)."
+            else {
+                lines += SizingLine("F (crossflow, $passes tube pass${if (passes > 1) "es" else ""})", f, Quantity.Ratio)
+                if (f < 0.8) warnings += "F is below 0.8: more tube passes, or more air, would use the area better."
+            }
+            f?.let { passes to it }
         } else {
-            lines += SizingLine("F (1-2 shells in series)", shellsF.second, Quantity.Ratio)
-            if (type == ObjectType.HeatExchanger) lines += SizingLine("Shells in series", shellsF.first.toDouble(), Quantity.Count)
+            val sf = if (isothermal) 1 to 1.0 else shells(hotIn, hotOut, coldIn, coldOut)
+            if (sf == null) warnings += "No arrangement of up to 6 shells in series gets F to 0.75: a true counter-current exchanger is needed."
+            else {
+                lines += SizingLine("F (1-2 shells in series)", sf.second, Quantity.Ratio)
+                if (type == ObjectType.HeatExchanger) lines += SizingLine("Shells in series", sf.first.toDouble(), Quantity.Count)
+            }
+            sf
         }
         if (u == null) {
             warnings += "Choose a service or give U."

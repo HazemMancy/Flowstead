@@ -186,13 +186,31 @@ data class PerformanceCurve(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val fit: String? = null,
     /** Polynomial order; null: the smaller of 3 and points − 1. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val order: Int? = null,
+    /**
+     * Compressors (D144): the path the head and efficiency are drawn on, [CurvePaths.POLYTROPIC] or null (adiabatic, as
+     * every curve before D144). New compressor curves start polytropic, as most vendors' and HYSYS's do.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val path: String? = null,
 ) {
     /** A variable-speed machine whose speed the engine finds from the pressure given. */
     val solvesSpeed: Boolean get() = (speed ?: 0.0) > 0 && operatingSpeed == null
+    val polytropic: Boolean get() = path == CurvePaths.POLYTROPIC
+    /** The result key of the head this curve is drawn in (a compressor's). */
+    val headKey: String get() = if (polytropic) "polytropicHead" else "adiabaticHead"
+
+    companion object {
+        /** A new curve for a machine of [type]: a compressor's on the polytropic path. */
+        fun newFor(type: ObjectType) = PerformanceCurve(path = if (type == ObjectType.Compressor) CurvePaths.POLYTROPIC else null)
+    }
 }
 
 object CurveFits {
     const val POLYNOMIAL = "polynomial"
+}
+
+object CurvePaths {
+    const val ADIABATIC = "adiabatic"
+    const val POLYTROPIC = "polytropic"
 }
 
 /** One straight run ([fitting] null) or a fitting of a pipe segment (D98). Lengths in m. Same shape as the engine's. */
@@ -207,6 +225,8 @@ data class PipeSegmentSection(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val outerDiameter: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val roughness: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val increments: Int? = null,
+    /** The [PipeFittings.USER_K] fitting: its resistance coefficient on the velocity head (D145). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val k: Double? = null,
 ) {
     val isFitting: Boolean get() = fitting != null
 }
@@ -250,12 +270,23 @@ object PipeFittings {
         Kind("expansion_1_4", "Sudden expansion d/D = 1/4", 225.0, false),
         Kind("reducer_4_3", "Reducer 4:3", 0.65, false),
         Kind("reducer_2_1", "Reducer 2:1", 5.67, false),
+        // D145: any fitting by its K (a vendor's valve, a strainer, a nozzle): DWSIM applies it as its own K fittings,
+        // K·ρ·v²/2 on the two-phase mixture (Flowstead's patch to DWSIM's pipe, engine/patches/dwsim-pipe-user-k.patch).
+        Kind(USER_K, "Other fitting (valve, strainer, nozzle)", Double.NaN, false),
     )
     private val byId = ALL.associateBy { it.id }
     fun get(id: String?): Kind? = id?.let { byId[it] }
 
-    /** "L/D 340" or "K 5.67". */
-    fun describe(k: Kind): String = if (k.lOverD) "L/D ${fmt(k.value)}" else "K ${fmt(k.value)}"
+    const val USER_K = "user_k"
+
+    /** "L/D 340" or "K 5.67" ("K you give" for the user's fitting). */
+    fun describe(k: Kind): String = if (k.id == USER_K) "K you give" else if (k.lOverD) "L/D ${fmt(k.value)}" else "K ${fmt(k.value)}"
+
+    /** A section's fitting described with its own value: "K 0.85" for the user's fitting. */
+    fun describe(s: PipeSegmentSection): String? = get(s.fitting)?.let { k -> if (k.id == USER_K) s.k?.let { "K ${fmt(it)}" } ?: "K not given" else describe(k) }
+
+    /** The K a fitting section applies (null for an L/D fitting or a straight run). */
+    fun kOf(s: PipeSegmentSection): Double? = get(s.fitting)?.takeIf { !it.lOverD }?.let { if (it.id == USER_K) s.k else it.value }
     private fun fmt(v: Double) = if (v == kotlin.math.floor(v)) v.toLong().toString() else v.toString()
 }
 

@@ -64,7 +64,7 @@ If `criteriaSet` is false, set criteria only from the user's design basis; other
 
 | Check | From | Criterion | Type |
 |---|---|---|---|
-| Time to target | `result.timeToTarget` vs `targetPressure` | API 521's guidance: 6.9 barg or 50 % of the vessel design gauge pressure within about 15 min (thick-walled vessels and fire cases differ); Flowstead's default target is the lower of 6.9 barg and half the starting gauge pressure, so restate it if the design pressure differs | standard (API 521 §5.20) / project |
+| Time to target | `result.timeToTarget` vs `targetPressure` | API 521's guidance: 6.9 barg or 50 % of the vessel design gauge pressure within about 15 min (thick-walled vessels and fire cases differ); Flowstead takes that target when the case has `designPressure` (`result.targetBasis` says which); without it, half the starting gauge pressure: give the design pressure, or flag the basis | standard (API 521 §5.20) / project |
 | Lowest metal temperature | `result.minimumWallTemperature` | above the material's MDMT (ASME VIII-1 UCS-66, impact testing) | standard (ASME VIII-1) / project (material) |
 | Peak flow | `result.peakFlow` | within the flare system's capacity | project |
 
@@ -77,6 +77,8 @@ If `criteriaSet` is false, set criteria only from the user's design basis; other
 | Pump on its curve | engine messages (run-out, below minimum flow) | within the curve's flow range | standard (API 610, operating region) |
 | Compressor surge margin | `results(k).properties.surgeMargin` | ≥ 10 % (Flowstead warns below) | practice |
 | Exchanger F factor | line "F (1-2 shells in series)" | ≥ 0.75; more shells when below | practice |
+| Air cooler F factor | line "F (crossflow, N tube passes)" | ≥ 0.8 is usual; more passes or more air when below; confirm the pass count with the vendor (1 if not given) | practice |
+| Compressor head and efficiency basis | `results(k).properties.adiabaticHead`, `polytropicHead`, `efficiency`, `polytropicEfficiency` | compare with the vendor's curve on its own path (most are polytropic); never mix adiabatic head with polytropic efficiency | practice (API 617, ASME PTC 10) |
 | Exchanger minimum approach | `results(hx).properties.minimumApproach` | ≥ the project's minimum (often 5–10 K, lower for cryogenic plate-fin) | project |
 | Temperature cross | engine error | none | — |
 | Area per shell | warnings | ≤ about 1000 m² a shell | practice |

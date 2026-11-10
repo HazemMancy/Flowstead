@@ -550,6 +550,7 @@ public static class DwxmzImporter
                         list.Add(new PipeSection
                         {
                             Fitting = fitting,
+                            K = fitting == PipeFittings.UserK ? PipeFittings.KOf(x.TipoSegmento) : null,
                             Length = fitting is null ? x.Comprimento : null,
                             ElevationChange = fitting is null && x.Elevacao != 0 ? x.Elevacao : null,
                             Count = Math.Max(1, x.Quantidade),

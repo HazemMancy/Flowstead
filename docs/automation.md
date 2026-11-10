@@ -72,7 +72,7 @@ Sub-flowsheets (D132–D139): `group([tags])`, `moveInto([tags], block)`, `dupli
 | Call | Returns |
 |---|---|
 | `sizing(tag)` | Separator: `{kind: 'separator', orientation, diameter_m, length_m, k_m_s, maxGasVelocity_m_s, gasVelocity_m_s, liquidVolume_m3, mistEliminatorArea_m2, levels, nozzles, basis, notes, warnings}` (GPSA, Svrcek–Monnery, API 12J). Equipment (exchangers, heaters, coolers, air coolers, pumps, compressors, expanders, tanks, columns): `{kind: 'equipment', lines: [{label, si, quantity, siUnit, text}], notes, warnings}`. Pipe: `{kind: 'line', service, criteriaSet, checks: [{label, quantity, value, limit, maximum, passes, note}]}` |
-| `setSizingInput(tag, input)` | A separator's basis (`{horizontal, mistEliminator: none\|mesh\|vane\|cyclone, inletDevice: none\|diverter\|half_pipe\|vane\|cyclone, k, holdupTime, surgeTime, oilRetention, waterRetention, …}`, SI) or an equipment's (`{service, u, utilityIn, utilityOut, margin, residenceTime, fillFraction, traySpacing, floodFraction, …}`); `{}` restores the library's |
+| `setSizingInput(tag, input)` | A separator's basis (`{horizontal, mistEliminator: none\|mesh\|vane\|cyclone, inletDevice: none\|diverter\|half_pipe\|vane\|cyclone, k, holdupTime, surgeTime, oilRetention, waterRetention, …}`, SI) or an equipment's (`{service, u, utilityIn, utilityOut, tubePasses (air coolers: crossflow F, D143), margin, residenceTime, fillFraction, traySpacing, floodFraction, …}`); `{}` restores the library's |
 | `setLineCriteria(service, criteria)` | `service` `gas`, `liquid` or `two_phase`; criteria in SI: `{maxVelocity, minVelocity, maxMomentumFlux, maxFrictionGradient, maxMach, erosionalC}` |
 
 ## Tools (each runs the engine; returns `{report: {sections}, result, ms}`)
@@ -81,7 +81,7 @@ Sub-flowsheets (D132–D139): `group([tags])`, `moveInto([tags], block)`, `dupli
 |---|---|
 | `await streamTool('envelope'\|'pvt'\|'petroleum', tag, params)` | Phase envelope (quality lines, hydrate curve, inhibitor), PVT experiment (CCE, CVD, DL, separator test, saturation), petroleum properties |
 | `await thermo('binary'\|'mccabe'\|'ternary'\|'critical'\|'compare'\|'chart', params)` | Values as `{value, unit}`; `source` a stream tag; `a`, `b`, `c` components |
-| `await safety('relief'\|'depressuring'\|'pressurization', definition)` | Defines (SI, equipment by tag) and runs a relief valve (API 520/521/526), a blowdown (API 521 two-zone) or a pipeline pressurization; kept with the case. Relief: `{tag, protectedId, setPressure (Pa abs), backPressure, design: conventional\|balancedBellows\|pilot, ruptureDisk, vessel: {diameter, length, horizontal, liquidLevel, elevation}, scenarios: [{kind: fire\|blockedOutlet\|controlValveFailure\|thermalExpansion\|custom, …}], inletLine, outletLine}` |
+| `await safety('relief'\|'depressuring'\|'pressurization', definition)` | Defines (SI, equipment by tag) and runs a relief valve (API 520/521/526), a blowdown (API 521 two-zone; give `designPressure`, Pa abs, for API 521's target, the lower of 6.9 barg and half of it, D142; `result.targetBasis` says what set it) or a pipeline pressurization; kept with the case. Relief: `{tag, protectedId, setPressure (Pa abs), backPressure, design: conventional\|balancedBellows\|pilot, ruptureDisk, vessel: {diameter, length, horizontal, liquidLevel, elevation}, scenarios: [{kind: fire\|blockedOutlet\|controlValveFailure\|thermalExpansion\|custom, …}], inletLine, outletLine}` |
 | `await caseStudy({name, objectId, specKey, from: {value, unit}, to, steps, outputs: [{objectId, key}], second?})` | A HYSYS-like case study (objects by tag) |
 | `await optimise(params)` | The optimiser (Nelder–Mead on full solves); `.apply()` applies the optimum |
 | `await dynamics()` | A dynamic run of the case's dynamics setup |
@@ -95,3 +95,9 @@ results. Zip the `flowstead-automation` folder (with SKILL.md inside it) and add
 (the Skills section of Settings). Where your Claude in Chrome or Edge does not load skills from your account, give it
 SKILL.md and the references as instructions instead. Then open Flowstead Web in a tab and ask Claude to build, review
 or size the case there. Install the process-engineering skill too, for standards and edition control in the verdicts.
+
+## Since 1.0 (same version: additions only)
+
+- Compressor results add `polytropicHead` and `polytropicEfficiency`; both heads are the work (η·Δh/g, D144). A
+  compressor curve's `path` (`'polytropic'` or adiabatic) is set in the curve editor.
+- A pipe section can be the fitting `user_k` with its `k` (D145).

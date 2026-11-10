@@ -377,6 +377,45 @@ public sealed class UnitChecksTests(EngineFixture engine)
         Assert.Contains(bad.Messages, m => m.ObjectId == "u" && m.Text.Contains("no speed"));
     }
 
+    // Nitrogen from 1 bar, 300 K is close to an ideal gas: the references are ideal-gas ones with NIST's mean cp
+    // (29.15 J/mol·K over 300–370 K, 29.17 over 300–390 K; M 28.0134 g/mol): along a path of efficiency η,
+    // ln(T₂/T₁) = R·ln(r)/(η·c̄p), and the head is η·c̄p·(T₂ − T₁)/M/g (D144).
+    private static readonly Dictionary<string, double> Nitrogen = new() { ["Nitrogen"] = 1.0 };
+    private const double R = 8.314462618, Mn2 = 28.0134e-3, G = 9.80665;
+
+    [Fact]
+    public async Task CompressorHeadsAreTheIsentropicAndPolytropicWork()
+    {
+        // Pressure ratio 2, adiabatic efficiency 0.75: T₂ₛ = 300·exp(R·ln2/29.15) = 365.6 K, Hs = 29.15·65.6/M/g = 6961 m.
+        // The actual outlet is 300 + 65.6/0.75 = 387.5 K, so ηp = R·ln2/(29.17·ln(387.5/300)) = 0.772.
+        var r = await Through(Feed("f", Nitrogen, 300, 1e5), ObjectType.Compressor,
+            new() { [SpecKeys.PressureRatio] = 2.0, [SpecKeys.Efficiency] = 0.75 });
+        Assert.Equal(SolveStatus.Converged, r.Status);
+        var c = r.Objects["u"].Properties;
+        var t2s = 300 * Math.Exp(R * Math.Log(2) / 29.15);
+        var hs = 29.15 * (t2s - 300) / Mn2 / G;
+        Assert.Equal(hs, c["adiabaticHead"], hs * 0.005);
+        Assert.Equal(0.772, c["polytropicEfficiency"], 0.004);
+        // Both heads are the work into each kg times their efficiency: their ratio is the efficiencies'.
+        Assert.Equal(c["polytropicEfficiency"] / c["efficiency"], c["polytropicHead"] / c["adiabaticHead"], 1e-9);
+    }
+
+    [Fact]
+    public async Task CompressorRunsOnAPolytropicCurve()
+    {
+        // A flat polytropic curve, 7136 m at ηp 0.80: for nitrogen that is pressure ratio 2 (T₂ = 300·exp(R·ln2/(0.8·29.17))
+        // = 384.0 K; Hp = 0.8·29.17·84.0/M/g = 7136 m). The machine runs on the polytropic path and settles on that head.
+        var curve = new PerformanceCurve { Points = [new(0.1, 7136, 0.80), new(1.0, 7136, 0.80)], Path = CurvePaths.Polytropic };
+        var r = await OnCurve(Feed("f", Nitrogen, 300, 1e5), ObjectType.Compressor, curve, "Peng-Robinson (PR)");
+        Assert.Equal(SolveStatus.Converged, r.Status);
+        var c = r.Objects["u"].Properties;
+        Assert.Equal(7136, c["polytropicHead"], 7136 * 1e-3);
+        Assert.Equal(0.80, c["polytropicEfficiency"], 1e-6);
+        Assert.Equal(2.0, c["pressureRatio"], 0.02);
+        Assert.Equal(300 * Math.Exp(R * Math.Log(2) / (0.8 * 29.17)), c["outletTemperature"], 1.5);
+        Assert.True(c["efficiency"] < 0.80, "the adiabatic efficiency of a compression is below its polytropic one");
+    }
+
     [Fact]
     public async Task CompressorRunsOnItsCurveAndSurgesBelowIt()
     {

@@ -341,8 +341,43 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         for (var i = 1; i < r.Time.Count; i++) released += 0.5 * (r.MassFlow[i] + r.MassFlow[i - 1]) * (r.Time[i] - r.Time[i - 1]);
         var lost = r.Inventory[0] - r.Inventory[^1];
         Assert.Equal(lost, released, lost * 0.03);
-        // API 521 target: the lower of 6.9 barg and half of the starting gauge pressure.
+        // API 521 target: the lower of 6.9 barg and half of the starting gauge pressure (no design pressure given).
         Assert.Equal(101325 + 690e3, r.TargetPressure, 1e-6);
+        Assert.Equal("6.9 barg", r.TargetBasis);
+        Assert.Contains(r.Warnings, w => w.Contains("No design pressure given"));
+    }
+
+    [Fact]
+    public async Task TheBlowdownTargetAndWallFollowTheDesignPressure()
+    {
+        // API 521 §5.20.1: the lower of 690 kPa gauge and 50 % of the design gauge pressure. ASME VIII-1 UG-27(c)(1):
+        // t = P·R/(S·E − 0.6·P) at the design pressure, S 138 MPa, E 1, R 0.75 m (the 1.5 m vessel), 6 mm at least.
+        async Task<DepressuringResult> Run(double designBarg, double startBarg)
+        {
+            var req = new DepressuringRequest
+            {
+                Flowsheet = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane"] }, Composition = Methane,
+                InitialPressure = 101325 + startBarg * 1e5, InitialTemperature = 300, Vessel = new VesselGeometry(1.5, 4),
+                OrificeDiameter = 0.02, DesignPressure = 101325 + designBarg * 1e5, Duration = 30,
+            };
+            var res = await engine.Authed().PostAsJsonAsync("/depressuring", req, Json.Options);
+            Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+            var r = await EngineFixture.Json<DepressuringResult>(res);
+            output.WriteLine($"design {designBarg} barg: target {(r.TargetPressure - 101325) / 1e5:0.###} barg ({r.TargetBasis}), wall {r.WallThickness * 1000:0.###} mm | " + string.Join(" | ", r.Warnings));
+            return r;
+        }
+        // Design 12 barg: half is 6 barg, below 6.9. Wall 12e5·0.75/(138e6 − 0.72e6) = 6.556 mm. Starting at 70 barg is above it.
+        var low = await Run(12, 70);
+        Assert.Equal(101325 + 6e5, low.TargetPressure, 1e-6);
+        Assert.Equal("half the design pressure", low.TargetBasis);
+        Assert.Equal(12e5 * 0.75 / (138e6 - 0.6 * 12e5), low.WallThickness, 1e-9);
+        Assert.Contains(low.Warnings, w => w.Contains("above its design pressure"));
+        // Design 100 barg, starting at 50: 6.9 barg, though half the start (25 barg) would also give it. Wall 56.818 mm.
+        var high = await Run(100, 50);
+        Assert.Equal(101325 + 690e3, high.TargetPressure, 1e-6);
+        Assert.Equal("6.9 barg", high.TargetBasis);
+        Assert.Equal(100e5 * 0.75 / (138e6 - 0.6 * 100e5), high.WallThickness, 1e-9);
+        Assert.DoesNotContain(high.Warnings, w => w.Contains("design pressure"));
     }
 
     [Fact]

@@ -162,6 +162,8 @@ data class DepressuringRequest(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
     val dischargeCoefficient: Double = 0.84,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val targetPressure: Double? = null,
+    /** The vessel's design pressure, Pa abs: API 521's target basis and the ASME wall's pressure (D142). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val designPressure: Double? = null,
     val targetTime: Double = 900.0,
     val duration: Double = 1800.0,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val fire: ReliefScenario? = null,
@@ -180,6 +182,8 @@ data class DepressuringResult(
     val orificeDiameter: Double = 0.0,
     val orificeSized: Boolean = false,
     val targetPressure: Double = 0.0,
+    /** What set the target: "given", "6.9 barg", "half the design pressure" or "half the starting pressure" (D142). */
+    val targetBasis: String? = null,
     val timeToTarget: Double? = null,
     val minimumTemperature: Double = 0.0,
     val minimumLiquidTemperature: Double? = null,

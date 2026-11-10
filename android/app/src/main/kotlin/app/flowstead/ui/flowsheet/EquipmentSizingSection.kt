@@ -115,6 +115,12 @@ internal fun EquipmentSizingSection(fs: Flowsheet, obj: SimObject, results: Resu
                 QuantityField("$what outlet temperature", input.utilityOut?.let { Spec(it, temp.id) }, Quantity.Temperature, temp, ctx, "${key}_uo", hint = "data library") {
                     save(input.copy(utilityOut = it?.si))
                 }
+                if (obj.type == ObjectType.AirCooler) {
+                    PlainNumber("Tube passes", input.tubePasses?.toDouble(), "${key}_tp", hint = "1") {
+                        save(input.copy(tubePasses = it?.takeIf { v -> v >= 1 && v <= 8 }?.let { v -> kotlin.math.round(v).toInt() }))
+                    }
+                    Calculated("F for crossflow with both fluids unmixed, the passes counter-cross (process in at the top, where the air leaves).")
+                }
             }
         }
     }

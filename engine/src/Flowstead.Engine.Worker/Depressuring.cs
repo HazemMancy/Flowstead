@@ -38,11 +38,17 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         if (!(g.Diameter > 0 && g.Length > 0)) throw new InvalidDataException("Give the vessel's diameter and length");
         if (req.Supply is { } supply) return Pressurize(supply);
         if (!(req.InitialPressure > req.BackPressure)) throw new InvalidDataException("The vessel must start above the back pressure");
-        var target = req.TargetPressure ?? Patm + Math.Min(690e3, 0.5 * (req.InitialPressure - Patm));
+        if (req.DesignPressure is { } dp && !(dp > req.BackPressure)) throw new InvalidDataException("The design pressure must be above the back pressure");
+        if (req.DesignPressure is { } dp2 && req.InitialPressure > dp2 * 1.0001)
+            _warnings.Add($"The vessel starts at {(req.InitialPressure - Patm) / 1e5:0.##} barg, above its design pressure ({(dp2 - Patm) / 1e5:0.##} barg).");
+        var (target, basis) = Target(req);
+        if (target <= req.BackPressure) _warnings.Add($"The target ({(target - Patm) / 1e5:0.##} barg) is not above the back pressure: the vessel cannot reach it.");
+        if (req.TargetPressure is null && req.DesignPressure is null)
+            _warnings.Add("No design pressure given: the target is half the starting gauge pressure. API 521 takes half the design pressure (or 6.9 barg, if lower); give it for that basis.");
         if (req.OrificeDiameter is { } d && d > 0)
         {
             var given = Blowdown(d, target);
-            return given with { OrificeSized = false, Warnings = [.. _warnings.Distinct(), .. given.Warnings] };
+            return given with { OrificeSized = false, TargetBasis = basis, Warnings = [.. _warnings.Distinct(), .. given.Warnings] };
         }
 
         // Size the orifice: blowdown time goes roughly as 1/area, so each run (stopped at the target) scales the area by
@@ -58,7 +64,7 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         var final = Blowdown(diameter, target);
         if (final.TimeToTarget is not { } reached || reached > req.TargetTime * 1.0001)
             _warnings.Add("The orifice could not be sized to reach the target in time; see the curve.");
-        return final with { OrificeSized = true, Warnings = [.. _warnings.Distinct(), .. final.Warnings] };
+        return final with { OrificeSized = true, TargetBasis = basis, Warnings = [.. _warnings.Distinct(), .. final.Warnings] };
     }
 
     // ------------------------------------------------------------------ pressurization
@@ -155,14 +161,30 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         public double Area;
     }
 
+    /// <summary>
+    /// The pressure a blowdown aims at, Pa abs, and why (API 521 §5.20.1): the one given, else the lower of 690 kPa gauge
+    /// and half the design gauge pressure (half the starting gauge pressure when the design pressure is not given).
+    /// </summary>
+    public static (double Pressure, string Basis) Target(DepressuringRequest req)
+    {
+        if (req.TargetPressure is { } t) return (t, "given");
+        var basis = req.DesignPressure ?? req.InitialPressure;
+        var half = 0.5 * (basis - Patm);
+        return half < 690e3
+            ? (Patm + half, req.DesignPressure is null ? "half the starting pressure" : "half the design pressure")
+            : (Patm + 690e3, "6.9 barg");
+    }
+
     private DepressuringResult Blowdown(double diameter, double target, bool stopAtTarget = false)
     {
         var g = req.Vessel;
         var volume = ReliefMath.Volume(g);
         var surface = ReliefMath.Surface(g);
         var orifice = Math.PI * diameter * diameter / 4;
-        var gauge = Math.Max(req.InitialPressure, req.Supply?.Pressure ?? 0) - Patm;
-        var thickness = req.WallThickness ?? Math.Max(0.006, 1.1 * gauge * g.Diameter / 2 / (AllowableStress - 0.6 * 1.1 * gauge));
+        // ASME VIII-1 UG-27(c)(1), t = P·R/(S·E − 0.6·P), at the design pressure when given, else 1.1 × the highest working pressure.
+        var design = (req.DesignPressure is { } dp ? Math.Max(dp, req.Supply?.Pressure ?? 0) - Patm
+            : 1.1 * (Math.Max(req.InitialPressure, req.Supply?.Pressure ?? 0) - Patm));
+        var thickness = req.WallThickness ?? Math.Max(0.006, design * g.Diameter / 2 / (AllowableStress - 0.6 * design));
         var dx = thickness / (Nodes - 1);
         var ambient = req.AmbientTemperature ?? req.InitialTemperature;
         var fixedH = req.HeatTransferCoefficient;
