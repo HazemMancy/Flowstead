@@ -987,6 +987,29 @@ class FlowsheetViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Line sizing of a stream (D148): its fluid through a test pipe of each size, in one engine solve; [onResult] gets the
+     * table (or why there is none) on the main thread.
+     */
+    fun streamLineSizing(streamId: String, input: app.flowstead.core.model.StreamLineSizing.Input, onResult: (LineSizingUi) -> Unit) {
+        val fs = current ?: return onResult(LineSizingUi(error = "No flowsheet"))
+        val view = ResultView(currentSolve, fs.modelHash())
+        app.flowstead.core.model.StreamLineSizing.problem(fs, view, streamId)?.let { return onResult(LineSizingUi(error = it)) }
+        if (app.flowstead.core.model.StreamLineSizing.candidates(input).isEmpty())
+            return onResult(LineSizingUi(error = if (input.design) "No size has that schedule" else "Choose a size and schedule, or give the inside diameter"))
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val test = app.flowstead.core.model.StreamLineSizing.flowsheet(fs, view, streamId, input)
+            onResult(
+                if (url.isBlank()) LineSizingUi(error = "Set the engine address in Settings")
+                else when (val r = engine.solve(url, secrets.apiKey(), test)) {
+                    is EngineResult.Ok -> LineSizingUi(app.flowstead.core.model.StreamLineSizing.outcome(fs, view, streamId, input, r.value), hash = fs.modelHash(), total = input.totalLength)
+                    is EngineResult.Failed -> LineSizingUi(error = "Not sized: ${r.reason}")
+                },
+            )
+        }
+    }
+
     /** A stream's distillation curves and petroleum product properties, DWSIM 10's (D99). */
     fun petroleumProperties(streamId: String) {
         val fs = current ?: return

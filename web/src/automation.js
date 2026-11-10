@@ -34,7 +34,7 @@ export function installAutomation(ctx) {
     describe() {
       const d = parse(A.describe());
       d.tools = {
-        streamTools: ['envelope', 'pvt', 'petroleum'],
+        streamTools: ['envelope', 'pvt', 'petroleum', 'linesizing'],
         thermo: ['binary', 'mccabe', 'ternary', 'critical', 'compare', 'chart'],
         safety: ['relief', 'depressuring', 'pressurization'],
         sizing: 'separators, exchangers, heaters, coolers, air coolers, pumps, compressors, expanders, tanks, columns, pipes',
@@ -144,6 +144,20 @@ export function installAutomation(ctx) {
       const id = idOf(ref), p = JSON.stringify(params);
       const { result, ms } = await call(Tools.request(kind, fs(), ...solveArgs(), id, p));
       return { report: JSON.parse(Tools.report(kind, fs(), ...solveArgs(), id, p, JSON.stringify(result))), result, ms };
+    },
+    /**
+     * Line sizing of a stream (D148), as HYSYS's stream analysis, without a pipe segment: {design: true|false, schedule
+     * ('40', 'STD', 'XS', '80' …), nps (rating), insideDiameter, roughness, totalLength: {value, unit}, service:
+     * gas|liquid|two_phase}. Returns {report, rows (SI), recommended, service, criteriaSet, ms}.
+     */
+    async lineSizing(ref, params = {}) {
+      const id = idOf(ref), p = JSON.stringify(params);
+      const req = JSON.parse(Tools.request('linesizing', fs(), ...solveArgs(), id, p));
+      if (req.error) throw new Error(req.error);
+      req.params.saturationFor = []; req.params.enthalpyBasis = ctx.enthalpyBasis();
+      const { result, ms } = await call(JSON.stringify(req));
+      const rows = JSON.parse(Tools.lineRows(fs(), ...solveArgs(), id, p, JSON.stringify(result)));
+      return { report: JSON.parse(Tools.report('linesizing', fs(), ...solveArgs(), id, p, JSON.stringify(result))), ...rows, ms };
     },
     /** Thermodynamics tools: binary, mccabe, ternary, critical, compare, chart (params as the app's; values {value, unit}; source a stream tag). */
     async thermo(kind, params = {}) {

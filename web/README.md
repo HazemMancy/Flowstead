@@ -36,6 +36,10 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 ## Release notes
 
 **Web 1.18**
+- **Line sizing of a stream (D148), as HYSYS's stream analysis:** in a stream's Analysis tab, size a line from the
+  stream's own solved state, with no pipe segment. Design tries every size of a schedule (40, STD, XS, 80 …) against
+  the project's criteria and marks the smallest that passes; rating takes one size or an inside diameter. ΔP per
+  length (e.g. bar/km), velocity, ρv² and the Mach number, and the total ΔP over the length you give, all from DWSIM.
 - **Lines to a sub-flowsheet drawn square (D147):** a stream going into a block leaves from its arrow's head, one
   coming out meets the stream's tail, in horizontal and vertical runs as every connection is; they ran at an angle
   from the stream's middle.

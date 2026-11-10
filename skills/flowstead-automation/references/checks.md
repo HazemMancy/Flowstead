@@ -47,6 +47,11 @@ deliverable.
 
 If `criteriaSet` is false, set criteria only from the user's design basis; otherwise report NEEDS CRITERION.
 
+To size a line that is not on the flowsheet yet, from a stream's own state (as HYSYS's stream line sizing), use
+`await lineSizing(streamTag, {design: true, schedule: '40'})`: every size of the schedule against the same criteria,
+`recommended` the smallest that passes; give `totalLength` for the line's total ΔP. Judge its rows as a line's checks
+above; it has no fittings or elevation, so say so when they matter.
+
 ## Relief valves (`safety('relief', …)`)
 
 | Check | From | Criterion | Type |

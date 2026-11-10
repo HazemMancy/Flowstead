@@ -1319,6 +1319,57 @@ try {
     await ctx.close();
   }
 
+  // ---------- 4r. line sizing of a stream, as HYSYS's stream analysis (D148) ----------
+  // Water at 25 °C, 10 bara, 20 kg/s, with no pipe segment. Hand references from the stream's own ρ and μ: v = ṁ/(ρ·πD²/4),
+  // ρv², Darcy–Weisbach with Colebrook's friction factor (0.0457 mm steel); over 1 km the liquid's ΔP is the gradient
+  // × 1000 m. Design against 3 m/s: the smallest Sch 40 size whose v is at most 3 m/s, worked from each size's diameter.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    const got = await p.evaluate(async () => {
+      const api = window.flowstead.api;
+      api.newCase({ propertyPackage: 'Steam Tables (IAPWS-IF97)', compounds: ['Water'], name: 'line sizing' });
+      api.add('material_stream', { tag: 'W' });
+      api.setSpecs('W', { temperature: [25, 'C'], pressure: [10, 'bara'], massFlow: [20, 'kg/s'] });
+      api.setComposition('W', { Water: 1 });
+      const s = await api.solve();
+      const w = api.results('W');
+      const rating = await api.lineSizing('W', { design: false, nps: '4', schedule: '40', totalLength: { value: '1', unit: 'km' } });
+      api.setLineCriteria('liquid', { maxVelocity: 3 });
+      const design = await api.lineSizing('W', { design: true, schedule: '40' });
+      return { status: s.status, rho: w.properties.density?.si, mu: w.properties.viscosity?.si, rating, design };
+    }).catch((e) => ({ error: e.message }));
+    if (got.error) problems.push(`line sizing: ${got.error}`);
+    else {
+      const { rho, mu } = got;
+      const r = got.rating.rows?.[0];
+      const D = 4.026 * 0.0254, A = Math.PI * D * D / 4, v = 20 / rho / A, e = 4.57e-5;
+      const re = rho * v * D / mu;
+      let f = 0.02;
+      for (let i = 0; i < 60; i++) f = (-2 * Math.log10(e / D / 3.7 + 2.51 / (re * Math.sqrt(f)))) ** -2;
+      const grad = f / D * rho * v * v / 2;
+      if (!r || r.error) problems.push(`rating row: ${JSON.stringify(got.rating).slice(0, 300)}`);
+      else {
+        if (Math.abs(r.insideDiameter_m - D) > 1e-9) problems.push(`NPS 4 Sch 40 ID ${r.insideDiameter_m} m for ${D}`);
+        if (!(Math.abs(r.velocity_m_s - v) <= 0.005 * v)) problems.push(`velocity ${r.velocity_m_s} m/s; by hand ${v}`);
+        if (!(Math.abs(r.momentumFlux_kg_m_s2 - rho * v * v) <= 0.01 * rho * v * v)) problems.push(`ρv² ${r.momentumFlux_kg_m_s2}; by hand ${rho * v * v}`);
+        if (!(Math.abs(r.gradient_Pa_m - grad) <= 0.02 * grad)) problems.push(`ΔP ${r.gradient_Pa_m} Pa/m; Darcy–Weisbach and Colebrook give ${grad}`);
+        if (!(Math.abs(r.totalDrop_Pa - 1000 * r.gradient_Pa_m) <= 0.01 * r.totalDrop_Pa)) problems.push(`ΔP over 1 km ${r.totalDrop_Pa} Pa for ${1000 * r.gradient_Pa_m}`);
+      }
+      const ok = (got.design.rows ?? []).filter((x) => !x.error && 20 / rho / (Math.PI * x.insideDiameter_m ** 2 / 4) <= 3).sort((a, b) => a.insideDiameter_m - b.insideDiameter_m)[0];
+      if (!ok || got.design.recommended !== ok.size) problems.push(`design recommends ${got.design.recommended}; by hand ${ok?.size}`);
+      got.summary = `NPS 4: ${r?.velocity_m_s?.toFixed(3)} m/s, ${(r?.gradient_Pa_m / 100)?.toFixed(3)} bar/km (hand ${(grad / 100).toFixed(3)}); design ${got.design.recommended}`;
+    }
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} stream line sizing (${got.summary ?? ''})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4p. the automation interface (D140): cases built, solved, sized and judged through window.flowstead.api ----------
   // Benchmarks 06, 07 and 09 are built from nothing through the interface (package, compounds, objects by type and tag,
   // ports, specifications in SI, compositions). References: (1) the built case is the benchmark's input (types, specs,

@@ -316,6 +316,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun copyStreamData(targetId: String, items: List<app.flowstead.core.model.StreamCopy.Item>) = vm.copyStreamData(targetId, items)
             override fun setCompositionBasis(basis: app.flowstead.core.model.CompositionBasis) = vm.setCompositionBasis(basis)
             override fun loadCompoundBasis() = vm.loadCompoundBasis()
+            override fun streamLineSizing(streamId: String, input: app.flowstead.core.model.StreamLineSizing.Input, onResult: (LineSizingUi) -> Unit) =
+                vm.streamLineSizing(streamId, input, onResult)
         }
     }
 

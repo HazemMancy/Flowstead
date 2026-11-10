@@ -143,6 +143,9 @@ object Units {
     val mm = u("mm", "mm", Quantity.Length, 1e-3, 3)
     val ft = u("ft", "ft", Quantity.Length, FT_M, 3)
     val inch = u("in", "in", Quantity.Length, IN_M, 4)
+    // Pipeline lengths (D148).
+    val km = u("km", "km", Quantity.Length, 1000.0, 3)
+    val mile = u("mi", "mile", Quantity.Length, 1609.344, 3)
 
     // Volume and time (vessel volumes, residence times)
     val m3 = u("m3", "m³", Quantity.Volume, 1.0, 3)

@@ -45,7 +45,25 @@ export function initTools(app) {
     const st = streamState[id] ??= { qualities: [0.5], hydrates: true, inhibitor: '', inhibitorPercent: '', experiment: 'cce', stages: [{ t: '37.78', p: '7' }] };
     const d = JSON.parse(Tools.defaults('pvt', app.project().flowsheet, ...solveArgs(), id));
     st.temperature ??= d.temperature; st.temperatureUnit ??= d.temperatureUnit;
+    const ls = st.line ??= { design: true, service: '', schedule: '40', nps: '4', id: '', roughness: '', length: '', lengthUnit: 'km' };
+    const ld = JSON.parse(Tools.defaults('linesizing', app.project().flowsheet, ...solveArgs(), id));
     container.innerHTML = `
+      <h3>Line sizing</h3>
+      <p class="fs-note">As HYSYS's stream line sizing: from this stream's solved state, without a pipe segment. Design tries every size of a schedule against the project's criteria; rating takes one size. ΔP per length, velocity, ρv² and the Mach number, and the total ΔP over the length you give.</p>
+      <div class="fs-seg" role="radiogroup" aria-label="Design or rating"><button type="button" role="radio" aria-checked="${ls.design}" data-lsmode="design">Design</button><button type="button" role="radio" aria-checked="${!ls.design}" data-lsmode="rating">Rating</button></div>
+      <div class="eq-row">
+        <label class="eq-cell"><span>Service</span><select id="ls_svc">${opts([{ id: 'gas', label: 'Gas' }, { id: 'liquid', label: 'Liquid' }, { id: 'two_phase', label: 'Two-phase' }], ls.service, `Automatic${ld.service ? ` (${ld.service.toLowerCase()})` : ''}`)}</select></label>
+        <label class="eq-cell"><span>Schedule</span><select id="ls_sch">${opts(ld.schedules.map((x) => ({ id: x, label: x })), ls.schedule)}</select></label>
+        ${ls.design ? '' : `<label class="eq-cell"><span>Size, NPS</span><select id="ls_nps">${opts(ld.sizes.map((x) => ({ id: x, label: x })), ls.nps)}</select></label>
+        <label class="eq-cell"><span>or inside diameter, mm</span><input type="text" inputmode="decimal" id="ls_id" value="${esc(ls.id)}" placeholder="from the size" autocomplete="off"/></label>`}
+      </div>
+      <div class="eq-row">
+        <label class="eq-cell"><span>Roughness, mm</span><input type="text" inputmode="decimal" id="ls_rough" value="${esc(ls.roughness)}" placeholder="0.0457 (steel)" autocomplete="off"/></label>
+        <label class="eq-cell"><span>Total length</span><input type="text" inputmode="decimal" id="ls_len" value="${esc(ls.length)}" placeholder="for the total ΔP" autocomplete="off"/></label>
+        <label class="eq-cell"><span>Unit</span><select id="ls_lu">${opts([{ id: 'm', label: 'm' }, { id: 'km', label: 'km' }, { id: 'ft', label: 'ft' }, { id: 'mi', label: 'mile' }], ls.lengthUnit)}</select></label>
+      </div>
+      <div class="actions"><button type="button" class="btn btn-sm" id="ls_run">${ls.design ? 'Size the line' : 'Rate the line'}</button></div>
+      <div id="ls_out" aria-live="polite"></div>
       <h3>Phase envelope</h3>
       <p class="fs-note">Bubble and dew curves of this stream's composition from DWSIM, with quality lines and the hydrate curve, as HYSYS's envelope utility.</p>
       <div class="fs-chips">${[0.1, 0.25, 0.5, 0.75, 0.9].map((q) => `<label class="chip-check"><input type="checkbox" data-q="${q}"${st.qualities.includes(q) ? ' checked' : ''}/> VF ${q}</label>`).join('')}
@@ -82,17 +100,28 @@ export function initTools(app) {
       if (t.id === 'an_t') st.temperature = t.value;
       if (t.id === 'an_tu') st.temperatureUnit = t.value;
       if (t.dataset.st) st.stages[Number(t.dataset.st)][t.dataset.k] = t.value;
+      const lsField = { ls_svc: 'service', ls_sch: 'schedule', ls_nps: 'nps', ls_id: 'id', ls_rough: 'roughness', ls_len: 'length', ls_lu: 'lengthUnit' }[t.id];
+      if (lsField) ls[lsField] = t.value;
     };
     container.onclick = (e) => {
       const t = e.target.closest('button'); if (!t) return;
+      if (t.dataset.lsmode) { ls.design = t.dataset.lsmode === 'design'; return streamAnalysis(container, id); }
       if (t.dataset.rm) { st.stages.splice(Number(t.dataset.rm), 1); stages(); }
       if (t.dataset.addst) { const last = st.stages.at(-1); st.stages.push({ t: last.t, p: String(+(Number(last.p) / 4).toPrecision(3)) }); stages(); }
     };
     const tool = (name, params, out, label) => {
       const p = app.project();
       const args = [p.flowsheet, ...solveArgs(), id, JSON.stringify(params)];
-      return run(JSON.parse(Tools.request(name, ...args)), q(out), label, (result) => Tools.report(name, ...args, JSON.stringify(result)));
+      const req = JSON.parse(Tools.request(name, ...args));
+      // Line sizing's test pipes need no bubble or dew points (D119), and take the case's enthalpy basis.
+      if (name === 'linesizing' && req.params) { req.params.saturationFor = []; req.params.enthalpyBasis = app.enthalpyBasis?.(); }
+      return run(req, q(out), label, (result) => Tools.report(name, ...args, JSON.stringify(result)));
     };
+    q('#ls_run').addEventListener('click', () => tool('linesizing', {
+      design: ls.design, service: ls.service || null, schedule: ls.schedule, nps: ls.design ? null : ls.nps,
+      insideDiameter: ls.design ? null : { value: ls.id, unit: 'mm' }, roughness: { value: ls.roughness, unit: 'mm' },
+      totalLength: { value: ls.length, unit: ls.lengthUnit },
+    }, '#ls_out', ls.design ? 'Sizing the line' : 'Rating the line'));
     q('#an_env').addEventListener('click', () => tool('envelope', { qualities: st.qualities, hydrates: st.hydrates, inhibitor: st.inhibitor || null, inhibitorPercent: st.inhibitorPercent }, '#an_env_out', 'Tracing'));
     q('#an_pvt').addEventListener('click', () => tool('pvt', {
       experiment: st.experiment, temperature: { value: st.temperature, unit: st.temperatureUnit },
