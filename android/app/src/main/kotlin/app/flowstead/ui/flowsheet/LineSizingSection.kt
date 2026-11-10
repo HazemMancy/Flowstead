@@ -64,7 +64,9 @@ internal fun LineSizingSection(obj: SimObject, results: ResultView, hash: String
             FilterChip(selected = design, onClick = { design = true }, label = { Text("Design") }, modifier = Modifier.testTag("ls_design"))
             FilterChip(selected = !design, onClick = { design = false }, label = { Text("Rating") }, modifier = Modifier.testTag("ls_rating"))
         }
-        Choice("Service", service?.label ?: "Automatic (${StreamLineSizing.service(fs = emptyFs, results, obj.id, null).label.lowercase()})",
+        // The automatic service is named once the stream has a solved vapour fraction; before that it is only "Automatic".
+        val solvedVf = results.value(obj.id, "vapourFraction") is app.flowstead.core.model.DisplayValue.Calculated && !results.stale
+        Choice("Service", service?.label ?: if (solvedVf) "Automatic (${StreamLineSizing.service(fs = emptyFs, results, obj.id, null).label.lowercase()})" else "Automatic",
             listOf("" to "Automatic (from the stream's phases)") + LineService.entries.map { it.name to it.label }) { picked ->
             service = LineService.entries.firstOrNull { it.name == picked }
         }

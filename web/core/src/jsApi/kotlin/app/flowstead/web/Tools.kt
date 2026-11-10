@@ -172,7 +172,9 @@ object Tools {
                 putJsonArray("sizes") { app.flowstead.core.model.PipeSizes.ALL.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.nps)) } }
                 put("lengthUnit", displayUnits.unitFor(Quantity.Length).id)
                 put("smallUnit", Units.byIdOrNull("mm")?.id ?: displayUnits.unitFor(Quantity.Length).id)
-                r?.let { app.flowstead.core.model.StreamLineSizing.service(f, lineView(f, it, solvedHash), objectId, null).let { s -> put("service", s.label) } }
+                // Named only once the stream has a solved vapour fraction (before that the service is not known).
+                r?.let { lineView(f, it, solvedHash) }?.takeIf { v -> !v.stale && v.value(objectId, "vapourFraction") is app.flowstead.core.model.DisplayValue.Calculated }
+                    ?.let { v -> put("service", app.flowstead.core.model.StreamLineSizing.service(f, v, objectId, null).label) }
             }
             putJsonArray("inhibitors") { HydrateInhibitors.ALL.forEach { addJsonObject { put("id", it); put("label", HydrateInhibitors.label(it)) } } }
             putJsonArray("experiments") {
