@@ -53,7 +53,7 @@ References (load when needed):
 3. **Plan** the edits or runs, using `describe()` for type ids, ports and spec keys.
 4. **Act**: build or change through the API (`add`, `connect`, `connectNew`, `setSpecs`, `setComposition`, …).
 5. **Solve**: `await api.solve()`. Read `status`, `messages` and `notReady`.
-6. **Run** the tools the question needs: `sizing(tag)`, `await safety(...)`, `await streamTool(...)`,
+6. **Run** the tools the question needs: `sizing(tag)`, `await lineSizing(stream, …)`, `await safety(...)`, `await streamTool(...)`,
    `await thermo(...)`, `await caseStudy(...)`, `await optimise(...)`, `await dynamics()`.
 7. **Judge** against `references/checks.md`. If the `process-engineering` skill is available, load it and follow its
    rules for standards and edition control. Never invent an acceptance criterion: when a limit is project-specific (a

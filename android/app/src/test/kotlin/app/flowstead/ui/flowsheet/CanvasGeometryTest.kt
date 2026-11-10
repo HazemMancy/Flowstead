@@ -74,4 +74,24 @@ class CanvasGeometryTest {
         assertEquals(132f, at.x)
         assertTrue(abs(at.y / CanvasGeometry.GRID - Math.round(at.y / CanvasGeometry.GRID)) < 1e-4)
     }
+
+    @Test
+    fun aStreamIntoOrOutOfASubflowsheetIsJoinedSquareToItsEnds() {
+        // The owner's report (D147): the line to a block ran at an angle from the stream's middle. A block 160 × 80 at
+        // (500, 400); streams above, beside and behind it, going in and coming out.
+        val block = androidx.compose.ui.geometry.Rect(Offset(420f, 360f), androidx.compose.ui.geometry.Size(160f, 80f))
+        for ((x, y) in listOf(300.0 to 200.0, 300.0 to 400.0, 700.0 to 250.0, 650.0 to 520.0)) for (into in listOf(true, false)) {
+            val s = SimObject("s", "2", ObjectType.MaterialStream, x = x, y = y)
+            val at = CanvasGeometry.center(s)
+            val pts = CanvasGeometry.blockLinkRoute(s, at, block, intoBlock = into)
+            pts.zipWithNext().forEach { (p, q) -> assertTrue(abs(p.x - q.x) < 1e-3f || abs(p.y - q.y) < 1e-3f, "diagonal run $p → $q for ($x, $y), into $into") }
+            val (streamEnd, blockEnd) = if (into) pts.first() to pts.last() else pts.last() to pts.first()
+            assertEquals(if (into) CanvasGeometry.streamOutlet(s, at) else CanvasGeometry.streamInlet(s, at), streamEnd)
+            assertEquals(if (into) block.left else block.right, blockEnd.x, 1e-3f)
+            assertTrue(blockEnd.y in block.top + 8f..block.bottom - 8f)
+        }
+        // A stream level with the block, ahead of it: one straight run.
+        val beside = SimObject("s", "2", ObjectType.MaterialStream, x = 300.0, y = 400.0)
+        assertEquals(2, CanvasGeometry.blockLinkRoute(beside, CanvasGeometry.center(beside), block, intoBlock = true).size)
+    }
 }

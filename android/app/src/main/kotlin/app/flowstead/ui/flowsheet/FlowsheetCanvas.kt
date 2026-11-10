@@ -402,11 +402,14 @@ fun FlowsheetCanvas(
                         val r = Rect(Offset(c.x - BlockView.BLOCK_W / 2, c.y - BlockView.BLOCK_H / 2), Size(BlockView.BLOCK_W, BlockView.BLOCK_H))
                         for (l in b.links) {
                             val o = fs.objects.firstOrNull { it.id == l.outerId } ?: continue
-                            val at = positionOf(o)
-                            val edge = Offset(if (l.feed) r.left else r.right, at.y.coerceIn(r.top + 8f, r.bottom - 8f))
+                            // Square to the stream's head or tail and to the block's edge, as a connection is drawn (D147).
+                            val pts = CanvasGeometry.blockLinkRoute(o, positionOf(o), r, intoBlock = l.feed)
                             val col = streamColor(o, palette, results, twoPhase)
-                            drawLine(col, at, edge, 2f, StrokeCap.Round, PathEffect.dashPathEffect(floatArrayOf(4f, 4f)))
-                            drawCircle(col, 3.5f, edge)
+                            drawPath(
+                                Path().apply { moveTo(pts[0].x, pts[0].y); pts.drop(1).forEach { lineTo(it.x, it.y) } }, col,
+                                style = Stroke(width = 2f, cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))),
+                            )
+                            drawCircle(col, 3.5f, if (l.feed) pts.last() else pts.first())
                         }
                         drawRoundRect(palette.fill, r.topLeft, r.size, CornerRadius(8f))
                         drawRoundRect(if (b.id == selectedBlock) colors.secondary else if (b.packageLabel != null) colors.tertiary else palette.stroke,

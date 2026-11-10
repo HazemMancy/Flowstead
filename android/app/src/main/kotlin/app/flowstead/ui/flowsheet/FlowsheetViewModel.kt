@@ -987,6 +987,36 @@ class FlowsheetViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Line sizing of a stream (D148): its fluid through a test pipe of each size, in one engine solve; [onResult] gets the
+     * table (or why there is none) on the main thread.
+     */
+    fun streamLineSizing(streamId: String, input: app.flowstead.core.model.StreamLineSizing.Input, onResult: (LineSizingUi) -> Unit) {
+        val fs = current ?: return onResult(LineSizingUi(error = "No flowsheet"))
+        val view = ResultView(currentSolve, fs.modelHash())
+        app.flowstead.core.model.StreamLineSizing.problem(fs, view, streamId)?.let { return onResult(LineSizingUi(error = it)) }
+        if (app.flowstead.core.model.StreamLineSizing.candidates(input).isEmpty())
+            return onResult(LineSizingUi(error = if (input.design) "No size has that schedule" else "Choose a size and schedule, or give the inside diameter"))
+        viewModelScope.launch {
+            val url = settingsRepository.settings.first().engineTarget
+            val sizing = app.flowstead.core.model.StreamLineSizing
+            if (url.isBlank()) return@launch onResult(LineSizingUi(error = "Set the engine address in Settings"))
+            val key = secrets.apiKey()
+            var solved = when (val r = engine.solve(url, key, sizing.flowsheet(fs, view, streamId, input))) {
+                is EngineResult.Ok -> r.value
+                is EngineResult.Failed -> return@launch onResult(LineSizingUi(error = "Not sized: ${r.reason}"))
+            }
+            // The engine stops at the first pipe that fails: those it did not reach are solved again, each alone.
+            for (tag in sizing.unsolved(input, solved)) {
+                when (val again = engine.solve(url, key, sizing.flowsheet(fs, view, streamId, input, setOf(tag)))) {
+                    is EngineResult.Ok -> solved = sizing.merge(solved, again.value)
+                    is EngineResult.Failed -> Unit
+                }
+            }
+            onResult(LineSizingUi(sizing.outcome(fs, view, streamId, input, solved), hash = fs.modelHash(), total = input.totalLength))
+        }
+    }
+
     /** A stream's distillation curves and petroleum product properties, DWSIM 10's (D99). */
     fun petroleumProperties(streamId: String) {
         val fs = current ?: return

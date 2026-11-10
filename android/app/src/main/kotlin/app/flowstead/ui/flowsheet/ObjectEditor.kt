@@ -99,6 +99,7 @@ import app.flowstead.core.model.Specification
 import app.flowstead.core.model.StreamCopy
 import app.flowstead.core.model.CompositionBasis
 import app.flowstead.core.model.displayName
+import app.flowstead.core.model.modelHash
 import app.flowstead.core.model.isFeed
 import app.flowstead.core.model.obj
 import app.flowstead.core.model.streamAt
@@ -158,6 +159,8 @@ interface EditorActions {
     fun setCompositionBasis(basis: CompositionBasis) = Unit
     /** Asks the engine for the molecular weights and liquid densities a mass or volume basis needs. */
     fun loadCompoundBasis() = Unit
+    /** Line sizing of a stream (D148): the engine's answer comes back through [onResult]. */
+    fun streamLineSizing(streamId: String, input: app.flowstead.core.model.StreamLineSizing.Input, onResult: (LineSizingUi) -> Unit) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -774,6 +777,7 @@ private fun ResultsSection(
     UnitMessages(results, obj.id)
     if (stream) {
         StreamResults(fs, obj.id, results, unitSet, ctx)
+        LineSizingSection(obj, results, fs.modelHash(), unitSet, ctx, actions)
         EnvelopeSection(obj, results, envelope, unitSet, ctx, actions)
         PetroleumSection(obj, petroleum, unitSet, ctx, actions)
         return

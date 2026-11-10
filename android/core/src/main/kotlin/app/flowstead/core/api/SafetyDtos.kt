@@ -59,6 +59,11 @@ data class PressurizationSupply(
     val opening: Double = 1.0,
     val valveXt: Double = 0.72,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
+    /** A fixed volume instead of a header (D149): the source vessel or pipe, which empties until the pressures equalise. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val vessel: VesselGeometry? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val wallThickness: Double? = null,
+    /** The source's inside film coefficient: null the correlations (wall heat), 0 adiabatic. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val heatTransferCoefficient: Double? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -206,5 +211,13 @@ data class DepressuringResult(
     val massFlow: List<Double> = emptyList(),
     val inventory: List<Double> = emptyList(),
     val liquidVolumeFraction: List<Double> = emptyList(),
+    /** Pressurization from a fixed volume (D149): the source's pressure and gas temperature, its coldest gas and wall, where and when the two sides equalise, the mass moved. */
+    val sourcePressure: List<Double>? = null,
+    val sourceTemperature: List<Double>? = null,
+    val sourceMinimumTemperature: Double? = null,
+    val sourceMinimumWallTemperature: Double? = null,
+    val equalisingPressure: Double? = null,
+    val timeToEqualise: Double? = null,
+    val massTransferred: Double? = null,
     val warnings: List<String> = emptyList(),
 )

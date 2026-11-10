@@ -198,6 +198,16 @@ public sealed record PressurizationSupply
     public double Opening { get; init; } = 1;
     public double ValveXt { get; init; } = 0.72;
     public double? OrificeDiameter { get; init; }
+    /// <summary>
+    /// A fixed volume instead of a header (D149): the supply is a vessel or pipe of this geometry, at <see cref="Pressure"/>
+    /// and <see cref="Temperature"/> with <see cref="Composition"/> in it, emptying into the system being filled until the
+    /// two pressures equalise. Its wall conducts (as a blowdown's) unless <see cref="HeatTransferCoefficient"/> is 0.
+    /// </summary>
+    public VesselGeometry? Vessel { get; init; }
+    /// <summary>The source's wall, m (null: ASME VIII-1 at 1.1 × its starting pressure).</summary>
+    public double? WallThickness { get; init; }
+    /// <summary>The source's inside film coefficient, W/m²·K: null the correlations, 0 adiabatic (the coldest source).</summary>
+    public double? HeatTransferCoefficient { get; init; }
 }
 
 public sealed record DepressuringResult
@@ -231,6 +241,16 @@ public sealed record DepressuringResult
     public List<double> MassFlow { get; init; } = [];
     public List<double> Inventory { get; init; } = [];
     public List<double> LiquidVolumeFraction { get; init; } = [];
+    /// <summary>Pressurization from a fixed volume (D149): the source's pressure and gas temperature against time.</summary>
+    public List<double>? SourcePressure { get; init; }
+    public List<double>? SourceTemperature { get; init; }
+    /// <summary>The source's coldest gas and inner wall, and the pressure both sides settle at and when (within 0.1 % of the first difference).</summary>
+    public double? SourceMinimumTemperature { get; init; }
+    public double? SourceMinimumWallTemperature { get; init; }
+    public double? EqualisingPressure { get; init; }
+    public double? TimeToEqualise { get; init; }
+    /// <summary>Mass moved from the source into the system filled, kg.</summary>
+    public double? MassTransferred { get; init; }
     public List<string> Warnings { get; init; } = [];
 }
 
