@@ -99,9 +99,10 @@ private fun LineSizingTable(a: LineSizingUi, stale: Boolean, unitSet: UnitSet, c
     val vu = unitSet.unitFor(Quantity.Velocity).symbol
     val mf = unitSet.unitFor(Quantity.MomentumFlux).symbol
     if (stale) Calculated("The flowsheet changed since: size the line again for the current values.")
+    val rec = o.recommended
     Text(
         when {
-            o.recommended != null -> "Meets the criteria: ${o.recommended.candidate.label}" + (o.recommended.candidate.schedule?.let { ", Sch $it" } ?: "")
+            rec != null -> "Meets the criteria: ${rec.candidate.label}" + (rec.candidate.schedule?.let { ", Sch $it" } ?: "")
             !o.criteriaSet -> "${o.service.label} service: no criteria set (Line sizing criteria) for a verdict"
             else -> "No size meets the criteria"
         },
@@ -111,10 +112,11 @@ private fun LineSizingTable(a: LineSizingUi, stale: Boolean, unitSet: UnitSet, c
         HorizontalDivider()
         Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
             Text(
-                row.candidate.label + " · ID ${ValueFormat.number(row.candidate.insideDiameter * 1000, 1)} mm" + if (row === o.recommended) "  ✓" else "",
+                row.candidate.label + " · ID ${ValueFormat.number(row.candidate.insideDiameter * 1000, 1)} mm" + if (row === rec) "  ✓" else "",
                 style = MaterialTheme.typography.labelLarge,
             )
-            if (row.error != null) Text(row.error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.error)
+            val error = row.error
+            if (error != null) Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.valueColors.error)
             else {
                 Text("ΔP ${fmt(row.gradient, Quantity.PressureGradient)} $g · v ${fmt(row.velocity, Quantity.Velocity)} $vu · ρv² ${fmt(row.momentumFlux, Quantity.MomentumFlux)} $mf" +
                     (row.mach?.let { " · Mach ${ValueFormat.number(it, 3)}" } ?: ""), style = MaterialTheme.typography.bodySmall)
