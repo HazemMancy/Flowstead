@@ -49,7 +49,7 @@ export function installAutomation(ctx) {
 
     // ---------- reading ----------
     /** The case: fluid, objects (specs, composition, joins, readiness), sub-flowsheets. */
-    case: () => objects(),
+    case: () => ({ ...objects(), enthalpyBasis: ctx.basis() }),
     /** The project file's flowsheet, as saved. */
     json: () => JSON.parse(fs()),
     name: () => ctx.project().name,
@@ -74,6 +74,13 @@ export function installAutomation(ctx) {
     setPackage: (name) => apply(sheets.setPropertyPackage(fs(), name), `Package ${name}`),
     addCompound: (name) => apply(sheets.addCompound(fs(), name), `Added ${name}`),
     removeCompound: (name) => apply(sheets.removeCompound(fs(), name), `Removed ${name}`),
+    /**
+     * The enthalpy and entropy basis: 'hysys' (heats of formation and absolute entropies, as HYSYS reports; the web's
+     * default) or 'dwsim' (zero for the ideal gas at 25 °C). Duties and differences are the same on either; compare
+     * absolute enthalpies with another simulator on its own basis. Changing it clears the results (solve again).
+     */
+    enthalpyBasis: () => ctx.basis(),
+    setEnthalpyBasis(b) { if (b !== 'hysys' && b !== 'dwsim') throw new Error("The basis is 'hysys' or 'dwsim'"); ctx.setBasis(b); return ctx.basis(); },
     /** Solver mode: true Active (solves after each change), false Hold. */
     setActive(on) { ctx.commit(core.setSolverActive(fs(), !!on), on ? 'Solver active' : 'Solver on hold'); return !!on; },
     /** Lays the flowsheet out left to right, as a PFD. */

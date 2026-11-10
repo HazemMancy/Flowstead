@@ -1247,6 +1247,8 @@ window.flowstead = {
     project: () => project, commit: (json, message) => commit(json, message), replace: (name, f) => replace(name, f),
     solve: () => solve(false), busy: () => busy, ready: () => engine.ready, enthalpyBasis, ensureSaturation: (ids) => ensureSaturation(ids),
     goLevel: (id) => goLevel(id), undo: () => step(undo, redo), redo: () => step(redo, undo),
+    basis: () => project.basis ?? 'hysys',
+    setBasis: (b) => { if (b === (project.basis ?? 'hysys')) return; $('basisSel').value = b; $('basisSel').dispatchEvent(new Event('change')); },
   }),
 };
 window.flowsheetReady = true;

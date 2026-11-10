@@ -28,7 +28,7 @@ first: a call's name, inputs or outputs change only with the version.
 
 | Call | Returns |
 |---|---|
-| `case()` | `{propertyPackage, compounds, solverActive, objects: [{id, tag, type, flowsheet?, specs: {key: {si, value, unit}}, composition?, refs?, in: [{port, from}], out: [{port, to}], needs?, problem?, notReady?}], subflowsheets: [{tag, propertyPackage, ownPackage, streams: [{inside, direction, outside?}]}]}` |
+| `case()` | `{propertyPackage, compounds, solverActive, enthalpyBasis, objects: [{id, tag, type, flowsheet?, specs: {key: {si, value, unit}}, composition?, refs?, in: [{port, from}], out: [{port, to}], needs?, problem?, notReady?}], subflowsheets: [{tag, propertyPackage, ownPackage, streams: [{inside, direction, outside?}]}]}` |
 | `results(tag)` | `{tag, type, solved, stale, status, error?, properties: {key: {label, si, siUnit, value, unit}}, phases: {overall\|vapour\|liquid1\|liquid2: {properties: {key: si}, composition}}, texts?, profiles?, messages: [{level, text}]}` |
 | `allResults()` | `results` for every object |
 | `check()` | `[{level: error\|warning\|info, text, objectId?}]`: missing specifications, loose ends, the engine's errors and warnings (empty: nothing to report) |
@@ -53,6 +53,7 @@ first: a call's name, inputs or outputs change only with the version.
 | `setRef(tag, key, value)` | A choice kept as text: a line's `service`, a reactor's `mode`, a column's options… (`''` clears) |
 | `rename(tag, newTag)`, `remove(tag)` | |
 | `setActive(true\|false)` | Solver Active (solves after each change) or Hold |
+| `setEnthalpyBasis('hysys'\|'dwsim')`, `enthalpyBasis()` | Enthalpy and entropy basis: HYSYS's (heats of formation, absolute entropies; the web's default) or DWSIM's (zero for the ideal gas at 25 °C). Duties are the same on either; compare absolute enthalpies with another simulator on its basis. Changing it clears the results |
 | `layout()` | Lays the flowsheet out as a PFD |
 | `undo()`, `redo()` | |
 

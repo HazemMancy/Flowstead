@@ -39,6 +39,8 @@ References (load when needed):
   a target), do not drop it silently: say what happened and why.
 - **A refusal is information.** When a call throws, its message is the app's reason ("Give the set pressure", "K-100
   takes no 'length'"). Fix the input or report the reason. Do not retry the same call blindly.
+- **Enthalpy basis:** absolute enthalpies and entropies depend on it (`api.enthalpyBasis()`: 'hysys', the web's
+  default, or 'dwsim'). Compare with HYSYS on 'hysys'; duties and differences are the same on either.
 - **Long calls** (solve, safety, case studies, the optimiser, dynamics) return promises: `await` them. A solve takes
   seconds in the browser; a case study is one solve a point.
 

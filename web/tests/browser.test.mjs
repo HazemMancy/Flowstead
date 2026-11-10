@@ -1269,6 +1269,7 @@ try {
     const build = (input, name) => p.evaluate(async ([f, name]) => {
       const api = window.flowstead.api;
       api.newCase({ propertyPackage: f.propertyPackage, compounds: f.compounds, name });
+      api.setEnthalpyBasis('dwsim'); // expected.json is on DWSIM's basis (the web's default is HYSYS's, D120)
       const tag = Object.fromEntries(f.objects.map((o) => [o.id, o.tag]));
       for (const o of f.objects) {
         api.add(o.type, { tag: o.tag, x: o.x, y: o.y });
