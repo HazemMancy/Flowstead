@@ -1252,6 +1252,114 @@ try {
     await ctx.close();
   }
 
+  // ---------- 4p. the automation interface (D140): cases built, solved, sized and judged through window.flowstead.api ----------
+  // Benchmarks 06, 07 and 09 are built from nothing through the interface (package, compounds, objects by type and tag,
+  // ports, specifications in SI, compositions). References: (1) the built case is the benchmark's input (types, specs,
+  // compositions, joins by tag), so (2) its solve passes every check of the benchmark's expected.json; (3) the
+  // compressor's driver is API 617's 1.10 × the engine's power; (4) the separator's fire load takes the heat API 521
+  // gives, 43.2 kW·A^0.82, on the wetted area worked by hand (2:1 heads, 1.084 D²); (5) a line check reports the engine's
+  // velocity against the criterion set; (6) refusals carry the app's reason; (7) one undo takes the last edit back.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [], got = {};
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady && window.flowstead?.api, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const build = (input, name) => p.evaluate(async ([f, name]) => {
+      const api = window.flowstead.api;
+      api.newCase({ propertyPackage: f.propertyPackage, compounds: f.compounds, name });
+      const tag = Object.fromEntries(f.objects.map((o) => [o.id, o.tag]));
+      for (const o of f.objects) {
+        api.add(o.type, { tag: o.tag, x: o.x, y: o.y });
+        for (const [k, sp] of Object.entries(o.specs ?? {})) api.setSpec(o.tag, k, sp.si, '');
+        if (Object.keys(o.composition ?? {}).length) api.setComposition(o.tag, o.composition);
+      }
+      const d = api.describe(), types = Object.fromEntries(f.objects.map((o) => [o.id, o.type]));
+      for (const c of f.connections) {
+        const fromStream = d.types.find((t) => t.id === types[c.fromObject]).isStream;
+        if (fromStream) api.connect(tag[c.fromObject], tag[c.toObject], { side: 'inlet', index: c.toPort });
+        else api.connect(tag[c.toObject], tag[c.fromObject], { side: 'outlet', index: c.fromPort });
+      }
+      return api.json();
+    }, [input, name]);
+    const shape = (f) => {
+      const t = Object.fromEntries(f.objects.map((o) => [o.id, o.tag]));
+      return JSON.stringify([f.propertyPackage, [...f.compounds].sort(),
+        f.objects.map((o) => `${o.tag}|${o.type}|${JSON.stringify(Object.entries(o.specs ?? {}).map(([k, v]) => [k, +v.si.toPrecision(12)]).sort())}|${JSON.stringify(Object.entries(o.composition ?? {}).map(([k, v]) => [k, +v.toPrecision(12)]).sort())}`).sort(),
+        f.connections.map((c) => `${t[c.fromObject]}:${c.fromPort}>${t[c.toObject]}:${c.toPort}`).sort()]);
+    };
+    let checks = 0;
+    for (const name of ['06-compressor-aftercooler', '07-recycle-loop', '09-pipe-and-orifice']) {
+      const input = JSON.parse(fs.readFileSync(path.join(benchDir, name, 'input.json'), 'utf8')).flowsheet;
+      const expected = JSON.parse(fs.readFileSync(path.join(benchDir, name, 'expected.json'), 'utf8'));
+      let built;
+      try { built = await build(input, name); } catch (e) { problems.push(`${name}: build failed: ${e.message}`); continue; }
+      if (shape(built) !== shape(input)) { problems.push(`${name}: built ${shape(built)} for ${shape(input)}`); continue; }
+      const s = await p.evaluate(() => window.flowstead.api.solve());
+      if (s.status !== 'converged' || s.stale) problems.push(`${name}: solve ${JSON.stringify(s).slice(0, 300)}`);
+      const tag = Object.fromEntries(input.objects.map((o) => [o.id, o.tag]));
+      const res = await p.evaluate((tags) => Object.fromEntries(tags.map((t) => [t, window.flowstead.api.results(t)])), Object.values(tag));
+      for (const c of expected.checks) {
+        const [, id, ...rest] = c.path.split('.');
+        const r = res[tag[id]];
+        let v;
+        if (rest[0] === 'properties') v = r?.properties?.[rest[1]]?.si;
+        else if (rest[0] === 'phases') v = r?.phases?.[rest[1]]?.[rest[2]]?.[rest[3]];
+        else continue;
+        if (typeof c.expected !== 'number') continue;
+        checks++;
+        const tol = Math.max(c.tol?.abs ?? 0, (c.tol?.rel ?? 0) * Math.abs(c.expected));
+        if (!(Math.abs(v - c.expected) <= tol)) problems.push(`${name}: ${c.path} ${v} for ${c.expected} ± ${tol}`);
+      }
+      if (name === '06-compressor-aftercooler') {
+        got.k = await p.evaluate(() => ({ power: window.flowstead.api.results('K-100').properties.power.si, sizing: window.flowstead.api.sizing('K-100') }));
+        const driver = got.k.sizing.lines.find((l) => /Driver at least/.test(l.label))?.si;
+        if (!(Math.abs(driver - 1.1 * got.k.power) <= 1e-9 * driver)) problems.push(`K-100 driver ${driver} W for 1.10 × ${got.k.power} W`);
+      }
+      if (name === '07-recycle-loop') {
+        // A vertical vessel D 1.5 m, 4 m shell, liquid 1.2 m up, on grade: wetted = 1.084 D² + π D (1.2 − D/4).
+        const D = 1.5, h = 1.2, A = 1.084 * D * D + Math.PI * D * (h - D / 4), Q = 43200 * A ** 0.82;
+        const rel = await p.evaluate(async () => {
+          try { return await window.flowstead.api.safety('relief', { tag: 'PSV-100', protectedId: 'V-100', setPressure: 4.0e6, vessel: { diameter: 1.5, length: 4, liquidLevel: 1.2 }, scenarios: [{ kind: 'fire', name: 'Fire' }] }); }
+          catch (e) { return { error: e.message }; }
+        });
+        got.relief = rel;
+        const fire = rel.result?.scenarios?.[0];
+        if (rel.error || !fire) problems.push(`relief: ${JSON.stringify(rel).slice(0, 300)}`);
+        else {
+          if (!(Math.abs(fire.details.heatInput - Q) <= 1e-6 * Q)) problems.push(`fire heat ${fire.details.heatInput} W; API 521 on ${A.toFixed(4)} m² gives ${Q} W`);
+          if (!(rel.result.orificeArea >= rel.result.requiredArea)) problems.push(`orifice ${rel.result.orifice} smaller than required`);
+        }
+        const sep = await p.evaluate(() => { try { return window.flowstead.api.sizing('V-100'); } catch (e) { return { error: e.message }; } });
+        if (sep.error || !(sep.diameter_m > 0)) problems.push(`separator sizing: ${JSON.stringify(sep).slice(0, 200)}`);
+      }
+      if (name === '09-pipe-and-orifice') {
+        const line = await p.evaluate(() => { const api = window.flowstead.api; api.setLineCriteria('liquid', { maxVelocity: 3 }); return { s: api.sizing('PIPE-100'), v: api.results('PIPE-100').properties.maxVelocity?.si }; });
+        const c = line.s.checks?.find((x) => x.label === 'Maximum velocity');
+        if (!(c && c.value === line.v && c.limit === 3 && c.passes === (line.v <= 3))) problems.push(`line check ${JSON.stringify(line).slice(0, 300)}`);
+      }
+    }
+    // Refusals and undo.
+    const refusals = await p.evaluate(() => {
+      const api = window.flowstead.api, r = [];
+      for (const f of [() => api.setSpec('PIPE-100', 'length', 10, 'kg/s'), () => api.connect('NOPE', 'PIPE-100'), () => api.add('warp_drive')]) {
+        try { f(); r.push('accepted'); } catch (e) { r.push(e.message); }
+      }
+      const before = api.case().objects.find((o) => o.tag === 'PIPE-100').specs.length.si;
+      api.setSpec('PIPE-100', 'length', 250, 'm');
+      api.undo();
+      r.push(api.case().objects.find((o) => o.tag === 'PIPE-100').specs.length.si === before ? 'undone' : 'not undone');
+      return r;
+    });
+    if (refusals.includes('accepted') || refusals.at(-1) !== 'undone') problems.push(`refusals and undo: ${JSON.stringify(refusals)}`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} automation interface (3 benchmarks built through it, ${checks} expected values; K-100 driver ${got.k?.sizing?.lines?.find((l) => /Driver at least/.test(l.label))?.si?.toFixed?.(0)} W; PSV ${got.relief?.result?.orifice}; refusals: ${refusals.slice(0, 3).join(' | ')})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4e. bubble and dew points on demand, and HYSYS's enthalpy basis (D119, D120) ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });

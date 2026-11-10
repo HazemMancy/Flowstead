@@ -35,6 +35,13 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.15**
+- **Automation interface (D140):** `window.flowstead.api` lets an agent in the browser, or a script, build, read,
+  change, solve, size and judge a case through the page's own code: every edit is yours (on the canvas, undoable),
+  every number the engine's. Reference: docs/automation.md. A Claude skill that uses it is in
+  skills/flowstead-automation.
+- Separator, equipment and line sizing on the web, through the interface (the app's methods).
+
 **Web 1.14**
 - **Into a sub-flowsheet by drag and drop (D139):** drag an object, or a selection, onto a block (outlined as you
   drag over it) and it goes inside, with a mouse, a pen or a finger; or choose Move into… on the selection bar. The
