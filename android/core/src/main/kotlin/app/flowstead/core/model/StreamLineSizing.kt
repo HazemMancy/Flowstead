@@ -82,9 +82,12 @@ object StreamLineSizing {
     fun scheduleOf(size: PipeSizes.Size, name: String): PipeSizes.Schedule? =
         size.schedules.firstOrNull { name in it.label.split(" / ") } ?: size.schedule(name)
 
-    /** The sizes tried: design, every size that has the schedule; rating, the one size or diameter. */
+    /** Design starts at NPS 1/2 (DN 15): the smaller sizes are instrument tubing, not process lines. */
+    const val SMALLEST_DESIGN_DN = 15
+
+    /** The sizes tried: design, every size from NPS 1/2 that has the schedule; rating, the one size or diameter. */
     fun candidates(input: Input): List<Candidate> = if (input.design) {
-        PipeSizes.ALL.mapNotNull { s -> scheduleOf(s, input.schedule)?.let { Candidate("NPS ${s.nps}", s.nps, it.label, s.insideDiameterM(it)) } }
+        PipeSizes.ALL.filter { it.dn >= SMALLEST_DESIGN_DN }.mapNotNull { s -> scheduleOf(s, input.schedule)?.let { Candidate("NPS ${s.nps}", s.nps, it.label, s.insideDiameterM(it)) } }
     } else {
         input.insideDiameter?.takeIf { it > 0 }?.let { listOf(Candidate("ID ${ValueFormatShort.mm(it)} mm", null, null, it)) }
             ?: PipeSizes.size(input.nps ?: "")?.let { s -> scheduleOf(s, input.schedule)?.let { listOf(Candidate("NPS ${s.nps}", s.nps, it.label, s.insideDiameterM(it))) } }
@@ -121,7 +124,7 @@ object StreamLineSizing {
         }
         candidates(input).forEachIndexed { i, c ->
             line("g$i", c.insideDiameter, TEST_LENGTH, 5)
-            input.totalLength?.takeIf { it > 0 }?.let { line("t$i", c.insideDiameter, it, 20) }
+            input.totalLength?.takeIf { it > 0 }?.let { line("t$i", c.insideDiameter, it, 10) }
         }
         return base.copy(
             objects = objects, connections = connections, subflowsheets = emptyList(), tables = emptyList(), safety = null,

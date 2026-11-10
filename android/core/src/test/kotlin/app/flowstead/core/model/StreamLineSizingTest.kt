@@ -28,7 +28,8 @@ class StreamLineSizingTest {
         assertNull(StreamLineSizing.problem(fs, view, "s"))
         val input = StreamLineSizing.Input(design = true, schedule = "40", totalLength = 2000.0)
         val sizes = StreamLineSizing.candidates(input)
-        assertEquals(PipeSizes.ALL.count { p -> p.schedules.any { "40" in it.label.split(" / ") } }, sizes.size)
+        assertEquals(PipeSizes.ALL.count { p -> p.dn >= 15 && p.schedules.any { "40" in it.label.split(" / ") } }, sizes.size)
+        assertEquals("1/2", sizes.first().nps) // tubing sizes below NPS 1/2 are not tried
         // Above NPS 10 schedule 40 is its own wall (NPS 12: 0.406 in, STD 0.375 in): ID 12.75 − 2·0.406 = 11.938 in.
         assertEquals(11.938 * 0.0254, sizes.first { it.nps == "12" }.insideDiameter, 1e-9)
         assertEquals(12.000 * 0.0254, StreamLineSizing.candidates(input.copy(schedule = "STD")).first { it.nps == "12" }.insideDiameter, 1e-9)

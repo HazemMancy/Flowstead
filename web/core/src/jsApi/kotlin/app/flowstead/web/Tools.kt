@@ -312,8 +312,8 @@ object Tools {
                 (if (total != null) listOf(row.totalError ?: n(row.totalDrop, Quantity.PressureDifference)) else emptyList()) +
                 (if (o.criteriaSet) listOf(if (row.passes) "pass" else row.checks.filter { !it.passes }.joinToString("; ") { it.label }.ifEmpty { "—" }) else emptyList())
         })
-        if (!o.criteriaSet) rep.note("No criteria set for ${o.service.label.lowercase()} lines: give the project's limits (a pipe's Design tab, Line sizing) for a verdict and a recommended size.", "warn")
-        rep.note("From the stream's solved state (${o.service.label.lowercase()} service): DWSIM's ΔP through a horizontal, adiabatic test pipe of each size, ${ValueFormat.number(app.flowstead.core.model.StreamLineSizing.TEST_LENGTH, 0)} m long for the gradient and the highest velocity and ρv²" +
+        if (!o.criteriaSet) rep.note("No criteria set for ${o.service.label.lowercase()} lines: give the project's limits above for a verdict and a recommended size.", "warn")
+        rep.note("From the stream's solved state (${o.service.label.lowercase()} service): DWSIM's ΔP through a horizontal, adiabatic test pipe of each size, ${ValueFormat.number(app.flowstead.core.model.StreamLineSizing.TEST_LENGTH, 0)} m long for the gradient (its average over those metres: near choking, a gas's gradient climbs steeply along the pipe) and the highest velocity and ρv²" +
             (if (total != null) ", and one of the whole length for its ΔP (worked out along it)" else "") + "; roughness ${ValueFormat.number(input.roughness * 1000, 4)} mm. No fittings or elevation: add a pipe segment for those.")
     }
 

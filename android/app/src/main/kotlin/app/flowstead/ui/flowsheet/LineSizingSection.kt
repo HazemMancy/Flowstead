@@ -75,6 +75,10 @@ internal fun LineSizingSection(obj: SimObject, results: ResultView, hash: String
         }
         QuantityField("Roughness", roughness?.let { Spec(it, small.id) }, Quantity.Length, small, ctx, "ls_rough_${obj.id}", hint = "0.0457 mm (steel)") { roughness = it?.si?.takeIf { v -> v >= 0 } }
         QuantityField("Total length", length?.let { Spec(it, Units.km.id) }, Quantity.Length, Units.km, ctx, "ls_len_${obj.id}", hint = "for the total ΔP") { length = it?.si?.takeIf { v -> v > 0 } }
+        // The criteria every line of the service is checked against, the project's (one screen for the case).
+        androidx.compose.material3.TextButton(onClick = { actions.editSizingCriteria() }, modifier = Modifier.heightIn(min = 48.dp).testTag("ls_criteria")) {
+            Text("Line sizing criteria…")
+        }
         OutlinedButton(
             enabled = !busy,
             onClick = {

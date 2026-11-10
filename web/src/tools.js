@@ -62,6 +62,16 @@ export function initTools(app) {
         <label class="eq-cell"><span>Total length</span><input type="text" inputmode="decimal" id="ls_len" value="${esc(ls.length)}" placeholder="for the total ΔP" autocomplete="off"/></label>
         <label class="eq-cell"><span>Unit</span><select id="ls_lu">${opts([{ id: 'm', label: 'm' }, { id: 'km', label: 'km' }, { id: 'ft', label: 'ft' }, { id: 'mi', label: 'mile' }], ls.lengthUnit)}</select></label>
       </div>
+      ${(() => {
+        // The project's criteria for this service, edited here: the same ones every line of the service is checked against.
+        const key = ls.service || ({ Gas: 'gas', Liquid: 'liquid', 'Two-phase': 'two_phase' })[ld.service] || 'two_phase';
+        const c = JSON.parse(app.project().flowsheet).sizingCriteria?.[key === 'two_phase' ? 'twoPhase' : key] ?? {};
+        const v = (k, f = 1) => (c[k]?.si != null ? String(+(c[k].si * f).toPrecision(6)) : '');
+        const cell = (k, label, f) => `<label class="eq-cell"><span>${label}</span><input type="text" inputmode="decimal" data-lscrit="${k}" data-f="${f}" value="${v(k, f)}" placeholder="not checked" autocomplete="off"/></label>`;
+        return `<p class="fs-note">Criteria for ${esc(key.replace('_', '-'))} lines (the project's, for every such line in the case):</p>
+      <div class="eq-row">${cell('maxVelocity', 'Max velocity, m/s', 1)}${cell('maxFrictionGradient', 'Max ΔP (friction), bar/km', 0.01)}${cell('maxMomentumFlux', 'Max ρv², kg/m·s²', 1)}</div>
+      <div class="eq-row">${cell('minVelocity', 'Min velocity, m/s', 1)}${cell('erosionalC', 'Erosional C (API RP 14E)', 1)}${cell('maxMach', 'Max Mach', 1)}</div>`;
+      })()}
       <div class="actions"><button type="button" class="btn btn-sm" id="ls_run">${ls.design ? 'Size the line' : 'Rate the line'}</button></div>
       <div id="ls_out" aria-live="polite"></div>
       <h3>Phase envelope</h3>
@@ -100,8 +110,20 @@ export function initTools(app) {
       if (t.id === 'an_t') st.temperature = t.value;
       if (t.id === 'an_tu') st.temperatureUnit = t.value;
       if (t.dataset.st) st.stages[Number(t.dataset.st)][t.dataset.k] = t.value;
+      if (t.dataset.lscrit) {
+        // Merges the one limit into the service's saved criteria (SI: bar/km × 100 = Pa/m).
+        const key = ls.service || ({ Gas: 'gas', Liquid: 'liquid', 'Two-phase': 'two_phase' })[ld.service] || 'two_phase';
+        const saved = JSON.parse(app.project().flowsheet).sizingCriteria?.[key === 'two_phase' ? 'twoPhase' : key] ?? {};
+        const next = Object.fromEntries(['maxVelocity', 'minVelocity', 'maxMomentumFlux', 'maxFrictionGradient', 'maxMach', 'erosionalC'].map((k) => [k, saved[k]?.si]).filter(([, x]) => x != null));
+        const text = t.value.trim().replace(',', '.');
+        if (text === '') delete next[t.dataset.lscrit];
+        else if (!(Number(text) > 0)) { app.toast('A limit is a positive number'); return streamAnalysis(container, id); }
+        else next[t.dataset.lscrit] = Number(text) / Number(t.dataset.f);
+        try { window.flowstead.api.setLineCriteria(key, next); } catch (err) { app.toast(err.message); }
+        return streamAnalysis(container, id);
+      }
       const lsField = { ls_svc: 'service', ls_sch: 'schedule', ls_nps: 'nps', ls_id: 'id', ls_rough: 'roughness', ls_len: 'length', ls_lu: 'lengthUnit' }[t.id];
-      if (lsField) ls[lsField] = t.value;
+      if (lsField) { ls[lsField] = t.value; if (lsField === 'service') return streamAnalysis(container, id); }
     };
     container.onclick = (e) => {
       const t = e.target.closest('button'); if (!t) return;
