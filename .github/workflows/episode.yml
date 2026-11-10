@@ -1,0 +1,50 @@
+name: episode
+
+# LinkedIn "Getting started" episodes (docs/linkedin/episodes): the narration transcribed against its script (every
+# word checked, each chapter's times), then each chapter recorded on the live site, for the final cut.
+
+on:
+  workflow_dispatch:
+    inputs:
+      episode:
+        description: "Episode folder under docs/linkedin/episodes"
+        default: "ep2"
+      record:
+        description: "Also record the chapters"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  episode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Transcribe the narration
+        run: |
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          pip install -q faster-whisper
+          d=docs/linkedin/episodes/${{ inputs.episode }}
+          mkdir -p out
+          python3 -I web/tools/episodes/transcribe.py "$d/media/narration.opus" "$d/script.txt" out/transcript.json
+      - uses: actions/setup-node@v5
+        if: inputs.record
+        with:
+          node-version: "22"
+      - name: Record the chapters on the live site
+        if: inputs.record
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+          node tools/episodes/${{ inputs.episode }}-record.mjs ../out/transcript.json ../out
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ${{ inputs.episode }}
+          path: out
