@@ -49,7 +49,7 @@ public static class Curves
             double? Mix(Func<CurvePoint, double?> pick) => Value(sa, q, pick) is { } x && Value(sb, q, pick) is { } y ? Blend(x, y) : null;
             return new CurvePoint(q, Mix(p => p.Head)!.Value, Mix(p => p.Efficiency), Mix(p => p.Npshr));
         }).ToList();
-        return new PerformanceCurve { Points = points, Speed = n, OperatingSpeed = n };
+        return new PerformanceCurve { Points = points, Speed = n, OperatingSpeed = n, Path = c.Path };
     }
 
     /// <summary>
@@ -63,6 +63,10 @@ public static class Curves
     private static readonly string[] PressureSpecs = [SpecKeys.OutletPressure, SpecKeys.PressureRise, SpecKeys.PressureRatio];
 
     /// <summary>A variable-speed machine with a pressure given and no speed: the engine finds the speed (HYSYS's way).</summary>
+    /// <summary>A compressor on a curve drawn on the polytropic path (D144).</summary>
+    public static bool IsPolytropic(SimObject o) =>
+        o.Type == ObjectType.Compressor && o.Curve is { Points.Count: >= 2 } c && c.Path == CurvePaths.Polytropic;
+
     public static bool SolvesSpeed(SimObject o) =>
         o.Type is ObjectType.Pump or ObjectType.Compressor && o.Curve is { Speed: > 0, OperatingSpeed: null } && PressureSpecs.Any(o.Specs.ContainsKey);
 
@@ -133,6 +137,9 @@ public static class Curves
 /// </summary>
 public static class CurveSolver
 {
+    /// <summary>The head the machine's curve is drawn in: a compressor's adiabatic or polytropic head (D144).</summary>
+    private static string HeadKey(SimObject m) => Curves.IsPolytropic(m) ? "polytropicHead" : "adiabaticHead";
+
     public const int MaxIterations = 25;
     private const double G = 9.80665;
 
@@ -229,7 +236,7 @@ public static class CurveSolver
                 _rise = rise;
                 return done;
             }
-            if (unit is not { Status: ObjectStatus.Solved } || !unit.Properties.TryGetValue("adiabaticHead", out var got) || !(got > 0)) { Readable = false; return false; }
+            if (unit is not { Status: ObjectStatus.Solved } || !unit.Properties.TryGetValue(HeadKey(machine), out var got) || !(got > 0)) { Readable = false; return false; }
             var err = got - head;
             Miss = Math.Abs(err) / head;
             if (Miss < 1e-4 && !effChanged) return true;
@@ -257,7 +264,7 @@ public static class CurveSolver
                 if (!unit.Properties.TryGetValue("pressureRise", out var rise) || !(rise > 0)) { Readable = false; return false; }
                 head = rise / (rho * G);
             }
-            else if (!unit.Properties.TryGetValue("adiabaticHead", out head) || !(head > 0)) { Readable = false; return false; }
+            else if (!unit.Properties.TryGetValue(HeadKey(machine), out head) || !(head > 0)) { Readable = false; return false; }
             double MapHead(double n) => Curves.At(Curves.AtSpeed(_map with { OperatingSpeed = n }), q, p => p.Head)!.Value;
             var rated = _map.Speed!.Value;
             double lo = 0.2 * rated, hi = 2.0 * rated;

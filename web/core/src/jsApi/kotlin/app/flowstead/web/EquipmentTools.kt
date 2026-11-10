@@ -12,6 +12,7 @@ package app.flowstead.web
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.CurveFits
+import app.flowstead.core.model.CurvePaths
 import app.flowstead.core.model.CurvePoint
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.EditRejected
@@ -71,6 +72,228 @@ object EquipmentTools {
     private fun ctx(f: Flowsheet) = UnitContext(f.atmosphericPressurePa)
     private inline fun edit(block: () -> Flowsheet): String = try { out(block()) } catch (e: Exception) { err(e.message ?: "Not allowed") }
 
+    // ---------- sizing (D47, D61, D62, D65, D106; on the web from D141): the app's sizing sections ----------
+
+    private fun pct(v: Double?) = v?.let { ValueFormat.number(it * 100, 1).replace(",", "") } ?: ""
+
+    /**
+     * The sizing the app shows for [id]: {applies, kind: separator|equipment|line, report: {sections} (or why there is
+     * none), fields: [{key, label, kind: number|choice|bool, value, unit, options?, hint?}]} with every number in the
+     * user's display units. The numbers are Flowstead's sizing on the engine's results (stale results are refused).
+     */
+    fun sizing(flowsheetJson: String, id: String, solveJson: String?, solvedHash: String): String {
+        val f = fs(flowsheetJson)
+        val o = f.obj(id) ?: return "{\"applies\":false}"
+        val c = ctx(f)
+        val rv = view(f, solveJson, solvedHash)
+        val rep = Report(c)
+        fun withU(si: Double, q: Quantity) = rep.withUnit(si, q)
+        fun field(key: String, label: String, v: Double?, q: Quantity?, hint: String? = null) = buildJsonObject {
+            put("key", key); put("label", label); put("kind", "number")
+            val u = q?.let { displayUnits.unitFor(it) }
+            put("value", num(v, u, c)); put("unit", u?.symbol ?: ""); hint?.let { put("hint", it) }
+        }
+        fun pctField(key: String, label: String, v: Double?, hint: String? = null) = buildJsonObject {
+            put("key", key); put("label", label); put("kind", "number"); put("value", pct(v)); put("unit", "%"); hint?.let { put("hint", it) }
+        }
+        fun choice(key: String, label: String, value: String?, options: List<Pair<String, String>>) = buildJsonObject {
+            put("key", key); put("label", label); put("kind", "choice"); put("value", value ?: "")
+            putJsonArray("options") { options.forEach { (i, l) -> addJsonObject { put("id", i); put("label", l) } } }
+        }
+        val fields = mutableListOf<kotlinx.serialization.json.JsonObject>()
+        val kind: String
+        var why: String? = null
+        when (o.type) {
+            ObjectType.Separator, ObjectType.ThreePhaseSeparator -> {
+                kind = "separator"
+                val i = o.sizing ?: app.flowstead.core.model.SeparatorSizingInput()
+                fields += buildJsonObject { put("key", "horizontal"); put("label", "Horizontal vessel"); put("kind", "bool"); put("value", i.horizontal) }
+                fields += choice("mistEliminator", "Mist eliminator", i.mistEliminator.name, app.flowstead.core.model.MistEliminator.entries.map { it.name to it.label })
+                fields += choice("inletDevice", "Inlet device", i.inletDevice.name, app.flowstead.core.model.InletDevice.entries.map { it.name to it.label })
+                val (loads, w) = app.flowstead.core.model.SeparatorSizing.loads(f, rv, o)
+                fields += field("k", "Souders–Brown K", i.k, Quantity.Velocity, loads?.let { "library: " + withU(app.flowstead.core.model.SeparatorSizing.k(i.copy(k = null), it.pressure), Quantity.Velocity) } ?: "library")
+                fields += field("holdupTime", "Hold-up time (NLL to LLL)", i.holdupTime, Quantity.Time)
+                fields += field("surgeTime", "Surge time (HLL to NLL)", i.surgeTime, Quantity.Time)
+                if (o.type == ObjectType.ThreePhaseSeparator) {
+                    fields += field("oilRetention", "Oil retention", i.oilRetention, Quantity.Time)
+                    fields += field("waterRetention", "Water retention", i.waterRetention, Quantity.Time)
+                }
+                if (i.horizontal) fields += field("lengthToDiameter", "L/D", i.lengthToDiameter, null, "from the pressure (Svrcek–Monnery)")
+                if (rv.stale) why = "Solve the flowsheet first: the sizing uses its results"
+                else if (loads == null) why = w ?: "Solve the flowsheet first"
+                else {
+                    val r = app.flowstead.core.model.SeparatorSizing.size(loads, i, o.type == ObjectType.ThreePhaseSeparator)
+                    rep.heading((if (r.horizontal) "Horizontal" else "Vertical") + (if (r.threePhase) " three-phase" else "") + " separator")
+                    rep.kv(listOfNotNull(
+                        Triple("Diameter", rep.value(r.diameter, Quantity.Length), rep.unitOf(Quantity.Length).symbol),
+                        Triple(if (r.horizontal) "Length (tangent to tangent)" else "Height (tangent to tangent)", rep.value(r.length, Quantity.Length), rep.unitOf(Quantity.Length).symbol),
+                        Triple(if (r.horizontal) "L/D" else "H/D", ValueFormat.number(r.slenderness, 2), ""),
+                        Triple("K used", rep.value(r.k, Quantity.Velocity), rep.unitOf(Quantity.Velocity).symbol),
+                        Triple("Allowable gas velocity", rep.value(r.maxGasVelocity, Quantity.Velocity), rep.unitOf(Quantity.Velocity).symbol),
+                        Triple("Gas velocity", rep.value(r.gasVelocity, Quantity.Velocity), rep.unitOf(Quantity.Velocity).symbol),
+                        Triple("Liquid volume", rep.value(r.liquidVolume, Quantity.Volume), rep.unitOf(Quantity.Volume).symbol),
+                        r.mistEliminatorArea?.let { Triple("Mist eliminator face area", ValueFormat.number(it, 2), "m²") },
+                    ))
+                    if (r.levels.isNotEmpty()) rep.table(listOf("Level", "Height, " + rep.unitOf(Quantity.Length).symbol), r.levels.map { listOf(it.name, rep.value(it.height, Quantity.Length)) })
+                    rep.table(listOf("Nozzle", "Bore needed, mm", "Pipe", "Limit"), r.nozzles.map { n -> listOf(n.name, ValueFormat.number(n.requiredDiameter * 1000, 0), n.nps?.let { "NPS $it" } ?: "above 24 in", n.limit) })
+                    r.notes.forEach { rep.note(it) }
+                    r.warnings.forEach { rep.note(it, "warn") }
+                    rep.note("GPSA section 7 (Souders–Brown, pressure factor), Svrcek–Monnery (heights, L/D), API 12J and Arnold & Stewart (three-phase), on the engine's outlet streams.")
+                }
+            }
+            ObjectType.PipeSegment -> {
+                kind = "line"
+                val svc = app.flowstead.core.model.LineSizing.service(f, o, rv)
+                fields += choice("service", "Service", o.refs[app.flowstead.core.model.LineSizing.SERVICE] ?: "", app.flowstead.core.model.LineSizing.SERVICE_OPTIONS.map { (it.first ?: "") to it.second })
+                if (svc != null) {
+                    val cr = (f.sizingCriteria ?: app.flowstead.core.model.SizingCriteria()).forService(svc)
+                    fields += field("maxVelocity", "Max velocity (${svc.label.lowercase()} lines)", cr.maxVelocity?.si, Quantity.Velocity)
+                    fields += field("minVelocity", "Min velocity", cr.minVelocity?.si, Quantity.Velocity)
+                    fields += field("maxMomentumFlux", "Max ρv²", cr.maxMomentumFlux?.si, Quantity.MomentumFlux)
+                    fields += field("maxFrictionGradient", "Max ΔP per length (friction)", cr.maxFrictionGradient?.si, Quantity.PressureGradient)
+                    fields += field("maxMach", "Max Mach number", cr.maxMach?.si, null)
+                    fields += field("erosionalC", "Erosional C (API RP 14E)", cr.erosionalC?.si, null, "100 continuous, 125 intermittent (solids-free)")
+                    if (rv.stale) why = "Solve the flowsheet first: the checks use its results"
+                    else {
+                        val checks = app.flowstead.core.model.LineSizing.checks(cr, o.id, rv)
+                        rep.heading("Line sizing: ${svc.label.lowercase()} service")
+                        if (cr.isEmpty) rep.note("No criteria set for ${svc.label.lowercase()} lines: give the project's limits below (they apply to every ${svc.label.lowercase()} line in the case).")
+                        else if (checks.isEmpty()) rep.note("The engine returned none of the values these criteria need.")
+                        else rep.table(listOf("Check", "Value", "Limit", ""), checks.map { ch ->
+                            val u = displayUnits.unitFor(ch.quantity)
+                            listOf(ch.label + (ch.note?.let { " ($it)" } ?: ""), ValueFormat.number(u.fromSi(ch.value, c), u.decimals) + " " + u.symbol,
+                                (if (ch.isMaximum) "≤ " else "≥ ") + ValueFormat.number(u.fromSi(ch.limit, c), u.decimals) + " " + u.symbol, if (ch.passes) "pass" else "FAIL")
+                        })
+                    }
+                } else why = "Solve the flowsheet first: the service comes from the solved streams"
+            }
+            in app.flowstead.core.model.EquipmentSizing.TYPES -> {
+                kind = "equipment"
+                val i = o.equipmentSizing ?: app.flowstead.core.model.EquipmentSizingInput()
+                val heat = o.type in setOf(ObjectType.HeatExchanger, ObjectType.Heater, ObjectType.Cooler, ObjectType.AirCooler)
+                if (heat) {
+                    val groups = app.flowstead.core.model.DataLibrary.U_SERVICES.filter { if (o.type == ObjectType.AirCooler) it.group.startsWith("Air") else !it.group.startsWith("Air") }
+                    fields += choice("service", "Service (typical U)", i.service ?: app.flowstead.core.model.EquipmentSizing.defaultService(o.type), groups.map { it.id to "${it.group}: ${it.label} (${it.low.toInt()}–${it.high.toInt()} W/m²·K)" })
+                    fields += field("u", "U", i.u, Quantity.HeatTransferCoefficient, "the service's typical value")
+                    if (o.type != ObjectType.HeatExchanger) {
+                        fields += field("utilityIn", if (o.type == ObjectType.AirCooler) "Air in" else "Utility in", i.utilityIn, Quantity.Temperature)
+                        fields += field("utilityOut", if (o.type == ObjectType.AirCooler) "Air out" else "Utility out", i.utilityOut, Quantity.Temperature)
+                    }
+                    if (o.type == ObjectType.AirCooler) fields += buildJsonObject {
+                        put("key", "tubePasses"); put("label", "Tube passes"); put("kind", "number"); put("value", i.tubePasses?.toString() ?: ""); put("unit", ""); put("hint", "1")
+                    }
+                }
+                if (o.type in setOf(ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander)) fields += pctField("margin", "Driver margin over shaft power", i.margin?.let { it }, if (o.type == ObjectType.Pump) "API 610: 125 / 115 / 110 %" else "API 617: 110 %")
+                if (o.type == ObjectType.Tank) { fields += field("residenceTime", "Residence time", i.residenceTime, Quantity.Time, "10 min"); fields += pctField("fillFraction", "Filled to", i.fillFraction, "85 %") }
+                if (o.type in app.flowstead.core.model.EquipmentSizing.COLUMNS) {
+                    fields += field("traySpacing", "Tray spacing", i.traySpacing, Quantity.Length, "610 mm")
+                    fields += pctField("floodFraction", "Design flood", i.floodFraction, "80 %")
+                    fields += pctField("downcomerFraction", "Downcomer area", i.downcomerFraction, "12 %")
+                    fields += pctField("trayEfficiency", "Tray efficiency", i.trayEfficiency, "70 %")
+                    fields += field("weirHeight", "Weir height", i.weirHeight, Quantity.Length, "50 mm")
+                    fields += field("holeDiameter", "Hole diameter", i.holeDiameter, Quantity.Length, "5 mm")
+                    fields += pctField("holeFraction", "Hole area (of active)", i.holeFraction, "10 %")
+                }
+                if (rv.stale) why = "Solve the flowsheet first: the sizing uses its results"
+                else {
+                    val r = app.flowstead.core.model.EquipmentSizing.size(f, rv, o, i)
+                    if (r == null) why = "Solve the flowsheet (and connect the streams) to size it"
+                    else {
+                        rep.heading("Sizing")
+                        rep.kv(r.lines.map { l ->
+                            val q = l.quantity
+                            when {
+                                l.si != null && q != null && q != Quantity.Count -> Triple(l.label, rep.value(l.si, q), rep.unitOf(q).symbol)
+                                l.si != null && q == Quantity.Count -> Triple(l.label, ValueFormat.number(l.si, 0), "")
+                                else -> Triple(l.label, l.text ?: "", "")
+                            }
+                        })
+                        r.notes.forEach { rep.note(it) }
+                        r.warnings.forEach { rep.note(it, "warn") }
+                    }
+                }
+            }
+            else -> return "{\"applies\":false}"
+        }
+        if (why != null) rep.note(why, "warn")
+        return buildJsonObject {
+            put("applies", true); put("kind", kind)
+            put("report", FlowsheetJson.parseToJsonElement(rep.json()))
+            putJsonArray("fields") { fields.forEach { add(it) } }
+        }.toString()
+    }
+
+    /** Changes one sizing basis field of [id] ({key, value} as typed in the field's display unit; blank: the library's). */
+    fun sizingEdit(flowsheetJson: String, id: String, opJson: String): String = edit {
+        val f = fs(flowsheetJson)
+        val o = f.obj(id) ?: throw EditRejected("That object no longer exists")
+        val op = FlowsheetJson.parseToJsonElement(opJson).jsonObject
+        val key = op["key"]?.jsonPrimitive?.content ?: throw EditRejected("No field")
+        val text = op["value"]?.jsonPrimitive?.contentOrNull
+        val c = ctx(f)
+        fun q(qq: Quantity?) = parse(text, qq?.let { displayUnits.unitFor(it) }, c)
+        fun frac() = parse(text, null, c)?.let { it / 100 }
+        when (o.type) {
+            ObjectType.Separator, ObjectType.ThreePhaseSeparator -> {
+                val i = o.sizing ?: app.flowstead.core.model.SeparatorSizingInput()
+                val n = when (key) {
+                    "horizontal" -> i.copy(horizontal = text == "true")
+                    "mistEliminator" -> i.copy(mistEliminator = app.flowstead.core.model.MistEliminator.valueOf(text!!))
+                    "inletDevice" -> i.copy(inletDevice = app.flowstead.core.model.InletDevice.valueOf(text!!))
+                    "k" -> i.copy(k = q(Quantity.Velocity)?.also { if (it <= 0) throw EditRejected("K must be positive") })
+                    "holdupTime" -> i.copy(holdupTime = q(Quantity.Time) ?: app.flowstead.core.model.SeparatorSizingInput().holdupTime)
+                    "surgeTime" -> i.copy(surgeTime = q(Quantity.Time) ?: app.flowstead.core.model.SeparatorSizingInput().surgeTime)
+                    "oilRetention" -> i.copy(oilRetention = q(Quantity.Time) ?: app.flowstead.core.model.SeparatorSizingInput().oilRetention)
+                    "waterRetention" -> i.copy(waterRetention = q(Quantity.Time) ?: app.flowstead.core.model.SeparatorSizingInput().waterRetention)
+                    "lengthToDiameter" -> i.copy(lengthToDiameter = q(null)?.also { if (it < 1) throw EditRejected("L/D below 1 is not a horizontal vessel") })
+                    else -> throw EditRejected("Unknown field")
+                }
+                FlowsheetEditing.setSizing(f, o.id, n.takeIf { it != app.flowstead.core.model.SeparatorSizingInput() })
+            }
+            ObjectType.PipeSegment -> {
+                if (key == "service") return@edit FlowsheetEditing.setRef(f, o.id, app.flowstead.core.model.LineSizing.SERVICE, text?.takeIf { it.isNotEmpty() })
+                val svc = app.flowstead.core.model.LineSizing.service(f, o, ResultView(null, f.modelHash())).let { it } ?: o.refs[app.flowstead.core.model.LineSizing.SERVICE]?.let { s -> app.flowstead.core.model.LineService.entries.firstOrNull { it.name.equals(s.replace("_", ""), true) } }
+                    ?: throw EditRejected("Choose the service (or solve) first: criteria are set per service")
+                val all = f.sizingCriteria ?: app.flowstead.core.model.SizingCriteria()
+                val cr = all.forService(svc)
+                fun sp(qq: Quantity?) = q(qq)?.let { app.flowstead.core.model.Spec(it, qq?.let { x -> displayUnits.unitFor(x).id } ?: "") }
+                val n = when (key) {
+                    "maxVelocity" -> cr.copy(maxVelocity = sp(Quantity.Velocity))
+                    "minVelocity" -> cr.copy(minVelocity = sp(Quantity.Velocity))
+                    "maxMomentumFlux" -> cr.copy(maxMomentumFlux = sp(Quantity.MomentumFlux))
+                    "maxFrictionGradient" -> cr.copy(maxFrictionGradient = sp(Quantity.PressureGradient))
+                    "maxMach" -> cr.copy(maxMach = sp(null))
+                    "erosionalC" -> cr.copy(erosionalC = sp(null))
+                    else -> throw EditRejected("Unknown field")
+                }
+                FlowsheetEditing.setSizingCriteria(f, all.with(svc, n))
+            }
+            in app.flowstead.core.model.EquipmentSizing.TYPES -> {
+                val i = o.equipmentSizing ?: app.flowstead.core.model.EquipmentSizingInput()
+                val n = when (key) {
+                    "service" -> i.copy(service = text?.takeIf { it.isNotEmpty() })
+                    "u" -> i.copy(u = q(Quantity.HeatTransferCoefficient))
+                    "utilityIn" -> i.copy(utilityIn = q(Quantity.Temperature))
+                    "utilityOut" -> i.copy(utilityOut = q(Quantity.Temperature))
+                    "tubePasses" -> i.copy(tubePasses = parse(text, null, c)?.let { v -> if (v < 1 || v > 8 || v != kotlin.math.floor(v)) throw EditRejected("Between 1 and 8 tube passes") else v.toInt() })
+                    "margin" -> i.copy(margin = frac()?.also { if (it < 1) throw EditRejected("A driver margin is 100 % or more") })
+                    "residenceTime" -> i.copy(residenceTime = q(Quantity.Time))
+                    "fillFraction" -> i.copy(fillFraction = frac()?.also { if (it <= 0 || it > 1) throw EditRejected("Between 0 and 100 %") })
+                    "traySpacing" -> i.copy(traySpacing = q(Quantity.Length))
+                    "floodFraction" -> i.copy(floodFraction = frac())
+                    "downcomerFraction" -> i.copy(downcomerFraction = frac())
+                    "trayEfficiency" -> i.copy(trayEfficiency = frac())
+                    "weirHeight" -> i.copy(weirHeight = q(Quantity.Length))
+                    "holeDiameter" -> i.copy(holeDiameter = q(Quantity.Length))
+                    "holeFraction" -> i.copy(holeFraction = frac())
+                    else -> throw EditRejected("Unknown field")
+                }
+                FlowsheetEditing.setEquipmentSizing(f, o.id, n.takeIf { it != app.flowstead.core.model.EquipmentSizingInput() })
+            }
+            else -> throw EditRejected("${o.tag} has no sizing")
+        }
+    }
+
     // ---------- performance curves (D48) ----------
 
     /**
@@ -97,6 +320,7 @@ object EquipmentTools {
             Specification.curveProblem(o)?.let { put("problem", it) }
             put("points", points(curve.points))
             put("fit", curve.fit ?: ""); put("order", curve.order?.toString() ?: "")
+            if (!pump) put("path", if (curve.polytropic) CurvePaths.POLYTROPIC else CurvePaths.ADIABATIC)
             put("speed", num(curve.speed, null, c, 0)); put("operatingSpeed", num(curve.operatingSpeed, null, c, 0))
             put("solvesSpeed", curve.solvesSpeed)
             (results.value(o.id, "operatingSpeed") as? DisplayValue.Calculated)?.takeIf { !results.stale }?.let { put("solvedSpeed", ValueFormat.number(it.si, 0)) }
@@ -104,10 +328,10 @@ object EquipmentTools {
             // The curve with the engine's operating point on it, in the user's units.
             if (curve.points.size >= 2 && Specification.curveProblem(o) == null) {
                 val q = (results.value(o.id, "inletVolumeFlow") as? DisplayValue.Calculated)?.takeIf { !results.stale }?.si
-                val h = (results.value(o.id, if (pump) "head" else "adiabaticHead") as? DisplayValue.Calculated)?.takeIf { !results.stale }?.si
+                val h = (results.value(o.id, if (pump) "head" else curve.headKey) as? DisplayValue.Calculated)?.takeIf { !results.stale }?.si
                 putJsonObject("plot") {
                     put("kind", "plot"); put("title", if (pump) "Pump curve" else "Compressor curve")
-                    put("xLabel", "Actual inlet flow, ${qu.symbol}"); put("yLabel", "${if (pump) "Head" else "Adiabatic head"}, ${hu.symbol}")
+                    put("xLabel", "Actual inlet flow, ${qu.symbol}"); put("yLabel", "${if (pump) "Head" else if (curve.polytropic) "Polytropic head" else "Adiabatic head"}, ${hu.symbol}")
                     putJsonArray("series") {
                         fun line(label: String, pts: List<CurvePoint>) = addJsonObject {
                             put("label", label)
@@ -142,7 +366,7 @@ object EquipmentTools {
         fun withPoints(cv: PerformanceCurve, pts: List<CurvePoint>) =
             if (line < 0) cv.copy(points = pts) else cv.copy(speedLines = cv.speedLines.toMutableList().also { it[line] = it[line].copy(points = pts) })
         val next: PerformanceCurve? = when (s("op")) {
-            "on" -> PerformanceCurve()
+            "on" -> PerformanceCurve.newFor(o.type)
             "off" -> null
             "point" -> {
                 val pts = pointsOf(curve).toMutableList()
@@ -168,6 +392,7 @@ object EquipmentTools {
                 "order" -> curve.copy(order = parse(s("value"), null, c)?.toInt())
                 "speed" -> curve.copy(speed = parse(s("value"), null, c))
                 "operatingSpeed" -> curve.copy(operatingSpeed = parse(s("value"), null, c))
+                "path" -> curve.copy(path = if (s("value") == CurvePaths.POLYTROPIC) CurvePaths.POLYTROPIC else null)
                 else -> curve
             }
             // As the app: the affinity-law copy of the rated curve at 80 % of the lowest speed; the user types the vendor's figures over it.
@@ -208,7 +433,8 @@ object EquipmentTools {
                     val k = PipeFittings.get(s.fitting)
                     addJsonObject {
                         k?.let { put("fitting", it.id) }
-                        put("name", k?.let { "${it.name} · ${PipeFittings.describe(it)}" } ?: "Straight run")
+                        put("name", k?.let { "${it.name} · ${PipeFittings.describe(s)}" } ?: "Straight run")
+                        if (s.fitting == PipeFittings.USER_K) put("k", s.k?.let { ValueFormat.number(it, 4).replace(",", "") } ?: "")
                         put("length", num(s.length, lu, c)); put("rise", num(s.elevationChange, lu, c)); put("id", num(s.innerDiameter, su, c))
                         put("increments", s.increments?.toString() ?: ""); put("count", s.count.toString())
                     }
@@ -220,12 +446,12 @@ object EquipmentTools {
             val run = list.filter { !it.isFitting }.sumOf { (it.length ?: 0.0) * it.count }
             val rise = list.filter { !it.isFitting }.sumOf { (it.elevationChange ?: 0.0) * it.count }
             val eq = list.mapNotNull { s -> PipeFittings.get(s.fitting)?.takeIf { it.lOverD }?.let { k -> (s.innerDiameter ?: d0)?.let { k.value * it * s.count } } }.sum()
-            val kSum = list.mapNotNull { s -> PipeFittings.get(s.fitting)?.takeIf { !it.lOverD }?.let { it.value * s.count } }.sum()
+            val kSum = list.mapNotNull { s -> PipeFittings.kOf(s)?.let { it * s.count } }.sum()
             if (list.isNotEmpty()) put("totals",
                 "Straight length ${num(run, lu, c)} ${lu.symbol}, rise ${num(rise, lu, c)} ${lu.symbol}" +
                     (if (eq > 0) "; fittings as ${num(eq, lu, c)} ${lu.symbol} more pipe" else "") +
                     (if (kSum > 0) "; K ${ValueFormat.number(kSum, 2)} velocity heads" else "") +
-                    ". Each fitting's loss is DWSIM's (Crane L/D or K).")
+                    ". Each fitting's loss is DWSIM's (Crane L/D or K, or the K you give).")
         }.toString()
     }
 
@@ -250,6 +476,7 @@ object EquipmentTools {
                     "id" -> x.copy(innerDiameter = parse(s("value"), su, c))
                     "increments" -> x.copy(increments = parse(s("value"), null, c)?.toInt())
                     "count" -> x.copy(count = (parse(s("value"), null, c) ?: 1.0).toInt().coerceAtLeast(1))
+                    "k" -> x.copy(k = parse(s("value"), null, c)?.also { if (!(it > 0)) throw EditRejected("K must be positive") })
                     else -> x
                 }
             }

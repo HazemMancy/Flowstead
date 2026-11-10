@@ -9,7 +9,7 @@ Flowstead's engine is DWSIM. Nothing here tracks a moving branch.
 | DWSIM version | 10.2.15 (D131; 10.2.12 `c3dc1b0c` before) |
 | Build | From source by `engine/scripts/fetch-dwsim.sh`: `dotnet publish` of `engine/DWSIM.Automation` (the headless engine and its references) for linux-x64, plus the user compounds in `content/addcomps`. Desktop UI projects are not built. |
 | Runtime | .NET 10: `Microsoft.NETCore.App` 10 on the server, the Mono runtime pack 10.0.13 on the phone |
-| Flowstead patches | `engine/patches/dwsim-blackoil.patch` (D101) and `dwsim-vessel-liquids.patch` (D103), applied by `fetch-dwsim.sh` |
+| Flowstead patches | `engine/patches/dwsim-blackoil.patch` (D101), `dwsim-vessel-liquids.patch` (D103), `dwsim-browser.patch` (the browser build) and `dwsim-pipe-user-k.patch` (D145), applied by `fetch-dwsim.sh` |
 | Android natives | SkiaSharp 2.88.9 (`SkiaSharp.NativeAssets.Android`, SHA-256 pinned in `engine/embedded/android/prepare.sh`) |
 
 ## Why a source build

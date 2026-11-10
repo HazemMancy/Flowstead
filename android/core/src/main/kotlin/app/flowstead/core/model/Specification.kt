@@ -505,6 +505,10 @@ object Specification {
             x.roughness?.let { if (it < 0) return SpecStatus.Invalid("$what: roughness can't be negative") }
             if (x.fitting != null) {
                 if (PipeFittings.get(x.fitting) == null) return SpecStatus.Invalid("$what: unknown fitting '${x.fitting}'")
+                if (x.fitting == PipeFittings.USER_K) {
+                    if (x.k == null) needs += "section ${i + 1} K"
+                    else if (!(x.k > 0 && x.k < 1e5)) return SpecStatus.Invalid("$what: K must be positive")
+                }
                 return@forEachIndexed
             }
             val len = x.length

@@ -13,6 +13,7 @@ import app.flowstead.core.api.ReliefScenario
 import app.flowstead.core.api.ReliefScenarioKinds
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.api.SolveStatus
+import app.flowstead.core.api.VesselGeometry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -68,6 +69,19 @@ class SafetyTest {
         assertEquals(3.0, req.scenarios.single().massFlow)
         assertEquals(310.0, req.operatingTemperature)
         assertEquals(7.9e5, req.operatingPressure)
+    }
+
+    @Test
+    fun aBlowdownTakesTheDesignPressureToTheEngine() {
+        // D142: the engine aims at the lower of 6.9 barg and half the design gauge pressure (API 521 §5.20.1).
+        val c = DepressuringCase("b", "Blowdown", protectedId = "v", vessel = VesselGeometry(1.5, 4.0), designPressure = 13.01325e5)
+        assertNull(Safety.depressuringProblem(fs, results, c))
+        assertEquals(13.01325e5, Safety.depressuringRequest(fs, results, c).designPressure)
+        assertNull(Safety.depressuringRequest(fs, results, c.copy(designPressure = null)).designPressure)
+        assertEquals("The design pressure must be above the back pressure", Safety.depressuringProblem(fs, results, c.copy(designPressure = 101325.0)))
+        assertEquals("half the design gauge pressure, the lower of the two (API 521)", Safety.targetBasisText("half the design pressure"))
+        // An older case file (no design pressure) still reads.
+        assertNull(FlowsheetJson.decodeFromString(DepressuringCase.serializer(), "{\"id\":\"b\",\"name\":\"B\"}").designPressure)
     }
 
     @Test

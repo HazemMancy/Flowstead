@@ -75,6 +75,28 @@ public sealed class PipeSectionTests(EngineFixture engine)
     }
 
     [Fact]
+    public async Task AFittingTakesTheKTheUserGives()
+    {
+        // D145: a user's K is DWSIM's own K arithmetic. K 1 is exactly the normal exit (DWSIM's K 1); K 4.2 (a vendor's
+        // strainer, say) adds 4.2 ρv²/2, with ρ and v the water's (hand: ṁ/ρ over πD²/4).
+        var basis = await Solve(Line([Run(100)]));
+        var liquid = basis.Objects["f"].Phases!.First(p => p.Key != "overall").Value.Properties;
+        var rho = liquid["density"];
+        var v = MassFlow / rho / (Math.PI * D * D / 4);
+        var exit = Dp(await Solve(Line([Run(100), Fit("exit_normal")])));
+        var one = Dp(await Solve(Line([Run(100), new PipeSection { Fitting = PipeFittings.UserK, K = 1.0 }])));
+        Assert.Equal(exit, one, exit * 1e-9);
+        var strainer = Dp(await Solve(Line([Run(100), new PipeSection { Fitting = PipeFittings.UserK, K = 4.2, Count = 2 }])));
+        Assert.Equal(2 * 4.2 * rho * v * v / 2, strainer - Dp(basis), 2 * 4.2 * rho * v * v / 2 * 0.01);
+        // Without its K it is refused, not taken as nothing.
+        var none = await Solve(Line([Run(100), new PipeSection { Fitting = PipeFittings.UserK }]));
+        Assert.Contains(none.Messages, m => m.Level == MessageLevel.Error && m.Text.Contains("give the fitting's K"));
+        // Its DWSIM name carries the K, read back exactly.
+        Assert.Equal(0.857, PipeFittings.KOf(PipeFittings.DwsimType(new PipeSection { Fitting = PipeFittings.UserK, K = 0.857 })));
+        Assert.Equal(PipeFittings.UserK, PipeFittings.FromDwsim("Fitting K=0.857 [29]"));
+    }
+
+    [Fact]
     public async Task SectionsAddUpAndCarryTheirOwnDiameter()
     {
         // Two runs of 50 m are one of 100 m; a 3" run (77.9 mm) in between costs about (102.3/77.9)^5 ≈ 3.9 times more per metre.

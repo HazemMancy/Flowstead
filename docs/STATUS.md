@@ -206,6 +206,12 @@ _Last updated: 2026-11-09_
 - **Into a sub-flowsheet by drag and drop; duplicate a sub-flowsheet (D139)** — one object or a selection dropped on a block (or Move into…) goes inside it, streams crossing its edge matched; touch and mouse on the web, a Select tool on the phone; Duplicate copies a block with everything inside.
 - **App 3.4.1 and Web 1.14**: the review fixes (D137, D138) and drag-into and duplicate for sub-flowsheets (D139).
 - **Web 1.15 (D140): automation interface and the Flowstead Claude skill** — `window.flowstead.api` builds, reads, changes, solves, sizes and runs every tool through the page's own code; skills/flowstead-automation drives it from Claude in Chrome or Edge and judges the results against standards and the project's criteria.
+- **Web 1.16 (D141): sizing in the Design tab** — separator, equipment and line sizing as in the app, with its basis in your units; browser test 4p checks it against the API and Souders–Brown.
+- **Blowdown to API 521's target on the design pressure (D142)** — the lower of 6.9 barg and half the design gauge pressure, the wall at the design pressure, the basis reported; checked by hand in SafetyTests.
+- **Air cooler crossflow F (D143)** — both fluids unmixed, N tube passes, exact by integration; checked against Nusselt's series, Kays & London and the counter-series formula.
+- **Polytropic compressor curves; heads that are the work (D144)** — DWSIM's own heads were a few per cent off; checked on ideal-gas nitrogen.
+- **A fitting by its K (D145)** — a DWSIM patch applies it as its own K fittings; K 1 equals DWSIM's exit to 10⁻⁹.
+- **App 3.5.0 and Web 1.16**: D141–D145.
 - **Web 1.11 (D130):** the thermodynamics tools in Basis: binary T–x–y/P–x–y with liquid–liquid branches, ternary with tie lines, true critical point, package comparison, property charts. Checked against NIST boiling and critical points and IAPWS-95 water density.
 
 ## Next

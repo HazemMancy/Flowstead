@@ -63,7 +63,7 @@ object ResultKeys {
             "condenserDuty", "reboilerDuty",
         )
         ObjectType.Pump -> listOf("power", "pressureRise", "head", "temperatureChange", "efficiency", "npshAvailable", "npshRequired", "feedBubblePressure", "inletVolumeFlow")
-        ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency", "inletVolumeFlow", "surgeMargin")
+        ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency", "polytropicHead", "polytropicEfficiency", "inletVolumeFlow", "surgeMargin")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
         ObjectType.HeatExchanger -> listOf("duty", "lmtd", "minimumApproach", "pinchLocation", "pinchHotTemperature", "pinchColdTemperature", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
         ObjectType.PipeSegment -> listOf("pressureDrop", "frictionPressureDrop", "staticPressureDrop") + PIPE_HYDRAULICS +
@@ -104,7 +104,7 @@ object ResultKeys {
         "pressure", "outletPressure" -> Quantity.Pressure
         "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop",
         "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop" -> Quantity.PressureDifference
-        "vapourFraction", "phaseMoleFraction", "efficiency" -> Quantity.Fraction
+        "vapourFraction", "phaseMoleFraction", "efficiency", "polytropicEfficiency" -> Quantity.Fraction
         "compressibilityFactor", "pressureRatio", "beta", "refluxRatio", "minimumRefluxRatio",
         "minimumStages", "actualStages", "optimalFeedStage" -> Quantity.Ratio
         "iterations" -> Quantity.Count
@@ -180,6 +180,8 @@ object ResultKeys {
         "pressureRatio" -> "Pressure ratio"
         "efficiency" -> "Adiabatic efficiency"
         "adiabaticHead" -> "Adiabatic head"
+        "polytropicHead" -> "Polytropic head"
+        "polytropicEfficiency" -> "Polytropic efficiency"
         "lmtd" -> "LMTD"
         "minimumApproach" -> "Minimum approach (zone analysis)"
         "pinchLocation" -> "Pinch at (fraction of the duty from the hot inlet)"

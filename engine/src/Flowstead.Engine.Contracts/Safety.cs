@@ -155,8 +155,13 @@ public sealed record DepressuringRequest
     public double BackPressure { get; init; } = 101325;
     public double? OrificeDiameter { get; init; }
     public double DischargeCoefficient { get; init; } = 0.84;
-    /// <summary>Pressure to reach, Pa abs; default the lower of 6.9 barg and half the initial gauge pressure (API 521).</summary>
+    /// <summary>
+    /// Pressure to reach, Pa abs. Default (API 521 §5.20.1): the lower of 690 kPa gauge and half the design gauge pressure,
+    /// or half the starting gauge pressure when no <see cref="DesignPressure"/> is given (D142).
+    /// </summary>
     public double? TargetPressure { get; init; }
+    /// <summary>The vessel's design pressure, Pa abs: the basis of the default target and of the default wall thickness (D142).</summary>
+    public double? DesignPressure { get; init; }
     public double TargetTime { get; init; } = 900;
     public double Duration { get; init; } = 1800;
     public ReliefScenario? Fire { get; init; }
@@ -200,6 +205,8 @@ public sealed record DepressuringResult
     public double OrificeDiameter { get; init; }
     public bool OrificeSized { get; init; }
     public double TargetPressure { get; init; }
+    /// <summary>What set the target: "given", "6.9 barg", "half the design pressure" or "half the starting pressure" (D142).</summary>
+    public string? TargetBasis { get; init; }
     public double? TimeToTarget { get; init; }
     /// <summary>Lowest vapour and liquid temperatures, and the lowest inner-surface metal temperature anywhere.</summary>
     public double MinimumTemperature { get; init; }

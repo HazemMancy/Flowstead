@@ -35,6 +35,21 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.16**
+- **Sizing in the Design tab (D141):** a separator's, an exchanger's, a machine's, a tank's, a column's and a line's
+  sizing, as in the app, with its basis (K, hold-up and surge times, mist pad, inlet device, U, utility temperatures,
+  margin, tray spacing, flood, line criteria) typed in your units next to it.
+- **Blowdown to API 521's target on the design pressure (D142):** give the vessel's design pressure and the orifice is
+  sized to the lower of 6.9 barg and half of it in 15 minutes; the design pressure also sets the wall thickness. The
+  result says which basis set the target.
+- **Air coolers on a crossflow F (D143):** both fluids unmixed in the tube passes you give, worked out exactly; it
+  was the shell-and-tube F before.
+- **Polytropic compressor curves (D144):** choose the path a vendor's curve is drawn on; new curves are polytropic.
+  Compressor heads are now the true isentropic and polytropic work (DWSIM's own figures were a few per cent off), so a
+  compressor on an adiabatic curve settles a little higher than before.
+- **A fitting by its K (D145):** any valve, strainer or nozzle with the K its vendor gives, applied by DWSIM as its own
+  K fittings.
+
 **Web 1.15**
 - **Automation interface (D140):** `window.flowstead.api` lets an agent in the browser, or a script, build, read,
   change, solve, size and judge a case through the page's own code: every edit is yours (on the canvas, undoable),

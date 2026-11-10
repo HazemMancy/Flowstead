@@ -167,4 +167,33 @@ class SpecificationTest {
         assertFalse(specProblem(base.copy(speed = 2950.0)) is SpecStatus.OverSpecified)
         assertTrue(base.copy(speed = 2950.0).solvesSpeed)
     }
+
+    @Test
+    fun newCompressorCurvesArePolytropicAndOldFilesStayAdiabatic() {
+        // D144: a new compressor curve is drawn on the polytropic path; a pump's has none; a saved curve without a path
+        // was always adiabatic, and stays so.
+        assertTrue(PerformanceCurve.newFor(ObjectType.Compressor).polytropic)
+        assertEquals("polytropicHead", PerformanceCurve.newFor(ObjectType.Compressor).headKey)
+        assertEquals(null, PerformanceCurve.newFor(ObjectType.Pump).path)
+        val old = FlowsheetJson.decodeFromString(PerformanceCurve.serializer(), "{\"points\":[{\"flow\":0.1,\"head\":9000.0}]}")
+        assertFalse(old.polytropic)
+        assertEquals("adiabaticHead", old.headKey)
+        // Saved as adiabatic it writes no path, so older apps read it unchanged.
+        assertFalse(FlowsheetJson.encodeToString(PerformanceCurve.serializer(), old).contains("path"))
+    }
+
+    @Test
+    fun aUserKFittingNeedsItsKAndCountsInTheTotals() {
+        // D145: the fitting's own K; none given is a missing input, not zero.
+        val withK = PipeSegmentSection(fitting = PipeFittings.USER_K, k = 0.85, count = 2)
+        assertEquals(0.85, PipeFittings.kOf(withK))
+        assertEquals("K 0.85", PipeFittings.describe(withK))
+        assertEquals(5.67, PipeFittings.kOf(PipeSegmentSection(fitting = "reducer_2_1")))
+        assertEquals(null, PipeFittings.kOf(PipeSegmentSection(fitting = "globe_valve")))
+        val pipe = SimObject("p", "P-1", ObjectType.PipeSegment, specs = mapOf(SpecKey.INNER_DIAMETER to Spec(0.1, "m")),
+            pipeSections = listOf(PipeSegmentSection(length = 100.0), PipeSegmentSection(fitting = PipeFittings.USER_K)))
+        val st = Specification.status(Flowsheet(), pipe)
+        assertTrue(st is SpecStatus.UnderSpecified && st.needs.any { "K" in it }, "$st")
+        assertIs<SpecStatus.Invalid>(Specification.status(Flowsheet(), pipe.copy(pipeSections = listOf(PipeSegmentSection(length = 100.0), withK.copy(k = -1.0)))))
+    }
 }

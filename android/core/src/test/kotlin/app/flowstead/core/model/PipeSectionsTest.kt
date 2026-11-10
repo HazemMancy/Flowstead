@@ -77,7 +77,7 @@ class PipeSectionsTest {
 
     @Test
     fun everyFittingIsDescribed() {
-        assertEquals(28, PipeFittings.ALL.size)
+        assertEquals(29, PipeFittings.ALL.size) // DWSIM's 28 and the K you give (D145)
         assertEquals(PipeFittings.ALL.size, PipeFittings.ALL.map { it.id }.toSet().size)
         assertEquals("L/D 340", PipeFittings.describe(PipeFittings.get("globe_valve")!!))
         assertEquals("K 5.67", PipeFittings.describe(PipeFittings.get("reducer_2_1")!!))

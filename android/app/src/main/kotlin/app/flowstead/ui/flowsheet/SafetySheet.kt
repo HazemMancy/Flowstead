@@ -471,6 +471,9 @@ private fun DepressuringEditor(
         }
         QuantityField("Restriction orifice diameter", c.orificeDiameter?.let { Spec(it, defaultUnit(SpecKey.INNER_DIAMETER, Quantity.Length, unitSet).id) }, Quantity.Length, defaultUnit(SpecKey.INNER_DIAMETER, Quantity.Length, unitSet), ctx,
             "bd_ro_${c.id}", hint = "sized for 15 min if empty", testTag = "bd_orifice") { save(c.copy(orificeDiameter = it?.si)) }
+        QuantityField("Design pressure", c.designPressure?.let { Spec(it, unitSet.unitFor(Quantity.Pressure).id) }, Quantity.Pressure, unitSet.unitFor(Quantity.Pressure), ctx,
+            "bd_design_${c.id}", hint = "half the starting pressure if empty", testTag = "bd_design") { save(c.copy(designPressure = it?.si)) }
+        Calculated("API 521 blows down to the lower of 6.9 barg and half the design gauge pressure in about 15 minutes; the design pressure also sets the wall (ASME VIII-1) for the wall temperatures.")
         CheckLine("Fire during depressuring (API 521 heat input)", c.withFire) { save(c.copy(withFire = it)) }
         Calculated("Two zones (vapour and liquid, not in equilibrium) and a wall conducting through its thickness, wet and dry sections apart.")
         QuantityField("Inside heat transfer coefficient", c.heatTransferCoefficient?.let { Spec(it, unitSet.unitFor(Quantity.HeatTransferCoefficient).id) }, Quantity.HeatTransferCoefficient,
@@ -495,6 +498,7 @@ private fun DepressuringEditor(
                     (r.timeToTarget?.let { "reached after ${ValueFormat.number(it / 60, 1)} min" } ?: "not reached"),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            Safety.targetBasisText(r.targetBasis)?.let { Text("Target: $it", style = MaterialTheme.typography.bodySmall) }
             Text(
                 "Lowest vapour temperature ${t(r.minimumTemperature)}" + (r.minimumLiquidTemperature?.let { "; liquid ${t(it)}" } ?: "") +
                     "; lowest inner wall ${t(r.minimumWallTemperature)}; wall ${ValueFormat.number(r.wallThickness * 1000, 1)} mm",

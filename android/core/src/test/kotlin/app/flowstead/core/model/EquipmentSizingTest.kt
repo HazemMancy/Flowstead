@@ -26,6 +26,34 @@ class EquipmentSizingTest {
     }
 
     @Test
+    fun anAirCoolerTakesTheCrossflowF() {
+        // Process 120 → 60 °C, 2 MW, against air 35 → 50 °C (the library's 15 K rise), U 500 W/m²·K, one tube pass.
+        val o = SimObject("e", "AC-100", ObjectType.AirCooler, equipmentSizing = EquipmentSizingInput(u = 500.0))
+        val fs = Flowsheet(compounds = listOf("Water"), objects = listOf(SimObject("a", "IN", ObjectType.MaterialStream), o, SimObject("b", "OUT", ObjectType.MaterialStream)),
+            connections = listOf(Connection("a", 0, "e", 0), Connection("e", 0, "b", 0)))
+        fun st(t: Double) = app.flowstead.core.api.ObjectResult(app.flowstead.core.api.ObjectStatus.Solved, properties = mapOf("temperature" to t))
+        val solve = app.flowstead.core.api.SolveResult(app.flowstead.core.api.SolveStatus.Converged, objects = mapOf(
+            "a" to st(393.15), "b" to st(333.15),
+            "e" to app.flowstead.core.api.ObjectResult(app.flowstead.core.api.ObjectStatus.Solved, properties = mapOf("duty" to -2e6))))
+        val view = ResultView(StoredSolve(solve, fs.modelHash(), 0), fs.modelHash())
+        // Hand: P = 60/85, R = 15/60 on the process side. Invert Nusselt's one-pass series for the NTU (bisection, here),
+        // F = counter-current NTU / that NTU, A = Q/(U·F·LMTD) with LMTD over (120 − 50) and (60 − 35).
+        val p = 60.0 / 85
+        val r = 0.25
+        var lo = 0.0
+        var hi = 20.0
+        repeat(200) { val m = (lo + hi) / 2; if (CrossflowF.onePassSeries(m, r) < p) lo = m else hi = m }
+        val f = kotlin.math.ln((1 - r * p) / (1 - p)) / (1 - r) / lo
+        val lm = (70.0 - 25.0) / kotlin.math.ln(70.0 / 25.0)
+        val res = EquipmentSizing.size(fs, view, o, o.equipmentSizing!!)!!
+        assertEquals(f, res.lines.first { it.label.startsWith("F (crossflow, 1 tube pass") }.si!!, 1e-5)
+        assertEquals(2e6 / (500 * f * lm), res.lines.first { it.label == "Bare-tube area" }.si!!, 1e-3)
+        // More passes: a higher F, a smaller bundle.
+        val two = EquipmentSizing.size(fs, view, o, EquipmentSizingInput(u = 500.0, tubePasses = 2))!!
+        assertTrue(two.lines.first { it.label.startsWith("F (crossflow, 2 tube passes") }.si!! > f)
+    }
+
+    @Test
     fun driversTakeTheApiMarginAndTheNextIecMotor() {
         assertEquals(1.25, DataLibrary.pumpMargin(10e3))
         assertEquals(1.15, DataLibrary.pumpMargin(30e3))

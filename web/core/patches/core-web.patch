@@ -288,7 +288,7 @@ diff -ruN a/app/flowstead/core/model/Plots.kt b/app/flowstead/core/model/Plots.k
 diff -ruN a/app/flowstead/core/model/Results.kt b/app/flowstead/core/model/Results.kt
 --- a/app/flowstead/core/model/Results.kt
 +++ b/app/flowstead/core/model/Results.kt
-@@ -375,8 +375,9 @@
+@@ -377,8 +377,9 @@
  private fun hashOf(solved: Flowsheet, positions: Boolean): String {
      // Where a sub-flowsheet block sits changes no result either (D132).
      val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) }, subflowsheets = solved.subflowsheets.map { it.copy(x = 0.0, y = 0.0) })
@@ -303,7 +303,7 @@ diff -ruN a/app/flowstead/core/model/Results.kt b/app/flowstead/core/model/Resul
 diff -ruN a/app/flowstead/core/model/Safety.kt b/app/flowstead/core/model/Safety.kt
 --- a/app/flowstead/core/model/Safety.kt
 +++ b/app/flowstead/core/model/Safety.kt
-@@ -141,11 +141,11 @@
+@@ -146,11 +146,11 @@
      fun network(sections: List<PipeSection>): Pair<VesselGeometry, Double?>? {
          val ok = sections.filter { it.insideDiameter > 0 && it.length > 0 }
          if (ok.isEmpty()) return null
@@ -340,7 +340,7 @@ diff -ruN a/app/flowstead/core/model/Specification.kt b/app/flowstead/core/model
          return null
      }
  
-@@ -544,7 +546,7 @@
+@@ -548,7 +550,7 @@
          }
      }
  

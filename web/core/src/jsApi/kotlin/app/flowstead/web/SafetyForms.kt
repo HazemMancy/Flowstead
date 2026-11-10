@@ -330,6 +330,7 @@ object SafetyForms {
                 rep.heading("Orifice ${ValueFormat.number(r.orificeDiameter * 1000, 1)} mm" + if (r.orificeSized) " (sized)" else "")
                 rep.kv(listOf(
                     Triple("Target ${rep.withUnit(r.targetPressure, Quantity.Pressure)}", r.timeToTarget?.let { "reached after ${ValueFormat.number(it / 60, 1)} min" } ?: "not reached", ""),
+                ) + listOfNotNull(Safety.targetBasisText(r.targetBasis)?.let { Triple("Target basis", it, "") }) + listOf(
                     Triple("Lowest vapour temperature", t(r.minimumTemperature), ""),
                 ) + listOfNotNull(r.minimumLiquidTemperature?.let { Triple("Lowest liquid temperature", t(it), "") }) + listOf(
                     Triple("Lowest inner wall temperature", t(r.minimumWallTemperature), ""),
@@ -486,6 +487,8 @@ private class SafetyForm(val fs: Flowsheet, val ctx: UnitContext) {
         note("Starts from its operating pressure, temperature and contents (its feed, from the last solve).")
         geometry(c.protectedId, c.vessel)
         q("backPressure", "Back pressure", c.backPressure, Quantity.Pressure, "atmospheric", blank = 101325.0)
+        q("designPressure", "Design pressure", c.designPressure, Quantity.Pressure, "half the starting pressure if empty")
+        note("API 521 blows down to the lower of 6.9 barg and half the design gauge pressure in about 15 minutes; the design pressure also sets the wall (ASME VIII-1) for the wall temperatures.")
         q("orificeDiameter", "Restriction orifice diameter", c.orificeDiameter, Quantity.Length, "sized for 15 min if empty", small = true)
         bool("withFire", "Fire during depressuring (API 521 heat input)", c.withFire)
         note("Two zones (vapour and liquid, not in equilibrium) and a wall conducting through its thickness, wet and dry sections apart.")

@@ -100,6 +100,11 @@ data class DepressuringCase(
     val backPressure: Double = 101325.0,
     /** Null: Flowstead sizes the orifice to the 15-minute target. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
+    /**
+     * The vessel's design pressure, Pa abs (D142). API 521 §5.20.1 aims a blowdown at the lower of 6.9 barg and half of
+     * it; null: half the starting gauge pressure, with a warning. It also sets the ASME wall thickness, unless given.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val designPressure: Double? = null,
     val withFire: Boolean = false,
     /** Null: Flowstead's correlations (natural convection, nucleate boiling); 0: adiabatic. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val heatTransferCoefficient: Double? = null,
@@ -302,14 +307,25 @@ object Safety {
         c.protectedId == null || fs.objects.none { it.id == c.protectedId } -> "Choose the vessel or pipe"
         geometry(fs, c.protectedId, c.vessel) == null -> "Give the vessel's dimensions (a pipe needs its inside diameter and length)"
         results.stale || contents(fs, results, c.protectedId) == null -> "Solve the flowsheet first: the vessel's contents come from the solve"
+        c.designPressure != null && c.designPressure <= c.backPressure -> "The design pressure must be above the back pressure"
         else -> null
+    }
+
+    /** Why the target is what it is, for the result (the engine's basis in words; API 521 §5.20.1). */
+    fun targetBasisText(basis: String?): String? = when (basis) {
+        "given" -> "as given"
+        "6.9 barg" -> "6.9 barg, the lower of the two (API 521)"
+        "half the design pressure" -> "half the design gauge pressure, the lower of the two (API 521)"
+        "half the starting pressure" -> "half the starting gauge pressure: give the design pressure for API 521's basis"
+        null -> null
+        else -> basis
     }
 
     fun depressuringRequest(fs: Flowsheet, results: ResultView, c: DepressuringCase): DepressuringRequest {
         val contents = contents(fs, results, c.protectedId) ?: error("No contents")
         return DepressuringRequest(
             flowsheet = SubflowsheetSolve.forObject(fs, c.protectedId), composition = contents.composition, initialPressure = contents.pressure, initialTemperature = contents.temperature,
-            vessel = geometry(fs, c.protectedId, c.vessel)!!, backPressure = c.backPressure, orificeDiameter = c.orificeDiameter,
+            vessel = geometry(fs, c.protectedId, c.vessel)!!, backPressure = c.backPressure, orificeDiameter = c.orificeDiameter, designPressure = c.designPressure,
             wallThickness = fs.objects.firstOrNull { it.id == c.protectedId }?.let { pipeGeometry(it)?.second },
             fire = if (c.withFire) ReliefScenario(ReliefScenarioKinds.FIRE) else null, heatTransferCoefficient = c.heatTransferCoefficient,
             ambientTemperature = c.ambientTemperature,

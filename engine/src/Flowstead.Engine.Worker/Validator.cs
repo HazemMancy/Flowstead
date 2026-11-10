@@ -476,6 +476,7 @@ public static class Validator
                     if (x.Fitting is { } f)
                     {
                         if (!PipeFittings.All.ContainsKey(f)) err($"{what}: unknown fitting '{f}'.", o.Id);
+                        else if (f == PipeFittings.UserK && !(x.K is > 0 and < 1e5)) err($"{what}: give the fitting's K (a positive number).", o.Id);
                         continue;
                     }
                     if (!(x.Length > 0)) err($"{what}: give a positive length.", o.Id);
