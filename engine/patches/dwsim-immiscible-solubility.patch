@@ -1,0 +1,126 @@
+diff --git a/engine/DWSIM.Thermodynamics/FlashAlgorithms/NestedLoopsImmiscible.vb b/engine/DWSIM.Thermodynamics/FlashAlgorithms/NestedLoopsImmiscible.vb
+index 5b2f9bf..3dd66bb 100644
+--- a/engine/DWSIM.Thermodynamics/FlashAlgorithms/NestedLoopsImmiscible.vb
++++ b/engine/DWSIM.Thermodynamics/FlashAlgorithms/NestedLoopsImmiscible.vb
+@@ -198,48 +198,89 @@ Namespace PropertyPackages.Auxiliary.FlashAlgorithms
+                 End If
+             Next
+ 
+-            'supercritical gases solubility
++            'Flowstead (D150): the gases dissolved in the free water, with every compound's balance kept.
++            '  - A compound with a Henry's constant (IAPWS G7-04, or DWSIM's table) dissolves by Henry's law, x = p / kH, with
++            '    p its partial pressure, whatever its critical temperature: CO2 and ethane are subcritical in cold water and got
++            '    no solubility, or a fixed one, before.
++            '  - A hydrocarbon without one takes DWSIM's correlation (its solubility in water saturated with the pure
++            '    hydrocarbon) times its fugacity relative to that saturated liquid, p / Psat, at most 1.
++            '  - The dissolved moles come out of the vapour, then the hydrocarbon liquid. Before, they were added to the water
++            '    phase on top of the feed while the water phase kept only its water's moles: the outlets held more of each gas
++            '    than came in, and less water.
+ 
+             Dim VTc = PP.RET_VTC()
+ 
+-            For i = 0 To n
+-                If xl2 > 0 And i <> wid And T / VTc(i) > 1.0 Then
+-                    Vx2(i) = Vy(i) * P / PP.AUX_KHenry(Vn(i), T)
+-                End If
+-            Next
++            If xl2 > 0 Then
+ 
+-            'hydrocarbon solubility
++                Dim isPF As Boolean
++                Dim sumd As Double = 0.0#
+ 
+-            Dim isPF As Boolean
+-
+-            For i = 0 To n
+-                If Vprops(i).IsPF Then
+-                    isPF = True
+-                Else
+-                    If Vprops(i).Elements.Count = 2 And Vprops(i).Elements.ContainsKey("C") And Vprops(i).Elements.ContainsKey("H") Then
++                For i = 0 To n
++                    If i = wid OrElse Vz(i) <= 0.0# Then Continue For
++                    Dim ppi As Double = If(V > 0, Vy(i) * P, Vx1(i) * PP.AUX_PVAPi(i, T))
++                    If Vprops(i).IsPF Then
+                         isPF = True
+                     Else
+-                        isPF = False
++                        isPF = Vprops(i).Elements.Count = 2 And Vprops(i).Elements.ContainsKey("C") And Vprops(i).Elements.ContainsKey("H")
+                     End If
++                    Dim nC = 0
++                    If Vprops(i).Elements.ContainsKey("C") Then nC = Vprops(i).Elements("C")
++                    Dim henry As Boolean = False
++                    Try
++                        henry = PP.CurrentMaterialStream IsNot Nothing AndAlso PP.HasHenryConstants(Vn(i))
++                    Catch ex As Exception
++                    End Try
++                    If henry Then
++                        Vx2(i) = ppi / PP.AUX_KHenry(Vn(i), T)
++                    ElseIf nC > 0 And isPF Then
++                        Dim sol = Math.Exp(-1.6708 - 0.6386 * nC - 0.5538 * nC ^ 2)
++                        Dim sT1 = Math.Exp(19.76 - 30125 / (1.8 * T) + 8649917 / (1.8 * T) ^ 2)
++                        Dim sT2 = Math.Exp(19.76 - 30125 / (1.8 * 298.15) + 8649917 / (1.8 * 298.15) ^ 2)
++                        Dim dSdT = (sT1 - sT2) / (298.15 - T) / sT1
++                        If T = 298.15 Then dSdT = 0.0
++                        Dim xs = sol + sol * dSdT * (T - 298.15)
++                        If xs < 0.0 Then xs = sol
++                        Dim psat = PP.AUX_PVAPi(i, T)
++                        Vx2(i) = xs * If(psat > 0, Math.Min(1.0#, ppi / psat), 1.0#)
++                    ElseIf T / VTc(i) > 1.0 Then
++                        Vx2(i) = ppi / PP.AUX_KHenry(Vn(i), T)
++                    End If
++                    If Not Double.IsFinite(Vx2(i)) OrElse Vx2(i) < 0.0# Then Vx2(i) = 0.0#
++                    sumd += Vx2(i)
++                Next
++
++                If sumd > 0.0# And sumd < 0.5 Then
++
++                    ' On the feed's basis: the free water's own water (xl2 = nWx) with the gases it holds.
++                    Dim A As Double = xl2 / (1.0# - sumd)
++                    Dim nV(n), nL(n), d(n) As Double
++                    For i = 0 To n
++                        nV(i) = V * Vy(i)
++                        nL(i) = xl1 * Vx1(i)
++                        If i = wid Then Continue For
++                        d(i) = Math.Min(A * Vx2(i), nV(i) + nL(i))
++                        Dim fromV = Math.Min(d(i), nV(i))
++                        nV(i) -= fromV
++                        nL(i) -= d(i) - fromV
++                    Next
++                    d(wid) = xl2
++                    V = nV.Sum()
++                    xl1 = nL.Sum()
++                    xl2 = d.Sum()
++                    For i = 0 To n
++                        Vy(i) = If(V > 0, nV(i) / V, 0.0#)
++                        Vx1(i) = If(xl1 > 0, nL(i) / xl1, 0.0#)
++                        Vx2(i) = d(i) / xl2
++                    Next
++
++                Else
++
++                    Vx2 = Vx2.NormalizeY()
++
+                 End If
+-                Dim nC = 0
+-                If Vprops(i).Elements.ContainsKey("C") Then
+-                    nC = Vprops(i).Elements("C")
+-                End If
+-                If nC > 0 And fi(i) > 0.0 And xl2 > 0 And i <> wid And Vx2(i) = 0.0 And isPF Then
+-                    Dim sol = Math.Exp(-1.6708 - 0.6386 * nC - 0.5538 * nC ^ 2)
+-                    Dim sT1 = Math.Exp(19.76 - 30125 / (1.8 * T) + 8649917 / (1.8 * T) ^ 2)
+-                    Dim sT2 = Math.Exp(19.76 - 30125 / (1.8 * 298.15) + 8649917 / (1.8 * 298.15) ^ 2)
+-                    Dim dSdT = (sT1 - sT2) / (298.15 - T) / sT1
+-                    If T = 298.15 Then dSdT = 0.0
+-                    Vx2(i) = sol + sol * dSdT * (T - 298.15)
+-                    If Vx2(i) < 0.0 Then Vx2(i) = sol
+-                    Vn1(i) = fi(i) - Vx2(i) * xl2 - Vy(i) * V
+-                    If Vn1(i) < 0.0 Then Vx2(i) = 0.0
+-                End If
+-            Next
+ 
+-            Vx2 = Vx2.NormalizeY()
++            End If
++
+ 
+             Ki = PP.DW_CalcKvalue(Vx1, Vy, T, P)
+             Ki2 = PP.DW_CalcKvalue(Vx2, Vy, T, P)
