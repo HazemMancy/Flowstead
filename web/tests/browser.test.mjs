@@ -1340,13 +1340,14 @@ try {
       const rating = await api.lineSizing('W', { design: false, nps: '4', schedule: '40', totalLength: { value: '1', unit: 'km' } });
       api.setLineCriteria('liquid', { maxVelocity: 3 });
       const design = await api.lineSizing('W', { design: true, schedule: '40' });
-      const ph = w.phases?.overall?.properties ?? {};
-      return { status: s.status, rho: w.properties.density?.si ?? ph.density, mu: w.properties.viscosity?.si ?? ph.viscosity, rating, design };
+      // Water is all liquid: its viscosity is the liquid phase's (DWSIM gives no overall viscosity for a liquid).
+      const ph = w.phases?.overall?.properties ?? {}, liq = w.phases?.liquid1?.properties ?? {};
+      return { status: s.status, rho: w.properties.density?.si ?? ph.density, mu: w.properties.viscosity?.si ?? liq.viscosity ?? ph.viscosity, rating, design, phases: Object.keys(w.phases ?? {}) };
     }).catch((e) => ({ error: e.message }));
     if (got.error) problems.push(`line sizing: ${got.error}`);
     else {
       const { rho, mu } = got;
-      if (!(rho > 0 && mu > 0)) problems.push(`the stream's density and viscosity are not in its results (${rho}, ${mu})`);
+      if (!(rho > 0 && mu > 0)) problems.push(`the stream's density and viscosity are not in its results (${rho}, ${mu}; phases ${got.phases})`);
       const r = got.rating.rows?.[0];
       const D = 4.026 * 0.0254, A = Math.PI * D * D / 4, v = 20 / rho / A, e = 4.57e-5;
       const re = rho * v * D / mu;
