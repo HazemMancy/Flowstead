@@ -280,3 +280,17 @@
 .eq-head{display:flex;justify-content:space-between;align-items:center;font-size:.8rem}
 .eq-rx{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.4rem;padding:.35rem 0;border-top:1px solid var(--border)}
 .eq-rx small{color:var(--muted);font-family:var(--mono)}
+
+/* Floating panels (D146): moved by their title bar or the grip, minimised to the title bar. */
+.fs-float-head{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.fs-float-head:active{cursor:grabbing}
+.fs-float-head h2{flex:1;min-width:0}
+.fs-float-grip{cursor:grab;touch-action:none;font-size:1rem;line-height:1;opacity:.65;padding:.15rem .3rem;min-width:1.8rem}
+.fs-float-grip:hover,.fs-float-grip:focus-visible{opacity:1}
+.fs-float-min{font-weight:700;min-width:1.8rem}
+.fs-min > :not(.fs-float-keep){display:none!important}
+.fs-min .fs-insp-top > :not(.fs-float-head){display:none!important}
+.fs-min.fs-inspector{overflow:hidden}
+.fs-selhead{display:flex;align-items:center;gap:.15rem}
+#selInto{max-width:11rem}
+@media (pointer:coarse){.fs-float-grip,.fs-float-min{min-width:2.6rem;min-height:2.6rem}}

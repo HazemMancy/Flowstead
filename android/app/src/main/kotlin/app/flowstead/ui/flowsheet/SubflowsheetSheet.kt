@@ -28,7 +28,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -61,6 +60,7 @@ fun SubflowsheetSheet(
     vm: FlowsheetViewModel,
     onOpenFluid: (String) -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val b = Subflowsheets.of(fs, blockId) ?: return
     val bd = Subflowsheets.boundary(fs, blockId)
@@ -69,7 +69,7 @@ fun SubflowsheetSheet(
     val differs = Subflowsheets.regionOf(fs, b.id) != Subflowsheets.regionOf(fs, b.parent)
     var name by remember(b.tag) { mutableStateOf(b.tag) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    FloatingSheet(title = "Sub-flowsheet ${b.tag}", onDismiss = onDismiss, modifier = modifier, testTag = "block_sheet") {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),

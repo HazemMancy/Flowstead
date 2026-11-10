@@ -20,7 +20,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -317,7 +321,10 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
 
     fun worldAtRoot(root: Offset) = viewport.toWorld(root - canvasRect.topLeft, density)
 
-    Column(modifier.fillMaxSize()) {
+    // The sheets float over the flowsheet, above the palette (D146): a Box over the editor's column.
+    var paletteHeight by remember { mutableStateOf(0) }
+    Box(modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .weight(1f)
@@ -376,9 +383,10 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                     vm.add(type, w.x.toDouble(), w.y.toDouble())
                 }
             },
-            modifier = Modifier.navigationBarsPadding(),
+            modifier = Modifier.navigationBarsPadding().onGloballyPositioned { paletteHeight = it.size.height },
         )
     }
+    val overCanvas = Modifier.padding(bottom = with(LocalDensity.current) { paletteHeight.toDp() })
 
     ui.editingId?.let { id ->
         ui.flowsheet.obj(id)?.let { obj ->
@@ -398,6 +406,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 safetyRunning = ui.safetyRunning,
                 compositionBasis = ui.compositionBasis,
                 compoundBasis = ui.compoundBasis,
+                modifier = overCanvas,
             )
         }
     }
@@ -524,7 +533,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
     }
 
     ui.selectedBlock?.let { id ->
-        SubflowsheetSheet(ui.flowsheet, id, ui.results, ui.unitSet, vm, onOpenFluid = onOpenBlockFluid, onDismiss = vm::closeBlock)
+        SubflowsheetSheet(ui.flowsheet, id, ui.results, ui.unitSet, vm, onOpenFluid = onOpenBlockFluid, onDismiss = vm::closeBlock, modifier = overCanvas)
     }
 
     tableFor?.let { id ->
@@ -567,6 +576,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 }
             }
         }
+    }
     }
 }
 
@@ -682,8 +692,22 @@ private fun LevelBar(ui: FlowsheetUi, onLevel: (String?) -> Unit, onAddBlock: ()
 private fun SelectionBar(ui: FlowsheetUi, onMoveInto: (String) -> Unit, onGroup: () -> Unit, onDelete: () -> Unit, onClear: () -> Unit) {
     val n = ui.multiSelected.size
     var menu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    androidx.compose.material3.Surface(shape = MaterialTheme.shapes.small, tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)) {
+    // Dragged by its handle anywhere over the flowsheet, so it never hides what is behind it (D146).
+    var offset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
+    androidx.compose.material3.Surface(
+        shape = MaterialTheme.shapes.small, tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) },
+    ) {
         androidx.compose.foundation.layout.FlowRow(verticalArrangement = Arrangement.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+            Icon(
+                Icons.Filled.DragIndicator, contentDescription = "Drag to move the selection bar",
+                modifier = Modifier
+                    .align(Alignment.CenterVertically)
+                    .size(40.dp)
+                    .pointerInput(Unit) { detectDragGestures { change, drag -> change.consume(); offset += drag } }
+                    .padding(8.dp)
+                    .testTag("selection_bar_handle"),
+            )
             Text(if (n == 0) "Tap objects to select them" else "$n selected", style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.align(Alignment.CenterVertically).padding(end = 4.dp))
             if (n > 0) {

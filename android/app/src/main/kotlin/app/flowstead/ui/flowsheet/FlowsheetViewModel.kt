@@ -466,7 +466,7 @@ class FlowsheetViewModel @Inject constructor(
     // ---- selection and editor
 
     fun select(id: String?) = local.update { it.copy(selectedId = id, selectedBlock = if (id != null) null else it.selectedBlock) }
-    fun openEditor(id: String) = local.update { it.copy(selectedId = id, editingId = id) }
+    fun openEditor(id: String) = local.update { it.copy(selectedId = id, editingId = id, selectedBlock = null) }
     fun closeEditor() = local.update { it.copy(editingId = null) }
     fun openSizingCriteria() = local.update { it.copy(editingSizingCriteria = true) }
     fun closeSizingCriteria() = local.update { it.copy(editingSizingCriteria = false) }

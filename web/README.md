@@ -35,6 +35,13 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.17**
+- **Panels you can move and minimise (D146):** drag the selection bar, a worksheet, a sub-flowsheet's panel or the
+  solve panel by its title bar (or the ⠿ grip) anywhere over the flowsheet, and minimise it to its title bar with —
+  (▢ opens it again), so nothing behind it is out of reach. Double-click or double-tap the grip to put it back. On a
+  phone, drag a worksheet's title bar down to lower it, or right down to leave only its title bar. Mouse, pen and
+  finger alike.
+
 **Web 1.16**
 - **Sizing in the Design tab (D141):** a separator's, an exchanger's, a machine's, a tank's, a column's and a line's
   sizing, as in the app, with its basis (K, hold-up and surge times, mist pad, inlet device, U, utility temperatures,
