@@ -1293,7 +1293,8 @@ public sealed partial class DwsimEngine
     /// </summary>
     private static double? Head(Compressor k, double efficiencyPercent)
     {
-        var w = (k.GetInletMaterialStream(0) as MaterialStream)?.Phases[0].Properties.massflow;
+        var inlet = k.GraphicObject.InputConnectors.FirstOrDefault(c => c.IsAttached)?.AttachedConnector.AttachedFrom.Name;
+        var w = (inlet is not null && k.FlowSheet.SimulationObjects.TryGetValue(inlet, out var so) ? so as MaterialStream : null)?.Phases[0].Properties.massflow;
         return w is > 0 ? efficiencyPercent / 100.0 * k.DeltaQ * 1000.0 / w.Value / 9.80665 : null;
     }
 
