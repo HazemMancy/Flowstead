@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -235,9 +236,9 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
     val canvasActions = remember(vm) {
         object : CanvasActions {
             override fun tap(hit: Hit) = when (hit) {
-                is Hit.OnObject -> vm.openEditor(hit.objectId)
-                is Hit.OnPort -> vm.openEditor(hit.objectId)
-                Hit.Empty -> vm.select(null)
+                is Hit.OnObject -> vm.tapObject(hit.objectId)
+                is Hit.OnPort -> vm.tapObject(hit.objectId)
+                Hit.Empty -> vm.tapObject(null)
             }
             override fun longPress(objectId: String) {
                 vm.select(objectId)
@@ -256,6 +257,8 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun openBlock(id: String) = vm.openLevel(id)
             override fun moveBlock(id: String, x: Double, y: Double) = vm.moveBlock(id, x, y)
             override fun dropOnBlock(streamId: String, blockId: String) = vm.dropOnBlock(streamId, blockId)
+            override fun moveMany(ids: List<String>, dx: Double, dy: Double) = vm.moveMany(ids, dx, dy)
+            override fun dropManyOnBlock(ids: List<String>, blockId: String) = vm.moveIntoBlock(ids, blockId)
         }
     }
     // The flowsheet shown (D133): the main one or a sub-flowsheet's; each opens centred on what it holds.
@@ -335,11 +338,16 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 actions = canvasActions,
                 modifier = Modifier.fillMaxSize(),
                 unitSet = ui.unitSet,
+                multiSelected = ui.multiSelected,
             )
-            LevelBar(ui, onLevel = vm::openLevel, onAddBlock = {
-                val c = viewport.toWorld(Offset(canvasRect.width / 2, canvasRect.height / 2), density)
-                vm.addBlock(((c.x / 24).roundToInt() * 24).toDouble(), ((c.y / 24).roundToInt() * 24 - 120).toDouble())
-            }, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
+            Column(Modifier.align(Alignment.TopStart).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                LevelBar(ui, onLevel = vm::openLevel, onAddBlock = {
+                    val c = viewport.toWorld(Offset(canvasRect.width / 2, canvasRect.height / 2), density)
+                    vm.addBlock(((c.x / 24).roundToInt() * 24).toDouble(), ((c.y / 24).roundToInt() * 24 - 120).toDouble())
+                }, onSelecting = vm::setSelecting, modifier = Modifier)
+                if (ui.selecting) SelectionBar(ui, onMoveInto = { vm.moveIntoBlock(ui.multiSelected, it) }, onGroup = vm::groupSelected,
+                    onDelete = vm::deleteSelected, onClear = vm::clearSelection)
+            }
             if (levelFs.objects.isEmpty() && ui.blocks.isEmpty()) {
                 Text(
                     "Tap or long-press-drag an item from the palette below.\nStart with a material stream for your feed.",
@@ -644,8 +652,9 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onSolverActive: (Bool
  * Where you are among sub-flowsheets (D133), as a breadcrumb (Main › SUB-1), and a button to add a block here. A block
  * opens with a second tap or a long press; streams go in and out from its sheet or by dragging one onto it.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun LevelBar(ui: FlowsheetUi, onLevel: (String?) -> Unit, onAddBlock: () -> Unit, modifier: Modifier) {
+private fun LevelBar(ui: FlowsheetUi, onLevel: (String?) -> Unit, onAddBlock: () -> Unit, onSelecting: (Boolean) -> Unit, modifier: Modifier) {
     androidx.compose.material3.Surface(
         modifier = modifier, shape = MaterialTheme.shapes.small, tonalElevation = 2.dp,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
@@ -658,6 +667,36 @@ private fun LevelBar(ui: FlowsheetUi, onLevel: (String?) -> Unit, onAddBlock: ()
                 else androidx.compose.material3.TextButton(onClick = { onLevel(id) }) { Text(tag) }
             }
             androidx.compose.material3.TextButton(onClick = onAddBlock, modifier = Modifier.testTag("add_block")) { Text("+ Sub-flowsheet") }
+            // The Select tool (D139): taps then build a selection to move, group, delete or drag into a block together.
+            androidx.compose.material3.FilterChip(
+                selected = ui.selecting, onClick = { onSelecting(!ui.selecting) }, label = { Text(if (ui.selecting) "Selecting" else "Select") },
+                modifier = Modifier.padding(end = 4.dp).testTag("select_tool"),
+            )
+        }
+    }
+}
+
+/** What to do with the objects selected together (D139); dragging any of them onto a block also moves them all into it. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SelectionBar(ui: FlowsheetUi, onMoveInto: (String) -> Unit, onGroup: () -> Unit, onDelete: () -> Unit, onClear: () -> Unit) {
+    val n = ui.multiSelected.size
+    var menu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.material3.Surface(shape = MaterialTheme.shapes.small, tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)) {
+        androidx.compose.foundation.layout.FlowRow(verticalArrangement = Arrangement.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+            Text(if (n == 0) "Tap objects to select them" else "$n selected", style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.align(Alignment.CenterVertically).padding(end = 4.dp))
+            if (n > 0) {
+                Box {
+                    androidx.compose.material3.TextButton(onClick = { menu = true }, enabled = ui.blocks.isNotEmpty(), modifier = Modifier.testTag("move_into")) { Text("Move into…") }
+                    androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        ui.blocks.forEach { b -> androidx.compose.material3.DropdownMenuItem(text = { Text(b.tag) }, onClick = { menu = false; onMoveInto(b.id) }) }
+                    }
+                }
+                androidx.compose.material3.TextButton(onClick = onGroup) { Text("Sub-flowsheet") }
+                androidx.compose.material3.TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                androidx.compose.material3.TextButton(onClick = onClear) { Text("Clear") }
+            }
         }
     }
 }

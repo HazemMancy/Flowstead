@@ -300,6 +300,28 @@ public static class ReliefMath
     /// <summary>Internal volume: the shell plus two 2:1 ellipsoidal heads (π D³/24 each; none for a pipe).</summary>
     public static double Volume(VesselGeometry g) => Math.PI * g.Diameter * g.Diameter / 4 * g.Length + g.HeadFactor * 2 * Math.PI * Math.Pow(g.Diameter, 3) / 24;
 
+    /// <summary>
+    /// The volume below a height <paramref name="h"/> from the vessel's bottom (m³). Lying: the shell's circular segment
+    /// times its length, and the heads filled to the same fraction as a sphere filled to h. Standing: a 2:1 head of depth
+    /// a = D/4 filled to y from its pole holds π R² (y²/a − y³/(3a²)), that is (y/a)² (3 − y/a)/2 of its π D³/24.
+    /// </summary>
+    public static double VolumeBelow(VesselGeometry g, double h)
+    {
+        var r = g.Diameter / 2;
+        var headVolume = g.HeadFactor * Math.PI * Math.Pow(g.Diameter, 3) / 24;
+        if (g.Lying)
+        {
+            var hh = Math.Clamp(h, 0, g.Diameter);
+            var segment = r * r * Math.Acos((r - hh) / r) - (r - hh) * Math.Sqrt(Math.Max(0, 2 * r * hh - hh * hh));
+            return segment * g.Length + 2 * headVolume * hh * hh * (3 * r - hh) / (4 * r * r * r);
+        }
+        var headDepth = g.Diameter / 4;
+        double Head(double y) { var x = Math.Clamp(y / headDepth, 0, 1); return headVolume * x * x * (3 - x) / 2; }
+        if (h <= headDepth) return Head(Math.Max(h, 0));
+        var top = h - headDepth - g.Length;
+        return headVolume + Math.PI * r * r * Math.Min(h - headDepth, g.Length) + (top > 0 ? headVolume - Head(Math.Max(headDepth - top, 0)) : 0);
+    }
+
     /// <summary>Inside wall surface: the shell plus the heads (none for a pipe).</summary>
     public static double Surface(VesselGeometry g) => Math.PI * g.Diameter * g.Length + g.HeadFactor * 2 * 1.084 * g.Diameter * g.Diameter;
 }

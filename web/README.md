@@ -35,6 +35,24 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.14**
+- **Into a sub-flowsheet by drag and drop (D139):** drag an object, or a selection, onto a block (outlined as you
+  drag over it) and it goes inside, with a mouse, a pen or a finger; or choose Move into… on the selection bar. The
+  streams joining it to the rest cross the block's edge, matched, and the case solves to the same numbers.
+- **Duplicate a sub-flowsheet** from its panel (or Ctrl+D): a copy with everything inside, beside it.
+- **Review fixes (D138):** relief and depressuring of a vessel with several feeds take them all; a standing vessel's
+  bottom-head volume; a horizontal separator's mist-pad area; the oil–water level's name; near-critical tray sizing;
+  pipe fittings named for what their values are (Crane TP-410); a controller back in automatic carries on without a
+  jump; operating speed and UA shown with their units.
+- **The app's remaining tools, now on the web:** a pump's or compressor's **performance curve** (points, polynomial
+  fit, variable speed with curves at other speeds, the operating point on the chart), a pipe's **sections and
+  fittings** (Crane L/D or K), **reactors** with their **reactions** (conversion, equilibrium, kinetic, catalytic),
+  **McCabe–Thiele** for a binary column, the flowsheet **check**, and the **watch panel** over the flowsheet.
+- Sub-flowsheets on several fluid packages are solved by the app's own code (one implementation for app and web).
+- **Fixed:** after a change to a unit's specification, a re-solve could stop with "Cannot wait on monitors on this
+  runtime" and leave the streams after that unit at the previous solve's values (case studies, the optimiser, Adjusts,
+  controllers and pump or compressor curves all re-solve this way). It now recalculates them, as the app does.
+
 **Web 1.13**
 - **Comfortable on every screen, with a finger or a mouse.** On a phone the toolbar is two lines (the name, Hold or
   Active, Solve; then one strip of every other button that scrolls sideways), so the flowsheet keeps most of the

@@ -36,6 +36,27 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
     }
 
     [Fact]
+    public void VolumeBelowALevelCountsTheHeadsByTheirShape()
+    {
+        // Standing vessel, D 2 m, 6 m shell: a 2:1 head is 0.5 m deep and holds π D³/24.
+        var g = new VesselGeometry(2, 6);
+        double head = Math.PI * 8 / 24, a = 0.5, r = 1;
+        // Bottom head filled to y from its pole, by integrating its cross-section π R² (2y/a − y²/a²): π R² (y²/a − y³/(3a²)).
+        foreach (var y in new[] { 0.1, 0.25, 0.4, 0.5 })
+            Assert.Equal(Math.PI * r * r * (y * y / a - y * y * y / (3 * a * a)), ReliefMath.VolumeBelow(g, y), 12);
+        Assert.Equal(0.3125 * head, ReliefMath.VolumeBelow(g, 0.25), 12);
+        // Into the shell, and to the top: the whole vessel.
+        Assert.Equal(head + Math.PI * 2.0, ReliefMath.VolumeBelow(g, 2.5), 12);
+        Assert.Equal(ReliefMath.Volume(g), ReliefMath.VolumeBelow(g, 7), 12);
+        // The top head mirrors the bottom one.
+        Assert.Equal(ReliefMath.Volume(g) - ReliefMath.VolumeBelow(g, 0.2), ReliefMath.VolumeBelow(g, 7 - 0.2), 12);
+        // Lying: half full is half the vessel; full is all of it.
+        var h = new VesselGeometry(2, 6, Horizontal: true);
+        Assert.Equal(ReliefMath.Volume(h) / 2, ReliefMath.VolumeBelow(h, 1), 12);
+        Assert.Equal(ReliefMath.Volume(h), ReliefMath.VolumeBelow(h, 2), 12);
+    }
+
+    [Fact]
     public void StandardConstants()
     {
         // API 520-1: C = 356 (US units) at k = 1.4, i.e. 0.0270 in SI.

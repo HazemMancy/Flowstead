@@ -321,12 +321,16 @@ object Subflowsheets {
      * inside to one outside stays outside and gets a boundary stream inside, matched to it, and a stream inside that ran
      * to a unit outside gets a matching stream outside. Results are unchanged: the case solves as before.
      */
-    fun group(fs: Flowsheet, ids: Collection<String>, x: Double, y: Double): Pair<Flowsheet, Subflowsheet> {
+    fun group(fs: Flowsheet, ids: Collection<String>, x: Double, y: Double): Pair<Flowsheet, Subflowsheet> = group(fs, ids, x, y, null)
+
+    /** [group], allowing streams matched to [into] (the block [moveInto] then folds the new one into). */
+    private fun group(fs: Flowsheet, ids: Collection<String>, x: Double, y: Double, into: String?): Pair<Flowsheet, Subflowsheet> {
         val chosen = fs.objects.filter { it.id in ids }
         if (chosen.isEmpty()) throw EditRejected("Select the equipment to put in the sub-flowsheet")
         val level = chosen.first().parent
         if (chosen.any { it.parent != level }) throw EditRejected("Select objects on one flowsheet")
         val inSet = chosen.map { it.id }.toSet()
+        partnerOfAnotherBlock(fs, inSet, into)?.let { throw EditRejected(it) }
         var (f, block) = add(fs, level, x, y)
         val ports = ArrayList<SubPort>()
         var conns = f.connections
@@ -377,6 +381,151 @@ object Subflowsheets {
         f = f.copy(subflowsheets = f.subflowsheets.map { if (it.id == block.id) block else it })
         return clean(f) to block
     }
+
+    /**
+     * Moves [ids] (objects on the flowsheet [blockId] is drawn on) into that sub-flowsheet, as a drag and drop onto it:
+     * as [group] does, every stream that joined them to something staying outside becomes a matched pair across the
+     * block's edge, and a stream that ran straight between them and the block (into or out of one of its boundary
+     * streams) is no longer crossed: it is joined to that boundary stream inside. Results are unchanged on one package.
+     * Refused when the block has its own fluid package without a component the moved streams carry.
+     */
+    fun moveInto(fs: Flowsheet, ids: Collection<String>, blockId: String): Flowsheet {
+        val b = of(fs, blockId) ?: throw EditRejected("That sub-flowsheet no longer exists")
+        val chosen = fs.objects.filter { it.id in ids }
+        if (chosen.isEmpty()) throw EditRejected("Select the equipment to move into ${b.tag}")
+        if (chosen.any { it.parent != b.parent }) throw EditRejected("Move objects that are on the same flowsheet as ${b.tag}")
+        partnerOfAnotherBlock(fs, chosen.map { it.id }.toSet(), blockId)?.let { throw EditRejected(it) }
+        val compounds = fluidAt(fs, blockId).compounds.toSet()
+        val missing = chosen.flatMap { it.composition.filterValues { x -> x > 0 }.keys }.filter { it !in compounds }.distinct()
+        if (missing.isNotEmpty()) throw EditRejected("${b.tag}'s fluid package has no ${missing.joinToString(", ")}: add ${if (missing.size == 1) "it" else "them"} there first")
+        val (grouped, tmp0) = group(fs, chosen.map { it.id }, b.x, b.y, blockId)
+        var f = grouped
+        val tmp = of(f, tmp0.id)!!
+        val target = of(f, blockId)!!
+        val merge = LinkedHashMap<String, String>() // stream to drop → the stream it is joined into
+        val bring = HashSet<String>() // streams of the parent that end up wholly inside
+        val ports = target.ports.toMutableList()
+        // A stream the block took in or gave out that moved in with the selection: its boundary stream inside joins it.
+        // Of a stream and the twin that stood for it across an edge (tagged "<its tag>-<block>"), the original stays.
+        fun keep(a: String, b: String): String {
+            val ta = f.obj(a)?.tag ?: return b; val tb = f.obj(b)?.tag ?: return a
+            return if (ta.startsWith("$tb-", ignoreCase = true)) b else a
+        }
+        for (q in target.ports) {
+            val o = q.outer ?: continue
+            if (f.obj(o)?.parent == tmp.id) {
+                val k = keep(o, q.inner)
+                merge[if (k == o) q.inner else o] = k
+                ports.remove(q)
+            }
+        }
+        for (p in tmp.ports) {
+            val o = p.outer ?: continue
+            val q = target.ports.firstOrNull { it.outer == o }
+            if (q != null) {
+                // The stream ran straight between the moved units and the block: it now lies wholly inside, and both
+                // boundary streams that stood for it there are joined into it (it keeps its tag, table and id).
+                val k = keep(o, q.inner)
+                merge[p.inner] = k
+                merge[if (k == o) q.inner else o] = k
+                ports.remove(q)
+                if (k == o) bring += o
+            } else ports += p
+        }
+        fun r(id: String) = merge[id] ?: id
+        f = f.copy(
+            objects = f.objects.filter { it.id !in merge }.map { o ->
+                val moved = if (o.parent == tmp.id || o.id in bring) o.copy(parent = blockId) else o
+                if (moved.refs.values.any { it in merge }) moved.copy(refs = moved.refs.mapValues { r(it.value) }) else moved
+            },
+            connections = f.connections.map { it.copy(fromObject = r(it.fromObject), toObject = r(it.toObject)) },
+            tables = f.tables.filter { it.objectId !in merge },
+            subflowsheets = f.subflowsheets.filter { it.id != tmp.id }.map { x ->
+                when {
+                    x.id == blockId -> x.copy(ports = ports.map { it.copy(inner = r(it.inner)) })
+                    x.parent == tmp.id -> x.copy(parent = blockId)
+                    else -> x
+                }
+            },
+        )
+        return clean(f)
+    }
+
+    /**
+     * A copy of sub-flowsheet [id] beside it ([dx], [dy] on its flowsheet): its own fluid package, every object and
+     * every sub-flowsheet inside, with new ids and tags, their connections, property tables, relief valves and dynamic
+     * settings. Its streams in and out are not matched (one stream outside feeds one block): the notes say so. A Set,
+     * Adjust or controller inside that refers to something outside the copy loses that reference (two would fight over
+     * one variable), and the notes say that too. Returns the flowsheet, the new block and the notes.
+     */
+    fun duplicate(fs: Flowsheet, id: String, dx: Double = 2 * FlowsheetEditing.GRID, dy: Double = 2 * FlowsheetEditing.GRID): Triple<Flowsheet, Subflowsheet, List<String>> {
+        val top = of(fs, id) ?: throw EditRejected("That sub-flowsheet no longer exists")
+        val blocks = descendants(fs, id)
+        val inside = fs.objects.filter { it.parent in blocks }
+        val newObject = inside.associate { it.id to FlowsheetEditing.newId() }
+        val newBlock = blocks.associateWith { FlowsheetEditing.newId() }
+        val notes = mutableListOf<String>()
+        var out = fs
+        val copies = ArrayList<SimObject>()
+        for (o in inside) {
+            val used = (out.objects + copies).map { it.tag.lowercase() }.toSet() + out.subflowsheets.map { it.tag.lowercase() }
+            val tag = if (o.tag.lowercase() !in used) o.tag
+                else FlowsheetEditing.nextTag(out.copy(objects = (out.objects + copies).map { it.copy(tag = it.tag.uppercase()) }), o.type)
+            var refs = o.refs.mapValues { (_, v) -> newObject[v] ?: v }
+            for (k in OBJECT_REFS) {
+                val v = o.refs[k] ?: continue
+                if (v !in newObject) { refs = refs - k; notes += "$tag: ${fs.obj(v)?.tag ?: "an object"} is outside the copy, so choose what it refers to again" }
+            }
+            copies += o.copy(id = newObject.getValue(o.id), tag = tag, parent = newBlock.getValue(o.parent!!), refs = refs)
+        }
+        val newBlocks = ArrayList<Subflowsheet>()
+        for (bid in blocks) {
+            val x = of(fs, bid)!!
+            val tag = nextTag(out.copy(objects = out.objects + copies, subflowsheets = out.subflowsheets + newBlocks))
+            newBlocks += x.copy(
+                id = newBlock.getValue(bid), tag = tag,
+                parent = if (bid == id) x.parent else newBlock.getValue(x.parent!!),
+                x = if (bid == id) x.x + dx else x.x, y = if (bid == id) x.y + dy else x.y,
+                ports = x.ports.mapNotNull { p -> newObject[p.inner]?.let { inner -> p.copy(inner = inner, outer = p.outer?.let { newObject[it] }) } },
+            )
+        }
+        if (top.ports.any { it.outer != null }) notes += "${newBlocks.first().tag}'s streams in and out are not connected: connect them in its sheet"
+        val safety = fs.safety?.let { st ->
+            val devices = st.devices.filter { it.id in newObject }.map { d ->
+                d.copy(id = newObject.getValue(d.id), tag = copies.first { it.id == newObject[d.id] }.tag, protectedId = d.protectedId?.let { newObject[it] ?: it }, result = null, resultHash = null)
+            }
+            if (devices.isEmpty()) st else st.copy(devices = st.devices + devices)
+        }
+        val dynamics = fs.dynamics?.let { d ->
+            val more = d.parameters.filterKeys { it in newObject }.mapKeys { newObject.getValue(it.key) }
+            if (more.isEmpty()) d else d.copy(parameters = d.parameters + more)
+        }
+        out = out.copy(
+            objects = out.objects + copies,
+            connections = out.connections + fs.connections.filter { it.fromObject in newObject && it.toObject in newObject }
+                .map { it.copy(fromObject = newObject.getValue(it.fromObject), toObject = newObject.getValue(it.toObject)) },
+            tables = out.tables + fs.tables.filter { it.objectId in newObject }.map { it.copy(objectId = newObject.getValue(it.objectId)) },
+            subflowsheets = out.subflowsheets + newBlocks,
+            safety = safety, dynamics = dynamics,
+        )
+        return Triple(clean(out), newBlocks.first(), notes)
+    }
+
+    /**
+     * Why [ids] can't go into a block other than [except]: a stream among them is the outside partner of another block's
+     * stream in or out, which must stay on that block's flowsheet. Null when they can.
+     */
+    private fun partnerOfAnotherBlock(fs: Flowsheet, ids: Set<String>, except: String?): String? {
+        for (b in fs.subflowsheets) {
+            if (b.id == except) continue
+            val p = b.ports.firstOrNull { it.outer in ids } ?: continue
+            return "${fs.obj(p.outer!!)?.tag} runs into or out of ${b.tag}: leave it out (its unit can go, it stays matched)"
+        }
+        return null
+    }
+
+    /** Refs that name another object. */
+    private val OBJECT_REFS = listOf(SetKeys.TARGET_OBJECT, SetKeys.SOURCE_OBJECT, AdjustKeys.MANIPULATED_OBJECT, AdjustKeys.CONTROLLED_OBJECT)
 
     /** Puts a sub-flowsheet's contents back on its parent, joining each matched pair into one stream. */
     fun ungroup(fs: Flowsheet, id: String): Flowsheet {

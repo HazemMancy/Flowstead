@@ -11,8 +11,10 @@ import { enterToNext, redrawKeepingFocus } from './forms.js';
  * Returns {streamAnalysis(container, id), openTools(tab), blackOilSection(container), hypotheticalSection(container)}.
  */
 export function initTools(app) {
-  const { $, Tools, Safety, Fluids, Dyn, Sheet, Data, Thermo, engine } = app;
+  const { $, Tools, Safety, Fluids, Dyn, Sheet, Data, Thermo, Equip, engine } = app;
   const solveArgs = () => { const s = app.project().solve; return [s ? JSON.stringify(s.result) : null, s?.modelHash ?? '']; };
+  /** Commits what a tool's edit returned: {flowsheet} or {error}. */
+  const commitSheet = (json, message) => { const r = JSON.parse(json); if (r.error) { app.toast(r.error); return false; } app.commit(JSON.stringify(r.flowsheet), message); return true; };
   const err = (text) => `<p class="rp-note error">${esc(text)}</p>`;
   const busy = (text) => `<p class="rp-note busy">${esc(text)}</p>`;
   const opts = (list, value, placeholder) => (placeholder ? `<option value="">${esc(placeholder)}</option>` : '') +
@@ -113,10 +115,13 @@ export function initTools(app) {
   function renderTools() {
     for (const b of $('toolsTabs').querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', b.dataset.tab === tab);
     const body = $('toolsBody');
-    if (tab === 'case') caseStudy(body);
+    if (tab === 'check') checkTool(body);
+    else if (tab === 'watch') watchTool(body);
+    else if (tab === 'case') caseStudy(body);
     else if (tab === 'opt') optimiser(body);
     else if (tab === 'dyn') dynamicsTool(body);
     else if (tab === 'pid') pidTool(body);
+    else if (tab === 'mccabe') mcCabeTool(body);
     else if (tab === 'sheet') sheetTool(body);
     else if (tab === 'scen') scenariosTool(body);
     else safety(body, tab);
@@ -589,7 +594,6 @@ export function initTools(app) {
         <select id="ss_xk" aria-label="Specification"${to ? '' : ' disabled'}>${opts((to?.keys ?? []).map((x) => ({ id: x.key, label: `${x.label} (${x.unit})` })), sh.expKey, 'Specification…')}</select></div>
       <div class="actions"><button type="button" class="btn btn-sm" id="ss_addx"${to && sh.expKey ? '' : ' disabled'}>Export ${sh.cell}</button>
         ${d.exports.length ? '<button type="button" class="btn btn-primary btn-sm" id="ss_apply">Apply the exports to the flowsheet</button>' : ''}</div>`;
-    const commitSheet = (json, message) => { const r = JSON.parse(json); if (r.error) { app.toast(r.error); return false; } app.commit(JSON.stringify(r.flowsheet), message); return true; };
     const setCell = () => { if (commitSheet(Sheet.setCell(app.project().flowsheet, sh.cell, body.querySelector('#ss_in').value), `${sh.cell} set`)) redraw(); };
     body.onkeydown = (e) => { if (e.target.id === 'ss_in' && e.key === 'Enter') { e.preventDefault(); setCell(); body.querySelector('#ss_in')?.focus(); } };
     body.onchange = (e) => {
@@ -617,6 +621,171 @@ export function initTools(app) {
 
   // ---------- scenarios (D126): the app's ScenariosTool ----------
   let scName = '';
+  // ---------- the check and the watch panel (D136, the app's CheckTool and WatchTool) ----------
+  function checkTool(body) {
+    const items = JSON.parse(Sheet.check(app.project().flowsheet, ...solveArgs()));
+    const tag = (id) => JSON.parse(app.project().flowsheet).objects.find((o) => o.id === id)?.tag;
+    body.innerHTML = items.length ? `<ul class="ck-list">${items.map((c) => `<li${c.objectId ? ` data-id="${esc(c.objectId)}" tabindex="0" role="button" title="Open ${esc(tag(c.objectId) ?? '')}"` : ''}><span class="${c.level}">${c.level[0].toUpperCase() + c.level.slice(1)}</span><span>${esc(c.text)}</span></li>`).join('')}</ul>`
+      : '<p class="fs-note">Nothing to report: the flowsheet is specified, connected and solved without warnings.</p>';
+    const open = (e) => { const li = e.target.closest('[data-id]'); if (!li) return; dlg.close(); app.openObject?.(li.dataset.id); };
+    body.onclick = open;
+    body.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); } };
+  }
+  let watchPick = '';
+  function watchTool(body) {
+    const redraw = () => watchTool(body);
+    const w = JSON.parse(Sheet.watch(app.project().flowsheet, ...solveArgs()));
+    const t = w.targets.find((x) => x.id === watchPick);
+    body.innerHTML = `<p class="fs-note">Results kept in view on the flowsheet, updated after every solve.</p>
+      <ul class="dyn-events">${w.items.map((i) => `<li><span>${esc(i.label)}</span><span><b>${esc(i.value)}</b> ${esc(i.unit)} <button type="button" class="btn btn-sm" data-unwatch="${esc(i.objectId)}|${esc(i.key)}">Remove</button></span></li>`).join('') || '<li class="fs-note">Nothing watched yet.</li>'}</ul>
+      ${w.targets.length ? `<div class="row2"><select id="wt_obj" aria-label="Object to watch">${opts(w.targets.map((x) => ({ id: x.id, label: x.tag })), watchPick, 'Object…')}</select>
+      <select id="wt_key" aria-label="Result to watch"${t ? '' : ' disabled'}>${t ? opts(t.keys.map((k) => ({ id: k.key, label: k.label })), '', 'Result…') : '<option>Result…</option>'}</select></div>`
+        : '<p class="fs-note">Solve the flowsheet to pick results.</p>'}`;
+    body.onchange = (e) => {
+      if (e.target.id === 'wt_obj') { watchPick = e.target.value; return redraw(); }
+      if (e.target.id === 'wt_key' && e.target.value) { commitSheet(Sheet.toggleWatch(app.project().flowsheet, watchPick, e.target.value), 'Watching it'); redraw(); }
+    };
+    body.onclick = (e) => {
+      const b = e.target.closest('[data-unwatch]'); if (!b) return;
+      const [id, key] = b.dataset.unwatch.split('|');
+      commitSheet(Sheet.toggleWatch(app.project().flowsheet, id, key), 'No longer watched'); redraw();
+    };
+  }
+  // ---------- McCabe–Thiele (D106, D136): the app's McCabeTool, on the engine's T–x–y at the column pressure ----------
+  const mt = { a: '', b: '', p: '1.01325', pu: 'bara', xD: '0.95', xB: '0.05', zF: '0.5', q: '1', reflux: '2', html: '' };
+  let mtLast = null;
+  function mcCabeTool(body) {
+    const comps = JSON.parse(app.project().flowsheet).compounds ?? [];
+    if (!comps.includes(mt.a)) mt.a = comps[0] ?? '';
+    if (!comps.includes(mt.b) || mt.b === mt.a) mt.b = comps.find((c) => c !== mt.a) ?? '';
+    const pu = [{ id: 'bara', label: 'bara' }, { id: 'kPa', label: 'kPa' }, { id: 'atm', label: 'atm' }, { id: 'psia', label: 'psia' }];
+    const num = (k, label, hint = '') => `<div class="field"><label for="mt_${k}">${esc(label)}</label><input type="text" id="mt_${k}" inputmode="decimal" value="${esc(mt[k])}"${hint ? ` placeholder="${esc(hint)}"` : ''} autocomplete="off"/></div>`;
+    body.innerHTML = `<p class="fs-note">A binary column stage by stage on the engine's equilibrium curve at the column pressure: constant molar overflow, total condenser, partial reboiler counted as a stage.</p>
+      <div class="row2"><div class="field"><label for="mt_a">Light key</label><select id="mt_a">${opts(comps.map((c) => ({ id: c, label: c })), mt.a)}</select></div>
+      <div class="field"><label for="mt_b">Heavy key</label><select id="mt_b">${opts(comps.map((c) => ({ id: c, label: c })), mt.b)}</select></div></div>
+      <div class="row2">${num('p', 'Column pressure')}<div class="field"><label for="mt_pu">Unit</label><select id="mt_pu">${opts(pu, mt.pu)}</select></div></div>
+      <div class="row2">${num('xD', 'xD (light key in the distillate)')}${num('xB', 'xB (in the bottoms)')}</div>
+      <div class="row2">${num('zF', 'zF (in the feed)')}${num('q', 'Feed q', '1 = saturated liquid')}</div>
+      ${num('reflux', 'Reflux ratio L/D')}
+      <button type="button" class="btn btn-sm btn-primary" id="mt_run"${comps.length < 2 ? ' disabled' : ''}>Trace the equilibrium curve</button>
+      <div id="mt_out" aria-live="polite">${mt.html}</div>`;
+    body.onchange = body.oninput = (e) => { const k = e.target.id?.replace(/^mt_/, ''); if (k && k in mt && k !== 'html') mt[k] = e.target.value; };
+    const params = () => JSON.stringify({ a: mt.a, b: mt.b, pressure: { value: mt.p, unit: mt.pu }, xD: mt.xD, xB: mt.xB, zF: mt.zF, q: mt.q, reflux: mt.reflux });
+    body.onclick = async (e) => {
+      if (e.target.id !== 'mt_run') return;
+      const fs0 = app.project().flowsheet, out = body.querySelector('#mt_out');
+      await run(JSON.parse(Thermo.request('mccabe', fs0, ...solveArgs(), params())), out, 'Tracing the equilibrium', (result) => {
+        mtLast = result;
+        return Thermo.report('mccabe', fs0, params(), JSON.stringify(result));
+      });
+      mt.html = out.innerHTML;
+    };
+    body.onkeydown = (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); body.querySelector('#mt_run').click(); } };
+  }
+
+  // ---------- a pump's or compressor's curve and a pipe's sections (D136, the app's CurveSection and PipeSectionsSection) ----------
+  let rxOpen = null;
+  function equipmentSection(el, id) {
+    el.dataset.id = id;
+    const fsj = app.project().flowsheet;
+    const cv = JSON.parse(Equip.curve(fsj, id, ...solveArgs()));
+    const ps = JSON.parse(Equip.sections(fsj, id));
+    const cell = (label, value, attrs) => `<label class="eq-cell"><span>${esc(label)}</span><input type="text" inputmode="decimal" value="${esc(value)}" ${attrs} autocomplete="off"/></label>`;
+    let html = '';
+    if (cv.kind) {
+      const pump = cv.kind === 'pump', u = cv.units;
+      html += `<h3>Performance curve</h3><label class="fs-switch"><input type="checkbox" id="eq_curve"${cv.on ? ' checked' : ''}/> Run on a performance curve</label>
+        <p class="fs-note">${pump ? 'Head, efficiency and NPSH required against actual inlet flow; the outlet pressure follows.' : 'Adiabatic head and efficiency against actual inlet flow; the lowest flow is the surge limit.'}</p>`;
+      if (cv.on) {
+        const rows = (pts, line) => pts.map((p, i) => `<div class="eq-row">${cell(`Flow, ${u.flow}`, p.flow, `data-cv="point" data-line="${line}" data-i="${i}" data-f="flow"`)}${cell(`Head, ${u.head}`, p.head, `data-cv="point" data-line="${line}" data-i="${i}" data-f="head"`)}${
+          cell('Eff, %', p.eff, `data-cv="point" data-line="${line}" data-i="${i}" data-f="eff"`)}${pump ? cell(`NPSHr, ${u.head}`, p.npshr, `data-cv="point" data-line="${line}" data-i="${i}" data-f="npshr"`) : ''}
+          <button type="button" class="icon-btn" data-cvop="removePoint" data-line="${line}" data-i="${i}" aria-label="Remove point ${i + 1}">✕</button></div>`).join('') +
+          `<button type="button" class="btn btn-sm" data-cvop="addPoint" data-line="${line}">Add point</button>`;
+        html += (cv.problem ? `<p class="fs-note warn">${esc(cv.problem)}</p>` : '') + rows(cv.points, -1) +
+          `<div class="fs-seg" role="radiogroup" aria-label="How the points are joined"><button type="button" role="radio" aria-checked="${!cv.fit}" data-cvfit="">Straight lines</button><button type="button" role="radio" aria-checked="${cv.fit === 'polynomial'}" data-cvfit="polynomial">Polynomial fit</button></div>` +
+          (cv.fit === 'polynomial' ? `<div class="eq-row">${cell('Order', cv.order, 'data-cv="field" data-f="order"')}</div>` : '') +
+          `<h3>Speed</h3><div class="eq-row">${cell('Curve speed, rpm', cv.speed, 'data-cv="field" data-f="speed"')}${cell('Runs at, rpm', cv.operatingSpeed, 'data-cv="field" data-f="operatingSpeed"')}</div>` +
+          (cv.solvesSpeed ? `<p class="fs-note">Variable speed: give the outlet pressure and the engine finds the speed${cv.solvedSpeed ? ` (${esc(cv.solvedSpeed)} rpm in the last solve)` : ''}; or type the speed it runs at.</p>` : '') +
+          cv.lines.map((l, k) => `<div class="eq-row">${cell('Curve at, rpm', l.speed, `data-cv="lineSpeed" data-line="${k}"`)}<button type="button" class="icon-btn" data-cvop="removeLine" data-line="${k}" aria-label="Remove the curve at ${esc(l.speed)} rpm">✕</button></div>${rows(l.points, k)}`).join('') +
+          (cv.points.length >= 2 ? `<button type="button" class="btn btn-sm" data-cvop="addLine">Add a curve at another speed</button>` : '') +
+          (cv.plot ? renderReport({ sections: [cv.plot] }) : '');
+      }
+    }
+    if (ps.pipe) {
+      const u = ps.units;
+      html += `<h3>Sections and fittings</h3><label class="fs-switch"><input type="checkbox" id="eq_sections"${ps.on ? ' checked' : ''}/> Sections and fittings</label>
+        <p class="fs-note">Several runs (each with its own length, rise and, if it differs, size) with elbows, valves, tees, entrances and exits between them.</p>`;
+      if (ps.on) {
+        html += ps.items.map((s, i) => `<div class="eq-sec"><div class="eq-head"><b>${i + 1}. ${esc(s.name)}</b><button type="button" class="icon-btn" data-psop="remove" data-i="${i}" aria-label="Remove section ${i + 1}">✕</button></div><div class="eq-row">${
+          s.fitting ? cell('Number', s.count, `data-ps="count" data-i="${i}"`) + cell(`Inside diameter, ${u.small}`, s.id, `data-ps="id" data-i="${i}"`)
+            : cell(`Length, ${u.length}`, s.length, `data-ps="length" data-i="${i}"`) + cell(`Rise, ${u.length}`, s.rise, `data-ps="rise" data-i="${i}"`) + cell(`Inside diameter, ${u.small}`, s.id, `data-ps="id" data-i="${i}"`) + cell('Increments', s.increments, `data-ps="increments" data-i="${i}"`)}</div></div>`).join('') +
+          `<div class="eq-row"><button type="button" class="btn btn-sm" data-psop="addRun">Add straight run</button><select id="eq_fitting" aria-label="Add a fitting"><option value="">Add a fitting…</option>${ps.fittings.map((k) => `<option value="${esc(k.id)}">${esc(k.label)}</option>`).join('')}</select></div>` +
+          (ps.totals ? `<p class="fs-note">${esc(ps.totals)}</p>` : '');
+      }
+    }
+    const rx = JSON.parse(Equip.reactions(fsj, id));
+    if (rx.reactor && !rx.gibbs) {
+      const sel = (field, list, value, extra = '') => `<select data-rx="${field}" ${extra}>${list.map((o) => `<option value="${esc(o.id)}"${o.id === value ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`;
+      const fld = (label, field, value, r, extra = '') => `<label class="eq-cell"><span>${esc(label)}</span><input type="text" value="${esc(value)}" data-rx="${field}" data-r="${esc(r.id)}" ${extra} autocomplete="off"/></label>`;
+      html += `<h3>${esc(rx.kinds.map((k) => k.label).join(' and '))} reactions</h3>` + rx.items.map((r) => {
+        const open = rxOpen === r.id;
+        let body = '';
+        if (open) {
+          body = `<div class="eq-sec">${fld('Name', 'name', r.name, r)}<p class="fs-note">Stoichiometric coefficients: negative for reactants, positive for products, empty if not involved.</p><div class="eq-row">${
+            rx.compounds.map((c) => fld(c, 'stoich', r.stoich[c], r, `data-c="${esc(c)}" inputmode="decimal"`)).join('')}</div><div class="eq-row">
+            <label class="eq-cell"><span>Base compound</span>${sel('base', [{ id: '', label: 'Choose…' }, ...r.reactants.map((c) => ({ id: c, label: c }))], r.base, `data-r="${esc(r.id)}"`)}</label>
+            <label class="eq-cell"><span>Phase</span>${sel('phase', r.phases, r.phase, `data-r="${esc(r.id)}"`)}</label></div>`;
+          if (r.type === 'Conversion') body += `<div class="eq-row">${fld('Conversion of the base compound, %', 'conversion', r.conversion, r, 'inputmode="decimal"')}</div>`;
+          if (r.type === 'Equilibrium') body += `<p class="fs-note">K from Gibbs energies of formation at the reactor temperature.</p><div class="eq-row">${fld('Temperature approach, K', 'approach', r.approach, r, 'inputmode="decimal" placeholder="0 if empty"')}</div>`;
+          if (r.type === 'Kinetic') body += `<p class="fs-note">r = A·exp(−E/RT)·Π cᵢ^orderᵢ, in mol/(m³·s) with concentrations in mol/m³.</p><div class="eq-row">${fld('Forward A', 'forwardA', r.forwardA, r)}${fld('Forward E, J/mol', 'forwardE', r.forwardE, r)}</div><div class="eq-row">${
+            r.reactants.map((c) => fld(`Order in ${c}`, 'order', r.orders[c], r, `data-c="${esc(c)}" placeholder="0 if empty"`)).join('')}</div><div class="eq-row">${fld('Reverse A', 'reverseA', r.reverseA, r, 'placeholder="irreversible if empty"')}${r.reverseA ? fld('Reverse E, J/mol', 'reverseE', r.reverseE, r) : ''}</div>`;
+          if (r.type === 'Catalytic') body += `<p class="fs-note">Langmuir–Hinshelwood: rate = numerator / denominator per kg of catalyst, DWSIM expressions of T (K) and the concentrations ${esc(r.symbols)}. E.g. 2.5e-3*exp(-45000/(8.314*T))*R1 over (1+0.4*R1)^2.</p>
+            <div class="eq-row">${fld('Rate numerator', 'num', r.num, r)}${fld('Rate denominator', 'den', r.den, r, 'placeholder="1"')}</div><div class="eq-row">
+            <label class="eq-cell"><span>Concentrations in</span>${sel('conc', r.concUnits.map((u) => ({ id: u, label: u })), r.conc, `data-r="${esc(r.id)}"`)}</label>
+            <label class="eq-cell"><span>Rate in</span>${sel('rate', r.rateUnits.map((u) => ({ id: u, label: u })), r.rate, `data-r="${esc(r.id)}"`)}</label></div>
+            <div class="eq-row">${fld('Lowest temperature, K', 'tmin', r.tmin, r, 'placeholder="no limit"')}${fld('Highest temperature, K', 'tmax', r.tmax, r, 'placeholder="no limit"')}</div>`;
+          body += (r.problem ? `<p class="fs-note warn">${esc(r.problem)}</p>` : '') + `<button type="button" class="btn btn-sm" data-rxop="delete" data-r="${esc(r.id)}">Delete reaction</button></div>`;
+        }
+        return `<div class="eq-rx"><label class="fs-switch"><input type="checkbox" data-rxuse="${esc(r.id)}"${r.used ? ' checked' : ''}/> <span><b>${esc(r.name)}</b> <small>${esc(r.equation)}</small></span></label>
+          <button type="button" class="btn btn-sm" data-rxopen="${esc(r.id)}">${open ? 'Done' : 'Edit'}</button>${!open && r.problem && r.used ? `<p class="fs-note warn">${esc(r.problem)}</p>` : ''}</div>${body}`;
+      }).join('') + `<div class="eq-row">${rx.kinds.map((k) => `<button type="button" class="btn btn-sm" data-rxnew="${esc(k.type)}">New ${esc(k.label.toLowerCase())} reaction</button>`).join('')}</div>
+        <p class="fs-note">Basis → Compound and data tools → Reaction finder suggests reactions among the components.</p>`;
+    }
+    el.innerHTML = html;
+    const rxEdit = (op, msg) => { const r = JSON.parse(Equip.reactionEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); if (r.reaction) rxOpen = r.reaction; app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
+    const curveEdit = (op, msg) => { const r = JSON.parse(Equip.curveEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
+    const secEdit = (op, msg) => { const r = JSON.parse(Equip.sectionsEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
+    el.onchange = (e) => {
+      const t = e.target;
+      if (t.id === 'eq_curve') return curveEdit({ op: t.checked ? 'on' : 'off' }, t.checked ? 'Runs on its curve' : 'Curve off');
+      if (t.id === 'eq_sections') return secEdit({ op: t.checked ? 'on' : 'off' }, t.checked ? 'Sections and fittings on' : 'One straight run');
+      if (t.id === 'eq_fitting' && t.value) return secEdit({ op: 'addFitting', value: t.value }, 'Fitting added');
+      if (t.dataset.rxuse) return rxEdit({ op: 'use', reaction: t.dataset.rxuse, on: String(t.checked) }, t.checked ? 'Reaction used' : 'Reaction not used');
+      if (t.dataset.rx) return rxEdit({ op: 'set', reaction: t.dataset.r, field: t.dataset.rx, compound: t.dataset.c, value: t.value }, 'Reaction changed');
+      if (t.dataset.cv) return curveEdit({ op: t.dataset.cv, line: Number(t.dataset.line ?? -1), index: Number(t.dataset.i ?? 0), field: t.dataset.f, value: t.value }, 'Curve changed');
+      if (t.dataset.ps) return secEdit({ op: 'set', index: Number(t.dataset.i), field: t.dataset.ps, value: t.value }, 'Section changed');
+    };
+    el.onclick = (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.rxopen) { rxOpen = rxOpen === b.dataset.rxopen ? null : b.dataset.rxopen; return equipmentSection(el, id); }
+      if (b.dataset.rxnew) return rxEdit({ op: 'new', kind: b.dataset.rxnew }, 'New reaction');
+      if (b.dataset.rxop === 'delete') { rxOpen = null; return rxEdit({ op: 'delete', reaction: b.dataset.r }, 'Reaction deleted'); }
+      if (b.dataset.cvop) return curveEdit({ op: b.dataset.cvop, line: Number(b.dataset.line ?? -1), index: Number(b.dataset.i ?? 0) }, 'Curve changed');
+      if (b.dataset.cvfit !== undefined) return curveEdit({ op: 'field', field: 'fit', value: b.dataset.cvfit }, 'Curve changed');
+      if (b.dataset.psop) return secEdit({ op: b.dataset.psop, index: Number(b.dataset.i ?? 0) }, 'Sections changed');
+    };
+    el.onkeydown = (e) => { if (e.key === 'Enter' && e.target.matches('input[type=text]')) { e.preventDefault(); e.target.blur(); } };
+  }
+
+  /** The watch panel over the canvas: shown when something is watched. */
+  function renderWatch() {
+    const el = $('watchPanel'); if (!el) return;
+    const w = JSON.parse(Sheet.watch(app.project().flowsheet, ...solveArgs()));
+    el.hidden = !w.items.length;
+    el.classList.toggle('stale', w.stale);
+    el.innerHTML = w.items.map((i) => `<div><span>${esc(i.label)}</span><span><b>${esc(i.value)}</b> ${esc(i.unit)}</span></div>`).join('');
+  }
+
   function scenariosTool(body) {
     const redraw = () => scenariosTool(body);
     const d = JSON.parse(Sheet.scenarios(app.project().flowsheet));
@@ -892,5 +1061,5 @@ export function initTools(app) {
     };
   }
 
-  return { lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
+  return { lastMcCabe: () => mtLast, renderWatch, equipmentSection, lastThermo: () => th.last ?? null, thermoSection, dataToolsSection, streamAnalysis, openTools, blackOilSection, hypotheticalSection, lastDynamics: () => dynRun?.result ?? null, lastStepTest: () => pid.last };
 }

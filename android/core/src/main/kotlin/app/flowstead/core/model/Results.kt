@@ -114,6 +114,9 @@ object ResultKeys {
         "adiabaticHead", "polytropicHead", "head", "curveHead", "npshRequired" -> Quantity.Length
         "inletVolumeFlow" -> Quantity.VolumeFlow
         "surgeMargin" -> Quantity.Fraction
+        // No unit to convert: shown as the engine gives them, the unit in the label (rpm; W/K).
+        "operatingSpeed", "ua" -> Quantity.Ratio
+        "curveIterations" -> Quantity.Count
         "molarFlow" -> Quantity.MolarFlow
         "massFlow" -> Quantity.MassFlow
         "volumeFlow", "liquidVolumeFlow" -> Quantity.VolumeFlow
@@ -188,6 +191,9 @@ object ResultKeys {
         "curveHead" -> "Head on the curve at this flow"
         "inletVolumeFlow" -> "Actual inlet flow"
         "surgeMargin" -> "Surge margin (flow above the surge limit)"
+        "operatingSpeed" -> "Operating speed, rpm"
+        "ua" -> "UA, W/K"
+        "curveIterations" -> "Solves to settle on the curve"
         "requiredCv" -> "Required Cv (US, IEC 60534)"
         "requiredKv" -> "Required Kv (metric)"
         "valveOpening" -> "Opening (linear trim)"

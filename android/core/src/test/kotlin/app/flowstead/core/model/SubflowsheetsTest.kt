@@ -213,4 +213,97 @@ class SubflowsheetsTest {
         assertEquals(wired, Subflowsheets.adopt(g, wired, null))
         assertEquals(g.objects.map { it.parent }, adopted.objects.dropLast(1).map { it.parent })
     }
+
+    // ---------- dragging objects into a sub-flowsheet, and duplicating one ----------
+
+    @Test
+    fun movingTheCompressorIntoTheCoolersBlockKeepsTheFlowsheetTheEngineSolves() {
+        val (g, block) = Subflowsheets.group(train, listOf("e"), 360.0, 0.0)
+        val m = Subflowsheets.moveInto(g, listOf("k"), block.id)
+        // K-100 is inside; DISCHARGE, which ran straight from it into the block, is inside too, keeping its id and tag.
+        assertEquals(block.id, m.obj("k")!!.parent)
+        assertEquals(block.id, m.obj("dis")!!.parent)
+        assertEquals("DISCHARGE", m.obj("dis")!!.tag)
+        // Only SUCTION and COOLED are left on the main flowsheet, each matched across the block's edge.
+        assertEquals(setOf("SUCTION", "COOLED"), m.objects.filter { it.parent == null }.map { it.tag }.toSet())
+        assertEquals(setOf("suc", "out"), Subflowsheets.of(m, block.id)!!.ports.map { it.outer }.toSet())
+        // The engine sees exactly the flowsheet it solved before: same numbers.
+        assertEquals(shape(train), shape(Subflowsheets.flatten(m)))
+        // The other way round (browser test 4o): K-100 dragged into an empty block, then DISCHARGE, which the block now
+        // gives out, and E-100 dragged in together.
+        val (e0, b2) = Subflowsheets.add(train, null, 240.0, 240.0)
+        val k1 = Subflowsheets.moveInto(e0, listOf("k"), b2.id)
+        val k2 = Subflowsheets.moveInto(k1, listOf("dis", "e"), b2.id)
+        assertEquals(listOf(b2.id, b2.id, b2.id), listOf("k", "dis", "e").map { k2.obj(it)!!.parent })
+        assertEquals("DISCHARGE", k2.obj("dis")!!.tag)
+        assertEquals(shape(train), shape(Subflowsheets.flatten(k2)))
+    }
+
+    @Test
+    fun movingAStreamWithItsUnitAndFromAnEmptyBlockGivesTheSameFlowsheet() {
+        // Everything but SUCTION, dragged into an empty block in two goes: first DISCHARGE and E-100, then K-100.
+        val (f0, b) = Subflowsheets.add(train, null, 600.0, 0.0)
+        val m1 = Subflowsheets.moveInto(f0, listOf("dis", "e"), b.id)
+        // DISCHARGE now crosses the block's edge: outside, a twin stands for it (its tag the engine's only change).
+        fun units(f: Flowsheet) = shape(f.copy(objects = f.objects.map { if (it.type.isStream) it.copy(tag = it.tag.substringBefore("-SUB")) else it }))
+        assertEquals(units(train), units(Subflowsheets.flatten(m1)))
+        val m2 = Subflowsheets.moveInto(m1, listOf("k"), b.id)
+        assertEquals(shape(train), shape(Subflowsheets.flatten(m2)))
+        assertEquals(setOf("SUCTION", "COOLED"), m2.objects.filter { it.parent == null }.map { it.tag }.toSet())
+        // Moved back out (ungrouped), the case is the train again.
+        assertEquals(shape(train), shape(Subflowsheets.ungroup(m2, b.id)))
+    }
+
+    @Test
+    fun movingIntoABlockOnItsOwnPackageNeedsItsComponents() {
+        val (f0, b) = Subflowsheets.add(train, null, 600.0, 0.0)
+        val own = Subflowsheets.setFluid(f0, b.id, SubFluid("Peng-Robinson (PR)", listOf("Methane", "Ethane")))
+        val e = assertFailsWith<EditRejected> { Subflowsheets.moveInto(own, listOf("suc", "k"), b.id) }
+        assertTrue("Propane" in e.message!!, e.message)
+        // Equipment without a composition of its own moves in.
+        assertEquals(b.id, Subflowsheets.moveInto(own, listOf("k"), b.id).obj("k")!!.parent)
+        // A stream matched to another block stays on that block's flowsheet: DISCHARGE feeds a cooler block.
+        val (g, cooler) = Subflowsheets.group(train, listOf("e"), 360.0, 0.0)
+        val (g2, other) = Subflowsheets.add(g, null, 0.0, 300.0)
+        val r = assertFailsWith<EditRejected> { Subflowsheets.moveInto(g2, listOf("k", "dis"), other.id) }
+        assertTrue("DISCHARGE" in r.message!! && cooler.tag in r.message!!, r.message)
+        assertFailsWith<EditRejected> { Subflowsheets.group(g2, listOf("k", "dis"), 0.0, 0.0) }
+        // Its unit alone moves, and the stream stays matched, now crossing into the new block too.
+        val k = Subflowsheets.moveInto(g2, listOf("k"), other.id)
+        assertEquals(shape(train), shape(Subflowsheets.flatten(k)))
+        // Only from the flowsheet the block is on.
+        val (f1, inner) = Subflowsheets.add(f0, b.id, 0.0, 0.0)
+        assertFailsWith<EditRejected> { Subflowsheets.moveInto(f1, listOf("k"), inner.id) }
+    }
+
+    @Test
+    fun duplicatingABlockCopiesEverythingInsideWithNewIdsAndTags() {
+        // The cooler in a block, with a nested block holding nothing but a note of a stream; a table on E-100.
+        val (g0, block) = Subflowsheets.group(train, listOf("e"), 360.0, 0.0)
+        val (g1, nested) = Subflowsheets.add(g0, block.id, 0.0, 0.0)
+        val g = FlowsheetEditing.setTable(g1, "e", listOf("duty"))
+        val (d, copy, notes) = Subflowsheets.duplicate(g, block.id)
+        // The original is untouched.
+        assertEquals(g.objects, d.objects.filter { o -> g.objects.any { it.id == o.id } })
+        // The copy: a new block (and a new nested one) with the same contents, new ids, unique tags.
+        val copied = d.objects.filter { it.parent == copy.id }
+        val orig = g.objects.filter { it.parent == block.id }
+        assertEquals(orig.map { it.type }.sorted(), copied.map { it.type }.sorted())
+        assertTrue(copied.none { c -> g.objects.any { it.id == c.id } })
+        assertEquals(d.objects.size, d.objects.map { it.tag.lowercase() }.toSet().size)
+        assertEquals((d.subflowsheets.map { it.tag } + d.objects.map { it.tag }).size, (d.subflowsheets.map { it.tag.lowercase() } + d.objects.map { it.tag.lowercase() }).toSet().size)
+        assertEquals(1, d.subflowsheets.count { it.parent == copy.id && it.id != nested.id })
+        assertEquals(block.x + 48.0, copy.x)
+        // Inside, the copy is joined as the original: E-100's feed and product, and its table.
+        val cooler = copied.first { it.type == ObjectType.Cooler }
+        assertEquals(2, d.connections.count { it.fromObject == cooler.id || it.toObject == cooler.id })
+        assertEquals(listOf("duty"), d.tables.first { it.objectId == cooler.id }.keys)
+        // Its streams in and out are there, not matched to anything outside, and the notes say so.
+        assertEquals(2, Subflowsheets.boundary(d, copy.id).size)
+        assertTrue(Subflowsheets.of(d, copy.id)!!.ports.all { it.outer == null })
+        assertTrue(notes.any { "not connected" in it }, notes.toString())
+        // The original still solves as the train; the copy is not ready until its streams are connected.
+        assertEquals(shape(train), shape(Subflowsheets.flatten(g)))
+        assertTrue(Readiness.of(d).notReady.keys.any { it in copied.map { c -> c.id } })
+    }
 }

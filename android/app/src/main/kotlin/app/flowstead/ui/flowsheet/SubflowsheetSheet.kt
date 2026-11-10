@@ -82,6 +82,7 @@ fun SubflowsheetSheet(
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { vm.openLevel(b.id) }, modifier = Modifier.testTag("block_open")) { Text("Open") }
+                OutlinedButton(onClick = { vm.duplicateBlock(b.id) }, modifier = Modifier.testTag("block_duplicate")) { Text("Duplicate") }
                 OutlinedButton(onClick = { vm.ungroupBlock(b.id) }) { Text("Ungroup") }
                 OutlinedButton(onClick = { vm.deleteBlock(b.id) }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             }
@@ -112,7 +113,7 @@ fun SubflowsheetSheet(
                 StreamPicker("Add a stream in", Subflowsheets.connectable(fs, b.id, true).map { it.id to it.tag }, Modifier.weight(1f)) { vm.connectToBlock(b.id, it, true) }
                 StreamPicker("Add a stream out", Subflowsheets.connectable(fs, b.id, false).map { it.id to it.tag }, Modifier.weight(1f)) { vm.connectToBlock(b.id, it, false) }
             }
-            Text("Or drag a stream onto the block. Inside, each one is a stream to join to the equipment there.",
+            Text("Or drag a stream onto the block. Inside, each one is a stream to join to the equipment there. Dragging a unit, or several selected with Select, onto the block moves them inside.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             for (x in bd) {
                 val outer = x.port?.outer?.let { o -> fs.objects.firstOrNull { it.id == o } }

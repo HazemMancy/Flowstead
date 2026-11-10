@@ -1030,6 +1030,228 @@ try {
     await p.close();
   }
 
+  // ---------- 4n. the app's tools now on the web (D136), against independent references ----------
+  // (a) A pump on its curve, set through the worksheet: water (steam tables) at 1 bar, 25 °C, 27.7 kg/s; curve 55 m at
+  //     50 m³/h, 40 m at 200 m³/h (the line H = 60 − 0.1 Q; the app takes points at positive flows only). The head is the curve at the actual flow, Q = m/ρ with IAPWS-95's
+  //     997.05 kg/m³ (100.0 m³/h → 50.0 m), and the pressure rise is ρgH.
+  // (b) A conversion reactor: methane combustion at 60 % conversion (benchmark 13 edited through the reactor editor):
+  //     the outlet methane is 40 % of the inlet methane (hand mass balance).
+  // (c) A pipe with a 90° elbow (Crane L/D 14) drops as much as a straight pipe 14 diameters longer; the straight
+  //     pipe's drop is Darcy–Weisbach with Colebrook's friction factor, by hand (water, IAPWS ρ and μ).
+  // (d) McCabe–Thiele, benzene/toluene at 1 atm: the minimum stages agree with Fenske on α from NIST's Antoine
+  //     vapour pressures at the top and bottom temperatures.
+  // (e) The watch panel shows the engine's value; the check lists nothing for a solved, complete case.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [], got = {};
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const open = async (fs, name) => {
+      await p.setInputFiles('#openFile', { name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fs)) });
+      await p.waitForFunction((n) => window.flowsteadFlowsheet.project.name === n, name, { timeout: 30_000 });
+    };
+    const solveNow = async () => {
+      await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+      const before = await p.evaluate(() => window.flowsteadFlowsheet.project.solve?.at ?? 0);
+      await p.click('#solveBtn');
+      await p.waitForFunction((b) => (window.flowsteadFlowsheet.project.solve?.at ?? 0) > b || /Not solved|Fix /.test(document.getElementById('solveMsgs')?.textContent ?? ''), before, { timeout: 600_000 });
+      return p.evaluate(() => window.flowsteadFlowsheet.project.solve?.result);
+    };
+    const openObject = (id) => p.evaluate((x) => [...document.querySelectorAll('#objects button')].find((b) => b.dataset.id === x)?.click(), id);
+    const S = (si, unit) => ({ si, unit });
+    const water = { Water: 1 };
+    // (a)
+    const m = 27.7, rho = 997.05;
+    await open({ schemaVersion: 1, propertyPackage: 'Steam Tables (IAPWS-IF97)', compounds: ['Water'], atmosphericPressurePa: 101325,
+      objects: [
+        { id: 'w', tag: 'WATER', type: 'material_stream', x: 0, y: 0, specs: { temperature: S(298.15, 'C'), pressure: S(1e5, 'bara'), massFlow: S(m, 'kg/s') }, composition: water },
+        { id: 'p', tag: 'P-100', type: 'pump', x: 120, y: 0 },
+        { id: 'd', tag: 'DIS', type: 'material_stream', x: 240, y: 0 }],
+      connections: [{ fromObject: 'w', fromPort: 0, toObject: 'p', toPort: 0 }, { fromObject: 'p', fromPort: 0, toObject: 'd', toPort: 0 }] }, 'pump');
+    await openObject('p');
+    await p.check('#eq_curve');
+    await p.click('[data-cvop="addPoint"]');
+    const setCell = async (sel, v) => { await p.fill(sel, v); await p.press(sel, 'Enter'); await p.waitForTimeout(80); };
+    await setCell('[data-cv="point"][data-i="0"][data-f="flow"]', '50');
+    await setCell('[data-cv="point"][data-i="0"][data-f="head"]', '55');
+    await p.click('[data-cvop="addPoint"]');
+    await setCell('[data-cv="point"][data-i="1"][data-f="flow"]', '200');
+    await setCell('[data-cv="point"][data-i="1"][data-f="head"]', '40');
+    await setCell('[data-cv="point"][data-i="0"][data-f="eff"]', '70');
+    await setCell('[data-cv="point"][data-i="1"][data-f="eff"]', '70');
+    const curve = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === 'p').curve);
+    const ra = await solveNow();
+    const qh = m / rho * 3600, hRef = 60 - 0.1 * qh, head = ra?.objects?.p?.properties?.head;
+    const rise = (ra?.objects?.d?.properties?.pressure ?? NaN) - 1e5;
+    got.pump = { head, hRef, rise, rhoGH: rho * 9.80665 * hRef };
+    if (!(curve?.points?.length === 2 && Math.abs(curve.points[1].flow - 200 / 3600) < 1e-12 && curve.points[1].head === 40)) problems.push(`curve as saved: ${JSON.stringify(curve)}`);
+    if (ra?.status !== 'converged') problems.push(`pump case: ${ra?.status} ${JSON.stringify(ra?.messages ?? [])}`);
+    if (!(Math.abs(head - hRef) / hRef < 2e-3)) problems.push(`pump head ${head} m; the curve at ${qh.toFixed(2)} m³/h gives ${hRef.toFixed(3)} m`);
+    if (!(Math.abs(rise - rho * 9.80665 * hRef) / rise < 3e-3)) {
+      const pp = ra?.objects?.p?.properties ?? {}, ov = (id) => ra?.objects?.[id]?.phases?.overall?.properties ?? {};
+      const later = await p.evaluate(() => window.flowsteadFlowsheet.project.solve?.result?.objects?.d?.properties?.pressure);
+      problems.push(`pressure rise ${rise} Pa; ρgH ${rho * 9.80665 * hRef} Pa (P-100 rise ${pp.pressureRise}, curve head ${pp.curveHead}, ${pp.curveIterations} solves, η ${pp.efficiency}; WATER ${ra?.objects?.w?.properties?.pressure} Pa, ρ ${ov('w').density}, Q ${ov('w').volumeFlow}; DIS ${ra?.objects?.d?.properties?.pressure} Pa, later ${later} Pa; ${JSON.stringify(ra?.messages ?? [])})`);
+    }
+    // (b)
+    const b13 = JSON.parse(fs.readFileSync(path.join(benchDir, '13-conversion-reactor', 'input.json'), 'utf8')).flowsheet;
+    await open(b13, 'rx');
+    const fsr = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
+    const reactor = fsr.objects.find((o) => o.type === 'conversion_reactor');
+    await openObject(reactor.id);
+    const rid = fsr.reactions[0].id;
+    await p.click(`[data-rxopen="${rid}"]`);
+    await setCell(`[data-rx="conversion"][data-r="${rid}"]`, '60');
+    const conv = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).reactions[0].conversion);
+    const rb = await solveNow();
+    const ch4 = (id) => (rb?.objects?.[id]?.properties?.molarFlow ?? 0) * (rb?.objects?.[id]?.phases?.overall?.composition?.Methane ?? 0);
+    const inlet = fsr.connections.filter((c) => c.toObject === reactor.id).map((c) => c.fromObject).filter((id) => fsr.objects.find((o) => o.id === id)?.type === 'material_stream');
+    const outlets = fsr.connections.filter((c) => c.fromObject === reactor.id).map((c) => c.toObject).filter((id) => fsr.objects.find((o) => o.id === id)?.type === 'material_stream');
+    const nin = inlet.reduce((a, id) => a + ch4(id), 0), nout = outlets.reduce((a, id) => a + ch4(id), 0);
+    got.reactor = { conv, nin, nout };
+    if (!(conv === 0.6 && rb?.status === 'converged' && nin > 0 && Math.abs(nout / nin - 0.4) < 1e-4)) problems.push(`reactor: ${JSON.stringify(got.reactor)} ${rb?.status}`);
+    // (c)
+    const pipe = (id, len, withElbow) => ({ schemaVersion: 1, propertyPackage: 'Steam Tables (IAPWS-IF97)', compounds: ['Water'], atmosphericPressurePa: 101325,
+      objects: [
+        { id: 'f', tag: 'FEED', type: 'material_stream', x: 0, y: 0, specs: { temperature: S(298.15, 'C'), pressure: S(5e5, 'bara'), massFlow: S(10, 'kg/s') }, composition: water },
+        { id: 'l', tag: 'L-100', type: 'pipe_segment', x: 120, y: 0, specs: { length: S(len, 'm'), innerDiameter: S(0.1, 'mm'), roughness: S(4.6e-5, 'mm'), elevationChange: S(0, 'm') },
+          ...(withElbow ? { pipeSections: [{ length: len, count: 1 }, { fitting: 'elbow_90', count: 1 }] } : {}) },
+        { id: 'o', tag: 'OUT', type: 'material_stream', x: 240, y: 0 }],
+      connections: [{ fromObject: 'f', fromPort: 0, toObject: 'l', toPort: 0 }, { fromObject: 'l', fromPort: 0, toObject: 'o', toPort: 0 }] });
+    await open(pipe('a', 100, true), 'elbow');
+    const rc1 = await solveNow();
+    await open(pipe('b', 101.4, false), 'straight');
+    const rc2 = await solveNow();
+    const dp1 = rc1?.objects?.l?.properties?.pressureDrop, dp2 = rc2?.objects?.l?.properties?.pressureDrop;
+    // Darcy–Weisbach, Colebrook (iterated), IAPWS water at 25 °C: ρ 997.05 kg/m³, μ 890.02 µPa·s.
+    const D = 0.1, A = Math.PI * D * D / 4, v = 10 / rho / A, Re = rho * v * D / 890.02e-6, eps = 4.6e-5;
+    let ff = 0.02; for (let i = 0; i < 50; i++) ff = (-2 * Math.log10(eps / D / 3.7 + 2.51 / (Re * Math.sqrt(ff)))) ** -2;
+    const dpHand = ff * 101.4 / D * rho * v * v / 2;
+    got.pipe = { dp1, dp2, dpHand };
+    if (!(Math.abs(dp1 - dp2) / dp2 < 5e-3)) problems.push(`elbow pipe ${dp1} Pa vs straight pipe 14 D longer ${dp2} Pa`);
+    if (!(Math.abs(dp2 - dpHand) / dpHand < 0.03)) problems.push(`straight pipe ${dp2} Pa; Darcy–Weisbach with Colebrook ${dpHand.toFixed(0)} Pa`);
+    // (d)
+    await open({ schemaVersion: 1, propertyPackage: 'Peng-Robinson (PR)', compounds: ['Benzene', 'Toluene'], atmosphericPressurePa: 101325, objects: [], connections: [] }, 'mccabe');
+    await p.click('#toolsBtn'); await p.click('#toolsTabs [data-tab="mccabe"]');
+    await p.selectOption('#mt_a', 'Benzene'); await p.selectOption('#mt_b', 'Toluene');
+    await p.click('#mt_run');
+    await p.waitForFunction(() => /Calculated by DWSIM|Not calculated/.test(document.getElementById('mt_out')?.textContent ?? ''), null, { timeout: 300_000 });
+    const kv = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#mt_out tr')].map((r) => [r.querySelector('th')?.textContent, Number(r.querySelector('td')?.textContent)])));
+    const antoine = (A, B, C, T) => 10 ** (A - B / (T + C)); // bar, K (NIST)
+    const alpha = (T) => antoine(4.01814, 1203.835, -53.226, T) / antoine(4.07827, 1343.943, -53.773, T);
+    const aAvg = Math.sqrt(alpha(354) * alpha(382));
+    const fenske = Math.log((0.95 / 0.05) * (0.95 / 0.05)) / Math.log(aAvg);
+    const nmin = kv['Minimum stages (total reflux)'], n = kv['Theoretical stages (reboiler included)'];
+    got.mccabe = { nmin, fenske, n };
+    if (!(Math.abs(nmin - fenske) / fenske < 0.06 && n > nmin)) problems.push(`McCabe–Thiele ${JSON.stringify(kv)}; Fenske ${fenske.toFixed(2)} (α ${aAvg.toFixed(3)})`);
+    await p.click('#toolsClose');
+    // (e)
+    await open(pipe('b', 101.4, false), 'watch');
+    await solveNow();
+    await p.click('#toolsBtn'); await p.click('#toolsTabs [data-tab="watch"]');
+    await p.selectOption('#wt_obj', 'l'); await p.selectOption('#wt_key', 'pressureDrop');
+    await p.click('#toolsTabs [data-tab="check"]');
+    const check = await p.$eval('#toolsBody', (e) => e.textContent);
+    await p.click('#toolsClose');
+    const panel = await p.$eval('#watchPanel', (e) => (e.hidden ? '' : e.textContent));
+    got.watch = panel;
+    if (!/L-100.*Pressure drop/i.test(panel) || !/\d/.test(panel)) problems.push(`watch panel: "${panel}"`);
+    if (!/Nothing to report/.test(check)) problems.push(`check: "${check.slice(0, 200)}"`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} app tools on the web (pump ${got.pump?.head?.toFixed?.(3)} m for ${got.pump?.hRef?.toFixed?.(3)} m; reactor CH4 out/in ${(got.reactor?.nout / got.reactor?.nin).toFixed?.(4)}; elbow ${got.pipe?.dp1?.toFixed?.(0)} vs ${got.pipe?.dp2?.toFixed?.(0)} Pa, hand ${got.pipe?.dpHand?.toFixed?.(0)} Pa; Nmin ${got.mccabe?.nmin} vs Fenske ${got.mccabe?.fenske?.toFixed?.(2)}; watch "${(got.watch ?? '').trim()}")`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4o. dragging objects into a sub-flowsheet, and duplicating one (D139) ----------
+  // Benchmark 06's train with an empty block: K-100 dragged onto it with a mouse, then DISCHARGE and E-100 together with
+  // a finger. The case flattens to the train and solves to the flat train's numbers (every result of every stream and
+  // unit, the reference the engine gave without the block). The block's copy has the same contents; one undo removes it.
+  for (const touch of [false, true]) {
+    const ctx = await browser.newContext(touch ? { viewport: { width: 1024, height: 768 }, hasTouch: true } : { viewport: { width: 1280, height: 900 } });
+    const p = await ctx.newPage();
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const b06 = JSON.parse(fs.readFileSync(path.join(benchDir, '06-compressor-aftercooler', 'input.json'), 'utf8')).flowsheet;
+    const open = async (f, name) => {
+      await p.setInputFiles('#openFile', { name: `${name}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(f)) });
+      await p.waitForFunction((n) => window.flowsteadFlowsheet.project.name === n, name, { timeout: 30_000 });
+    };
+    const solveNow = async () => {
+      await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+      const before = await p.evaluate(() => window.flowsteadFlowsheet.project.solve?.at ?? 0);
+      await p.click('#solveBtn');
+      await p.waitForFunction((b) => (window.flowsteadFlowsheet.project.solve?.at ?? 0) > b, before, { timeout: 600_000 });
+      return p.evaluate(() => window.flowsteadFlowsheet.project.solve.result);
+    };
+    await open(b06, 'flat');
+    const flat = await solveNow();
+    const units = b06.objects.filter((o) => o.type !== 'material_stream');
+    const k = units.find((o) => o.type === 'compressor'), e = units.find((o) => o.type === 'cooler' || o.type === 'heater');
+    const dis = b06.connections.find((c) => c.fromObject === k.id).toObject;
+    const bx = (k.x + e.x) / 2, by = Math.max(...b06.objects.map((o) => o.y)) + 240;
+    await open({ ...b06, subflowsheets: [{ id: 'blk', tag: 'SUB-1', x: bx, y: by }] }, 'blocked');
+    const scr = (x, y) => p.evaluate(([x, y]) => { const w = window.flowsteadFlowsheet, r = document.getElementById('canvas').getBoundingClientRect(); return [r.left + x * w.view.zoom + w.view.offsetX, r.top + y * w.view.zoom + w.view.offsetY]; }, [x, y]);
+    const drag = async (from, to) => {
+      if (touch) {
+        const cdp = await ctx.newCDPSession(p);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from[0], y: from[1] }] });
+        for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from[0] + (to[0] - from[0]) * i / 8, y: from[1] + (to[1] - from[1]) * i / 8 }] });
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      } else { await p.mouse.move(...from); await p.mouse.down(); await p.mouse.move(to[0], to[1], { steps: 8 }); await p.mouse.up(); }
+      await p.waitForTimeout(150);
+    };
+    const parent = (id) => p.evaluate((i) => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).objects.find((o) => o.id === i)?.parent ?? null, id);
+    // The flat case's solve left its panel open over the canvas: closed, as before dragging on what it covers.
+    if (await p.isVisible('#solveClose')) await p.click('#solveClose');
+    const under = (pt) => p.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el?.id || el?.className || el?.tagName; }, pt);
+    const target = await scr(bx, by);
+    await drag(await scr(k.x, k.y), target);
+    if ((await parent(k.id)) !== 'blk') problems.push(`${k.tag} dragged onto SUB-1 is on ${await parent(k.id)}`);
+    await p.evaluate(([a, b]) => { const v = window.flowsteadFlowsheet.view; v.selectedId = null; v.toggleSelected(a); v.toggleSelected(b); }, [dis, e.id]);
+    // What the drop did: the view's answer, the block it was over, and any message shown.
+    await p.evaluate(() => { const v = window.flowsteadFlowsheet.view, end = v.endDrag.bind(v); window.__drops = [];
+      v.endDrag = (x, y) => { const over = v.dropTarget, r = end(x, y); window.__drops.push(`${over || 'no block'} → ${String(r).slice(0, 160)}`); return r; }; });
+    const fromE = await scr(e.x, e.y);
+    const seen = `${await under(fromE)} at ${e.tag}, ${await under(target)} at SUB-1, ${await p.evaluate(() => window.flowsteadFlowsheet.view.selectionCount)} selected`;
+    await drag(fromE, target);
+    const drops = await p.evaluate(() => (window.__drops ?? []).join(' ; ') + ' | toast: ' + [...document.querySelectorAll('.fs-toast,.toast')].map((x) => x.textContent).join(' / '));
+    for (const id of [dis, e.id]) if ((await parent(id)) !== 'blk') problems.push(`${id} dragged with the selection is on ${await parent(id)} (${seen}; ${drops})`);
+    const flatTags = await p.evaluate(() => { const w = window.flowsteadFlowsheet, f = JSON.parse(w.SubTools.flatten(w.project.flowsheet)), t = Object.fromEntries(f.objects.map((o) => [o.id, o.tag]));
+      return { tags: f.objects.map((o) => o.tag).sort(), links: f.connections.map((c) => `${t[c.fromObject]}>${t[c.toObject]}`).sort() }; });
+    const t06 = Object.fromEntries(b06.objects.map((o) => [o.id, o.tag]));
+    const want = { tags: b06.objects.map((o) => o.tag).sort(), links: b06.connections.map((c) => `${t06[c.fromObject]}>${t06[c.toObject]}`).sort() };
+    if (JSON.stringify(flatTags) !== JSON.stringify(want)) problems.push(`flattened ${JSON.stringify(flatTags)} for ${JSON.stringify(want)}`);
+    const grouped = await solveNow();
+    let compared = 0, worst = 0;
+    for (const o of b06.objects) for (const [key, v] of Object.entries(flat.objects[o.id]?.properties ?? {})) {
+      const w = grouped.objects[o.id]?.properties?.[key];
+      if (w === undefined) { problems.push(`${o.tag} has no ${key} after the move`); continue; }
+      compared++; worst = Math.max(worst, Math.abs(w - v) / Math.max(Math.abs(v), 1e-9));
+    }
+    if (!(compared >= 25 && worst < 1e-9)) problems.push(`moved vs flat: ${compared} values, worst ${worst}`);
+    // Duplicate: the block's panel, then one undo.
+    if (touch) await p.touchscreen.tap(...target); else await p.mouse.click(...target);
+    await p.click('#blockDup');
+    const after = await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet));
+    const copy = after.subflowsheets.find((x) => x.id !== 'blk');
+    const inside = (id) => after.objects.filter((o) => o.parent === id).map((o) => o.type).sort().join();
+    if (!copy || inside(copy.id) !== inside('blk')) problems.push(`duplicate: ${copy?.tag} holds ${inside(copy?.id)}, SUB-1 ${inside('blk')}`);
+    if (new Set(after.objects.map((o) => o.tag.toLowerCase())).size !== after.objects.length) problems.push('duplicate: tags repeat');
+    await p.click('#undoBtn');
+    if ((await p.evaluate(() => JSON.parse(window.flowsteadFlowsheet.project.flowsheet).subflowsheets.length)) !== 1) problems.push('one undo did not take the copy away');
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} into a sub-flowsheet by ${touch ? 'finger' : 'mouse'} (${compared} values against the flat case, worst ${worst.toExponential(1)}; duplicated ${copy?.tag})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await ctx.close();
+  }
+
   // ---------- 4e. bubble and dew points on demand, and HYSYS's enthalpy basis (D119, D120) ----------
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });

@@ -171,4 +171,25 @@ public sealed class DynamicsTests(EngineFixture engine, ITestOutputHelper output
         Assert.InRange(T(r, "sep", "pressure")[^1], 18e5 * 0.995, 18e5 * 1.005);
         Assert.Equal(18e5, T(r, "pic-100", "target")[^1]);
     }
+
+    [Fact]
+    public async Task BackToAutomaticTheOutputCarriesOnWithoutAKick()
+    {
+        // PIC-100 to manual, its setpoint moved 2 bar below the pressure, then back to automatic at 100 s. Bumpless: the
+        // output's first step is only the integral action, Kc·e·dt/Ti (Kc 2, Ti 30 s, e = 2 bar over its 40 bar span
+        // (twice the first setpoint), 5 %: 0.33 % a second), not the proportional kick Kc·e (10 %).
+        var r = await Run(Separator(), 160, [
+            new DynamicEvent(10, "pic-100", DynamicKeys.Mode, 0),
+            new DynamicEvent(20, "pic-100", AdjustKeys.Target, 18e5),
+            new DynamicEvent(100, "pic-100", DynamicKeys.Mode, 1),
+        ]);
+        var op = T(r, "pic-100", "output");
+        int At(double t) => r.Times.FindIndex(x => x >= t - 1e-9);
+        int before = At(99), after = At(102);
+        Assert.Equal(op[At(50)], op[before], 9); // held in manual
+        var e = 2e5 / 40e5 * 100;
+        var step = Math.Abs(op[after] - op[before]);
+        output.WriteLine($"output {op[before]:0.###} % at 99 s, {op[after]:0.###} % at 102 s; Kc·e = {2 * e:0.##} %");
+        Assert.True(step < 0.25 * 2 * e, $"output jumped {step:0.###} % on returning to automatic");
+    }
 }

@@ -28,6 +28,9 @@ import app.flowstead.core.model.SetKeys
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
 import app.flowstead.core.model.SpecKey
+import app.flowstead.core.model.ReactionType
+import app.flowstead.core.model.Reactors
+import app.flowstead.core.model.ReactorKeys
 import app.flowstead.core.model.PipeSizes
 import app.flowstead.core.model.Specification
 import app.flowstead.core.model.ValveLibrary
@@ -351,15 +354,28 @@ private class Form(val fs: Flowsheet, val obj: SimObject, val ctx: UnitContext) 
             }
             ObjectType.Adjust, ObjectType.Controller -> adjust()
             ObjectType.Recycle -> note("Tear stream: the engine iterates until the assumed and calculated streams agree (1e-6 kg/s, 0.001 K). Iterations are reported in the results.")
-            ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor, ObjectType.Cstr, ObjectType.Pfr ->
-                note("Reactions and the reactor's operating mode are edited in the Android app for now; a flowsheet saved from the app keeps them here, and it solves.")
+            ObjectType.ConversionReactor, ObjectType.EquilibriumReactor, ObjectType.GibbsReactor, ObjectType.Cstr, ObjectType.Pfr -> {
+                // As the app's ReactorEditor (D136): operating mode, size and catalyst here; the reactions below.
+                if (obj.type == ObjectType.GibbsReactor) note("Minimises Gibbs energy over every component in the fluid package: no reactions to define.")
+                method("Operation", ReactorKeys.MODE, ReactorKeys.MODES)
+                if (obj.refs[ReactorKeys.MODE] == "outlet_temperature") spec(SpecKey.OUTLET_TEMPERATURE)
+                if (obj.type == ObjectType.Cstr || obj.type == ObjectType.Pfr) spec(SpecKey.VOLUME)
+                if (obj.type == ObjectType.Pfr) spec(SpecKey.REACTOR_LENGTH)
+                spec(SpecKey.PRESSURE_DROP, "0 if empty")
+                if (Reactors.reactionType(obj.type) == ReactionType.Kinetic && Reactors.reactions(fs, obj).any { it.type == ReactionType.Catalytic }) {
+                    label("Catalyst")
+                    note("A catalytic rate is per kg of catalyst; the reactor holds loading × volume of it.")
+                    spec(SpecKey.CATALYST_LOADING)
+                    if (obj.type == ObjectType.Pfr) { spec(SpecKey.CATALYST_VOID_FRACTION); spec(SpecKey.CATALYST_PARTICLE_DIAMETER, "Ergun pressure drop if given") }
+                }
+            }
             ObjectType.ReliefValve -> note("Pressure safety valve: its relief cases are set up in the Android app's Safety analysis for now. It takes no part in the solve.")
             else -> note("${obj.type.displayName()} editing arrives with the remaining unit operations.")
         }
         if (!obj.type.isStream && Ports.of(obj.type).isNotEmpty()) connections()
     }
 
-    private fun curveNote() { if (obj.curve != null) note("This machine runs on a performance curve, edited in the Android app.") }
+    private fun curveNote() { if (obj.curve != null) note("This machine runs on its performance curve, below.") }
 
     /** A feed: conditions (give two), flow (give one), composition (the app's FeedStreamEditor). */
     private fun feed() {
@@ -386,7 +402,7 @@ private class Form(val fs: Flowsheet, val obj: SimObject, val ctx: UnitContext) 
         if (!sections) spec(SpecKey.ELEVATION_CHANGE, "0 (horizontal) if empty")
         spec(SpecKey.ROUGHNESS, "0.0457 mm (commercial steel) if empty")
         if (!sections) spec(SpecKey.INCREMENTS, "10 if empty; 20–50 for long gas lines")
-        if (sections) note("This line has ${obj.pipeSections!!.size} sections with fittings, edited in the Android app.")
+        if (sections) note("This line has ${obj.pipeSections!!.size} sections with fittings, below.")
         label("Flow model")
         note("All gas or all liquid: Darcy–Weisbach with the Chen friction factor, applied in every increment; gas density is re-evaluated along the line. When gas and liquid flow together, the correlation below applies.")
         method("Two-phase correlation", ChoiceKey.PIPE_CORRELATION, ChoiceKey.PIPE_CORRELATIONS)
