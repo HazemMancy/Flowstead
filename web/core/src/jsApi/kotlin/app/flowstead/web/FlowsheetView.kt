@@ -677,10 +677,10 @@ class FlowsheetView {
             for (p in b.ports) {
                 val outer = p.outer?.let { fs.obj(it) } ?: continue
                 val feed = Subflowsheets.boundary(saved, b.id).firstOrNull { it.stream.id == p.inner }?.feed ?: true
-                val at = positionOf(outer)
-                val edge = Offset(if (feed) r.left else r.right, at.y.coerceIn(r.top + 8f, r.bottom - 8f))
-                drawLine(streamColor(outer), at, edge, 2f, StrokeCap.Round, PathEffect.dashPathEffect(floatArrayOf(4f, 4f)))
-                drawCircle(streamColor(outer), 3.5f, edge)
+                // Square to the stream's head or tail and to the block's edge, as a connection is drawn (D147).
+                val pts = CanvasGeometry.blockLinkRoute(outer, positionOf(outer), r, intoBlock = feed)
+                drawPath(polyline(pts), streamColor(outer), style = Stroke(width = 2f, cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))))
+                drawCircle(streamColor(outer), 3.5f, if (feed) pts.last() else pts.first())
             }
         }
         // Adjust, controller and Set references: dashed signal lines to the objects they read and write.

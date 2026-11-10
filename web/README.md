@@ -35,6 +35,11 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.18**
+- **Lines to a sub-flowsheet drawn square (D147):** a stream going into a block leaves from its arrow's head, one
+  coming out meets the stream's tail, in horizontal and vertical runs as every connection is; they ran at an angle
+  from the stream's middle.
+
 **Web 1.17**
 - **Panels you can move and minimise (D146):** drag the selection bar, a worksheet, a sub-flowsheet's panel or the
   solve panel by its title bar (or the ⠿ grip) anywhere over the flowsheet, and minimise it to its title bar with —
