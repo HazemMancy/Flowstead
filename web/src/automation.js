@@ -152,10 +152,18 @@ export function installAutomation(ctx) {
      */
     async lineSizing(ref, params = {}) {
       const id = idOf(ref), p = JSON.stringify(params);
-      const req = JSON.parse(Tools.request('linesizing', fs(), ...solveArgs(), id, p));
-      if (req.error) throw new Error(req.error);
-      req.params.saturationFor = []; req.params.enthalpyBasis = ctx.enthalpyBasis();
-      const { result, ms } = await call(JSON.stringify(req));
+      const ask = async (extra) => {
+        const req = JSON.parse(Tools.request('linesizing', fs(), ...solveArgs(), id, JSON.stringify({ ...params, ...extra })));
+        if (req.error) throw new Error(req.error);
+        req.params.saturationFor = []; req.params.enthalpyBasis = ctx.enthalpyBasis();
+        return call(JSON.stringify(req));
+      };
+      let { result, ms } = await ask({});
+      // The engine stops at the first pipe that fails: those it did not reach are solved again, each alone.
+      for (const tag of JSON.parse(Tools.lineUnsolved(fs(), p, JSON.stringify(result)))) {
+        const again = await ask({ only: [tag] });
+        result = JSON.parse(Tools.lineMerge(JSON.stringify(result), JSON.stringify(again.result))); ms += again.ms;
+      }
       const rows = JSON.parse(Tools.lineRows(fs(), ...solveArgs(), id, p, JSON.stringify(result)));
       return { report: JSON.parse(Tools.report('linesizing', fs(), ...solveArgs(), id, p, JSON.stringify(result))), ...rows, ms };
     },

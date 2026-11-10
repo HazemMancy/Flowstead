@@ -221,7 +221,8 @@ object Tools {
                 app.flowstead.core.model.StreamLineSizing.problem(f, view, objectId)?.let { throw EditRejected(it) }
                 val input = lineInput(p, ctx)
                 if (app.flowstead.core.model.StreamLineSizing.candidates(input).isEmpty()) throw EditRejected(if (input.design) "No size has that schedule" else "Choose a size and schedule, or give the inside diameter")
-                call("solve", enc(Flowsheet.serializer(), app.flowstead.core.model.StreamLineSizing.flowsheet(f, view, objectId, input)))
+                val only = p["only"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
+                call("solve", enc(Flowsheet.serializer(), app.flowstead.core.model.StreamLineSizing.flowsheet(f, view, objectId, input, only)))
             }
             else -> err("Unknown tool")
         }
@@ -259,6 +260,17 @@ object Tools {
         }
         return rep.json()
     }
+
+    /** The test pipes a line sizing answer did not reach (the engine stops at the first that fails): solve them again, each alone. */
+    fun lineUnsolved(flowsheetJson: String, paramsJson: String, resultJson: String): String = buildJsonArray {
+        val f = fs(flowsheetJson)
+        app.flowstead.core.model.StreamLineSizing.unsolved(lineInput(params(paramsJson), UnitContext(f.atmosphericPressurePa)), FlowsheetJson.decodeFromString(SolveResult.serializer(), resultJson))
+            .forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) }
+    }.toString()
+
+    /** Two line sizing answers as one. */
+    fun lineMerge(aJson: String, bJson: String): String = FlowsheetJson.encodeToString(SolveResult.serializer(),
+        app.flowstead.core.model.StreamLineSizing.merge(FlowsheetJson.decodeFromString(SolveResult.serializer(), aJson), FlowsheetJson.decodeFromString(SolveResult.serializer(), bJson)))
 
     /**
      * Line sizing's rows in SI (D148), for the automation interface: {service, criteriaSet, recommended, rows: [{size, nps,

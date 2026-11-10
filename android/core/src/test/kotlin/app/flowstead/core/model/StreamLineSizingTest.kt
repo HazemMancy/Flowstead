@@ -66,4 +66,24 @@ class StreamLineSizingTest {
         assertEquals(500.0 / 4, o.rows[3].gradient!!, 1e-9) // Pa/m: 12 500 Pa over 100 m
         assertTrue(o.rows.take(3).none { it.passes })
     }
+
+    @Test
+    fun pipesTheEngineDidNotReachAreSolvedAgainAlone() {
+        // The engine stops at the first pipe that fails: one size errs, two it never reached; the retry asks for those two.
+        val input = StreamLineSizing.Input(design = false, insideDiameter = 0.05, totalLength = 1000.0)
+        val first = SolveResult(SolveStatus.Failed, objects = mapOf(
+            "g0" to ObjectResult(ObjectStatus.Error, error = "Pressure below zero"),
+            "t0" to ObjectResult(ObjectStatus.NotSolved, error = "Not calculated")))
+        assertEquals(listOf("t0"), StreamLineSizing.unsolved(input, first))
+        val again = SolveResult(SolveStatus.Converged, objects = mapOf("t0" to ObjectResult(ObjectStatus.Solved, properties = mapOf("pressureDrop" to 5e4))))
+        val merged = StreamLineSizing.merge(first, again)
+        assertEquals(ObjectStatus.Error, merged.objects["g0"]!!.status) // a real failure stays
+        assertEquals(5e4, merged.objects["t0"]!!.properties["pressureDrop"])
+        assertTrue(StreamLineSizing.unsolved(input, merged).isEmpty())
+        // The retry's flowsheet holds that pipe alone; the full one puts the largest size first.
+        assertEquals(listOf("t0"), StreamLineSizing.flowsheet(fs, view, "s", input, setOf("t0")).objects.filter { it.type == ObjectType.PipeSegment }.map { it.id })
+        val design = StreamLineSizing.flowsheet(fs, view, "s", StreamLineSizing.Input(design = true, schedule = "40"))
+        val ids = design.objects.filter { it.type == ObjectType.PipeSegment }.map { it.specs[SpecKey.INNER_DIAMETER]!!.si }
+        assertEquals(ids.sortedDescending(), ids)
+    }
 }

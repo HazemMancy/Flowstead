@@ -139,11 +139,32 @@ export function initTools(app) {
       if (name === 'linesizing' && req.params) { req.params.saturationFor = []; req.params.enthalpyBasis = app.enthalpyBasis?.(); }
       return run(req, q(out), label, (result) => Tools.report(name, ...args, JSON.stringify(result)));
     };
-    q('#ls_run').addEventListener('click', () => tool('linesizing', {
-      design: ls.design, service: ls.service || null, schedule: ls.schedule, nps: ls.design ? null : ls.nps,
-      insideDiameter: ls.design ? null : { value: ls.id, unit: 'mm' }, roughness: { value: ls.roughness, unit: 'mm' },
-      totalLength: { value: ls.length, unit: ls.lengthUnit },
-    }, '#ls_out', ls.design ? 'Sizing the line' : 'Rating the line'));
+    q('#ls_run').addEventListener('click', async () => {
+      const params = {
+        design: ls.design, service: ls.service || null, schedule: ls.schedule, nps: ls.design ? null : ls.nps,
+        insideDiameter: ls.design ? null : { value: ls.id, unit: 'mm' }, roughness: { value: ls.roughness, unit: 'mm' },
+        totalLength: { value: ls.length, unit: ls.lengthUnit },
+      };
+      const out = q('#ls_out');
+      const p = app.project(), base = [p.flowsheet, ...solveArgs(), id];
+      const ask = async (extra) => {
+        const req = JSON.parse(Tools.request('linesizing', ...base, JSON.stringify({ ...params, ...extra })));
+        if (req.error) throw new Error(req.error);
+        req.params.saturationFor = []; req.params.enthalpyBasis = app.enthalpyBasis?.();
+        return engine.call(req.method, req.params);
+      };
+      out.innerHTML = busy(ls.design ? 'Sizing the line…' : 'Rating the line…');
+      try {
+        await app.ready();
+        let { result, ms } = await ask({});
+        // The engine stops at the first pipe that fails: those it did not reach are solved again, each alone (D148).
+        for (const tag of JSON.parse(Tools.lineUnsolved(p.flowsheet, JSON.stringify(params), JSON.stringify(result)))) {
+          const again = await ask({ only: [tag] });
+          result = JSON.parse(Tools.lineMerge(JSON.stringify(result), JSON.stringify(again.result))); ms += again.ms;
+        }
+        out.innerHTML = renderReport(JSON.parse(Tools.report('linesizing', ...base, JSON.stringify(params), JSON.stringify(result)))) + `<p class="meta">Calculated by DWSIM in ${(ms / 1000).toFixed(1)} s.</p>`;
+      } catch (e) { out.innerHTML = err(`Not calculated: ${e.message}`); }
+    });
     q('#an_env').addEventListener('click', () => tool('envelope', { qualities: st.qualities, hydrates: st.hydrates, inhibitor: st.inhibitor || null, inhibitorPercent: st.inhibitorPercent }, '#an_env_out', 'Tracing'));
     q('#an_pvt').addEventListener('click', () => tool('pvt', {
       experiment: st.experiment, temperature: { value: st.temperature, unit: st.temperatureUnit },

@@ -999,14 +999,21 @@ class FlowsheetViewModel @Inject constructor(
             return onResult(LineSizingUi(error = if (input.design) "No size has that schedule" else "Choose a size and schedule, or give the inside diameter"))
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
-            val test = app.flowstead.core.model.StreamLineSizing.flowsheet(fs, view, streamId, input)
-            onResult(
-                if (url.isBlank()) LineSizingUi(error = "Set the engine address in Settings")
-                else when (val r = engine.solve(url, secrets.apiKey(), test)) {
-                    is EngineResult.Ok -> LineSizingUi(app.flowstead.core.model.StreamLineSizing.outcome(fs, view, streamId, input, r.value), hash = fs.modelHash(), total = input.totalLength)
-                    is EngineResult.Failed -> LineSizingUi(error = "Not sized: ${r.reason}")
-                },
-            )
+            val sizing = app.flowstead.core.model.StreamLineSizing
+            if (url.isBlank()) return@launch onResult(LineSizingUi(error = "Set the engine address in Settings"))
+            val key = secrets.apiKey()
+            var solved = when (val r = engine.solve(url, key, sizing.flowsheet(fs, view, streamId, input))) {
+                is EngineResult.Ok -> r.value
+                is EngineResult.Failed -> return@launch onResult(LineSizingUi(error = "Not sized: ${r.reason}"))
+            }
+            // The engine stops at the first pipe that fails: those it did not reach are solved again, each alone.
+            for (tag in sizing.unsolved(input, solved)) {
+                when (val again = engine.solve(url, key, sizing.flowsheet(fs, view, streamId, input, setOf(tag)))) {
+                    is EngineResult.Ok -> solved = sizing.merge(solved, again.value)
+                    is EngineResult.Failed -> Unit
+                }
+            }
+            onResult(LineSizingUi(sizing.outcome(fs, view, streamId, input, solved), hash = fs.modelHash(), total = input.totalLength))
         }
     }
 

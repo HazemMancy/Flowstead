@@ -105,8 +105,11 @@ object StreamLineSizing {
         }
     }
 
-    /** The flowsheet the engine solves: the stream's fluid into a test pipe per size ("g<i>", 100 m; "t<i>", the total length). */
-    fun flowsheet(fs: Flowsheet, results: ResultView, streamId: String, input: Input): Flowsheet {
+    /**
+     * The flowsheet the engine solves: the stream's fluid into a test pipe per size ("g<i>", 100 m; "t<i>", the total
+     * length), the largest first. [only]: just those pipes (a retry of one the first solve did not reach).
+     */
+    fun flowsheet(fs: Flowsheet, results: ResultView, streamId: String, input: Input, only: Set<String>? = null): Flowsheet {
         val base = SubflowsheetSolve.forObject(fs, streamId)
         fun v(k: String) = (results.value(streamId, k) as? DisplayValue.Calculated)?.si!!
         val x = base.compounds.associateWith { c -> (results.composition(streamId, Phases.OVERALL, c) as? DisplayValue.Calculated)?.si ?: 0.0 }.filterValues { it > 0 }
@@ -122,15 +125,25 @@ object StreamLineSizing {
             connections += Connection("${tag}_in", 0, tag, 0)
             connections += Connection(tag, 0, "${tag}_out", 0)
         }
-        candidates(input).forEachIndexed { i, c ->
-            line("g$i", c.insideDiameter, TEST_LENGTH, 5)
-            input.totalLength?.takeIf { it > 0 }?.let { line("t$i", c.insideDiameter, it, 10) }
+        // The engine stops at the first unit that fails (a small size the flow chokes or empties); the largest go first,
+        // and those it did not reach are solved again alone ([unsolved]).
+        candidates(input).withIndex().sortedByDescending { it.value.insideDiameter }.forEach { (i, c) ->
+            if (only == null || "g$i" in only) line("g$i", c.insideDiameter, TEST_LENGTH, 5)
+            input.totalLength?.takeIf { it > 0 }?.let { if (only == null || "t$i" in only) line("t$i", c.insideDiameter, it, 10) }
         }
         return base.copy(
             objects = objects, connections = connections, subflowsheets = emptyList(), tables = emptyList(), safety = null,
             dynamics = null, caseStudies = emptyList(), spreadsheet = null, watch = emptyList(), scenarios = emptyList(),
         )
     }
+
+    /** The test pipes the engine's answer [solved] did not reach (none solved, none failed in their own right). */
+    fun unsolved(input: Input, solved: SolveResult): List<String> = candidates(input).indices.flatMap { i ->
+        listOfNotNull("g$i", if ((input.totalLength ?: 0.0) > 0) "t$i" else null)
+    }.filter { tag -> solved.objects[tag].let { it == null || it.status == ObjectStatus.NotSolved } }
+
+    /** [a]'s answer with [b]'s for the pipes [b] solved. */
+    fun merge(a: SolveResult, b: SolveResult): SolveResult = a.copy(objects = a.objects + b.objects.filterKeys { k -> b.objects[k]?.status != ObjectStatus.NotSolved || a.objects[k] == null })
 
     /** The table from the engine's answer to [flowsheet]. */
     fun outcome(fs: Flowsheet, results: ResultView, streamId: String, input: Input, solved: SolveResult): Outcome {
