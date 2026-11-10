@@ -1319,6 +1319,109 @@ try {
     await ctx.close();
   }
 
+  // ---------- 4s. Getting started, episode 2 (from the well to the inlet separator): every number the video quotes ----------
+  // The well gas of episode 1 with its produced water, choked from 70 to 40 bara into a three-phase inlet separator. The
+  // numbers the narration reads are the engine's, each checked here against an independent reference: (1) the choke is
+  // isenthalpic, so the outlet's enthalpy is the inlet's; (2) the separator's outlets add up to its feed (mass balance);
+  // (3) the allowable gas velocity is Souders–Brown's K·√((ρL − ρG)/ρG) with the liquids' volume-weighted density, from
+  // the outlets' own densities; (4) the gas line's velocity is ṁ/(ρ·πD²/4) and ρv² from it, by hand; (5) the blowdown's
+  // target is API 521's, the lower of 6.9 barg and half the design gauge pressure, reached within 15 minutes.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady && window.flowstead?.api, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const got = await p.evaluate(async () => {
+      const api = window.flowstead.api;
+      const x = { Nitrogen: 0.010, 'Carbon dioxide': 0.020, Methane: 0.780, Ethane: 0.060, Propane: 0.030, Isobutane: 0.006, 'N-butane': 0.008,
+        Isopentane: 0.004, 'N-pentane': 0.003, 'N-hexane': 0.004, 'N-heptane': 0.005, Water: 0.070 };
+      api.newCase({ propertyPackage: 'Peng-Robinson (PR)', compounds: Object.keys(x), name: 'Episode 2 inlet facility' });
+      api.add('material_stream', { tag: 'WELL-GAS' });
+      api.setSpecs('WELL-GAS', { temperature: [30, 'C'], pressure: [70, 'bara'], molarFlow: [1000, 'kgmol/h'] });
+      api.setComposition('WELL-GAS', x);
+      api.add('valve', { tag: 'CHOKE' });
+      api.connect('WELL-GAS', 'CHOKE', { side: 'inlet', index: 0 });
+      api.connectNew('CHOKE', { side: 'outlet', index: 0, tag: 'SEP-FEED' });
+      api.setSpec('CHOKE', 'outletPressure', 40, 'bara');
+      api.add('three_phase_separator', { tag: 'V-100' });
+      api.connect('SEP-FEED', 'V-100', { side: 'inlet', index: 0 });
+      api.connectNew('V-100', { side: 'outlet', index: 0, tag: 'GAS' });
+      api.connectNew('V-100', { side: 'outlet', index: 1, tag: 'CONDENSATE' });
+      api.connectNew('V-100', { side: 'outlet', index: 2, tag: 'WATER' });
+      const s = await api.solve();
+      const r = Object.fromEntries(['WELL-GAS', 'SEP-FEED', 'GAS', 'CONDENSATE', 'WATER'].map((t) => [t, api.results(t)]));
+      const pv = (t, k) => r[t].properties[k]?.si ?? r[t].phases?.overall?.properties?.[k];
+      const env = await api.streamTool('envelope', 'SEP-FEED', { hydrates: true, inhibitor: 'methanol', inhibitorPercent: '20' }).catch((e) => ({ error: e.message }));
+      api.setSizingInput('V-100', { horizontal: true });
+      const sep = api.sizing('V-100');
+      api.setLineCriteria('gas', { maxVelocity: 18, maxMomentumFlux: 15000 });
+      const line = await api.lineSizing('GAS', { design: true, schedule: '40', totalLength: { value: '2', unit: 'km' } });
+      // Velocity and ρv² alone pass NPS 4, at a ΔP no 2 km line can take: a friction limit of 2.5 bar/km as well.
+      api.setLineCriteria('gas', { maxVelocity: 18, maxMomentumFlux: 15000, maxFrictionGradient: 250 });
+      const line2 = await api.lineSizing('GAS', { design: true, schedule: '40', totalLength: { value: '2', unit: 'km' } });
+      const bd = await api.safety('depressuring', { protectedId: 'V-100', vessel: { diameter: sep.diameter_m, length: sep.length_m, horizontal: true, liquidLevel: sep.levels.find((l) => /NLL/.test(l.name)).height_m }, designPressure: 51.01325e5, backPressure: 101325 }).catch((e) => ({ error: e.message }));
+      const check = api.check();
+      return {
+        status: s.status, check,
+        well: { T: pv('WELL-GAS', 'temperature'), h: pv('WELL-GAS', 'massEnthalpy'), w: pv('WELL-GAS', 'massFlow'), vf: pv('WELL-GAS', 'vapourFraction') },
+        feed: { T: pv('SEP-FEED', 'temperature'), P: pv('SEP-FEED', 'pressure'), h: pv('SEP-FEED', 'massEnthalpy') },
+        out: Object.fromEntries(['GAS', 'CONDENSATE', 'WATER'].map((t) => [t, { w: pv(t, 'massFlow'), rho: pv(t, 'density'), mol: pv(t, 'molarFlow'), T: pv(t, 'temperature'), M: pv(t, 'molecularWeight'), x: r[t].phases?.overall?.composition }])),
+        wellM: pv('WELL-GAS', 'molecularWeight'), wellMol: pv('WELL-GAS', 'molarFlow'), props: Object.keys(r.GAS.properties), phaseProps: Object.keys(r.GAS.phases?.overall?.properties ?? {}),
+        env: env.error ? env : { hydrate: env.result?.hydrateTemperatureAtPressure, structure: env.result?.hydrateStructureAtPressure, inhibitorNeeded: env.result?.requiredInhibitorFraction, notes: env.report?.sections?.filter?.((x) => x.kind === 'note').map((x) => x.text) ?? JSON.stringify(env.report).slice(0, 600), cricondenbar: env.result?.cricondenbarPressure, cricondentherm: env.result?.cricondenthermTemperature },
+        sep, line2: { recommended: line2.recommended, rows: line2.rows?.filter((x) => !x.error && x.insideDiameter_m < 0.21).map((x) => ({ size: x.size, g: x.gradient_Pa_m, passes: x.passes, failed: x.failed })) },
+        line: { recommended: line.recommended, service: line.service, rows: line.rows?.map((x) => ({ size: x.size, id: x.insideDiameter_m, g: x.gradient_Pa_m, v: x.velocity_m_s, m: x.momentumFlux_kg_m_s2, total: x.totalDrop_Pa, passes: x.passes, err: x.error })) },
+        bd: bd.error ? bd : { target: bd.result.targetPressure, basis: bd.result.targetBasis, t: bd.result.timeToTarget, orifice: bd.result.orificeDiameter, sized: bd.result.orificeSized, tmin: bd.result.minimumTemperature, tliq: bd.result.minimumLiquidTemperature, twall: bd.result.minimumWallTemperature, peak: bd.result.peakFlow, m0: bd.result.inventory?.[0], p0: bd.result.pressure?.[0], warnings: bd.result.warnings },
+        json: api.json(),
+      };
+    }).catch((e) => ({ error: e.message }));
+    if (got.error) problems.push(`episode 2 case: ${got.error}`);
+    else {
+      const { well, feed, out, sep, line, bd, env } = got;
+      if (got.status !== 'converged') problems.push(`solve ${got.status}`);
+      const errors = (got.check ?? []).filter((c) => c.level === 'error');
+      if (errors.length) problems.push(`check: ${JSON.stringify(errors)}`);
+      if (!(Math.abs(feed.h - well.h) <= 100)) problems.push(`choke not isenthalpic: ${well.h} J/kg in, ${feed.h} out`);
+      const wout = out.GAS.w + out.CONDENSATE.w + out.WATER.w, nout = out.GAS.mol + out.CONDENSATE.mol + out.WATER.mol;
+      if (!(Math.abs(nout - got.wellMol) <= 1e-6 * got.wellMol)) problems.push(`separator molar balance ${nout} mol/s out for ${got.wellMol} in`);
+      if (!(Math.abs(wout - well.w) <= 1e-4 * well.w)) problems.push(`separator mass balance ${wout} kg/s out for ${well.w} in (${(100 * (wout / well.w - 1)).toFixed(4)} %)`);
+      const qo = out.CONDENSATE.w / out.CONDENSATE.rho, qw = out.WATER.w / out.WATER.rho, rhoL = (qo * out.CONDENSATE.rho + qw * out.WATER.rho) / (qo + qw), rhoG = out.GAS.rho;
+      const vmax = sep.k_m_s * Math.sqrt((rhoL - rhoG) / rhoG);
+      if (!(Math.abs(sep.maxGasVelocity_m_s - vmax) <= 0.005 * vmax)) problems.push(`Souders–Brown ${sep.maxGasVelocity_m_s} m/s; by hand ${vmax}`);
+      // The engine reports the highest velocity and ρv² along its 100 m test pipe, at the outlet: the gas there is lighter by
+      // about the pressure lost (P/(P − ΔP)), and ρv² = G·v with the mass flux G fixed. Between the inlet's value by hand and that.
+      for (const row of line.rows ?? []) {
+        if (row.err) continue;
+        const G = out.GAS.w / (Math.PI * row.id ** 2 / 4), v = G / rhoG, f = feed.P / (feed.P - 100 * row.g);
+        if (!(row.v >= 0.995 * v && row.v <= 1.01 * f * v)) problems.push(`${row.size} gas velocity ${row.v} m/s; by hand ${v} to ${f * v}`);
+        if (!(row.m >= 0.995 * G * v && row.m <= 1.01 * f * G * v)) problems.push(`${row.size} ρv² ${row.m}; by hand ${G * v} to ${f * G * v}`);
+      }
+      const ok2 = (got.line2.rows ?? []).filter((x) => x.passes).map((x) => x.size)[0];
+      const byHand2 = (line.rows ?? []).filter((x) => !x.err && x.v <= 18 && x.m <= 15000 && x.g <= 250).sort((a, b) => a.id - b.id)[0];
+      if (got.line2.recommended !== byHand2?.size || ok2 !== byHand2?.size) problems.push(`with 2.5 bar/km: ${got.line2.recommended}; by the criteria ${byHand2?.size}`);
+      const rec = (line.rows ?? []).find((x) => x.size === line.recommended);
+      const ok = (line.rows ?? []).filter((x) => !x.err && x.v <= 18 && x.m <= 15000).sort((a, b) => a.id - b.id)[0];
+      if (!rec || rec !== ok) problems.push(`line recommended ${line.recommended}; by the criteria ${ok?.size}`);
+      if (bd.error) problems.push(`blowdown: ${bd.error}`);
+      else {
+        const target = 101325 + Math.min(6.9e5, (51.01325e5 - 101325) / 2);
+        if (!(Math.abs(bd.target - target) <= 100)) problems.push(`blowdown target ${bd.target} Pa for API 521's ${target}`);
+        if (!(bd.t > 0 && bd.t <= 15.05 * 60)) problems.push(`blowdown takes ${bd.t} s`);
+      }
+      if (env.error) problems.push(`envelope: ${env.error}`);
+      got.summary = `feed ${(feed.T - 273.15).toFixed(2)} °C after the choke (well ${(well.T - 273.15).toFixed(2)}), hydrate ${(env.hydrate - 273.15).toFixed(2)} °C; V-100 ${sep.diameter_m?.toFixed(3)} × ${sep.length_m?.toFixed(3)} m; gas line ${line.recommended}, with ΔP ${got.line2.recommended}; blowdown to ${(bd.target / 1e5).toFixed(3)} bara in ${(bd.t / 60).toFixed(2)} min`;
+    }
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} episode 2 case (${got.summary ?? ''})`);
+    const { json, ...numbers } = got;
+    console.log('     EP2 ' + JSON.stringify(numbers));
+    console.log('     EP2CASE ' + JSON.stringify(json));
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4r. line sizing of a stream, as HYSYS's stream analysis (D148) ----------
   // Water at 25 °C, 10 bara, 20 kg/s, with no pipe segment. Hand references from the stream's own ρ and μ: v = ṁ/(ρ·πD²/4),
   // ρv², Darcy–Weisbach with Colebrook's friction factor (0.0457 mm steel); over 1 km the liquid's ΔP is the gradient

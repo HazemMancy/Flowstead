@@ -35,6 +35,11 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.19**
+- **Water with dissolved gas (D150):** a three-phase separator's water now holds the gases Henry's law gives (CO₂,
+  methane, ethane, nitrogen…), taken from the gas it leaves, so every compound balances across the separator. The
+  water outlet of a wet gas used to carry far too much ethane and no CO₂.
+
 **Web 1.18**
 - **Pressurization from a vessel or pipe (D149):** besides a header at constant pressure, the gas can come from a fixed
   volume (a vessel, tank or pipe on the flowsheet, its contents from the solve) that empties until the two sides
