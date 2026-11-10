@@ -212,6 +212,7 @@ _Last updated: 2026-11-09_
 - **Polytropic compressor curves; heads that are the work (D144)** — DWSIM's own heads were a few per cent off; checked on ideal-gas nitrogen.
 - **A fitting by its K (D145)** — a DWSIM patch applies it as its own K fittings; K 1 equals DWSIM's exit to 10⁻⁹.
 - **App 3.5.0 and Web 1.16**: D141–D145.
+- **Panels over the flowsheet move and minimise (D146), Web 1.17 and App 3.5.1** — selection bar, worksheets, sub-flowsheet and solve panels on the web (mouse, pen, finger); on Android the editor and sub-flowsheet sheets no longer block the flowsheet and the selection bar drags; browser test 4q and FloatingSheetTest.
 - **Web 1.11 (D130):** the thermodynamics tools in Basis: binary T–x–y/P–x–y with liquid–liquid branches, ternary with tie lines, true critical point, package comparison, property charts. Checked against NIST boiling and critical points and IAPWS-95 water density.
 
 ## Next

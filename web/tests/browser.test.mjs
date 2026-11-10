@@ -1165,6 +1165,73 @@ try {
     await p.close();
   }
 
+  // ---------- 4q. panels over the flowsheet move and minimise, with a mouse and a finger (D146) ----------
+  // The owner's report: the selection bar and the worksheets sat over the flowsheet and nothing behind them could be
+  // reached. Moved or minimised, the point they covered is the canvas again (what a click there reaches).
+  for (const touch of [false, true]) {
+    const ctx = await browser.newContext(touch ? { viewport: { width: 412, height: 860 }, hasTouch: true, isMobile: true } : { viewport: { width: 1280, height: 900 } });
+    const p = await ctx.newPage();
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.evaluate(() => { localStorage.clear(); const api = window.flowstead.api; api.newCase({ propertyPackage: 'Peng-Robinson (PR)', compounds: ['Methane'], name: 'panels' }); api.add('material_stream', { tag: 'S-1' }); api.add('separator', { tag: 'V-1' }); });
+    const id = await p.evaluate(() => window.flowstead.api.case().objects.find((o) => o.tag === 'V-1').id);
+    await p.evaluate((i) => document.querySelector(`#objects [data-id="${i}"]`).click(), id);
+    await p.waitForSelector('#inspector .fs-float-grip', { timeout: 10_000 });
+    const box = (sel) => p.evaluate((q) => { const r = document.querySelector(q).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }, sel);
+    const under = (x, y) => p.evaluate(([px, py]) => document.elementFromPoint(px, py)?.id || document.elementFromPoint(px, py)?.closest('[id]')?.id, [x, y]);
+    const a = await box('#inspector');
+    const spot = touch ? [a.x + a.w / 2, a.y + 30] : [a.x + a.w / 2, a.y + a.h / 2];
+    if (await under(...spot) !== 'inspector' && !(await p.evaluate(([x, y]) => document.getElementById('inspector').contains(document.elementFromPoint(x, y)), spot))) problems.push('the worksheet does not cover the spot to begin with');
+    if (!touch) {
+      const g = await box('#inspector .fs-float-grip');
+      await p.mouse.move(g.x + g.w / 2, g.y + g.h / 2); await p.mouse.down(); await p.mouse.move(g.x - 500, g.y + 80, { steps: 10 }); await p.mouse.up();
+      const b = await box('#inspector');
+      if (!(a.x - b.x > 400)) problems.push(`the worksheet moved ${a.x - b.x} px for 500`);
+      if (await under(...spot) !== 'canvas') problems.push(`after moving it, ${await under(...spot)} is where the worksheet was`);
+      await p.click('#inspector .fs-float-min');
+      if (!((await box('#inspector')).h < 100)) problems.push('minimised, the worksheet is still tall');
+      await p.click('#inspector .fs-float-min');
+      await p.dblclick('#inspector .fs-float-grip');
+      if (Math.abs((await box('#inspector')).x - a.x) > 2) problems.push('a double-click on the grip does not put the worksheet back');
+      // The selection bar: Select all, then move it and minimise it.
+      await p.focus('#canvas'); await p.keyboard.press('Control+a');
+      await p.waitForSelector('#selBar:not([hidden])');
+      const s0 = await box('#selBar');
+      const c0 = [s0.x + s0.w / 2, s0.y + s0.h / 2];
+      const sg = await box('#selBar .fs-float-grip');
+      await p.mouse.move(sg.x + 4, sg.y + 4); await p.mouse.down(); await p.mouse.move(sg.x + 4, sg.y + 404, { steps: 8 }); await p.mouse.up();
+      if (!((await box('#selBar')).y - s0.y > 350)) problems.push('the selection bar did not move');
+      if (await under(...c0) !== 'canvas') problems.push(`after moving the selection bar, ${await under(...c0)} is where it was`);
+      await p.click('#selBar .fs-float-min');
+      if (!((await box('#selBar')).w < s0.w)) problems.push('minimised, the selection bar is as wide');
+    } else {
+      // A phone: the worksheet is a sheet along the bottom; dragging its title bar down lowers it, further down minimises it.
+      const hd = await box('#inspector .fs-insp-head');
+      const cdp = await ctx.newCDPSession(p);
+      const t = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+      const drag = async (x, y, dy, n) => { await t('touchStart', x, y); for (let i = 1; i <= n; i++) await t('touchMove', x, y + (dy * i) / n); await t('touchEnd'); };
+      const x = hd.x + hd.w / 2 - 30;
+      await drag(x, hd.y + hd.h / 2, 260, 10);
+      const b = await box('#inspector');
+      if (!(a.h - b.h > 200)) problems.push(`the sheet is ${b.h} px tall after dragging it down 260 px (was ${a.h})`);
+      if (await under(...spot) !== 'canvas') problems.push(`after lowering the sheet, ${await under(...spot)} is where it was`);
+      const hd2 = await box('#inspector .fs-insp-head');
+      await drag(x, hd2.y + hd2.h / 2, 856 - (hd2.y + hd2.h / 2), 12); // to the screen's bottom edge, as far as a finger goes
+      if (!(await p.evaluate(() => document.getElementById('inspector').classList.contains('fs-min')))) problems.push('dragged right down, the sheet is not minimised');
+      const g = await box('#inspector .fs-float-grip');
+      await p.tap('#inspector .fs-float-min');
+      if (!((await box('#inspector')).h > 200)) problems.push('the sheet does not open again from ▢');
+      if (g.w < 40) problems.push(`the grip is ${g.w} px wide on a touch screen`);
+    }
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} floating panels (${touch ? 'phone, finger' : 'desktop, mouse'})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await ctx.close();
+  }
+
   // ---------- 4o. dragging objects into a sub-flowsheet, and duplicating one (D139) ----------
   // Benchmark 06's train with an empty block: K-100 dragged onto it with a mouse, then DISCHARGE and E-100 together with
   // a finger. The case flattens to the train and solves to the flat train's numbers (every result of every stream and

@@ -36,7 +36,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.Slider
@@ -44,7 +43,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -181,8 +179,10 @@ fun ObjectEditorSheet(
     compoundBasis: CompoundBasisUi? = null,
     /** Why the solver leaves this object out (D83), or null when it is ready. */
     notReady: String? = null,
+    modifier: Modifier = Modifier,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    // Over the flowsheet, not blocking it (D146): tap another object and its editor replaces this one.
+    FloatingSheet(title = "${obj.tag} · ${obj.type.displayName()}", onDismiss = onDismiss, modifier = modifier, testTag = "editor_sheet") {
         Column(
             Modifier
                 .fillMaxWidth()

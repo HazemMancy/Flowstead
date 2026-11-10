@@ -10,6 +10,7 @@ import { initDocuments, importDwsim } from './documents.js';
 import { enterToNext } from './forms.js';
 import { withSubflowsheets } from './subflowsheets.js';
 import { installAutomation } from './automation.js';
+import { floating } from './floating.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -1238,7 +1239,14 @@ renderGroups(); renderPalette();
 load();
 resize();
 view.fit(cssW, cssH); draw();
-window.flowsteadFlowsheet = { core, view, tools, engine, SubTools, Equip: EquipmentTools.getInstance(), Thermo: ThermoTools.getInstance(), get project() { return project; } }; // for the browser tests
+// Panels over the flowsheet move and minimise (D146), so they never hide what is behind them.
+const panels = {
+  selBar: floating($('selBar'), { head: '.fs-selhead' }),
+  inspector: floating($('inspector'), { head: '.fs-insp-head', keep: '.fs-insp-top' }),
+  blockInsp: floating($('blockInsp'), { head: '.fs-insp-head' }),
+  solvePanel: floating($('solvePanel'), { head: '.fs-insp-head' }),
+};
+window.flowsteadFlowsheet = { core, view, tools, engine, SubTools, Equip: EquipmentTools.getInstance(), Thermo: ThermoTools.getInstance(), panels, get project() { return project; } }; // for the browser tests
 // The automation interface (D140): window.flowstead.api, for an agent in the browser or a script (docs/automation.md).
 window.flowstead = {
   api: installAutomation({
