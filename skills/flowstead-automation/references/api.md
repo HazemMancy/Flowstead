@@ -101,4 +101,5 @@ or size the case there. Install the process-engineering skill too, for standards
 - Compressor results add `polytropicHead` and `polytropicEfficiency`; both heads are the work (η·Δh/g, D144). A
   compressor curve's `path` (`'polytropic'` or adiabatic) is set in the curve editor.
 - A pipe section can be the fitting `user_k` with its `k` (D145).
+- `safety('pressurization', {…, source: 'vessel', sourceId, sourceVessel, sourcePressure, sourceAdiabatic, fillId, fillVessel, valve: 'flowsheet', valveId})`: from a fixed volume until the sides equalise (`result.equalisingPressure`, `timeToEqualise`, `sourceMinimumTemperature`), into a vessel, through a valve or orifice plate on the flowsheet (D149).
 - `await lineSizing(stream, {design, schedule: '40'|'STD'|'XS'|'80'…, nps, insideDiameter, roughness, totalLength: {value, unit}, service})`: line sizing of a stream as HYSYS's stream analysis, no pipe segment (D148) → `{report, rows: [{size, insideDiameter_m, gradient_Pa_m, velocity_m_s, momentumFlux_kg_m_s2, mach, totalDrop_Pa, passes, failed}], recommended, service, criteriaSet}`.

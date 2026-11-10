@@ -29,6 +29,7 @@ import app.flowstead.core.model.PipeSection
 import app.flowstead.core.model.PipeSizes
 import app.flowstead.core.model.PressurizationCase
 import app.flowstead.core.model.PressurizationValves
+import app.flowstead.core.model.PressurizationSources
 import app.flowstead.core.model.ReliefDeviceDef
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.Safety
@@ -170,6 +171,7 @@ object SafetyForms {
                     "pipe" -> FlowsheetEditing.upsertPressurization(f, c.copy(pipeIds = if (a["on"]?.jsonPrimitive?.booleanOrNull == true) (c.pipeIds + s("value")!!).distinct() else c.pipeIds - s("value")!!))
                     "addSection" -> FlowsheetEditing.upsertPressurization(f, c.copy(sections = c.sections + PipeSection(0.2, 1000.0)))
                     "removeSection" -> FlowsheetEditing.upsertPressurization(f, c.copy(sections = c.sections.filterIndexed { j, _ -> j != s("index")!!.toInt() }))
+                    "fill" -> FlowsheetEditing.upsertPressurization(f, c.copy(fillId = s("value")?.takeIf { it.isNotEmpty() }))
                     else -> {
                         val next = setPath(c, PressurizationCase.serializer(), a, ctx)
                         // As the app: the run lasts at least twice the target time.
@@ -343,7 +345,19 @@ object SafetyForms {
             FILL -> {
                 val c = fill(f, id); val r = c.result ?: return rep.json()
                 stale(c.resultHash)
-                rep.heading("Target ${rep.withUnit(r.targetPressure, Quantity.Pressure)} " + (r.timeToTarget?.let { "reached after ${ValueFormat.number(it / 60, 1)} min" } ?: "not reached"))
+                val te = r.timeToEqualise
+                val pe = r.equalisingPressure
+                rep.heading(when {
+                    c.source == PressurizationSources.VESSEL && c.targetPressure == null ->
+                        if (te != null && pe != null) "Equalised at ${rep.withUnit(pe, Quantity.Pressure)} after ${ValueFormat.number(te / 60, 1)} min" else "Not equalised in ${ValueFormat.number(c.duration / 3600, 1)} h"
+                    else -> "Target ${rep.withUnit(r.targetPressure, Quantity.Pressure)} " + (r.timeToTarget?.let { "reached after ${ValueFormat.number(it / 60, 1)} min" } ?: "not reached")
+                })
+                if (c.source == PressurizationSources.VESSEL) rep.kv(listOfNotNull(
+                    pe?.let { Triple("Equalising pressure", rep.withUnit(it, Quantity.Pressure) + (te?.let { t -> " after ${ValueFormat.number(t / 60, 1)} min" } ?: ""), "") },
+                    r.massTransferred?.let { Triple("Mass moved from the source", ValueFormat.number(it, 1), "kg") },
+                    r.sourceMinimumTemperature?.let { Triple("Source's coldest gas", t(it), "") },
+                    r.sourceMinimumWallTemperature?.let { Triple("Source's lowest inner wall temperature", t(it), "") },
+                ))
                 rep.kv(listOf(
                     Triple("Inlet", r.cv?.let { "Cv ${ValueFormat.number(it, 1)}" } ?: ("${ValueFormat.number(r.orificeDiameter * 1000, 1)} mm orifice" + if (r.orificeSized) " (sized)" else ""), ""),
                     Triple("Gas temperature", "${t(r.minimumTemperature)} to ${r.maximumTemperature?.let(::t) ?: "—"}", ""),
@@ -453,14 +467,14 @@ private class SafetyForm(val fs: Flowsheet, val ctx: UnitContext) {
     }
 
     /** A vessel's dimensions to type, or a pipe segment's own (the app's GeometryFields). */
-    private fun geometry(protectedId: String?, v: app.flowstead.core.api.VesselGeometry?) {
+    private fun geometry(protectedId: String?, v: app.flowstead.core.api.VesselGeometry?, path: String = "vessel") {
         val pipe = fs.objects.firstOrNull { it.id == protectedId && it.type == ObjectType.PipeSegment }
         if (pipe == null) {
-            q("vessel.diameter", "Diameter", v?.diameter?.takeIf { it > 0 }, Quantity.Length, blank = 0.0, create = vesselCreate)
-            q("vessel.length", "Length T/T", v?.length?.takeIf { it > 0 }, Quantity.Length, blank = 0.0, create = vesselCreate)
-            choice("Orientation", if (v?.horizontal == true) "true" else "false", listOf("false" to "Vertical", "true" to "Horizontal"), buildJsonObject { put("op", "set"); put("path", "vessel.horizontal"); put("bool", true); put("create", vesselCreate) })
-            q("vessel.liquidLevel", "Liquid level", v?.liquidLevel ?: 0.0, Quantity.Length, "0 (gas-filled)", blank = 0.0, create = vesselCreate)
-            q("vessel.elevation", "Bottom above grade", v?.elevation ?: 0.0, Quantity.Length, "0", blank = 0.0, create = vesselCreate)
+            q("$path.diameter", "Diameter", v?.diameter?.takeIf { it > 0 }, Quantity.Length, blank = 0.0, create = vesselCreate)
+            q("$path.length", "Length T/T", v?.length?.takeIf { it > 0 }, Quantity.Length, blank = 0.0, create = vesselCreate)
+            choice("Orientation", if (v?.horizontal == true) "true" else "false", listOf("false" to "Vertical", "true" to "Horizontal"), buildJsonObject { put("op", "set"); put("path", "$path.horizontal"); put("bool", true); put("create", vesselCreate) })
+            q("$path.liquidLevel", "Liquid level", v?.liquidLevel ?: 0.0, Quantity.Length, "0 (gas-filled)", blank = 0.0, create = vesselCreate)
+            if (path == "vessel") q("$path.elevation", "Bottom above grade", v?.elevation ?: 0.0, Quantity.Length, "0", blank = 0.0, create = vesselCreate)
             return
         }
         val g = Safety.pipeGeometry(pipe)
@@ -500,33 +514,59 @@ private class SafetyForm(val fs: Flowsheet, val ctx: UnitContext) {
     }
 
     fun fill(c: PressurizationCase, results: ResultView) {
-        note("Time to pressurize a pipeline or a network of pipelines from a supply through a control valve or orifice, as HYSYS's pipeline pressurization: pressure, gas and wall temperatures and flow against time.")
+        note("Time to pressurize a pipeline, a network of pipelines or a vessel through a control valve or orifice, as HYSYS's pipeline pressurization: from a header at constant pressure, or from a vessel or pipe that empties until the two sides equalise. Pressure, gas and wall temperatures and flow against time.")
         text("name", "Name", c.name)
-        val streams = fs.objects.filter { it.type == ObjectType.MaterialStream }
-        choice("Supply stream", c.supplyId, streams.map { it.id to it.tag }, setOp("supplyId"))
-        note("The supply's pressure, temperature and composition come from the last solve; it holds steady while the line fills.")
-        label("Pipeline (one network at one pressure)")
-        fs.objects.filter { it.type == ObjectType.PipeSegment }.forEach { p ->
+        val vesselSource = c.source == PressurizationSources.VESSEL
+        choice("Source", c.source, listOf(PressurizationSources.HEADER to "A header: constant pressure (a stream)", PressurizationSources.VESSEL to "A vessel or pipe: a fixed volume that empties"), setOp("source"))
+        val holders = fs.objects.filter { it.type in Safety.PROTECTABLE }
+        if (!vesselSource) {
+            val streams = fs.objects.filter { it.type == ObjectType.MaterialStream }
+            choice("Supply stream", c.supplyId, streams.map { it.id to it.tag }, setOp("supplyId"))
+            note("The supply's pressure, temperature and composition come from the last solve; it holds steady while the line fills.")
+        } else {
+            choice("Source vessel or pipe", c.sourceId, holders.map { it.id to "${it.tag} · ${it.type.displayName()}" }, setOp("sourceId"))
+            note("Its contents (composition, temperature, pressure) come from the last solve; it empties into what is filled, falling in pressure, until the two equalise.")
+            geometry(c.sourceId, c.sourceVessel, "sourceVessel")
+            q("sourcePressure", "Starting pressure", c.sourcePressure, Quantity.Pressure, "as solved")
+            bool("sourceAdiabatic", "Adiabatic source (no heat from its wall: the coldest case)", c.sourceAdiabatic)
+        }
+        choice("Fill", c.fillId ?: "", listOf("" to "Pipes (the network below)") + holders.filter { it.type != ObjectType.PipeSegment && it.id != c.sourceId }.map { it.id to "${it.tag} · ${it.type.displayName()}" },
+            op("fill"))
+        if (c.fillId != null) geometry(c.fillId, c.fillVessel, "fillVessel")
+        else label("Pipeline (one network at one pressure)")
+        if (c.fillId == null) fs.objects.filter { it.type == ObjectType.PipeSegment && it.id != c.sourceId }.forEach { p ->
             items += buildJsonObject {
                 put("kind", "check"); put("checked", p.id in c.pipeIds)
                 put("label", p.tag + (Safety.pipeGeometry(p)?.first?.let { g -> " · ${ValueFormat.number(g.diameter * 1000, 1)} mm × ${ValueFormat.number(g.length, 1)} m" } ?: " · no size yet"))
                 put("op", op("pipe", "value" to p.id))
             }
         }
-        c.sections.forEachIndexed { i, s ->
-            items += buildJsonObject { put("kind", "subhead"); put("text", "Section ${i + 1}"); put("op", op("removeSection", "index" to i)) }
-            q("sections.$i.insideDiameter", "Inside diameter", s.insideDiameter, Quantity.Length, small = true)
-            q("sections.$i.length", "Length", s.length, Quantity.Length)
+        if (c.fillId == null) {
+            c.sections.forEachIndexed { i, s ->
+                items += buildJsonObject { put("kind", "subhead"); put("text", "Section ${i + 1}"); put("op", op("removeSection", "index" to i)) }
+                q("sections.$i.insideDiameter", "Inside diameter", s.insideDiameter, Quantity.Length, small = true)
+                q("sections.$i.length", "Length", s.length, Quantity.Length)
+            }
+            button("Add a pipe section by hand", op("addSection"))
         }
-        button("Add a pipe section by hand", op("addSection"))
-        Safety.network(Safety.sections(fs, c))?.let { (g, _) -> note("Network volume ${ValueFormat.number(PI * g.diameter * g.diameter / 4 * g.length, 3)} m³.") }
+        Safety.filled(fs, c)?.let { (g, _) -> note("Volume filled ${ValueFormat.number(Safety.volume(g), 3)} m³.") }
         label("Starting state")
         q("initialPressure", "Pressure", c.initialPressure, Quantity.Pressure, "atmospheric", blank = 101325.0)
-        q("initialTemperature", "Temperature", c.initialTemperature, Quantity.Temperature, "the supply's")
-        note("The line starts holding the supply gas at that pressure.")
+        q("initialTemperature", "Temperature", c.initialTemperature, Quantity.Temperature, if (vesselSource) "the source's" else "the supply's")
+        note("What is filled starts holding the ${if (vesselSource) "source's" else "supply"} gas at that pressure.")
         label("Inlet")
-        choice("Through", c.valve, listOf(PressurizationValves.CV to "Control valve (Cv)", PressurizationValves.ORIFICE to "Restriction orifice", PressurizationValves.SIZE to "Orifice sized to the target time"), setOp("valve"))
+        choice("Through", c.valve, listOf(PressurizationValves.FLOWSHEET to "A valve or orifice on the flowsheet", PressurizationValves.CV to "Control valve (Cv)", PressurizationValves.ORIFICE to "Restriction orifice", PressurizationValves.SIZE to "Orifice sized to the target time"), setOp("valve"))
         when (c.valve) {
+            PressurizationValves.FLOWSHEET -> {
+                choice("Valve or orifice", c.valveId, Safety.valveChoices(fs).map { it.id to "${it.tag} · ${it.type.displayName()}" }, setOp("valveId"))
+                Safety.flowsheetValve(fs, results, c.valveId)?.let { v ->
+                    when {
+                        v.orificeDiameter != null -> note("${v.tag}: its orifice, ${ValueFormat.number(v.orificeDiameter * 1000, 1)} mm.")
+                        v.ratedCv -> { note("${v.tag}: its rated Cv ${ValueFormat.number(v.cv!!, 1)}, xT ${ValueFormat.number(v.xt, 2)}."); q("opening", "Opening", c.opening, Quantity.Fraction, "100 %", blank = 1.0) }
+                        else -> note("${v.tag}: Cv ${ValueFormat.number(v.cv!!, 1)}, the Cv it needs in the solve (as it runs), xT ${ValueFormat.number(v.xt, 2)}. Give it a rated Cv to use that instead.")
+                    }
+                }
+            }
             PressurizationValves.CV -> {
                 num("cv", "Rated Cv", c.cv)
                 q("opening", "Opening", c.opening, Quantity.Fraction, "100 %", blank = 1.0)
@@ -535,7 +575,7 @@ private class SafetyForm(val fs: Flowsheet, val ctx: UnitContext) {
             PressurizationValves.ORIFICE -> q("orificeDiameter", "Orifice diameter", c.orificeDiameter, Quantity.Length, small = true)
         }
         label("Target")
-        q("targetPressure", "Pressure", c.targetPressure, Quantity.Pressure, "95 % of the supply")
+        q("targetPressure", "Pressure", c.targetPressure, Quantity.Pressure, if (vesselSource) "where the two sides equalise" else "95 % of the supply")
         q("targetTime", "In (time)", c.targetTime, Quantity.Time, "1 h", blank = 3600.0)
         val problem = Safety.pressurizationProblem(fs, results, c)
         problem?.let { note(it, "warn") }

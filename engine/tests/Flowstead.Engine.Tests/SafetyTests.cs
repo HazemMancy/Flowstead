@@ -446,6 +446,69 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.True(r.MinimumWallTemperature >= Math.Min(r.MinimumTemperature, r.MinimumLiquidTemperature ?? double.MaxValue) - 0.5);
     }
 
+    // ------------------------------------------------------------------ pressurization from a fixed volume (D149)
+
+    private async Task<DepressuringResult> Equalise(double? hTarget, double? hSource, double? target = null)
+    {
+        // Two equal vessels (1 m × 3 m, 2:1 heads) of nitrogen at 300 K: the source at 10 bara, the other at 1 atm; a 10 mm orifice.
+        var n2 = new Dictionary<string, double> { ["Nitrogen"] = 1.0 };
+        var req = new DepressuringRequest
+        {
+            Flowsheet = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Nitrogen"] }, Composition = n2,
+            InitialPressure = 101325, InitialTemperature = 300, Vessel = new VesselGeometry(1.0, 3.0), HeatTransferCoefficient = hTarget,
+            TargetPressure = target, Duration = 4 * 3600,
+            Supply = new PressurizationSupply
+            {
+                Composition = n2, Pressure = 10e5, Temperature = 300, OrificeDiameter = 0.01,
+                Vessel = new VesselGeometry(1.0, 3.0), HeatTransferCoefficient = hSource,
+            },
+        };
+        var res = await engine.Authed(15).PostAsJsonAsync("/depressuring", req, Json.Options);
+        Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+        var r = await EngineFixture.Json<DepressuringResult>(res);
+        output.WriteLine($"equalised at {r.EqualisingPressure / 1e5:0.####} bar after {r.TimeToEqualise:0} s; moved {r.MassTransferred:0.###} kg; source min {r.SourceMinimumTemperature - 273.15:0.#} °C wall {r.SourceMinimumWallTemperature - 273.15:0.#} °C; filled max {r.MaximumTemperature - 273.15:0.#} °C; {r.Time.Count} steps | " + string.Join(" | ", r.Warnings));
+        return r;
+    }
+
+    [Fact]
+    public async Task TwoAdiabaticVesselsEqualiseAtTheIdealGasPressure()
+    {
+        // Ideal gas, no heat: the internal energy (P V /(γ − 1)) is kept, so where the pressures meet
+        // P_eq = (Ps·Vs + Pt·Vt)/(Vs + Vt), whatever the temperatures: (10 + 1.01325)/2 = 5.5066 bara for equal volumes.
+        var r = await Equalise(0, 0);
+        var expected = (10e5 + 101325) / 2;
+        Assert.NotNull(r.EqualisingPressure);
+        Assert.Equal(expected, r.EqualisingPressure!.Value, expected * 0.01);
+        Assert.NotNull(r.TimeToEqualise);
+        // The source falls and the filled side rises throughout; the source is colder than it started, the other hotter.
+        Assert.True(r.SourcePressure!.Zip(r.SourcePressure!.Skip(1)).All(p => p.Second <= p.First + 1));
+        Assert.True(r.Pressure.Zip(r.Pressure.Skip(1)).All(p => p.Second >= p.First - 1));
+        Assert.True(r.SourceMinimumTemperature < 300 - 20);
+        Assert.True(r.MaximumTemperature > 300 + 20);
+        // Mass: what left the source is what the other holds more (each vessel's own volume from its flashes).
+        Assert.Equal(r.Inventory[^1] - r.Inventory[0], r.MassTransferred!.Value, r.MassTransferred.Value * 0.005);
+    }
+
+    [Fact]
+    public async Task WithWallHeatTheVesselsStillEqualiseAndATargetAboveItIsSaidToBeOutOfReach()
+    {
+        // With the walls giving and taking heat, the net heat Q shifts P_eq by (γ − 1)·Q/(Vs + Vt): close to the ideal-gas value.
+        var r = await Equalise(null, null);
+        var ideal = (10e5 + 101325) / 2;
+        Assert.InRange(r.EqualisingPressure!.Value, 0.95 * ideal, 1.05 * ideal);
+        // The source's wall is warmer than its gas: heat flows in, so it is less cold than when adiabatic.
+        var adiabatic = await Equalise(null, 0);
+        Assert.True(r.SourceMinimumTemperature > adiabatic.SourceMinimumTemperature);
+        Assert.Contains(adiabatic.Warnings, w => w.Contains("The source is adiabatic"));
+        // A target above where they equalise cannot be reached, and the result says so.
+        var high = await Equalise(null, null, target: 7e5);
+        Assert.Null(high.TimeToTarget);
+        Assert.Contains(high.Warnings, w => w.Contains("above the pressure the two sides equalise at"));
+        // One below it is reached before they equalise.
+        var low = await Equalise(null, null, target: 4e5);
+        Assert.True(low.TimeToTarget < low.TimeToEqualise);
+    }
+
     private async Task<DepressuringResult> Pressurize(PressurizationSupply supply, double? target = null, double targetTime = 3600)
     {
         var gas = new Dictionary<string, double> { ["Methane"] = 0.92, ["Ethane"] = 0.05, ["Propane"] = 0.03 };

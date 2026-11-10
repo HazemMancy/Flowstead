@@ -161,4 +161,37 @@ class SafetyTest {
         assertEquals(a, Math.PI * eq.diameter * eq.length, a * 1e-12)
         assertEquals((0.01 * Math.PI * 0.3 * 5000 + 0.007 * Math.PI * 0.15 * 2000) / a, w!!, 1e-12)
     }
+
+    @Test
+    fun aFixedVolumeSourceAndAFlowsheetValveGoToTheEngine() {
+        // D149: V-100 (its contents from the solve, 8 bar) empties into pipe P-1 through FV-100 (rated Cv 50, xT 0.7) on the flowsheet.
+        val pipe = SimObject("p", "P-1", ObjectType.PipeSegment, specs = mapOf(SpecKey.INNER_DIAMETER to Spec(0.2, "m"), SpecKey.LENGTH to Spec(1000.0, "m")))
+        val valve = SimObject("fv", "FV-100", ObjectType.Valve, specs = mapOf(SpecKey.RATED_CV to Spec(50.0, ""), SpecKey.VALVE_XT to Spec(0.7, "")))
+        val ro = SimObject("ro", "RO-100", ObjectType.OrificePlate, specs = mapOf(SpecKey.ORIFICE_DIAMETER to Spec(0.012, "m")))
+        val f2 = fs.copy(objects = fs.objects + pipe + valve + ro)
+        val r2 = ResultView(StoredSolve(solved, f2.modelHash(), 0), f2.modelHash())
+        val c = PressurizationCase("z", "Equalise", source = PressurizationSources.VESSEL, sourceId = "v", sourceVessel = VesselGeometry(1.5, 4.0),
+            pipeIds = listOf("p"), valve = PressurizationValves.FLOWSHEET, valveId = "fv", opening = 0.5)
+        assertNull(Safety.pressurizationProblem(f2, r2, c))
+        val s = Safety.pressurizationRequest(f2, r2, c).supply!!
+        assertEquals(VesselGeometry(1.5, 4.0), s.vessel)
+        assertEquals(8e5, s.pressure)
+        assertEquals(50.0, s.cv)
+        assertEquals(0.7, s.valveXt)
+        assertEquals(0.5, s.opening) // a rated Cv takes the opening
+        assertNull(s.heatTransferCoefficient) // wall heat by default
+        assertEquals(0.0, Safety.pressurizationRequest(f2, r2, c.copy(sourceAdiabatic = true)).supply!!.heatTransferCoefficient)
+        assertEquals(8.5e5, Safety.pressurizationRequest(f2, r2, c.copy(sourcePressure = 8.5e5)).supply!!.pressure)
+        // An orifice plate gives its bore; a valve with no Cv (no rating, no solve) is refused.
+        assertEquals(0.012, Safety.pressurizationRequest(f2, r2, c.copy(valveId = "ro")).supply!!.orificeDiameter)
+        val bare = f2.copy(objects = f2.objects.map { if (it.id == "fv") it.copy(specs = emptyMap()) else it })
+        val rb = ResultView(StoredSolve(solved, bare.modelHash(), 0), bare.modelHash())
+        assertEquals("FV-100 has no Cv: give its rated Cv, or solve the flowsheet for the Cv it needs", Safety.pressurizationProblem(bare, rb, c))
+        assertEquals("The source cannot be what it fills", Safety.pressurizationProblem(f2, r2, c.copy(sourceId = "p")))
+        // A fixed volume needs a target to size an orifice to.
+        assertEquals("Give the target pressure to size the orifice (or choose a valve or orifice)",
+            Safety.pressurizationProblem(f2, r2, c.copy(valve = PressurizationValves.SIZE)))
+        // The volume of a 1.5 m × 4 m vessel with 2:1 heads: π·1.5²/4·4 + π·1.5³/12.
+        assertEquals(Math.PI * 1.5 * 1.5 / 4 * 4 + Math.PI * 1.5 * 1.5 * 1.5 / 12, Safety.volume(VesselGeometry(1.5, 4.0)), 1e-12)
+    }
 }

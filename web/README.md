@@ -36,6 +36,12 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 ## Release notes
 
 **Web 1.18**
+- **Pressurization from a vessel or pipe (D149):** besides a header at constant pressure, the gas can come from a fixed
+  volume (a vessel, tank or pipe on the flowsheet, its contents from the solve) that empties until the two sides
+  equalise: the equalising pressure and when it is reached, the time to a target (or that the target is above the
+  equalising pressure and out of reach), and the source's coldest gas and wall. Wall heat by default; an adiabatic
+  source for the coldest case. A vessel can be what is filled, and the valve or orifice can be one on the flowsheet
+  (its rated or required Cv and xT, or its bore).
 - **Line sizing of a stream (D148), as HYSYS's stream analysis:** in a stream's Analysis tab, size a line from the
   stream's own solved state, with no pipe segment. Design tries every size of a schedule (40, STD, XS, 80 …) against
   the project's criteria and marks the smallest that passes; rating takes one size or an inside diameter. ΔP per
