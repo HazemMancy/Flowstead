@@ -765,7 +765,7 @@ export function initTools(app) {
     const rxEdit = (op, msg) => { const r = JSON.parse(Equip.reactionEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); if (r.reaction) rxOpen = r.reaction; app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     const curveEdit = (op, msg) => { const r = JSON.parse(Equip.curveEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     const secEdit = (op, msg) => { const r = JSON.parse(Equip.sectionsEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) return app.toast(r.error); app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
-    const szEdit = (op, msg) => { const r = JSON.parse(Equip.sizingEdit(app.project().flowsheet, id, JSON.stringify(op))); if (r.error) { app.toast(r.error); return equipmentSection(el, id); } app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
+    const szEdit = (op, msg) => { const r = JSON.parse(Equip.sizingEdit(app.project().flowsheet, id, JSON.stringify(op), ...solveArgs())); if (r.error) { app.toast(r.error); return equipmentSection(el, id); } app.commit(JSON.stringify(r.flowsheet), msg); equipmentSection(el, id); };
     el.onchange = (e) => {
       const t = e.target;
       if (t.dataset.sz) return szEdit({ key: t.dataset.sz, value: t.type === 'checkbox' ? String(t.checked) : t.value }, 'Sizing basis changed');

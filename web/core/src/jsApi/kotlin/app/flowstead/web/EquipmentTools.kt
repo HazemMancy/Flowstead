@@ -224,7 +224,7 @@ object EquipmentTools {
     }
 
     /** Changes one sizing basis field of [id] ({key, value} as typed in the field's display unit; blank: the library's). */
-    fun sizingEdit(flowsheetJson: String, id: String, opJson: String): String = edit {
+    fun sizingEdit(flowsheetJson: String, id: String, opJson: String, solveJson: String?, solvedHash: String): String = edit {
         val f = fs(flowsheetJson)
         val o = f.obj(id) ?: throw EditRejected("That object no longer exists")
         val op = FlowsheetJson.parseToJsonElement(opJson).jsonObject
@@ -252,7 +252,8 @@ object EquipmentTools {
             }
             ObjectType.PipeSegment -> {
                 if (key == "service") return@edit FlowsheetEditing.setRef(f, o.id, app.flowstead.core.model.LineSizing.SERVICE, text?.takeIf { it.isNotEmpty() })
-                val svc = app.flowstead.core.model.LineSizing.service(f, o, ResultView(null, f.modelHash())).let { it } ?: o.refs[app.flowstead.core.model.LineSizing.SERVICE]?.let { s -> app.flowstead.core.model.LineService.entries.firstOrNull { it.name.equals(s.replace("_", ""), true) } }
+                // The service the sizing shows: the one chosen, or the solved streams' (the same call as sizing()).
+                val svc = app.flowstead.core.model.LineSizing.service(f, o, view(f, solveJson, solvedHash))
                     ?: throw EditRejected("Choose the service (or solve) first: criteria are set per service")
                 val all = f.sizingCriteria ?: app.flowstead.core.model.SizingCriteria()
                 val cr = all.forService(svc)

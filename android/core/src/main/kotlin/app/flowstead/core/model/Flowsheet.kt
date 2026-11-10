@@ -272,7 +272,7 @@ object PipeFittings {
         Kind("reducer_2_1", "Reducer 2:1", 5.67, false),
         // D145: any fitting by its K (a vendor's valve, a strainer, a nozzle): DWSIM applies it as its own K fittings,
         // K·ρ·v²/2 on the two-phase mixture (Flowstead's patch to DWSIM's pipe, engine/patches/dwsim-pipe-user-k.patch).
-        Kind(USER_K, "Fitting, K you give", Double.NaN, false),
+        Kind(USER_K, "Other fitting (valve, strainer, nozzle)", Double.NaN, false),
     )
     private val byId = ALL.associateBy { it.id }
     fun get(id: String?): Kind? = id?.let { byId[it] }
