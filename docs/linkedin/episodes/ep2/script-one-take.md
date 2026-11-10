@@ -21,9 +21,9 @@ Paragraph 2:
 7. "Same conditions as before: thirty…" — steady, each number clear.
 8. "Now it's a gas, a…" — slightly amused.
 Paragraph 3:
-9. "Next, the choke.…" — confident.
+9. "Next, the choke." — confident.
 10. "We drop in a valve…" — matter-of-fact.
-11. "Solve.…" — brisk, after a short beat.
+11. "Solve." — brisk, after a short beat.
 12. "The gas leaves at eighteen…" — emphasis on the number.
 13. "That's twelve degrees of Joule–Thomson…" — explaining.
 14. "And the enthalpy in equals…" — quietly pleased.
@@ -36,11 +36,11 @@ Paragraph 4:
 20. "Hydrates form below fourteen degrees…" — emphasis on the number.
 21. "We're at eighteen: only four…" — concerned, after a short beat.
 22. "Put twenty weight percent methanol…" — thoughtful.
-23. "Good to know before winter.…" — wry.
+23. "Good to know before winter." — wry.
 Paragraph 5:
-24. "Now, the inlet separator.…" — confident.
+24. "Now, the inlet separator." — confident.
 25. "A three-phase vessel, with three…" — matter-of-fact.
-26. "Solve.…" — brisk, after a short beat.
+26. "Solve." — brisk, after a short beat.
 27. "Eighteen tonnes an hour of…" — steady, each number clear.
 28. "And every compound balances: what…" — quietly pleased.
 Paragraph 6:
@@ -58,7 +58,7 @@ Paragraph 7:
 39. "So we add a third…" — decisive.
 40. "N P S six: seven…" — pleased.
 Paragraph 8:
-41. "Finally, safety.…" — serious.
+41. "Finally, safety." — serious.
 42. "If there's a fire or…" — grave.
 43. "We give it its design…" — matter-of-fact.
 44. "Flowstead takes the target from…" — explaining.
@@ -70,7 +70,7 @@ Paragraph 9:
 49. "Everything we did is in…" — warmly.
 50. "And the same case opens…" — friendly.
 Paragraph 10:
-51. "That's episode two.…" — warmly.
+51. "That's episode two." — warmly.
 52. "Try it on a case…" — inviting.
 53. "See you in the next…" — cheerful.
 ```
