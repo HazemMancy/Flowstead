@@ -149,7 +149,7 @@ export function initTools(app) {
       const p = app.project(), base = [p.flowsheet, ...solveArgs(), id];
       const ask = async (extra) => {
         const req = JSON.parse(Tools.request('linesizing', ...base, JSON.stringify({ ...params, ...extra })));
-        if (req.error) throw new Error(req.error);
+        if (req.error) throw Object.assign(new Error(req.error), { plain: true });
         req.params.saturationFor = []; req.params.enthalpyBasis = app.enthalpyBasis?.();
         return engine.call(req.method, req.params);
       };
@@ -163,7 +163,7 @@ export function initTools(app) {
           result = JSON.parse(Tools.lineMerge(JSON.stringify(result), JSON.stringify(again.result))); ms += again.ms;
         }
         out.innerHTML = renderReport(JSON.parse(Tools.report('linesizing', ...base, JSON.stringify(params), JSON.stringify(result)))) + `<p class="meta">Calculated by DWSIM in ${(ms / 1000).toFixed(1)} s.</p>`;
-      } catch (e) { out.innerHTML = err(`Not calculated: ${e.message}`); }
+      } catch (e) { out.innerHTML = err(e.plain ? e.message : `Not calculated: ${e.message}`); }
     });
     q('#an_env').addEventListener('click', () => tool('envelope', { qualities: st.qualities, hydrates: st.hydrates, inhibitor: st.inhibitor || null, inhibitorPercent: st.inhibitorPercent }, '#an_env_out', 'Tracing'));
     q('#an_pvt').addEventListener('click', () => tool('pvt', {
