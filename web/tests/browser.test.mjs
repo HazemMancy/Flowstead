@@ -1352,21 +1352,26 @@ try {
       api.connectNew('V-100', { side: 'outlet', index: 2, tag: 'WATER' });
       const s = await api.solve();
       const r = Object.fromEntries(['WELL-GAS', 'SEP-FEED', 'GAS', 'CONDENSATE', 'WATER'].map((t) => [t, api.results(t)]));
-      const pv = (t, k) => r[t].properties[k]?.si;
+      const pv = (t, k) => r[t].properties[k]?.si ?? r[t].phases?.overall?.properties?.[k];
       const env = await api.streamTool('envelope', 'SEP-FEED', { hydrates: true, inhibitor: 'methanol', inhibitorPercent: '20' }).catch((e) => ({ error: e.message }));
       api.setSizingInput('V-100', { horizontal: true });
       const sep = api.sizing('V-100');
       api.setLineCriteria('gas', { maxVelocity: 18, maxMomentumFlux: 15000 });
       const line = await api.lineSizing('GAS', { design: true, schedule: '40', totalLength: { value: '2', unit: 'km' } });
-      const bd = await api.safety('depressuring', { protectedId: 'V-100', vessel: { diameter: sep.diameter_m, length: sep.length_m, horizontal: true, liquidLevel: sep.levels.find((l) => /NLL/.test(l.name))?.height ?? 0 }, designPressure: 51.01325e5, backPressure: 101325 }).catch((e) => ({ error: e.message }));
+      // Velocity and ρv² alone pass NPS 4, at a ΔP no 2 km line can take: a friction limit of 2.5 bar/km as well.
+      api.setLineCriteria('gas', { maxVelocity: 18, maxMomentumFlux: 15000, maxFrictionGradient: 250 });
+      const line2 = await api.lineSizing('GAS', { design: true, schedule: '40', totalLength: { value: '2', unit: 'km' } });
+      const bd = await api.safety('depressuring', { protectedId: 'V-100', vessel: { diameter: sep.diameter_m, length: sep.length_m, horizontal: true, liquidLevel: sep.levels.find((l) => /NLL/.test(l.name)).height_m }, designPressure: 51.01325e5, backPressure: 101325 }).catch((e) => ({ error: e.message }));
       const check = api.check();
       return {
         status: s.status, check,
         well: { T: pv('WELL-GAS', 'temperature'), h: pv('WELL-GAS', 'massEnthalpy'), w: pv('WELL-GAS', 'massFlow'), vf: pv('WELL-GAS', 'vapourFraction') },
         feed: { T: pv('SEP-FEED', 'temperature'), P: pv('SEP-FEED', 'pressure'), h: pv('SEP-FEED', 'massEnthalpy') },
-        out: Object.fromEntries(['GAS', 'CONDENSATE', 'WATER'].map((t) => [t, { w: pv(t, 'massFlow'), rho: pv(t, 'density'), q: pv(t, 'volumeFlow'), mol: pv(t, 'molarFlow'), T: pv(t, 'temperature') }])),
+        out: Object.fromEntries(['GAS', 'CONDENSATE', 'WATER'].map((t) => [t, { w: pv(t, 'massFlow'), rho: pv(t, 'density'), mol: pv(t, 'molarFlow'), T: pv(t, 'temperature'), M: pv(t, 'molecularWeight'), x: r[t].phases?.overall?.composition }])),
+        wellM: pv('WELL-GAS', 'molecularWeight'), wellMol: pv('WELL-GAS', 'molarFlow'), props: Object.keys(r.GAS.properties), phaseProps: Object.keys(r.GAS.phases?.overall?.properties ?? {}),
         env: env.error ? env : { hydrate: env.result?.hydrateTemperatureAtPressure, structure: env.result?.hydrateStructureAtPressure, inhibitorNeeded: env.result?.requiredInhibitorFraction, notes: env.report?.sections?.filter?.((x) => x.kind === 'note').map((x) => x.text) ?? JSON.stringify(env.report).slice(0, 600), cricondenbar: env.result?.cricondenbarPressure, cricondentherm: env.result?.cricondenthermTemperature },
-        sep, line: { recommended: line.recommended, service: line.service, rows: line.rows?.map((x) => ({ size: x.size, id: x.insideDiameter_m, g: x.gradient_Pa_m, v: x.velocity_m_s, m: x.momentumFlux_kg_m_s2, total: x.totalDrop_Pa, passes: x.passes, err: x.error })) },
+        sep, line2: { recommended: line2.recommended, rows: line2.rows?.filter((x) => !x.error && x.insideDiameter_m < 0.21).map((x) => ({ size: x.size, g: x.gradient_Pa_m, passes: x.passes, failed: x.failed })) },
+        line: { recommended: line.recommended, service: line.service, rows: line.rows?.map((x) => ({ size: x.size, id: x.insideDiameter_m, g: x.gradient_Pa_m, v: x.velocity_m_s, m: x.momentumFlux_kg_m_s2, total: x.totalDrop_Pa, passes: x.passes, err: x.error })) },
         bd: bd.error ? bd : { target: bd.result.targetPressure, basis: bd.result.targetBasis, t: bd.result.timeToTarget, orifice: bd.result.orificeDiameter, sized: bd.result.orificeSized, tmin: bd.result.minimumTemperature, tliq: bd.result.minimumLiquidTemperature, twall: bd.result.minimumWallTemperature, peak: bd.result.peakFlow, m0: bd.result.inventory?.[0], p0: bd.result.pressure?.[0], warnings: bd.result.warnings },
         json: api.json(),
       };
@@ -1378,17 +1383,23 @@ try {
       const errors = (got.check ?? []).filter((c) => c.level === 'error');
       if (errors.length) problems.push(`check: ${JSON.stringify(errors)}`);
       if (!(Math.abs(feed.h - well.h) <= 100)) problems.push(`choke not isenthalpic: ${well.h} J/kg in, ${feed.h} out`);
-      const wout = out.GAS.w + out.CONDENSATE.w + out.WATER.w;
-      if (!(Math.abs(wout - well.w) <= 1e-4 * well.w)) problems.push(`separator mass balance ${wout} kg/s out for ${well.w} in`);
+      const wout = out.GAS.w + out.CONDENSATE.w + out.WATER.w, nout = out.GAS.mol + out.CONDENSATE.mol + out.WATER.mol;
+      if (!(Math.abs(nout - got.wellMol) <= 1e-6 * got.wellMol)) problems.push(`separator molar balance ${nout} mol/s out for ${got.wellMol} in`);
+      if (!(Math.abs(wout - well.w) <= 1e-4 * well.w)) problems.push(`separator mass balance ${wout} kg/s out for ${well.w} in (${(100 * (wout / well.w - 1)).toFixed(4)} %)`);
       const qo = out.CONDENSATE.w / out.CONDENSATE.rho, qw = out.WATER.w / out.WATER.rho, rhoL = (qo * out.CONDENSATE.rho + qw * out.WATER.rho) / (qo + qw), rhoG = out.GAS.rho;
       const vmax = sep.k_m_s * Math.sqrt((rhoL - rhoG) / rhoG);
       if (!(Math.abs(sep.maxGasVelocity_m_s - vmax) <= 0.005 * vmax)) problems.push(`Souders–Brown ${sep.maxGasVelocity_m_s} m/s; by hand ${vmax}`);
+      // The engine reports the highest velocity and ρv² along its 100 m test pipe, at the outlet: the gas there is lighter by
+      // about the pressure lost (P/(P − ΔP)), and ρv² = G·v with the mass flux G fixed. Between the inlet's value by hand and that.
       for (const row of line.rows ?? []) {
         if (row.err) continue;
-        const v = out.GAS.w / rhoG / (Math.PI * row.id ** 2 / 4);
-        if (!(Math.abs(row.v - v) <= 0.03 * v)) problems.push(`${row.size} gas velocity ${row.v} m/s; by hand ${v}`);
-        if (!(Math.abs(row.m - rhoG * v * v) <= 0.06 * rhoG * v * v)) problems.push(`${row.size} ρv² ${row.m}; by hand ${rhoG * v * v}`);
+        const G = out.GAS.w / (Math.PI * row.id ** 2 / 4), v = G / rhoG, f = feed.P / (feed.P - 100 * row.g);
+        if (!(row.v >= 0.995 * v && row.v <= 1.01 * f * v)) problems.push(`${row.size} gas velocity ${row.v} m/s; by hand ${v} to ${f * v}`);
+        if (!(row.m >= 0.995 * G * v && row.m <= 1.01 * f * G * v)) problems.push(`${row.size} ρv² ${row.m}; by hand ${G * v} to ${f * G * v}`);
       }
+      const ok2 = (got.line2.rows ?? []).filter((x) => x.passes).map((x) => x.size)[0];
+      const byHand2 = (line.rows ?? []).filter((x) => !x.err && x.v <= 18 && x.m <= 15000 && x.g <= 250).sort((a, b) => a.id - b.id)[0];
+      if (got.line2.recommended !== byHand2?.size || ok2 !== byHand2?.size) problems.push(`with 2.5 bar/km: ${got.line2.recommended}; by the criteria ${byHand2?.size}`);
       const rec = (line.rows ?? []).find((x) => x.size === line.recommended);
       const ok = (line.rows ?? []).filter((x) => !x.err && x.v <= 18 && x.m <= 15000).sort((a, b) => a.id - b.id)[0];
       if (!rec || rec !== ok) problems.push(`line recommended ${line.recommended}; by the criteria ${ok?.size}`);
@@ -1399,7 +1410,7 @@ try {
         if (!(bd.t > 0 && bd.t <= 15.05 * 60)) problems.push(`blowdown takes ${bd.t} s`);
       }
       if (env.error) problems.push(`envelope: ${env.error}`);
-      got.summary = `feed ${(feed.T - 273.15).toFixed(2)} °C after the choke (well ${(well.T - 273.15).toFixed(2)}), hydrate ${(env.hydrate - 273.15).toFixed(2)} °C; V-100 ${sep.diameter_m?.toFixed(3)} × ${sep.length_m?.toFixed(3)} m; gas line ${line.recommended}; blowdown to ${(bd.target / 1e5).toFixed(3)} bara in ${(bd.t / 60).toFixed(2)} min`;
+      got.summary = `feed ${(feed.T - 273.15).toFixed(2)} °C after the choke (well ${(well.T - 273.15).toFixed(2)}), hydrate ${(env.hydrate - 273.15).toFixed(2)} °C; V-100 ${sep.diameter_m?.toFixed(3)} × ${sep.length_m?.toFixed(3)} m; gas line ${line.recommended}, with ΔP ${got.line2.recommended}; blowdown to ${(bd.target / 1e5).toFixed(3)} bara in ${(bd.t / 60).toFixed(2)} min`;
     }
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} episode 2 case (${got.summary ?? ''})`);
