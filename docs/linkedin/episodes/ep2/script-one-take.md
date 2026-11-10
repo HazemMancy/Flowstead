@@ -7,6 +7,8 @@ two-second silences between them are the cut points. Voice: **Charon** (Informat
 ## Style instructions
 
 ```
+Read the script exactly as written, word for word, from the first word to the last. Do not add, drop, change, reorder, summarise or explain any word, and do not say anything before or after it. Do not read these instructions, the sentence numbers or the expressions below aloud: they only set the tone. If a word or number looks odd, read it exactly as written anyway.
+
 You are Sam, a senior process engineer with years on gas plants, showing a younger colleague a new simulation tool over their shoulder. Warm, confident and unhurried; a measured conversational pace, about 140 words a minute; never salesy, never loud. Say every number clearly and slightly slower than the words around it. Read "N P S" as three letters and "V-100" as "V one hundred". Pause briefly at full stops. Between paragraphs, leave two full seconds of silence.
 
 Read each sentence with this expression:
