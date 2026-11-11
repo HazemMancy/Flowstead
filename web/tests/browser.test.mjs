@@ -1478,6 +1478,47 @@ try {
     await p.close();
   }
 
+  // ---------- 4u. packed columns (D152): benchmark 11's depropanizer packed with 25 mm metal Pall rings ----------
+  // The engine rates the bed (its numbers are checked against Robbins and Kister–Gill in PackedColumnTests); here the
+  // web's part: the packing chosen through the API reaches the engine and the sizing shows the bed, with the HETP rule
+  // (1.5 × 25 mm, but not under the diameter or 1 ft below 2 ft) times the 20 stages giving the bed height.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady && window.flowstead?.api, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const case11 = JSON.parse(fs.readFileSync(path.join(benchDir, '11-depropanizer', 'input.json'), 'utf8')).flowsheet;
+    const keep = new Set(['f', 't', 'd', 'b']);
+    case11.objects = case11.objects.filter((o) => keep.has(o.id));
+    case11.connections = case11.connections.filter((c) => keep.has(c.fromObject) && keep.has(c.toObject));
+    const got = await p.evaluate(async (fsheet) => {
+      const api = window.flowstead.api;
+      api.load(fsheet, 'packed');
+      api.setRef('T-100', 'packing', 'Pall rings Metal 25 mm (Perry)');
+      const s = await api.solve();
+      return { status: s.status, sizing: api.sizing('T-100') };
+    }, case11).catch((e) => ({ error: e.message }));
+    let d, hetp, bed;
+    if (got.error) problems.push(got.error);
+    else {
+      if (got.status !== 'converged') problems.push(`solve ${got.status}`);
+      const line = (l) => got.sizing?.lines?.find((x) => x.label === l);
+      if (line('Packing')?.text !== 'Pall rings Metal 25 mm (Perry)') problems.push(`sizing: ${JSON.stringify(got.sizing)}`);
+      d = line('Diameter')?.si; hetp = line('HETP (mean)')?.si; bed = line('Bed height')?.si;
+      const want = d < 0.6096 ? Math.max(0.0375, d, 0.3048) : 0.0375;
+      if (!(Math.abs(hetp - want) < 1e-9)) problems.push(`HETP ${hetp} m for ${want} m at D = ${d} m`);
+      if (!(Math.abs(bed - 20 * want) < 1e-6)) problems.push(`bed ${bed} m for 20 × ${want} m`);
+      if (!(line('Pressure drop over the bed')?.si > 0)) problems.push('no pressure drop over the bed');
+    }
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} packed column (D ${d?.toFixed?.(2)} m, bed ${bed?.toFixed?.(2)} m)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4r. line sizing of a stream, as HYSYS's stream analysis (D148) ----------
   // Water at 25 °C, 10 bara, 20 kg/s, with no pipe segment. Hand references from the stream's own ρ and μ: v = ṁ/(ρ·πD²/4),
   // ρv², Darcy–Weisbach with Colebrook's friction factor (0.0457 mm steel); over 1 km the liquid's ΔP is the gradient
