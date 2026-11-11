@@ -113,9 +113,9 @@ run("ffmpeg", "-v", "error", "-y", "-i", picture, "-i", audio, "-filter_complex"
     f"color=c=0x02142A:s=1080x1350:r={FPS}[bg];"
     f"[0:v]scale=1080:608:flags=lanczos[v];"
     f"[bg][v]overlay=0:{top}:shortest=1,"
-    f"drawtext=font='Inter SemiBold':fontsize=24:fontcolor=0x9FB3CC:text='GETTING STARTED · EPISODE 2':x=60:y=88,"
-    f"drawtext=font='Inter ExtraBold':fontsize=52:fontcolor=white:text='From the well to the':x=60:y=132,"
-    f"drawtext=font='Inter ExtraBold':fontsize=52:fontcolor=0x14D3CF:text='inlet separator':x=60:y=190,"
+    f"drawtext=font='Inter SemiBold':fontsize=24:fontcolor=0x9FB3CC:text='GETTING STARTED · EPISODE 2':x=60:y=88:enable='between(t,{starts[1]:.2f},{starts[-1]:.2f})',"
+    f"drawtext=font='Inter ExtraBold':fontsize=52:fontcolor=white:text='From the well to the':x=60:y=132:enable='between(t,{starts[1]:.2f},{starts[-1]:.2f})',"
+    f"drawtext=font='Inter ExtraBold':fontsize=52:fontcolor=0x14D3CF:text='inlet separator':x=60:y=190:enable='between(t,{starts[1]:.2f},{starts[-1]:.2f})',"
     f"ass={os.path.join(out, 'captions-4x5.ass')}[o]",
     "-map", "[o]", "-map", "1:a", "-c:v", "libx264", "-preset", "slow", "-crf", "19", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-movflags", "+faststart", "-shortest", feed)

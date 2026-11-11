@@ -278,9 +278,9 @@ await chapter(2, 'The choke', null, async () => {
   const pu = p.locator('#inspForm select[data-unit="outletPressure"]');
   if (await pu.count() && (await pu.inputValue()) !== 'bara') await pu.selectOption('bara');
   await type('#inspForm input[data-spec="outletPressure"]', '40');
+  await select('SEP-FEED'); await click('#tabResults');
   await at(39.6); await click('#solveBtn');
   await p.waitForFunction(() => /Converged/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
-  await select('SEP-FEED'); await click('#tabResults');
   await at(41.2); await hl(row('#inspResults', 'Temperature'), 3000);
   await at(47.6); await hl(row('#inspResults', 'Mass enthalpy'), 1600);
   await select('WELL-GAS'); await tab('#tabResults');
@@ -326,7 +326,7 @@ await chapter(4, 'Three-phase separator', null, async () => {
     await api(([i, tag]) => window.flowstead.api.connectNew('V-100', { side: 'outlet', index: i, tag }), [i, tag]);
     await tidy();
   }
-  await at(87.7); await click('#solveBtn');
+  await at(86.8); await click('#solveBtn');
   await p.waitForFunction(() => /Converged/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
   await select('GAS'); await tab('#tabResults');
   await at(88.6); await hl(row('#inspResults', 'Mass flow'), 1500);
@@ -405,7 +405,8 @@ await chapter(7, 'Blowdown · API 521', async () => {
   await click('[data-tab="depressuring"]:visible');
   await p.evaluate(() => { document.getElementById('sf_out').innerHTML = ''; });
   await sleep(600);
-  await at(171.0); await hl(p.locator('#sf_form .field, #sf_form label', { hasText: /Design pressure/i }).first(), 2200);
+  await at(171.0); await choose('#sf_form select[aria-label="Design pressure unit"]', 'barg');
+  await hl(p.locator('#sf_form .field', { has: p.locator('select[aria-label="Design pressure unit"]') }).first(), 2000);
   await at(176.6); await hl(p.locator('#sf_form .field, #sf_form label', { hasText: /Design pressure/i }).first(), 2000);
   await at(180.2); await reveal('#sf_form [data-run]', '#sf_out', bd);
   await at(181.2); await hl(p.locator('#sf_out').locator('h3, h4, .rp-heading', { hasText: /Orifice/ }).first(), 1800);
