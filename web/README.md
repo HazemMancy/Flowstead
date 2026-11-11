@@ -45,6 +45,8 @@ In the repository's settings, **Pages → Build and deployment → Source** must
   must be; a flow behind a splitter or separator finds the feed's flow; a product's enthalpy finds the feed temperature.
 - Absolute entropy on HYSYS's basis is right for n-butane and heavier paraffins; typing the first enthalpy into a case
   keeps the case's basis.
+- Review fixes: a zoomed chart draws its curves whole (no false lines across a phase envelope); saved runs stay
+  within the browser's storage, and a file's malformed runs are left out.
 
 **Web 1.21**
 - The enthalpy and entropy basis is saved in the case itself, as in the Android app (3.6.0), so a case keeps it when it

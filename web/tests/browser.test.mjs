@@ -1766,6 +1766,13 @@ try {
     const [file] = await Promise.all([p.waitForEvent('download'), p.click('#saveBtn')]);
     const saved = JSON.parse(fs.readFileSync(await file.path(), 'utf8'));
     if (!(saved.flowsteadWebRuns?.length >= 1)) problems.push('the saved file does not carry the runs');
+    // Opened again, with a run that is not well formed added (a file is anyone's): the good one is back, the other left out.
+    const n = saved.flowsteadWebRuns.length;
+    saved.flowsteadWebRuns.push({ id: 'bad', scope: saved.flowsteadWebRuns[0].scope, report: '{not json', at: 0 }, 'junk');
+    await p.setInputFiles('#openFile', { name: 'd155.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(saved)) });
+    await p.waitForFunction(() => /Saved runs/.test(document.querySelector('#inspAnalysis .runs')?.textContent ?? '') || !document.querySelector('#inspAnalysis .runs'), null, { timeout: 30_000 }).catch(() => {});
+    const kept = await p.evaluate(() => JSON.parse(localStorage.getItem('flowstead.web.project'))?.runs?.length ?? -1);
+    if (kept !== n) problems.push(`opening the file kept ${kept} runs of ${n} good ones`);
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} interactive charts and saved runs (D155)`);
     problems.forEach((x) => console.log('     ' + x));

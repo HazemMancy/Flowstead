@@ -12,7 +12,7 @@ import { withSubflowsheets } from './subflowsheets.js';
 import { installAutomation } from './automation.js';
 import { floating } from './floating.js';
 import { initCharts } from './charts.js';
-import { initRuns } from './runs.js';
+import { initRuns, validRuns } from './runs.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -908,7 +908,7 @@ $('openFile').addEventListener('change', async () => {
     // A Flowstead flowsheet, or a benchmark/example file ({name, flowsheet}).
     const sheet = j.flowsheet && typeof j.flowsheet === 'object' ? j.flowsheet : j;
     if (!Array.isArray(sheet.objects)) throw new Error('This is not a Flowstead flowsheet');
-    const runs = Array.isArray(sheet.flowsteadWebRuns) ? sheet.flowsteadWebRuns : [];
+    const runs = validRuns(sheet.flowsteadWebRuns);
     delete sheet.flowsteadWebRuns;
     const json = JSON.stringify(sheet);
     view.setFlowsheet(json); // decodes it with the app's rules; throws if it is not a valid flowsheet

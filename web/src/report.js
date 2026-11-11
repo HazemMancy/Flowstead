@@ -23,9 +23,11 @@ export function plotInner(p, v = {}) {
   const hidden = v.hidden ?? new Set();
   const all0 = p.series.map((s, i) => ({ ...s, i, color: COLORS[i % COLORS.length], points: s.points.filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y)) })).filter((s) => s.points.length);
   const inX = (x) => !v.x || (x >= v.x[0] && x <= v.x[1]);
-  const series = all0.filter((s) => !hidden.has(s.i)).map((s) => ({ ...s, points: s.points.filter(([x]) => inX(x)) })).filter((s) => s.points.length);
+  // Zoomed, a curve is drawn whole and clipped to the plot (a phase envelope is not a function of x, so leaving out its
+  // points outside the range would join what is left with false straight lines); the y range is that of what is inside.
+  const series = all0.filter((s) => !hidden.has(s.i) && s.points.some(([x]) => inX(x)));
   const markers = (p.markers ?? []).filter((m) => inX(m.x));
-  const all = series.flatMap((s) => s.points).concat(markers.map((m) => [m.x, m.y]));
+  const all = series.flatMap((s) => s.points.filter(([x]) => inX(x))).concat(markers.map((m) => [m.x, m.y]));
   if (!all.length) return { svg: '', series: all0, sx: null };
   const [x0, x1, dx] = v.x ? [v.x[0], v.x[1], nice(v.x[0], v.x[1])[2]] : nice(Math.min(...all.map((q) => q[0])), Math.max(...all.map((q) => q[0])));
   const [y0, y1, dy] = nice(Math.min(...all.map((q) => q[1])), Math.max(...all.map((q) => q[1])));

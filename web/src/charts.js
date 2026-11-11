@@ -57,9 +57,9 @@ function hover(fig, s, e) {
     if (best && bd < 70) near.push({ i, label: ser.label, x: best[0], y: best[1], d: bd });
   });
   near.sort((a, b) => a.d - b.d);
-  const colors = [...fig.querySelectorAll('.legend-item i')].map((el) => el.style.background);
+  const color = (i) => fig.querySelector(`.legend-item[data-series="${i}"] i`)?.style.background || 'var(--fg)';
   g.innerHTML = `<line x1="${pt.x}" x2="${pt.x}" y1="${f.T}" y2="${f.H - f.B}" class="cross"/>` +
-    near.map((n) => `<circle cx="${sx(n.x)}" cy="${sy(n.y)}" r="5" fill="${colors[n.i] ?? 'var(--fg)'}" stroke="var(--bg-card)" stroke-width="2"/>`).join('');
+    near.map((n) => `<circle cx="${sx(n.x)}" cy="${sy(n.y)}" r="5" fill="${color(n.i)}" stroke="var(--bg-card)" stroke-width="2"/>`).join('');
   if (!near.length) { tip.hidden = true; return; }
   tip.innerHTML = near.slice(0, 5).map((n) => `<div><b>${esc(n.label)}</b><br>${esc(s.p.xLabel)}: ${fmt(n.x)}<br>${esc(s.p.yLabel)}: ${fmt(n.y)}</div>`).join('');
   tip.hidden = false;
@@ -103,7 +103,8 @@ export function initCharts(root = document) {
   });
   root.addEventListener('pointerup', (e) => {
     const fig = e.target.closest?.('.rp-plot'); const s = fig && state.get(fig);
-    if (!s?.drag) { document.querySelectorAll('.rp-plot').forEach((f) => { const t = state.get(f); if (t) t.drag = null; }); return; }
+    // Let go outside the plot: the drag ends there, with nothing zoomed.
+    if (!s?.drag) { document.querySelectorAll('.rp-plot').forEach((f) => { const t = state.get(f); if (t?.drag) { t.drag = null; f.querySelector('.zoom-box')?.setAttribute('width', 0); } }); return; }
     const pt = svgPoint(fig.querySelector('svg'), e), f = s.frame, start = s.drag.x; s.drag = null;
     if (!pt || Math.abs(pt.x - start) < 8) { fig.querySelector('.zoom-box')?.setAttribute('width', 0); return; }
     const toX = (px) => f.x0 + ((Math.max(f.L, Math.min(f.W - f.R, px)) - f.L) / (f.W - f.L - f.R)) * (f.x1 - f.x0);

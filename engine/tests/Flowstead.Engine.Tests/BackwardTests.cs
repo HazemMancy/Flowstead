@@ -38,11 +38,11 @@ public sealed class BackwardTests(EngineFixture engine, ITestOutputHelper output
         await EngineFixture.Json<SolveResult>(await engine.Authed().PostAsJsonAsync("/solve", fs, Json.Options));
 
     /// <summary>The engine's mass enthalpy of the gas at <paramref name="t"/> and <paramref name="p"/> (a flash of a lone stream).</summary>
-    private async Task<double> Enthalpy(double t, double p)
+    private async Task<double> Enthalpy(double t, double p, string? basis = null)
     {
         var r = await Solve(new Flowsheet
         {
-            PropertyPackage = "Peng-Robinson (PR)", Compounds = Gas.Keys.ToList(),
+            EnthalpyBasis = basis, PropertyPackage = "Peng-Robinson (PR)", Compounds = Gas.Keys.ToList(),
             Objects = [Stream("s", new() { [SpecKeys.Temperature] = new(t, "K"), [SpecKeys.Pressure] = new(p, "Pa"), [SpecKeys.MolarFlow] = new(1, "mol/s") }, Gas)],
         });
         return r.Objects["s"].Properties["massEnthalpy"];
@@ -195,6 +195,25 @@ public sealed class BackwardTests(EngineFixture engine, ITestOutputHelper output
         Assert.Equal(SolveStatus.Converged, r.Status);
         Assert.Equal(353.15, r.Objects["p"].Properties["temperature"], 0.02);
         Assert.Equal(hOut - q / w, await Enthalpy(r.Objects["f"].Properties["temperature"], 30e5), 50.0);
+    }
+
+    [Fact]
+    public async Task AProductsEnthalpyOnHysysBasisIsMetOnThatBasis()
+    {
+        // The same heater with the case on HYSYS's basis (formation enthalpy, the default for a new case): the typed
+        // enthalpy is read on that basis, so the feed temperature found is the same as on DWSIM's.
+        const double q = 500e3, w = 5.0;
+        var hOut = await Enthalpy(353.15, 29.5e5, "formation");
+        Assert.True(Math.Abs(hOut - await Enthalpy(353.15, 29.5e5)) > 1e5, "the two bases differ by the formation enthalpy");
+        var feed = Stream("f", new() { [SpecKeys.Pressure] = new(30e5, "Pa"), [SpecKeys.MassFlow] = new(w, "kg/s") }, Gas);
+        var product = Stream("p", new() { [SpecKeys.MassEnthalpy] = new(hOut, "J/kg") });
+        var e = new SimObject { Id = "e", Tag = "Q-100", Type = ObjectType.EnergyStream };
+        var fs = Line(ObjectType.Heater, new() { [SpecKeys.Duty] = new(q, "W"), [SpecKeys.PressureDrop] = new(0.5e5, "Pa") }, feed, product, e);
+        var r = await Solve(fs with { EnthalpyBasis = "formation" });
+        Assert.Equal(SolveStatus.Converged, r.Status);
+        Assert.Equal(353.15, r.Objects["p"].Properties["temperature"], 0.02);
+        Assert.Equal(hOut, r.Objects["p"].Properties["massEnthalpy"], 50.0);
+        Assert.Equal(hOut - q / w, await Enthalpy(r.Objects["f"].Properties["temperature"], 30e5, "formation"), 50.0);
     }
 
     [Fact]
