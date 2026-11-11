@@ -271,6 +271,7 @@ public sealed partial class DwsimEngine
         UnitChecks.AddNpsh(model, results, objects);
         UnitChecks.AddZoneAnalysis(model, results, objects);
         Columns.Verify(model, results);
+        PackedColumns.Rate(model, results, messages);
         Reactors.Verify(model, results);
         UnitChecks.Apply(model, results, messages);
         foreach (var (id, r) in results.Where(r => r.Value.Status == ObjectStatus.Error))
