@@ -222,7 +222,7 @@ object Packings {
             "Rated by DWSIM's packing hydraulics: ${results.text(o.id, "packingModel") ?: "its packing correlations"}; data from ${results.text(o.id, "packingSource") ?: "DWSIM's catalogue"}.",
             "Each stage between the condenser and the reboiler is one stage of bed, rated with its own solved vapour and liquid. " +
                 (if (number(o, DIAMETER) == null) "The diameter puts the most loaded stage at ${ValueFormat.number(target * 100, 0)} % of flood, rounded up to 50 mm. " else "The diameter is the one given. ") +
-                (if (number(o, HEIGHT) == null) "The bed is the stages times the HETP by Kister's rules of thumb (1.5 nominal sizes for random packings; 100/a + 4 in for structured ones; not less than the diameter below 2 ft)." else "The bed height is the one given."),
+                (if (number(o, HEIGHT) == null) "The bed is the stages times the HETP by Kister's rules of thumb (1.5 ft per inch of nominal size for random packings; 100/a + 4 in for structured ones; not less than the diameter below 2 ft)." else "The bed height is the one given."),
             "Allow for liquid distributors, bed supports and redistributors (a bed every 6 m or so of random packing) on top of the bed height.",
         )
         return EquipmentSizingResult(lines, notes, warnings)

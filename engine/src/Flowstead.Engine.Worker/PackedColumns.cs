@@ -64,6 +64,22 @@ public static class PackedColumns
         }
     }
 
+    /// <summary>
+    /// Rule-of-thumb HETP, m (Kister; Seader and Henley 2nd ed. eqs. 6-116 to 6-118): random packings HETP (ft) =
+    /// 1.5 d_p (in), i.e. 18 nominal sizes; structured packings HETP (ft) = 100/a (ft²/ft³) + 4/12; not less than the
+    /// column diameter (or 1 ft) below 2 ft. DWSIM 10.2.15's RuleOfThumbHETP takes 1.5 d_p with d_p in metres for random
+    /// packings, 12 times too short (37.5 mm for 25 mm rings instead of 0.457 m), so Flowstead uses its own.
+    /// </summary>
+    public static double Hetp(PackingData p, double diameter)
+    {
+        double h;
+        if (p.Structured) h = 0.3048 * (100.0 / (p.a * 0.3048) + 4.0 / 12.0);
+        else h = 0.3048 * 1.5 * (Math.Max(p.NominalSize, 0.0) / 0.0254);
+        if (!(h > 0)) h = 0.5;
+        if (diameter < 0.6096) h = Math.Max(h, Math.Max(diameter, 0.3048));
+        return h;
+    }
+
     public sealed record Rated(Dictionary<string, double> Properties, List<string> Warnings, string? Why);
 
     /// <summary>The column's trays rated as a bed of <paramref name="packing"/>, from its stage profile.</summary>
@@ -108,7 +124,9 @@ public static class PackedColumns
         var diameter = given ?? Math.Ceiling(required / 0.05 - 1e-9) * 0.05;
 
         var ratings = usable.Select(s => PackingHydraulics.RatePacking(section, packing, s, diameter)).ToList();
-        var hetps = ratings.Select(x => x.HETP).Where(double.IsFinite).ToList();
+        // The HETP by Kister's rules as published, not DWSIM's RuleOfThumbHETP (see Hetp).
+        var hetp = Hetp(packing, diameter);
+        var hetps = ratings.Select(_ => hetp).ToList();
         var height = Ref(o, ChoiceKeys.PackingHeight) ?? hetps.Sum();
         var slice = height / Math.Max(1, ratings.Count(x => double.IsFinite(x.PressureDrop)));
         var drop = ratings.Where(x => double.IsFinite(x.PressureDrop)).Sum(x => x.PressureDrop * slice);

@@ -1481,7 +1481,8 @@ try {
   // ---------- 4u. packed columns (D152): benchmark 11's depropanizer packed with 25 mm metal Pall rings ----------
   // The engine rates the bed (its numbers are checked against Robbins and Kister–Gill in PackedColumnTests); here the
   // web's part: the packing chosen through the API reaches the engine and the sizing shows the bed, with the HETP rule
-  // (1.5 × 25 mm, but not under the diameter or 1 ft below 2 ft) times the 20 stages giving the bed height.
+  // (Kister: 1.5 ft per inch of packing, 0.4572 m for 25 mm; not under the diameter or 1 ft below 2 ft) times the 20
+  // stages giving the bed height.
   {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     const errs = [], problems = [];
@@ -1507,7 +1508,7 @@ try {
       const line = (l) => got.sizing?.lines?.find((x) => x.label === l);
       if (line('Packing')?.text !== 'Pall rings Metal 25 mm (Perry)') problems.push(`sizing: ${JSON.stringify(got.sizing)}`);
       d = line('Diameter')?.si; hetp = line('HETP (mean)')?.si; bed = line('Bed height')?.si;
-      const want = d < 0.6096 ? Math.max(0.0375, d, 0.3048) : 0.0375;
+      const want = d < 0.6096 ? Math.max(0.4572, d, 0.3048) : 0.4572;
       if (!(Math.abs(hetp - want) < 1e-9)) problems.push(`HETP ${hetp} m for ${want} m at D = ${d} m`);
       if (!(Math.abs(bed - 20 * want) < 1e-6)) problems.push(`bed ${bed} m for 20 × ${want} m`);
       if (!(line('Pressure drop over the bed')?.si > 0)) problems.push('no pressure drop over the bed');
