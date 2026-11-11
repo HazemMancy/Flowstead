@@ -27,6 +27,16 @@ object EnthalpyBases {
     }
 
     /**
+     * [after] an edit of [before], with the basis kept: the automatic basis is HYSYS's until a stream types an enthalpy or
+     * entropy, so the first one typed into an automatic case would otherwise turn the whole case to DWSIM's reference
+     * and read the value just typed on it. The basis in force is written down instead. Cases that already type one
+     * (saved before the basis existed) keep DWSIM's.
+     */
+    fun keep(before: Flowsheet, after: Flowsheet): Flowsheet =
+        if (before.enthalpyBasis == null && after.enthalpyBasis == null && !typesEnergy(before) && typesEnergy(after)) after.copy(enthalpyBasis = FORMATION)
+        else after
+
+    /**
      * What a solve sends: the basis resolved as the engine reads it ("formation", or none for DWSIM's) and the streams that
      * get bubble and dew points ([saturationFor]: null for all, empty for none).
      */

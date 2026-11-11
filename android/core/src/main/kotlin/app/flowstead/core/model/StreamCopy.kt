@@ -55,7 +55,7 @@ object StreamCopy {
         if (state.isNotEmpty()) specs = specs - SpecKey.STREAM_STATE.toSet() + state.associate { it.key to it.spec!! }
         if (flow.isNotEmpty()) specs = specs - SpecKey.STREAM_FLOW.toSet() + flow.associate { it.key to it.spec!! }
         val composition = items.firstOrNull { it.key == COMPOSITION }?.composition?.filterKeys { it in fs.compounds } ?: target.composition
-        return fs.copy(objects = fs.objects.map { if (it.id == targetId) it.copy(specs = specs, composition = composition) else it })
+        return EnthalpyBases.keep(fs, fs.copy(objects = fs.objects.map { if (it.id == targetId) it.copy(specs = specs, composition = composition) else it }))
     }
 
     /**

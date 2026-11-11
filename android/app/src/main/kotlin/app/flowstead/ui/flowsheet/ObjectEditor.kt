@@ -902,7 +902,7 @@ private fun FeedStreamEditor(
 }
 
 /**
- * A product of a valve, heater, cooler, pump, compressor, expander or pipe (D151): calculated, or given what it must be,
+ * A product the line back from can cross (D151, D154): calculated, or given what it must be,
  * and its feed upstream found, as HYSYS solves backward.
  */
 @Composable
@@ -919,9 +919,10 @@ private fun ProductStreamEditor(
     DuplicateButton(obj, actions, "Duplicate as a feed (its solved T, P, flow and composition)")
 }
 
-internal const val PRODUCT_NOTE = "Calculated from the unit it comes from. Or give what it must be: its temperature, pressure or vapour " +
-    "fraction, its flow, its composition. Flowstead then finds what its feed upstream lacks, as HYSYS solves backward " +
-    "(through valves, heaters, coolers, pumps, compressors, expanders and pipes)."
+internal const val PRODUCT_NOTE = "Calculated from the unit it comes from. Or give what it must be: its temperature, pressure, vapour " +
+    "fraction or enthalpy, its flow, its composition. Flowstead then finds what its feed upstream lacks, as HYSYS solves backward " +
+    "(through valves, heaters, coolers, pumps, compressors, expanders, pipes, heat exchangers, splitters and separators; " +
+    "a composition only where the line keeps it)."
 
 @Composable
 private fun DuplicateButton(obj: SimObject, actions: EditorActions, label: String) {

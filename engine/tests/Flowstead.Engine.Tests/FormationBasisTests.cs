@@ -108,5 +108,46 @@ public sealed class FormationBasisTests(EngineFixture engine, ITestOutputHelper 
         Assert.InRange(PO(s, "massEntropy") * mw, 296.06 - 6, 296.06 + 6);
     }
 
+    [Fact]
+    public async Task EveryCommonCompoundIsItsNistHeatOfFormationAndEntropy()
+    {
+        // NIST-JANAF / NIST WebBook, ideal gas at 298.15 K: Hf kJ/mol, S° J/(mol·K) at 1 bar. At 0.5 kPa every one is a gas;
+        // S° is compared after taking off R ln(101.325/0.5) for the pressure and adding R ln 1.01325 for 1 bar → 1 atm.
+        // ChemSep writes structural formulas (CH3(CH2)4CH3, (C6H5)CH3, HOH): the atoms must be counted through them.
+        var nist = new (string Name, double Hf, double S0)[]
+        {
+            ("Methane", -74.87, 186.25), ("Ethane", -84.0, 229.2), ("Propane", -104.7, 270.3), ("Isobutane", -134.2, 295.4),
+            ("N-butane", -125.6, 310.2), ("Isopentane", -153.6, 343.7), ("N-pentane", -146.8, 349.1), ("N-hexane", -166.9, 388.8),
+            ("Carbon dioxide", -393.51, 213.79), ("Hydrogen sulfide", -20.6, 205.81), ("Nitrogen", 0, 191.61), ("Water", -241.83, 188.84),
+            ("Benzene", 82.9, 269.2), ("Toluene", 50.4, 320.7), ("Methanol", -201.0, 239.9),
+        };
+        var problems = new List<string>();
+        foreach (var (name, hf, s0) in nist)
+        {
+            var s = await Solve(Stream(PR, new() { [name] = 1 }, 25, 0.5, FormationBasisName));
+            var mw = P(s, "massFlow") / P(s, "molarFlow");
+            var h = s["phases"]!["overall"]!["properties"]!["molarEnthalpy"]!.GetValue<double>() / 1000;
+            var sm = PO(s, "massEntropy") * mw - 8.314462618 * Math.Log(101.325 / 0.5) + 8.314462618 * Math.Log(1.01325);
+            output.WriteLine($"{name,-18} H {h,9:F2} (NIST {hf,8:F2})   S {sm,7:F2} (NIST {s0,7:F2})");
+            if (Math.Abs(h - hf) > 1.0) problems.Add($"{name}: H {h:F2} kJ/mol, NIST {hf}");
+            if (Math.Abs(sm - s0) > 1.5) problems.Add($"{name}: S {sm:F2} J/(mol·K), NIST {s0}");
+        }
+        Assert.True(problems.Count == 0, string.Join("; ", problems));
+    }
+
+    [Fact]
+    public async Task LiquidWaterIsItsHeatOfFormationLessPengRobinsonsVaporisation()
+    {
+        // NIST liquid water at 25 °C: −285.83 kJ/mol. Peng-Robinson's departure gives a heat of vaporisation about 1.7 kJ/mol
+        // above the steam tables', as HYSYS's PR does; the free-water phase of a gas–water case is the same liquid.
+        foreach (var x in new[] { new Dictionary<string, double> { ["Water"] = 1 }, new Dictionary<string, double> { ["Water"] = 0.5, ["Methane"] = 0.5 } })
+        {
+            var s = await Solve(Stream(PR, x, 25, 101.325, FormationBasisName));
+            var water = s["phases"]!.AsObject().First(p => p.Key != "overall" && p.Value!["composition"]?["Water"]?.GetValue<double>() > 0.99).Value!;
+            var h = water["properties"]!["molarEnthalpy"]!.GetValue<double>() / 1000;
+            Assert.InRange(h, -285.83 - 2.5, -285.83 + 2.5);
+        }
+    }
+
     private const string FormationBasisName = "formation";
 }

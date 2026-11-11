@@ -399,9 +399,9 @@ private class Form(val fs: Flowsheet, val obj: SimObject, val ctx: UnitContext) 
         }
     }
 
-    /** A product a backward specification can be put on (D151): what it must be, its feed upstream found. */
+    /** A product a backward specification can be put on (D151, D154): what it must be, its feed upstream found. */
     private fun product() {
-        note("Calculated from the unit it comes from. Or give what it must be: its temperature, pressure or vapour fraction, its flow, its composition. Flowstead then finds what its feed upstream lacks, as HYSYS solves backward (through valves, heaters, coolers, pumps, compressors, expanders and pipes).")
+        note("Calculated from the unit it comes from. Or give what it must be: its temperature, pressure, vapour fraction or enthalpy, its flow, its composition. Flowstead then finds what its feed upstream lacks, as HYSYS solves backward (through valves, heaters, coolers, pumps, compressors, expanders, pipes, heat exchangers, splitters and separators; a composition only where the line keeps it).")
         label("What it must be (optional)")
         for (k in Backward.STATE) spec(k, "calculated if empty")
         for (k in Backward.FLOW) spec(k, "from its feed if empty")

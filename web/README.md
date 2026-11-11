@@ -35,6 +35,12 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.22**
+- Backward specifications widened: a stream leaving a heat exchanger, splitter, separator or tank can be given what it
+  must be; a flow behind a splitter or separator finds the feed's flow; a product's enthalpy finds the feed temperature.
+- Absolute entropy on HYSYS's basis is right for n-butane and heavier paraffins; typing the first enthalpy into a case
+  keeps the case's basis.
+
 **Web 1.21**
 - The enthalpy and entropy basis is saved in the case itself, as in the Android app (3.6.0), so a case keeps it when it
   moves between the two. Cases from earlier web versions keep the choice they had.

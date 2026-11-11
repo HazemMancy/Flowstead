@@ -95,16 +95,16 @@ object FlowsheetEditing {
     /** Removes every connection on one unit-op port, or all connections of a stream end. */
     fun disconnect(fs: Flowsheet, connection: Connection): Flowsheet = fs.copy(connections = fs.connections - connection)
 
-    fun setSpec(fs: Flowsheet, id: String, key: String, spec: Spec?): Flowsheet = update(fs, id) {
+    fun setSpec(fs: Flowsheet, id: String, key: String, spec: Spec?): Flowsheet = EnthalpyBases.keep(fs, update(fs, id) {
         if (spec == null) it.copy(specs = it.specs - key) else {
             require(spec.si.isFinite()) { "Not a number" }
             it.copy(specs = it.specs + (key to spec))
         }
-    }
+    })
 
     /** Sets one spec and drops the ones it replaces, e.g. choosing outlet pressure clears ΔP. */
     fun setExclusiveSpec(fs: Flowsheet, id: String, key: String, spec: Spec, clears: Collection<String>): Flowsheet =
-        update(fs, id) { o -> o.copy(specs = o.specs - clears.filter { it != key }.toSet() + (key to spec)) }
+        EnthalpyBases.keep(fs, update(fs, id) { o -> o.copy(specs = o.specs - clears.filter { it != key }.toSet() + (key to spec)) })
 
     /** Changes the dynamic run's setup (D86). */
     fun setDynamics(fs: Flowsheet, change: (DynamicsSetup) -> DynamicsSetup): Flowsheet = fs.copy(dynamics = change(fs.dynamics ?: DynamicsSetup()))
