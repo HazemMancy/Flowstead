@@ -17,6 +17,14 @@ const only = process.env.CHAPTERS ? process.env.CHAPTERS.split(',').map(Number) 
 const T = JSON.parse(fs.readFileSync(transcriptPath, 'utf8'));
 const starts = T.chapters.map((c) => c.start);
 const total = T.words.at(-1).e + 0.6;
+// A paced narration (pace.py): the cues below are the original take's times, moved by its time map.
+const TM = T.timeMap;
+const remap = (t) => {
+  if (!TM) return t;
+  const p = TM.pieces.find((x) => t >= x.old[0] - 1e-9 && t <= x.old[1] + 1e-9) ?? TM.pieces.at(-1);
+  return p.new + (t - p.old[0]) / TM.tempo;
+};
+const stretch = TM ? 1 / TM.tempo : 1;
 const chapterEnd = (i) => (i + 1 < starts.length ? starts[i + 1] : total);
 
 // ---------- the site ----------
@@ -105,6 +113,7 @@ async function type(sel, text) {
 async function choose(sel, value) { const loc = await moveTo(sel); await pulse(); await loc.selectOption(value); await sleep(400); }
 /** An amber box round [loc] for [ms] (it follows the element while it is shown). */
 async function hl(loc, ms = 2500) {
+  ms *= stretch;
   loc = typeof loc === 'string' ? p.locator(loc).first() : loc;
   if (!(await loc.count())) { console.log('  (no element to highlight)'); return; }
   const b = await boxOf(loc); if (!b) return;
@@ -189,7 +198,9 @@ async function stopRec(dir, length) {
   console.log(`  ${frames.length} frames, ${length.toFixed(2)} s of narration${lag > 0.05 ? `; ran ${lag.toFixed(1)} s over` : ''}`);
 }
 /** Waits until the narration reaches [t] (seconds from the start of the audio). */
-async function at(t) {
+async function at(t) { return atPaced(remap(t)); }
+/** Waits until the (paced) narration reaches [t]. */
+async function atPaced(t) {
   const wait = (t - chapterStart) - (Date.now() / 1000 - t0);
   if (wait > 0) await sleep(wait * 1000);
   else if (wait < -0.4) console.log(`  late by ${(-wait).toFixed(1)} s for the cue at ${t} s`);
@@ -202,7 +213,7 @@ async function chapter(i, label, setup, run) {
   await startRec();
   await badge(i + 1, label);
   await run();
-  await at(chapterEnd(i));
+  await atPaced(chapterEnd(i));
   await stopRec(path.join(out, `ch${String(i + 1).padStart(2, '0')}`), chapterEnd(i) - starts[i]);
 }
 
