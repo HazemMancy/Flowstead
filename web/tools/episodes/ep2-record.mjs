@@ -280,7 +280,7 @@ await chapter(2, 'The choke', null, async () => {
   await type('#inspForm input[data-spec="outletPressure"]', '40');
   await at(39.6); await click('#solveBtn');
   await p.waitForFunction(() => /Converged/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
-  await select('SEP-FEED'); await tab('#tabResults');
+  await select('SEP-FEED'); await click('#tabResults');
   await at(41.2); await hl(row('#inspResults', 'Temperature'), 3000);
   await at(47.6); await hl(row('#inspResults', 'Mass enthalpy'), 1600);
   await select('WELL-GAS'); await tab('#tabResults');
@@ -351,7 +351,7 @@ await chapter(5, 'Sizing V-100', async () => { await p.click('#solveClose').catc
   const sz = (label) => p.locator('#inspEquip .eq-sz tr', { has: p.locator('th', { hasText: label }) }).first();
   await at(106.6); await hl(sz('Diameter'), 1500);
   await at(108.2); await hl(sz('Length'), 1700);
-  await at(111.5); await hl(p.locator('#inspEquip label', { has: p.locator('[data-sz="k"]') }), 2000);
+  await at(111.5); await hl(sz('K used'), 2000);
   await at(116.2); await hl(sz('Allowable gas velocity'), 2200);
   await at(118.9); await hl(sz('Gas velocity'), 1800);
   await at(121.8); await hl(p.locator('#inspEquip').locator('table, .eq-sz', { hasText: /interface/i }).last(), 2600);
@@ -396,8 +396,8 @@ await chapter(7, 'Blowdown · API 521', async () => {
     return a.safety('depressuring', { name: 'V-100 blowdown', protectedId: 'V-100', vessel: { diameter: s.diameter_m, length: s.length_m, horizontal: true, liquidLevel: s.levels.find((l) => /NLL/.test(l.name)).height_m }, designPressure: 51.01325e5, backPressure: 101325 });
   });
   await p.click('#toolsBtn'); await p.click('[data-tab="depressuring"]:visible');
-  const dpu = p.locator('#sf_form .field', { hasText: 'Design pressure' }).locator('select').first();
-  if (await dpu.count()) { await dpu.selectOption('barg').catch(() => {}); await sleep(500); }
+  const dpu = p.locator('#sf_form select[aria-label="Design pressure unit"]');
+  if (await dpu.count()) { await dpu.selectOption('barg'); await sleep(600); } else console.log('  no design pressure unit');
   await p.click('#sf_form [data-run]'); await doneIn('#sf_out', 'reached after'); bd = await htmlOf('#sf_out');
   await p.click('#toolsClose');
 }, async () => {
@@ -427,7 +427,12 @@ await chapter(8, 'Report · on your phone', async () => {
   await mp.waitForFunction(() => window.flowsheetReady && window.flowstead?.api, null, { timeout: 120_000 });
   await mp.evaluate(() => window.flowsteadFlowsheet.engine.ready);
   await mp.evaluate(async (j) => { const a = window.flowstead.api; a.load(JSON.parse(j), 'Episode 2 · well to inlet separator'); await a.solve(); }, json);
+  await mp.click('#solveClose').catch(() => {});
   await mp.evaluate(() => document.getElementById('fitBtn')?.click());
+  const v = await mp.evaluate(() => window.flowstead.api.case().objects.find((o) => o.tag === 'V-100').id);
+  await mp.evaluate((id) => document.querySelector(`#objects [data-id="${id}"]`).click(), v);
+  await sleep(600); await mp.click('#tabDesign').catch(() => {});
+  await mp.waitForSelector('#inspEquip .eq-sz', { timeout: 30_000 }).catch(() => {});
   await sleep(800);
   phoneShot = (await mp.screenshot({ type: 'jpeg', quality: 90 })).toString('base64');
   await m.close();
