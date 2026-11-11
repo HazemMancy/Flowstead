@@ -56,7 +56,7 @@ public sealed class BackwardTests(EngineFixture engine, ITestOutputHelper output
         var product = Stream("p", new() { [SpecKeys.Temperature] = new(291.15, "K") });
         var r = await Solve(Line(ObjectType.Valve, new() { [SpecKeys.OutletPressure] = new(40e5, "Pa") }, feed, product));
         Assert.Equal(SolveStatus.Converged, r.Status);
-        Assert.DoesNotContain(r.Objects.Keys, k => k.StartsWith(BackSolver.LoopPrefix));
+        Assert.DoesNotContain(r.Objects.Keys, k => k.StartsWith("__backward_"));
         var tIn = r.Objects["f"].Properties["temperature"];
         var tOut = r.Objects["p"].Properties["temperature"];
         output.WriteLine($"Wellhead {tIn - 273.15:F3} °C for 18 °C at the separator");
