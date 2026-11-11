@@ -116,7 +116,9 @@ async function hl(loc, ms = 2500) {
   ms *= stretch;
   loc = typeof loc === 'string' ? p.locator(loc).first() : loc;
   if (!(await loc.count())) { console.log('  (no element to highlight)'); return; }
-  const b = await boxOf(loc); if (!b) return;
+  let b = await boxOf(loc); if (!b) return;
+  // A panel still redrawing moves the row: measure again once it has settled.
+  for (let k = 0; k < 5; k++) { await sleep(150); const c = await loc.boundingBox(); if (!c) return; if (Math.abs(c.y - b.y) < 1 && Math.abs(c.x - b.x) < 1) break; b = c; }
   await cursorTo(b.x + b.width - 18, b.y + b.height / 2);
   await p.evaluate(([b, ms]) => {
     const d = document.createElement('div'); d.className = 'ep-hl';
