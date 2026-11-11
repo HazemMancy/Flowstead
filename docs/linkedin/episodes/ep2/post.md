@@ -17,6 +17,7 @@ in the browser:
 Every number in the video comes from the engine and is checked against a hand calculation in Flowstead's tests.
 
 Free and open source. Try it on a case you know, and tell me what you find:
-hazemmancy.github.io/Flowstead
+🌐 Flowsheet (web, nothing to install): https://hazemmancy.github.io/Flowstead/flowsheet.html
+📱 Android app: https://github.com/HazemMancy/Flowstead/releases
 
 #ProcessEngineering #ChemicalEngineering #OilAndGas #ProcessSimulation #DWSIM #OpenSource #GasProcessing
