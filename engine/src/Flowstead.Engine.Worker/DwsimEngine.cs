@@ -146,8 +146,13 @@ public sealed partial class DwsimEngine
         var sw = Stopwatch.StartNew();
         // Sets first, so the validator sees the specifications DWSIM will get.
         model = SetSolver.Apply(model.WithoutDrawings());
+        // Backward specifications (D151): a product's targets become Adjusts on its feed upstream; DWSIM sees a forward flowsheet.
+        var back = BackSolver.Prepare(model);
+        model = back.Model;
         var messages = Validator.Validate(model, _automation.AvailableCompounds.Keys, MvpPackages.Select(p => p.Name)
             .Concat(_automation.AvailablePropertyPackages.Keys));
+        foreach (var (id, why) in back.Problems)
+            messages.Add(new SolverMessage(MessageLevel.Error, $"{model.Objects.First(o => o.Id == id).Tag}: {why}", id));
         if (messages.Any(m => m.Level == MessageLevel.Error))
         {
             return Result(SolveStatus.Invalid, messages, [], sw);
@@ -156,16 +161,24 @@ public sealed partial class DwsimEngine
         // Adjusts and controllers (D84): DWSIM never sees them; each iteration is a full solve of the rest. Controllers
         // that act in dynamics only (D86) are left out of the steady state.
         var loops = model.Objects.Where(o => o.Type.IsLoop() && DynamicLoops.InSteadyState(o)).ToList();
+        loops.AddRange(back.Loops);
         if (loops.Count == 0) return CurveSolver.Solve(model with { Objects = model.Objects.Where(o => !o.Type.IsLoop()).ToList() }, m => SolveCore(m, [.. messages], sw));
 
         var withoutLoops = model with { Objects = model.Objects.Where(o => !o.Type.IsLoop()).ToList() };
         var outcome = LoopSolver.Solve(withoutLoops, loops, m => CurveSolver.Solve(m, mm => SolveCore(mm, [], Stopwatch.StartNew())));
         var objects = new Dictionary<string, ObjectResult>(outcome.Result.Objects);
-        foreach (var (id, r) in outcome.Loops) objects[id] = r;
+        foreach (var (id, r) in outcome.Loops.Where(l => !back.LoopProduct.ContainsKey(l.Key))) objects[id] = r;
         var all = messages.Concat(outcome.Result.Messages).ToList();
         foreach (var (id, r) in outcome.Loops.Where(l => l.Value.Status == ObjectStatus.Error))
         {
-            all.Add(new SolverMessage(MessageLevel.Error, r.Error!, id));
+            // A backward specification's Adjust is the product's: its failure is said there.
+            if (back.LoopProduct.TryGetValue(id, out var product))
+            {
+                var tag = model.Objects.First(o => o.Id == product).Tag;
+                all.Add(new SolverMessage(MessageLevel.Error, $"{tag}: its specification could not be met from the feed upstream ({r.Error})", product));
+                if (objects.TryGetValue(product, out var pr)) objects[product] = pr with { Status = ObjectStatus.Error, Error = $"Specification not met: {r.Error}" };
+            }
+            else all.Add(new SolverMessage(MessageLevel.Error, r.Error!, id));
         }
         var ok = outcome.Result.Status == SolveStatus.Converged && outcome.Loops.Values.All(r => r.Status == ObjectStatus.Solved);
         return outcome.Result with

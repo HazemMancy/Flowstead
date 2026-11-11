@@ -1422,6 +1422,62 @@ try {
     await p.close();
   }
 
+  // ---------- 4t. backward specifications (D151): a choke's product given, the wellhead temperature found ----------
+  // The separator side (40 bara, 18 °C) and the wellhead pressure (70 bara) known; the wellhead temperature found by the
+  // engine. Reference: the valve is isenthalpic, so the found wellhead's enthalpy is the product's, flashed on its own.
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady && window.flowstead?.api, null, { timeout: 60_000 });
+    await p.evaluate(() => window.flowsteadFlowsheet.engine.ready);
+    const got = await p.evaluate(async () => {
+      const api = window.flowstead.api;
+      const x = { Methane: 0.85, Ethane: 0.08, Propane: 0.04, 'N-butane': 0.03 };
+      api.newCase({ propertyPackage: 'Peng-Robinson (PR)', compounds: Object.keys(x), name: 'backward' });
+      api.add('material_stream', { tag: 'WELL' });
+      api.setSpecs('WELL', { pressure: [70, 'bara'], molarFlow: [1000, 'kgmol/h'] });
+      api.setComposition('WELL', x);
+      api.add('valve', { tag: 'CHOKE' });
+      api.connect('WELL', 'CHOKE', { side: 'inlet', index: 0 });
+      api.connectNew('CHOKE', { side: 'outlet', index: 0, tag: 'SEP-FEED' });
+      api.setSpec('CHOKE', 'outletPressure', 40, 'bara');
+      api.setSpec('SEP-FEED', 'temperature', 18, 'C');
+      const before = api.check().filter((c) => c.level === 'error');
+      const s = await api.solve();
+      const w = api.results('WELL').properties, f = api.results('SEP-FEED').properties;
+      // The product's worksheet offers what it must be (no enthalpy).
+      const pid = api.case().objects.find((o) => o.tag === 'SEP-FEED').id;
+      document.querySelector(`#objects [data-id="${pid}"]`).click();
+      await new Promise((r) => setTimeout(r, 400));
+      const fields = [...document.querySelectorAll('#inspForm [data-spec]')].map((e) => e.dataset.spec).join(',');
+      // The product's own state, flashed alone.
+      api.newCase({ propertyPackage: 'Peng-Robinson (PR)', compounds: Object.keys(x), name: 'flash' });
+      api.add('material_stream', { tag: 'S' });
+      api.setSpecs('S', { temperature: [18, 'C'], pressure: [40, 'bara'], molarFlow: [1, 'kgmol/h'] });
+      api.setComposition('S', x);
+      await api.solve();
+      const h = api.results('S').properties.massEnthalpy.si;
+      return { status: s.status, before, fields, tWell: w.temperature?.si, hWell: w.massEnthalpy?.si, tFeed: f.temperature?.si, h };
+    }).catch((e) => ({ error: e.message }));
+    if (got.error) problems.push(got.error);
+    else {
+      if (got.before.length) problems.push(`the case was not complete: ${JSON.stringify(got.before)}`);
+      if (got.status !== 'converged') problems.push(`solve ${got.status}`);
+      if (!(Math.abs(got.tFeed - 291.15) <= 0.01)) problems.push(`SEP-FEED at ${got.tFeed} K for 291.15`);
+      if (!(Math.abs(got.hWell - got.h) <= 50)) problems.push(`WELL's enthalpy ${got.hWell} J/kg; the product's, flashed alone, ${got.h}`);
+      if (!(got.tWell > got.tFeed)) problems.push(`WELL at ${got.tWell} K is not warmer than its product`);
+    }
+    const fields = got.fields ?? '';
+    if (!/temperature/.test(fields) || !/pressure/.test(fields) || /massEnthalpy/.test(fields)) problems.push(`product worksheet fields: ${fields}`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} backward specification (wellhead ${(got.tWell - 273.15)?.toFixed?.(2)} °C for 18 °C at 40 bara)`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
   // ---------- 4r. line sizing of a stream, as HYSYS's stream analysis (D148) ----------
   // Water at 25 °C, 10 bara, 20 kg/s, with no pipe segment. Hand references from the stream's own ρ and μ: v = ṁ/(ρ·πD²/4),
   // ρv², Darcy–Weisbach with Colebrook's friction factor (0.0457 mm steel); over 1 km the liquid's ΔP is the gradient
