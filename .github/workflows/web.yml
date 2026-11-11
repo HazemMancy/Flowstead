@@ -46,7 +46,11 @@ jobs:
         working-directory: web
         run: |
           npm ci --ignore-scripts
-          npx playwright install --with-deps chromium
+          # The browser comes from Playwright's CDN; its system packages from apt, which falls back to another mirror
+          # when Ubuntu's can't be reached (D157).
+          npx playwright install chromium
+          sudo npx playwright install-deps chromium \
+            || { sudo sh ../engine/scripts/apt-mirror-fallback.sh && sudo npx playwright install-deps chromium; }
       - name: Unit conversions against shared/units/test-vectors.json
         working-directory: web
         run: npm run test:units

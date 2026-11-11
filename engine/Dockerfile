@@ -19,8 +19,11 @@ RUN dotnet publish src/Flowstead.Engine.Worker -c Release -o /app/worker -p:Dwsi
  && dotnet publish src/Flowstead.Engine.Spike -c Release -o /app/spike -p:DwsimBin=/opt/dwsim
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
-RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 libgomp1 \
-    && rm -rf /var/lib/apt/lists/* \
+# Two libraries from apt; when Ubuntu's mirrors can't be reached, once more from another mirror (D157).
+COPY scripts/apt-mirror-fallback.sh /tmp/apt-mirror-fallback.sh
+RUN (apt-get update && apt-get install -y --no-install-recommends libfontconfig1 libgomp1) \
+     || (sh /tmp/apt-mirror-fallback.sh && apt-get update && apt-get install -y --no-install-recommends libfontconfig1 libgomp1) \
+    && rm -rf /var/lib/apt/lists/* /tmp/apt-mirror-fallback.sh \
     && useradd --system --uid 10001 --home /var/lib/flowstead flowstead \
     && mkdir -p /var/lib/flowstead && chown flowstead /var/lib/flowstead
 COPY --from=build /opt/dwsim /opt/dwsim
