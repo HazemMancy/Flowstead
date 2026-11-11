@@ -138,7 +138,7 @@ async function select(tag) {
   const o = await objectAt(tag);
   await cursorTo(o.x, o.y); await pulse();
   await p.evaluate((id) => document.querySelector(`#objects [data-id="${id}"]`).click(), o.id);
-  await sleep(500);
+  await sleep(250);
 }
 /** The engine's output for [sel] given the same inputs beforehand (its calculations take longer than the narration):
  * the button is pressed on screen, a moment of "calculating", then that output. Its "Calculated by DWSIM in … s" line
@@ -278,12 +278,12 @@ await chapter(2, 'The choke', null, async () => {
   const pu = p.locator('#inspForm select[data-unit="outletPressure"]');
   if (await pu.count() && (await pu.inputValue()) !== 'bara') await pu.selectOption('bara');
   await type('#inspForm input[data-spec="outletPressure"]', '40');
-  await select('SEP-FEED'); await click('#tabResults');
-  await at(39.6); await click('#solveBtn');
+  await at(38.8); await click('#solveBtn');
   await p.waitForFunction(() => /Converged/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
+  await select('SEP-FEED'); await click('#tabResults');
   await at(41.2); await hl(row('#inspResults', 'Temperature'), 3000);
   await at(47.6); await hl(row('#inspResults', 'Mass enthalpy'), 1600);
-  await select('WELL-GAS'); await tab('#tabResults');
+  await select('WELL-GAS'); await click('#tabResults');
   await at(49.0); await hl(row('#inspResults', 'Mass enthalpy'), 1800);
 });
 
@@ -328,11 +328,11 @@ await chapter(4, 'Three-phase separator', null, async () => {
   }
   await at(86.8); await click('#solveBtn');
   await p.waitForFunction(() => /Converged/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
-  await select('GAS'); await tab('#tabResults');
+  await select('GAS'); await click('#tabResults');
   await at(88.6); await hl(row('#inspResults', 'Mass flow'), 1500);
-  await select('CONDENSATE'); await tab('#tabResults');
+  await select('CONDENSATE'); await click('#tabResults');
   await at(90.4); await hl(row('#inspResults', 'Mass flow'), 1500);
-  await select('WATER'); await tab('#tabResults');
+  await select('WATER'); await click('#tabResults');
   await at(93.1); await hl(row('#inspResults', 'Mass flow'), 1700);
   await at(99.0); await hl(p.locator('#inspResults table', { hasText: 'Carbon dioxide' }).last(), 1600);
 });
