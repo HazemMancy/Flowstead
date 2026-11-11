@@ -201,7 +201,9 @@ fun ObjectEditorSheet(
             HorizontalDivider()
             when (obj.type) {
                 ObjectType.MaterialStream ->
-                    if (fs.isFeed(obj)) FeedStreamEditor(fs, obj, results, unitSet, ctx, actions, compositionBasis, compoundBasis) else {
+                    if (fs.isFeed(obj)) FeedStreamEditor(fs, obj, results, unitSet, ctx, actions, compositionBasis, compoundBasis)
+                    else if (app.flowstead.core.model.Backward.canTake(fs, obj)) ProductStreamEditor(fs, obj, unitSet, ctx, actions, compositionBasis, compoundBasis)
+                    else {
                         Calculated("This stream is calculated from the unit it comes from.")
                         DuplicateButton(obj, actions, "Duplicate as a feed (its solved T, P, flow and composition)")
                     }
@@ -898,6 +900,28 @@ private fun FeedStreamEditor(
     CompositionEditor(fs, obj, actions, basis, basisData)
     DuplicateButton(obj, actions, "Duplicate stream (all its data)")
 }
+
+/**
+ * A product of a valve, heater, cooler, pump, compressor, expander or pipe (D151): calculated, or given what it must be,
+ * and its feed upstream found, as HYSYS solves backward.
+ */
+@Composable
+private fun ProductStreamEditor(
+    fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions,
+    basis: CompositionBasis, basisData: CompoundBasisUi?,
+) {
+    Calculated(PRODUCT_NOTE)
+    SectionLabel("What it must be (optional)")
+    for (key in app.flowstead.core.model.Backward.STATE) SpecField(obj, key, unitSet, ctx, actions, optionalHint = "calculated if empty")
+    for (key in app.flowstead.core.model.Backward.FLOW) SpecField(obj, key, unitSet, ctx, actions, optionalHint = "from its feed if empty")
+    SectionLabel("Composition (optional)")
+    CompositionEditor(fs, obj, actions, basis, basisData)
+    DuplicateButton(obj, actions, "Duplicate as a feed (its solved T, P, flow and composition)")
+}
+
+internal const val PRODUCT_NOTE = "Calculated from the unit it comes from. Or give what it must be: its temperature, pressure or vapour " +
+    "fraction, its flow, its composition. Flowstead then finds what its feed upstream lacks, as HYSYS solves backward " +
+    "(through valves, heaters, coolers, pumps, compressors, expanders and pipes)."
 
 @Composable
 private fun DuplicateButton(obj: SimObject, actions: EditorActions, label: String) {

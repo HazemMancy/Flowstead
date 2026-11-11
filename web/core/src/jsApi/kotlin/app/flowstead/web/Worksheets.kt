@@ -12,6 +12,7 @@ import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.AdjustKeys
 import app.flowstead.core.model.ChoiceKey
 import app.flowstead.core.model.Columns
+import app.flowstead.core.model.Backward
 import app.flowstead.core.model.CompositionBasis
 import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.Flowsheet
@@ -284,7 +285,11 @@ private class Form(val fs: Flowsheet, val obj: SimObject, val ctx: UnitContext) 
 
     fun build() {
         when (obj.type) {
-            ObjectType.MaterialStream -> if (fs.isFeed(obj)) feed() else note("This stream is calculated from the unit it comes from.")
+            ObjectType.MaterialStream -> when {
+                fs.isFeed(obj) -> feed()
+                Backward.canTake(fs, obj) -> product()
+                else -> note("This stream is calculated from the unit it comes from.")
+            }
             ObjectType.EnergyStream -> note("Energy streams carry the duty or power of the unit they connect to.")
             ObjectType.Valve -> {
                 exclusive(listOf(SpecKey.OUTLET_PRESSURE to "Outlet pressure", SpecKey.PRESSURE_DROP to "Pressure drop"))
@@ -384,6 +389,23 @@ private class Form(val fs: Flowsheet, val obj: SimObject, val ctx: UnitContext) 
         label("Flow — give one")
         for (k in SpecKey.STREAM_FLOW) spec(k)
         label("Composition")
+        items += buildJsonObject {
+            put("kind", "composition")
+            putJsonArray("bases") { CompositionBasis.entries.forEach { b -> addJsonObject { put("id", b.name); put("label", b.label); put("total", b.total); put("needsEngineData", b.needsEngineData) } } }
+            put("tolerance", Specification.COMPOSITION_TOLERANCE)
+            putJsonArray("compounds") {
+                fs.compounds.forEach { c -> addJsonObject { put("name", c); obj.composition[c]?.let { put("mole", it) } } }
+            }
+        }
+    }
+
+    /** A product a backward specification can be put on (D151): what it must be, its feed upstream found. */
+    private fun product() {
+        note("Calculated from the unit it comes from. Or give what it must be: its temperature, pressure or vapour fraction, its flow, its composition. Flowstead then finds what its feed upstream lacks, as HYSYS solves backward (through valves, heaters, coolers, pumps, compressors, expanders and pipes).")
+        label("What it must be (optional)")
+        for (k in Backward.STATE) spec(k, "calculated if empty")
+        for (k in Backward.FLOW) spec(k, "from its feed if empty")
+        label("Composition (optional)")
         items += buildJsonObject {
             put("kind", "composition")
             putJsonArray("bases") { CompositionBasis.entries.forEach { b -> addJsonObject { put("id", b.name); put("label", b.label); put("total", b.total); put("needsEngineData", b.needsEngineData) } } }

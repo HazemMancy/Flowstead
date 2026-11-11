@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-11-09_
+_Last updated: 2026-11-11_
 
 ## Works
 
@@ -216,6 +216,8 @@ _Last updated: 2026-11-09_
 - **Pressurization from a fixed volume (D149), Web 1.18 and App 3.5.1** — a vessel, tank or pipe as the source, emptying until the two sides equalise: equalising pressure and time, time to target or out of reach, the source's coldest gas and wall; wall heat or adiabatic; a vessel as what is filled; the valve or orifice from the flowsheet. SafetyTests against the ideal-gas equalising pressure; review: what is filled starts with the source's vapour (a separator's liquid stays in it), steps never carry the pressures past each other.
 - **Line sizing of a stream (D148), Web 1.18 and App 3.5.1** — design or rating from the stream's solved state, no pipe segment: ΔP per length, velocity, ρv², Mach, total ΔP over a length; browser test 4r against Darcy–Weisbach and Colebrook.
 - **Gases dissolved in free water keep every compound's balance (D150), Web 1.19 and App 3.5.2** — DWSIM patch to its free-water flash: Henry's law (IAPWS G7-04) for every gas with a constant, the correlation on the partial pressure for other hydrocarbons, each gas split in equilibrium between the vapour and the water. A three-phase separator's outlets were 0.6 % out on ethane and water. FreeWaterTests against Henry's law by hand; benchmarks 04 and 21 moved.
+- **Backward specifications (D151), Web 1.20 and App 3.5.3** — a product stream of a valve, heater, cooler, air cooler, pump, compressor, expander or pipe takes its temperature, pressure, vapour fraction, flow or composition, and the feed upstream is found (hidden Adjusts, Newton/Broyden). Engine tests against each unit's energy balance.
+- **Packed columns (D152), Web 1.20 and App 3.5.3** — a rigorous column's stages rated as a bed of one of 149 DWSIM catalogue packings by DWSIM's own packing hydraulics: diameter for the flood fraction, bed height from the HETP, pressure drop. Checked against Robbins and Kister–Gill written apart (Perry's example, 619.66 Pa).
 - **Lines to and from a sub-flowsheet drawn square (D147), Web 1.18** — from the stream's head or to its tail, in horizontal and vertical runs; CanvasGeometryTest.
 - **Web 1.11 (D130):** the thermodynamics tools in Basis: binary T–x–y/P–x–y with liquid–liquid branches, ternary with tie lines, true critical point, package comparison, property charts. Checked against NIST boiling and critical points and IAPWS-95 water density.
 

@@ -51,7 +51,11 @@ A stream is a feed when nothing feeds it: it needs two of temperature, pressure,
 - Pumps, compressors, expanders: driver at the API 610 / API 617 margin, next IEC 60072 motor.
 - Tanks: volume and dimensions from residence time and fill.
 - Columns (D65, D106): Fair's flooding diameter, actual trays, height; sieve-tray hydraulics (Sinnott: weir crest, dry
-  plate, downcomer backup and residence).
+  plate, downcomer backup and residence). Packed (D152, `setRef(column, 'packing', name)`): DWSIM's packing hydraulics
+  (Robbins with Kister–Gill flood, Billet–Schultes, Rocha–Bravo–Fair) for the diameter at 70 % of flood, rule-of-thumb
+  HETP and bed height, pressure drop over the bed. No mass-transfer HETP (no diffusivities): say so for a design.
+- Backward specifications (D151): a product of a valve, heater, cooler, air cooler, pump, compressor, expander or pipe
+  can carry T, P, vapour fraction, flow or composition; the feed upstream is solved for.
 - Lines (D47): checks against the case's criteria by service: velocity, ρv², friction gradient, Mach, API RP 14E
   erosional velocity.
 
@@ -81,7 +85,7 @@ A stream is a feed when nothing feeds it: it needs two of temperature, pressure,
 
 - Two-phase relief from a control valve failure (give the flow as a custom scenario); energy streams across a
   sub-flowsheet on its own package; dynamics of columns, reactors and compressors; weeping and entrainment on trays;
-  packed columns; detailed exchanger rating (TEMA thermal design); vessel wall stress beyond the ASME VIII-1 thickness
+  a mass-transfer HETP for packings; detailed exchanger rating (TEMA thermal design); vessel wall stress beyond the ASME VIII-1 thickness
   used in blowdown; noise; flare radiation and dispersion.
 - Expected values in benchmarks/ are the engine's own (repeatability), except where a test cites NIST, IAPWS, a hand
   calculation or the owner's HYSYS value.

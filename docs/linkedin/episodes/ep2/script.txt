@@ -1,0 +1,19 @@
+Welcome back to Getting Started with Flowstead. In episode one, we built a well gas and read its properties. Today, we take that gas where it really goes: through the choke, into an inlet separator, and out into a line. And at every step, we'll check that the numbers hold up.
+
+A real well doesn't make dry gas. So first, in the Basis, we add water, and give the well stream seven mole percent of it. Same conditions as before: thirty degrees Celsius, seventy bar absolute, one thousand kilogram moles an hour. Now it's a gas, a condensate and free water, all in one pipe.
+
+Next, the choke. We drop in a valve, connect it, and set the outlet to forty bar absolute. Solve. The gas leaves at eighteen degrees Celsius. That's twelve degrees of Joule–Thomson cooling, about zero point four degrees per bar. And the enthalpy in equals the enthalpy out, exactly as a valve should.
+
+So, where does that put us? Let's trace the phase envelope, with the hydrate curve switched on. The envelope reaches a cricondenbar of one hundred and twenty-five bar, and a cricondentherm of forty-six degrees. Our stream sits inside it: two phase, with free water. And here's the line that matters. Hydrates form below fourteen degrees at forty bar. We're at eighteen: only four degrees of margin. Put twenty weight percent methanol in the water, and the hydrate line drops seven degrees, to about seven. Good to know before winter.
+
+Now, the inlet separator. A three-phase vessel, with three outlets: gas, condensate and water. Solve. Eighteen tonnes an hour of gas, nine hundred and fifty-eight kilograms an hour of condensate, and twelve hundred and fifty-six kilograms an hour of water. And every compound balances: what goes in comes out, even the gas dissolved in the water.
+
+How big does it need to be? Open the Design tab, and choose horizontal. Flowstead sizes it at one point six eight metres, by eight point four metres, tangent to tangent. The Souders–Brown K is zero point one one four metres per second, so the gas may move at zero point five one, and it actually moves at zero point four three. The levels, the oil–water interface and the nozzles come with it: an eight-inch inlet, and a five-inch gas outlet.
+
+The gas now needs a line, two kilometres of it. In the stream's analysis, open line sizing: design mode, schedule forty, and our criteria, eighteen metres per second, and a rho v squared of fifteen thousand. It picks N P S four, at seventeen metres per second. But look at the pressure drop: eighteen bar per kilometre. Over two kilometres, that line would eat most of our pressure. So we add a third limit, two and a half bar per kilometre, and size again. N P S six: seven metres per second, two point one bar per kilometre, and three point nine bar over the whole line.
+
+Finally, safety. If there's a fire or a leak, V-100 must blow down. We give it its design pressure, fifty bar gauge. Flowstead takes the target from API five twenty-one: the lower of six point nine bar gauge, and half the design pressure. It sizes the orifice at sixteen millimetres. And it reaches six point nine bar gauge in fourteen and a half minutes, inside the fifteen. The gas cools to minus fifteen degrees on the way down, while the wall stays above nine. That's the number your material selection will ask about.
+
+Everything we did is in the calculation report, every number straight from DWSIM. And the same case opens on your phone, for when the question comes up on site.
+
+That's episode two. Try it on a case you know, and tell me what you find. See you in the next one.

@@ -1,0 +1,49 @@
+name: episode
+
+# LinkedIn "Getting started" episodes (docs/linkedin/episodes): the narration transcribed against its script (every
+# word checked, each chapter's times) and the site as deployed, both put on a draft release ("episode-work") so the
+# episode can be recorded on the real engine and cut.
+
+on:
+  push:
+    branches: ["claude/**"]
+    paths: ["docs/linkedin/episodes/**/media/**", "docs/linkedin/episodes/**/script.txt", "web/tools/episodes/transcribe.py", ".github/workflows/episode.yml"]
+  workflow_dispatch:
+    inputs:
+      episode:
+        description: "Episode folder under docs/linkedin/episodes"
+        default: "ep2"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  episode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      EP: ${{ inputs.episode || 'ep2' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Transcribe the narration
+        run: |
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          pip install -q faster-whisper
+          d=docs/linkedin/episodes/$EP
+          mkdir -p out
+          python3 -I web/tools/episodes/transcribe.py "$d/media/narration.opus" "$d/script.txt" out/$EP-transcript.json
+      - name: The site as deployed (the last web run on main)
+        run: |
+          run=$(gh run list -R "$GITHUB_REPOSITORY" -w web -b main -s success -L 1 --json databaseId -q '.[0].databaseId')
+          gh run download "$run" -R "$GITHUB_REPOSITORY" -n github-pages -D pages
+          mkdir site && tar -xf pages/artifact.tar -C site && tar -czf out/site.tar.gz -C site .
+          echo "site from web run $run"
+      - name: Put both on the draft release "episode-work"
+        run: |
+          gh release view episode-work -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create episode-work -R "$GITHUB_REPOSITORY" --draft --title "Episode work files (not a release)" --notes "Working files for the LinkedIn episodes."
+          gh release upload episode-work out/* -R "$GITHUB_REPOSITORY" --clobber

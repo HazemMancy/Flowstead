@@ -374,7 +374,7 @@ public static class Columns
         {
             pp.CurrentMaterialStream = stream;
             var consts = pp.DW_GetConstantProperties();
-            List<double> rv = [], rl = [], mv = [], ml = [], st = [];
+            List<double> rv = [], rl = [], mv = [], ml = [], st = [], vl = [], vv = [];
             for (var i = 0; i < t.Count; i++)
             {
                 var x = ((IEnumerable)xs[i]!).Cast<object>().Select(Convert.ToDouble).ToArray();
@@ -387,6 +387,14 @@ public static class Columns
                 rv.Add(p[i] * mY / 1000.0 / (z * 8.314462618 * t[i]));
                 rl.Add(pp.AUX_LIQDENS(t[i], x, p[i], 0, false));
                 st.Add(x.Select((xi, k) => xi * pp.AUX_SURFTi(consts[k], t[i])).Sum());
+                // Viscosities for packed column rating (D152): DWSIM's pure-compound values at the stage's T (and P). On
+                // their own: a compound without viscosity data leaves them out, not the tray sizing's properties.
+                try
+                {
+                    vl.Add(Math.Exp(x.Select((xi, k) => xi > 0 ? xi * Math.Log(pp.AUX_LIQVISCi(consts[k].Name, t[i], p[i])) : 0.0).Sum()));
+                    vv.Add(y.Select((yi, k) => yi > 0 ? yi * pp.AUX_VAPVISCi(consts[k], t[i]) : 0.0).Sum());
+                }
+                catch { vl.Add(double.NaN); vv.Add(double.NaN); }
             }
             void Put(string key, List<double> v) { if (v.All(d => double.IsFinite(d) && d > 0)) profile[key] = v; }
             Put(ProfileKeys.VapourDensity, rv);
@@ -394,6 +402,8 @@ public static class Columns
             Put(ProfileKeys.VapourMolarMass, mv);
             Put(ProfileKeys.LiquidMolarMass, ml);
             Put(ProfileKeys.SurfaceTension, st);
+            Put(ProfileKeys.LiquidViscosity, vl);
+            Put(ProfileKeys.VapourViscosity, vv);
         }
         catch
         {

@@ -60,6 +60,16 @@ first: a call's name, inputs or outputs change only with the version.
 Sub-flowsheets (D132–D139): `group([tags])`, `moveInto([tags], block)`, `duplicateBlock(block)`, `ungroup(block)`,
 `connectBlock(block, stream, 'in'|'out')`, `openLevel(block|null)`.
 
+Backward specifications (D151): `setSpec` on a product of a valve, heater, cooler, air cooler, pump, compressor,
+expander or pipe segment (`temperature`, `pressure`, `vapourFraction`, `molarFlow`, `massFlow`), or `setComposition` on
+it, makes it what the line must deliver; the feed upstream takes the flow and composition and lacks one state value per
+target, which the solve finds. `solve().notReady` and the product's messages say why a line can't be solved this way.
+
+Packed columns (D152): `setRef(column, 'packing', name)` packs a rigorous column with a DWSIM catalogue packing (the
+names are the Internals choice of `sizing(column)`'s fields, e.g. `'Pall rings Metal 25 mm (Perry)'`, `'Mellapak Sheet
+metal 250Y'`); `'packingFlood'` (fraction, 0.70), `'packingDiameter'` and `'packingHeight'` (m) are optional, SI as text.
+Solve, then `sizing(column)` gives the bed: diameter, highest flood, HETP, bed height, pressure drop.
+
 ## Solving
 
 | Call | Returns |

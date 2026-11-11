@@ -35,6 +35,16 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.20**
+- **Solve backward, as HYSYS (D151):** a product of a valve, heater, cooler, air cooler, pump, compressor, expander or
+  pipe takes *What it must be* (temperature, pressure, vapour fraction, flow, composition) in its worksheet, and the
+  feed upstream is found: the wellhead temperature that gives 18 °C after the choke, the feed temperature a heater's
+  duty brings to 80 °C. A line that can't be solved says why.
+- **Packed columns (D152):** a column's Design tab has *Internals*: sieve trays, or one of 149 random and structured
+  packings from DWSIM's catalogue. The engine rates the bed with DWSIM's own packing correlations (Robbins and
+  Kister–Gill, Billet–Schultes, Rocha–Bravo–Fair): the diameter for 70 % of flood (or yours), the HETP and bed height,
+  the pressure drop over the bed and the highest flood.
+
 **Web 1.19**
 - **Water with dissolved gas (D150):** a three-phase separator's water now holds the gases Henry's law gives (CO₂,
   methane, ethane, nitrogen…), taken from the gas it leaves, so every compound balances across the separator. The

@@ -92,6 +92,10 @@ public static class ProfileKeys
     public const string VapourMolarMass = "vapourMolarMass";
     public const string LiquidMolarMass = "liquidMolarMass";
     public const string SurfaceTension = "surfaceTension";
+    // Column, per stage (D152), for packed column rating: the liquid's viscosity as the log-mole average of DWSIM's pure
+    // liquid viscosities, the vapour's as the mole average of its low-pressure pure vapour viscosities (Pa·s).
+    public const string LiquidViscosity = "liquidViscosity";
+    public const string VapourViscosity = "vapourViscosity";
 }
 
 /// <summary>

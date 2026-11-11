@@ -490,6 +490,12 @@ public static class ChoiceKeys
 {
     /// <summary>Pipe: two-phase correlation beggs_brill (default), lockhart_martinelli, petalas_aziz. The app also keeps "nps", "schedule" and "service" in a pipe's refs; the engine ignores them.</summary>
     public const string PipeCorrelation = "correlation";
+    /// <summary>Column (D152): a packing of DWSIM's catalogue, by its display name; the trays are rated as a packed bed of it.</summary>
+    public const string Packing = "packing";
+    /// <summary>Column (D152): the design fraction of flood (0.70 if absent), the diameter (sized if absent) and the bed height (HETP x stages if absent), SI, as invariant text.</summary>
+    public const string PackingFlood = "packingFlood";
+    public const string PackingDiameter = "packingDiameter";
+    public const string PackingHeight = "packingHeight";
     /// <summary>Orifice plate: flange (default), corner, radius.</summary>
     public const string OrificeTaps = "taps";
     /// <summary>Columns with a condenser: total (default) or partial.</summary>
