@@ -62,6 +62,7 @@ export function initRuns(app) {
       <ul>${mine.slice().reverse().map((r) => `<li><label class="chip-check"><input type="checkbox" data-run-pick="${esc(r.id)}"/></label><button type="button" class="btn btn-sm${r.id === current ? ' current' : ''}" data-run-open="${esc(r.id)}">${esc(when(r.at))}</button><span>${esc(r.label)}${r.headline ? ` · ${esc(r.headline)}` : ''}${r.hash !== hash ? ' <b class="warn">· flowsheet changed since</b>' : ''}</span><button type="button" class="icon-btn" data-run-del="${esc(r.id)}" aria-label="Delete this saved run">✕</button></li>`).join('')}</ul>
       <div class="fs-actions"><button type="button" class="btn btn-sm" data-run-compare disabled>Compare the ticked runs</button></div></details>`;
     bar.dataset.for = out.id;
+    if (current) bar.dataset.current = current; else delete bar.dataset.current;
   }
 
   function show(out, runs) {
@@ -93,10 +94,19 @@ export function initRuns(app) {
   // A tool's panel drawn anew: its saved runs listed, the latest shown when nothing else is.
   // Looked for once per frame at most: the page changes often (a chart's pointer, the canvas), the panels seldom.
   const seen = new WeakSet();
-  let queued = false;
+  let queued = false, lastHash = null;
   new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; scan(); }); } })
     .observe(document.body, { childList: true, subtree: true });
   function scan() {
+    // An edit changes the model: each list shown says again which runs it has left behind.
+    const bars = document.querySelectorAll('.runs[data-for]');
+    if (bars.length) {
+      const h = app.modelHash();
+      if (h !== lastHash) {
+        lastHash = h;
+        bars.forEach((b) => { const out = document.getElementById(b.dataset.for); const open = b.querySelector('details')?.open; if (out) { strip(out, b.dataset.current ?? null); if (open) b.querySelector('details').open = true; } });
+      }
+    }
     for (const out of document.querySelectorAll('[id$="_out"]')) {
       if (seen.has(out)) continue;
       seen.add(out);

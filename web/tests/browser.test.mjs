@@ -1740,8 +1740,12 @@ try {
     await plot.locator('.legend-item').first().click();
     if ((await plot.locator('.legend-item').first().getAttribute('aria-pressed')) !== 'false' || (await paths()) >= before) problems.push('a legend click did not hide its curve');
     await plot.locator('.legend-item').first().click();
-    await p.mouse.move(area.x + area.width * 0.3, area.y + area.height * 0.5); await p.mouse.down();
-    await p.mouse.move(area.x + area.width * 0.6, area.y + area.height * 0.5, { steps: 5 }); await p.mouse.up();
+    if (!(await plot.locator('[data-plot-reset]').isHidden())) problems.push('Reset zoom shows before any zoom');
+    // Measured again, in view: clicking the legend may have scrolled the page.
+    await plot.locator('.plot-area svg').scrollIntoViewIfNeeded();
+    const box = await plot.locator('.plot-area svg').boundingBox();
+    await p.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5); await p.mouse.down();
+    await p.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, { steps: 5 }); await p.mouse.up();
     if (await plot.locator('[data-plot-reset]').isHidden()) problems.push('a drag across the plot did not zoom');
     await plot.locator('.plot-area svg').dblclick();
     if (!(await plot.locator('[data-plot-reset]').isHidden())) problems.push('double-click did not reset the zoom');
