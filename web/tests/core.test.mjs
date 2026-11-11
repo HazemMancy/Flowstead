@@ -787,3 +787,17 @@ test('automation interface, model side (D140): describe, units by id or symbol, 
   assert.equal(dev.protectedId, sep.id);
   assert.equal(dev.tag, 'PSV-100');
 });
+
+test('the enthalpy basis is the flowsheet\'s own, as in the app (D153)', () => {
+  const f = core.layout(bench('05-jt-valve-letdown'));
+  assert.equal(core.enthalpyBasis(f), 'formation'); // HYSYS's by default
+  const typed = JSON.parse(f); const s = typed.objects.find((o) => o.id === 'hp');
+  delete s.specs.temperature; s.specs.massEnthalpy = { si: -4.0e6, unit: 'kJ/kg' };
+  assert.equal(core.enthalpyBasis(JSON.stringify(typed)), 'dwsim'); // a typed enthalpy keeps DWSIM's
+  const set = core.setEnthalpyBasis(f, 'dwsim');
+  assert.equal(JSON.parse(set).enthalpyBasis, 'dwsim');
+  assert.equal(core.enthalpyBasis(set), 'dwsim');
+  assert.notEqual(core.modelHash(set), core.modelHash(f), 'results on the other basis are other results');
+  assert.equal(JSON.parse(f).enthalpyBasis, undefined, 'not written when automatic, so saved cases hash as before');
+  assert.throws(() => core.setEnthalpyBasis(f, 'hysys'));
+});

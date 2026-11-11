@@ -223,6 +223,15 @@ object FlowsteadCore {
         return out(f.copy(objects = f.objects.map { o -> o.copy(specs = o.specs.mapValues { restate(it.value) }) }))
     }
 
+    /** The enthalpy and entropy basis in force (D153, the app's EnthalpyBases.effective): "formation" (HYSYS's) or "dwsim". */
+    fun enthalpyBasis(flowsheetJson: String): String = app.flowstead.core.model.EnthalpyBases.effective(fs(flowsheetJson))
+
+    /** Sets the basis ("formation" or "dwsim"); saved with the flowsheet, and part of the model (results go out of date). */
+    fun setEnthalpyBasis(flowsheetJson: String, basis: String): String {
+        require(basis == app.flowstead.core.model.EnthalpyBases.FORMATION || basis == app.flowstead.core.model.EnthalpyBases.DWSIM) { "Unknown basis $basis" }
+        return out(fs(flowsheetJson).copy(enthalpyBasis = basis))
+    }
+
     /** Hold (false) or Active (true) solver, as HYSYS's solver buttons (the app's Flowsheet.solverActive); saved with the flowsheet, not part of the solved model. */
     fun solverActive(flowsheetJson: String): Boolean = fs(flowsheetJson).solverActive
     fun setSolverActive(flowsheetJson: String, active: Boolean): String = out(fs(flowsheetJson).copy(solverActive = active))

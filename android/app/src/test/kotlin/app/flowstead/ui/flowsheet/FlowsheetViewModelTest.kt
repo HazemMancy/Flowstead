@@ -46,7 +46,8 @@ class FlowsheetViewModelTest {
 
     private suspend fun vm(fs: Flowsheet = Flowsheet(propertyPackage = "Peng-Robinson (PR)", compounds = listOf("Methane"))): FlowsheetViewModel {
         val id = repo.create("Letdown", fs)
-        return FlowsheetViewModel(SavedStateHandle(mapOf("projectId" to id)), repo, settings, FakeSecretStore(), engine, queue, documents) { 42L }
+        return FlowsheetViewModel(SavedStateHandle(mapOf("projectId" to id)), repo, settings, FakeSecretStore(), engine, queue, documents,
+            app.flowstead.data.engine.SaturationFiller(repo, settings, FakeSecretStore(), engine)) { 42L }
     }
 
     private suspend fun FlowsheetViewModel.ui(predicate: (FlowsheetUi) -> Boolean = { true }): FlowsheetUi =
@@ -152,7 +153,7 @@ class FlowsheetViewModelTest {
         assertEquals(setOf("e"), ui.notReady.keys)
         vm.solve()
         assertEquals("Converged in 1.2 s · 1 not ready", vm.messages.first())
-        assertEquals(completeFeed(), engine.solved.single()) // the empty stream is not sent
+        assertEquals(app.flowstead.core.model.EnthalpyBases.forEngine(completeFeed(), saturationFor = emptyList()), engine.solved.single()) // the empty stream is not sent
         assertFalse(vm.ui { it.results.status != null }.results.stale)
     }
 
@@ -182,10 +183,36 @@ class FlowsheetViewModelTest {
         val solved = vm.ui { it.results.status != null }
         assertFalse(solved.results.stale)
         assertEquals(app.flowstead.core.model.DisplayValue.Calculated(1.0, stale = false), solved.results.value("f", "vapourFraction"))
-        assertEquals(completeFeed(), engine.solved.single())
+        assertEquals(app.flowstead.core.model.EnthalpyBases.forEngine(completeFeed(), saturationFor = emptyList()), engine.solved.single())
 
         vm.setSpec("f", SpecKey.TEMPERATURE, Spec(310.0, "C"))
         assertTrue(vm.ui { it.results.stale }.results.stale)
+    }
+
+    @Test
+    fun aStreamsBubbleAndDewPointsAreAskedForWhenItsEditorOpens() = runTest {
+        settings.setEngineUrl("https://engine.example.com")
+        fun result(props: Map<String, Double>) = app.flowstead.data.engine.EngineResult.Ok(
+            app.flowstead.core.api.SolveResult(
+                app.flowstead.core.api.SolveStatus.Converged, elapsedMs = 100,
+                objects = mapOf("f" to app.flowstead.core.api.ObjectResult(app.flowstead.core.api.ObjectStatus.Solved, properties = props)),
+            ),
+        )
+        engine.solveResult = result(mapOf("vapourFraction" to 1.0))
+        val vm = vm(completeFeed())
+        vm.ui()
+        vm.solve()
+        vm.ui { it.results.status != null }
+        assertEquals(emptyList(), engine.solved.single().saturationFor) // the solve leaves them out
+        // Opening the stream asks for its points only, and they join the stored solve, which stays current.
+        engine.solveResult = result(mapOf("vapourFraction" to 1.0, "dewPointTemperature" to 190.0))
+        vm.openEditor("f")
+        val filled = vm.ui { it.results.value("f", "dewPointTemperature") is app.flowstead.core.model.DisplayValue.Calculated }
+        assertEquals(app.flowstead.core.model.DisplayValue.Calculated(190.0, stale = false), filled.results.value("f", "dewPointTemperature"))
+        assertEquals(listOf("f"), engine.solved.last().saturationFor)
+        // Asked once per solve.
+        vm.closeEditor(); vm.openEditor("f"); vm.ui { it.editingId == "f" }
+        assertEquals(2, engine.solved.size)
     }
 
     @Test

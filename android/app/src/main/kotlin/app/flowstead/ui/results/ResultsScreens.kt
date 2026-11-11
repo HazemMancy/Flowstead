@@ -78,6 +78,7 @@ import kotlinx.coroutines.flow.stateIn
 import java.text.DateFormat
 import java.util.Date
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 data class ResultsUi(
     val name: String,
@@ -96,8 +97,12 @@ class ResultsViewModel @Inject constructor(
     savedState: SavedStateHandle,
     repository: ProjectRepository,
     settings: SettingsRepository,
+    saturation: app.flowstead.data.engine.SaturationFiller,
 ) : ViewModel() {
     private val projectId = savedState.toRoute<ResultsRoute>().projectId
+
+    // The results table lists every stream's bubble and dew points, which a solve leaves out (D153): ask for them.
+    init { viewModelScope.launch { saturation.fill(projectId, null) } }
 
     val state: StateFlow<ResultsUi?> = combine(repository.observeProject(projectId), settings.settings) { p, s ->
         p?.let {

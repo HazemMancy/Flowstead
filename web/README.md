@@ -35,6 +35,10 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 
 ## Release notes
 
+**Web 1.21**
+- The enthalpy and entropy basis is saved in the case itself, as in the Android app (3.6.0), so a case keeps it when it
+  moves between the two. Cases from earlier web versions keep the choice they had.
+
 **Web 1.20**
 - **Solve backward, as HYSYS (D151):** a product of a valve, heater, cooler, air cooler, pump, compressor, expander or
   pipe takes *What it must be* (temperature, pressure, vapour fraction, flow, composition) in its worksheet, and the

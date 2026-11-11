@@ -28,20 +28,29 @@ const typeById = new Map(types.map((t) => [t.id, t]));
 const dark = () => document.documentElement.getAttribute('data-theme') !== 'light';
 
 // ---------- project: the flowsheet (app JSON), its stored solve, undo and redo ----------
-let project = { name: 'Untitled', flowsheet: core.newFlowsheet(PACKAGE), solve: null, basis: 'hysys' };
+let project = { name: 'Untitled', flowsheet: core.newFlowsheet(PACKAGE), solve: null };
 const undo = [], redo = [];
 
-// Enthalpy and entropy basis (D119): HYSYS's (heats of formation and absolute entropies added, for the cubic equations and
-// Lee–Kesler) or DWSIM's own reference. A case that types an enthalpy or entropy keeps the basis it was written on.
+// Enthalpy and entropy basis (D122, D153): the flowsheet's own setting, as in the app, so a case keeps it between the two:
+// HYSYS's (heats of formation and absolute entropies added, for the cubic equations and Lee–Kesler) or DWSIM's reference;
+// by default HYSYS's, unless the case types an enthalpy or entropy.
 const hasEnergySpecs = (flowsheetJson) => (JSON.parse(flowsheetJson).objects ?? []).some((o) => o.specs?.massEnthalpy || o.specs?.massEntropy);
-const defaultBasis = (flowsheetJson, current) => (hasEnergySpecs(flowsheetJson) ? 'dwsim' : current ?? 'hysys');
-const enthalpyBasis = () => (project.basis === 'dwsim' ? undefined : 'formation');
+const isHysysBasis = () => core.enthalpyBasis(project.flowsheet) === 'formation';
+const enthalpyBasis = () => (isHysysBasis() ? 'formation' : undefined); // as the engine reads it
 const basisApplies = () => /^(Peng-Robinson|Soave-Redlich-Kwong|Lee-Kesler)/.test(JSON.parse(project.flowsheet).propertyPackage ?? '');
 
 function load() {
   try {
     const p = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (p && typeof p.flowsheet === 'string') { view.setFlowsheet(p.flowsheet); project = p; project.basis = p.basis ?? (hasEnergySpecs(p.flowsheet) ? 'dwsim' : 'hysys'); }
+    if (p && typeof p.flowsheet === 'string') {
+      view.setFlowsheet(p.flowsheet); project = p;
+      // Web 1.7 to 1.20 kept the basis beside the flowsheet: a choice that differs from the automatic one moves into it.
+      if (p.basis) {
+        const want = p.basis === 'dwsim' ? 'dwsim' : 'formation';
+        if (core.enthalpyBasis(p.flowsheet) !== want) project.flowsheet = core.setEnthalpyBasis(p.flowsheet, want);
+        delete project.basis;
+      }
+    }
   } catch (e) { project = { name: 'Untitled', flowsheet: core.newFlowsheet(PACKAGE), solve: null }; }
   applyProject();
 }
@@ -422,7 +431,7 @@ function renderInspector() {
     (solved ? `<div class="table-wrap"><table class="props"><caption class="sr-only">Results for ${esc(o.tag)}${view.stale ? ' (out of date)' : ''}</caption><tbody>${
       rows.map((r) => `<tr><th scope="row">${esc(r.label)}</th><td>${esc(r.value)}</td><td class="unit">${esc(r.unit)}</td></tr>`).join('')}</tbody></table></div>` +
       (view.stale ? '<p class="meta">Results are out of date: the flowsheet changed since the last solve.</p>' : '') +
-      (isStream && basisApplies() ? `<p class="meta">Enthalpy and entropy are on ${project.basis === 'dwsim' ? 'DWSIM’s reference (ideal gas at 25 °C)' : 'HYSYS’s basis (heats of formation and absolute entropies included)'}; change it in Basis.</p>` : '')
+      (isStream && basisApplies() ? `<p class="meta">Enthalpy and entropy are on ${!isHysysBasis() ? 'DWSIM’s reference (ideal gas at 25 °C)' : 'HYSYS’s basis (heats of formation and absolute entropies included)'}; change it in Basis.</p>` : '')
       : '<p class="placeholder">No results yet: complete the worksheet and press Solve.</p>');
 }
 const fid = (id, k) => `f_${id}_${k}`.replace(/[^\w-]/g, '_');
@@ -856,8 +865,8 @@ function refresh() {
 $('projectName').addEventListener('change', () => { project.name = $('projectName').value.trim() || 'Untitled'; persist(); });
 function replace(name, flowsheet) {
   if (project.flowsheet !== core.newFlowsheet(PACKAGE)) { undo.push(project.flowsheet); redo.length = 0; }
-  project = { name, flowsheet, solve: null, basis: defaultBasis(flowsheet, project.basis) };
-  if (project.basis === 'dwsim' && hasEnergySpecs(flowsheet)) toast('This case types an enthalpy or an entropy, so it keeps DWSIM’s basis. Change it in Basis if it was written on HYSYS’s.');
+  project = { name, flowsheet, solve: null };
+  if (core.enthalpyBasis(flowsheet) === 'dwsim' && hasEnergySpecs(flowsheet) && !JSON.parse(flowsheet).enthalpyBasis) toast('This case types an enthalpy or an entropy, so it keeps DWSIM’s basis. Change it in Basis if it was written on HYSYS’s.');
   select(null);
   applyProject(); persist();
   view.fit(cssW, cssH); draw();
@@ -940,9 +949,9 @@ function renderBasis() {
     $('pkgSel').innerHTML = `<option>${esc(b.propertyPackage || '—')}</option>`; $('pkgSel').disabled = true; $('compSearch').disabled = true; $('compPick').disabled = true; $('compBrowse').disabled = true;
     $('pkgNote').textContent = 'The package list and the component search come from the engine, which is still loading.';
   }
-  $('basisSel').value = project.basis ?? 'hysys';
+  $('basisSel').value = isHysysBasis() ? 'hysys' : 'dwsim';
   $('basisNote').textContent = basisApplies()
-    ? (project.basis === 'dwsim' ? 'DWSIM’s reference: enthalpy and entropy are zero for an ideal gas at 25 °C. Differences (duties) are the same on either basis.'
+    ? (!isHysysBasis() ? 'DWSIM’s reference: enthalpy and entropy are zero for an ideal gas at 25 °C. Differences (duties) are the same on either basis.'
       : 'As HYSYS: each compound’s ideal-gas heat of formation and absolute entropy are included, so absolute values compare with HYSYS. Differences (duties) are the same on either basis.')
     : 'This property package has its own reference for enthalpy and entropy: the choice applies to Peng-Robinson, SRK and Lee-Kesler.';
   const blockTag = basisTarget && JSON.parse(SubTools.info(project.flowsheet, basisTarget))?.tag;
@@ -959,11 +968,10 @@ function renderBasis() {
     : '<li class="empty">No components yet: search below.</li>';
 }
 $('basisSel').addEventListener('change', () => {
-  project.basis = $('basisSel').value;
-  project.solve = null; view.setSolve(null, '', 0); satAsked.clear(); // results on the other basis are not these results
-  persist(); refresh(); renderBasis();
+  // Part of the model, as in the app: an undoable edit, after which the results are out of date until the next solve.
+  commit(core.setEnthalpyBasis(project.flowsheet, $('basisSel').value === 'dwsim' ? 'dwsim' : 'formation'), 'Enthalpy basis changed');
+  renderBasis();
   if (hasEnergySpecs(basisGet())) toast('Typed enthalpy and entropy values are now read on the other basis.');
-  queueSolve(0, true);
 });
 $('pkgSel').addEventListener('change', () => { const r = JSON.parse(sheets.setPropertyPackage(basisGet(), $('pkgSel').value)); if (r.flowsheet) basisCommit(JSON.stringify(r.flowsheet), `Package ${$('pkgSel').value}`); renderBasis(); });
 $('compList').addEventListener('click', (e) => {
@@ -1255,8 +1263,8 @@ window.flowstead = {
     project: () => project, commit: (json, message) => commit(json, message), replace: (name, f) => replace(name, f),
     solve: () => solve(false), busy: () => busy, ready: () => engine.ready, enthalpyBasis, ensureSaturation: (ids) => ensureSaturation(ids),
     goLevel: (id) => goLevel(id), undo: () => step(undo, redo), redo: () => step(redo, undo),
-    basis: () => project.basis ?? 'hysys',
-    setBasis: (b) => { if (b === (project.basis ?? 'hysys')) return; $('basisSel').value = b; $('basisSel').dispatchEvent(new Event('change')); },
+    basis: () => (isHysysBasis() ? 'hysys' : 'dwsim'),
+    setBasis: (b) => { if (b === (isHysysBasis() ? 'hysys' : 'dwsim')) return; $('basisSel').value = b; $('basisSel').dispatchEvent(new Event('change')); },
   }),
 };
 window.flowsheetReady = true;

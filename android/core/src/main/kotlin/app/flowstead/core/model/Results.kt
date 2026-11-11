@@ -370,7 +370,7 @@ fun Flowsheet.legacyModelHash(): String = hashOf(solvedPart(), positions = true)
 // leaves it out).
 private fun Flowsheet.solvedPart() = copy(
     sizingCriteria = null, documentInfo = null, tables = emptyList(), solverActive = false, caseStudies = emptyList(), safety = null, dynamics = null,
-    spreadsheet = null, watch = emptyList(), scenarios = emptyList(),
+    spreadsheet = null, watch = emptyList(), scenarios = emptyList(), saturationFor = null,
     objects = objects.filter { it.type != ObjectType.ReliefValve }.map { if (it.sheet.isEmpty() && it.sizing == null && it.equipmentSizing == null) it else it.copy(sheet = emptyMap(), sizing = null, equipmentSizing = null) },
 )
 

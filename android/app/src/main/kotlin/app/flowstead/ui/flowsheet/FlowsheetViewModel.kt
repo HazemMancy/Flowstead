@@ -217,6 +217,8 @@ class FlowsheetViewModel @Inject constructor(
     private val engine: EngineClient,
     private val queue: SolveQueue,
     private val documents: DocumentIo,
+    /** Bubble and dew points on demand (D153): a solve leaves them out, the screens that show them ask. */
+    private val saturation: app.flowstead.data.engine.SaturationFiller,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -466,7 +468,25 @@ class FlowsheetViewModel @Inject constructor(
     // ---- selection and editor
 
     fun select(id: String?) = local.update { it.copy(selectedId = id, selectedBlock = if (id != null) null else it.selectedBlock) }
-    fun openEditor(id: String) = local.update { it.copy(selectedId = id, editingId = id, selectedBlock = null) }
+    fun openEditor(id: String) {
+        local.update { it.copy(selectedId = id, editingId = id, selectedBlock = null) }
+        fillSaturation(listOf(id))
+    }
+
+    /** Asks the engine for [ids]' bubble and dew points if the current solve does not have them (D153). */
+    private fun fillSaturation(ids: Collection<String>?) {
+        if (ids != null && ids.isEmpty()) return
+        viewModelScope.launch { saturation.fill(projectId, ids) }
+    }
+
+    /** Before a document that lists them: every stream's bubble and dew points, in the solve the document reads. */
+    private suspend fun withSaturation() {
+        saturation.fill(projectId, null)?.let { currentSolve = it }
+    }
+
+    /** Streams whose table on the flowsheet shows a bubble or dew point. */
+    private fun tableStreams(fs: Flowsheet): List<String> =
+        fs.tables.filter { t -> t.keys.any { it in app.flowstead.data.engine.SaturationFiller.KEYS } }.map { it.objectId }
     fun closeEditor() = local.update { it.copy(editingId = null) }
     fun openSizingCriteria() = local.update { it.copy(editingSizingCriteria = true) }
     fun closeSizingCriteria() = local.update { it.copy(editingSizingCriteria = false) }
@@ -650,7 +670,8 @@ class FlowsheetViewModel @Inject constructor(
                     _messages.send("Set the engine address in Settings to solve")
                     return@launch
                 }
-                when (val r = engine.solve(url, secrets.apiKey(), readiness.solvable)) {
+                // Bubble and dew points are most of a solve's time: none here, the screens that show them ask (D153).
+                when (val r = engine.solve(url, secrets.apiKey(), app.flowstead.core.model.EnthalpyBases.forEngine(readiness.solvable, saturationFor = emptyList()))) {
                     is EngineResult.Failed -> if (r.unreachable && !auto) {
                         queue.enqueue(projectId)
                         _messages.send("Engine unreachable. Queued: it will solve when the phone is back online")
@@ -660,6 +681,7 @@ class FlowsheetViewModel @Inject constructor(
                     is EngineResult.Ok -> {
                         queue.cancel(projectId)
                         repository.saveSolve(projectId, StoredSolve(r.value, fs.modelHash(), clock.now()))
+                        fillSaturation(listOfNotNull(local.value.editingId) + tableStreams(fs))
                         if (!auto || r.value.status != SolveStatus.Converged) {
                             val left = readiness.notReady.size
                             _messages.send(summary(r.value) + if (left == 0) "" else " · $left not ready")
@@ -776,7 +798,7 @@ class FlowsheetViewModel @Inject constructor(
         viewModelScope.launch {
             val url = settingsRepository.settings.first().engineTarget
             val next = if (url.isBlank()) ToolRunUi(error = "Set the engine address in Settings")
-            else when (val r = engine.optimise(url, secrets.apiKey(), request(Readiness.of(fs).solvable))) {
+            else when (val r = engine.optimise(url, secrets.apiKey(), request(app.flowstead.core.model.EnthalpyBases.forEngine(Readiness.of(fs).solvable, saturationFor = emptyList())))) {
                 is EngineResult.Ok -> ToolRunUi(result = r.value)
                 is EngineResult.Failed -> ToolRunUi<app.flowstead.core.api.OptimiseResult>(error = "Not run: ${r.reason}")
             }
@@ -909,7 +931,7 @@ class FlowsheetViewModel @Inject constructor(
                 val errors = mutableListOf<String?>()
                 for ((i, point) in grid.withIndex()) {
                     val at = CaseStudies.at(base, cs, point.first, point.second)
-                    when (val r = engine.solve(url, key, at)) {
+                    when (val r = engine.solve(url, key, app.flowstead.core.model.EnthalpyBases.forEngine(at, saturationFor = if (cs.outputs.any { o -> o.key in app.flowstead.data.engine.SaturationFiller.KEYS }) null else emptyList()))) {
                         is EngineResult.Ok -> {
                             val (v, error) = CaseStudies.read(at, cs, r.value)
                             v.forEachIndexed { k, value -> values[k] += value }
@@ -1002,13 +1024,13 @@ class FlowsheetViewModel @Inject constructor(
             val sizing = app.flowstead.core.model.StreamLineSizing
             if (url.isBlank()) return@launch onResult(LineSizingUi(error = "Set the engine address in Settings"))
             val key = secrets.apiKey()
-            var solved = when (val r = engine.solve(url, key, sizing.flowsheet(fs, view, streamId, input))) {
+            var solved = when (val r = engine.solve(url, key, app.flowstead.core.model.EnthalpyBases.forEngine(sizing.flowsheet(fs, view, streamId, input), saturationFor = emptyList()))) {
                 is EngineResult.Ok -> r.value
                 is EngineResult.Failed -> return@launch onResult(LineSizingUi(error = "Not sized: ${r.reason}"))
             }
             // The engine stops at the first pipe that fails: those it did not reach are solved again, each alone.
             for (tag in sizing.unsolved(input, solved)) {
-                when (val again = engine.solve(url, key, sizing.flowsheet(fs, view, streamId, input, setOf(tag)))) {
+                when (val again = engine.solve(url, key, app.flowstead.core.model.EnthalpyBases.forEngine(sizing.flowsheet(fs, view, streamId, input, setOf(tag)), saturationFor = emptyList()))) {
                     is EngineResult.Ok -> solved = sizing.merge(solved, again.value)
                     is EngineResult.Failed -> Unit
                 }
@@ -1175,7 +1197,7 @@ class FlowsheetViewModel @Inject constructor(
             _messages.send("Set the engine address in Settings to export DWSIM files")
             return@export
         }
-        when (val r = engine.exportDwsim(url, secrets.apiKey(), fs)) {
+        when (val r = engine.exportDwsim(url, secrets.apiKey(), app.flowstead.core.model.EnthalpyBases.forEngine(fs))) {
             is EngineResult.Failed -> _messages.send("Not exported: ${r.reason}")
             is EngineResult.Ok -> {
                 documents.write(uri, java.util.Base64.getDecoder().decode(r.value.data))
@@ -1187,6 +1209,7 @@ class FlowsheetViewModel @Inject constructor(
 
     /** Writes the stored results (engine values only) as CSV or Excel. Works offline. */
     fun exportResults(uri: Uri, format: ResultsFormat) = export {
+        withSaturation()
         val fs = current ?: return@export
         val solve = currentSolve ?: run {
             _messages.send("Solve first: there are no results to export")
@@ -1211,6 +1234,7 @@ class FlowsheetViewModel @Inject constructor(
 
     /** Equipment data sheets as a PDF or Excel workbook, from the stored solve (blank process data if there is none). */
     fun exportDataSheets(uri: Uri, id: String, format: DataSheetFormat) = export {
+        withSaturation()
         val fs = current ?: return@export
         val unitSet = settingsRepository.settings.first().unitSet
         val targets = if (id == ALL_EQUIPMENT) fs.objects.filter { DataSheets.isEquipment(it.type) } else listOfNotNull(fs.obj(id))
@@ -1233,6 +1257,7 @@ class FlowsheetViewModel @Inject constructor(
 
     /** The heat and material balance (all streams, energy streams, duties) as an A3 PDF or a workbook. */
     fun exportHeatMaterialBalance(uri: Uri, format: DataSheetFormat) = export {
+        withSaturation()
         val fs = current ?: return@export
         val unitSet = settingsRepository.settings.first().unitSet
         val perSheet = if (format == DataSheetFormat.Pdf) HeatMaterialBalance.STREAMS_PER_PDF_SHEET else Int.MAX_VALUE

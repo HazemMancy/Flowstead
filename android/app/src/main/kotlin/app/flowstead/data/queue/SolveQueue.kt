@@ -92,7 +92,8 @@ class QueuedSolver @Inject constructor(
         if (!readiness.anyReady) return QueuedOutcome.Dropped
         val url = settings.settings.first().engineTarget
         if (url.isBlank()) return QueuedOutcome.Dropped
-        return when (val r = engine.solve(url, secrets.apiKey(), readiness.solvable)) {
+        // On the flowsheet's enthalpy basis; with every stream's bubble and dew points, since no screen is open to ask (D153).
+        return when (val r = engine.solve(url, secrets.apiKey(), app.flowstead.core.model.EnthalpyBases.forEngine(readiness.solvable))) {
             is EngineResult.Ok -> {
                 repository.saveSolve(projectId, StoredSolve(r.value, fs.modelHash(), clock.now()))
                 QueuedOutcome.Solved
