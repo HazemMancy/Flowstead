@@ -36,6 +36,11 @@ In the repository's settings, **Pages → Build and deployment → Source** must
 ## Release notes
 
 **Web 1.22**
+- **Interactive charts**: point at a chart to read each curve's values, click the legend to hide or show a curve, drag
+  across it with a mouse to zoom (double-click to go back), and download the values as CSV.
+- **Every tool run is kept with the case**: the phase envelope, PVT, curves, line sizing, optimiser, dynamics, relief,
+  blowdown, pressurization and the thermodynamics tools. Open a saved run without running it again, tick several to
+  compare them side by side; a run made before the flowsheet changed is marked. Saved runs go into the saved file too.
 - Backward specifications widened: a stream leaving a heat exchanger, splitter, separator or tank can be given what it
   must be; a flow behind a splitter or separator finds the feed's flow; a product's enthalpy finds the feed temperature.
 - Absolute entropy on HYSYS's basis is right for n-butane and heavier paraffins; typing the first enthalpy into a case

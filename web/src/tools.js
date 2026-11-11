@@ -33,7 +33,10 @@ export function initTools(app) {
       // A dynamic run starts from a steady solve: it needs no bubble or dew points either.
       if (req.method === 'dynamics' && req.params?.flowsheet) req.params.flowsheet.saturationFor = [];
       const { result, ms } = await engine.call(req.method, req.params);
-      out.innerHTML = renderReport(JSON.parse(report(result))) + `<p class="meta">Calculated by DWSIM in ${(ms / 1000).toFixed(1)} s.</p>`;
+      const rep = report(result);
+      out.innerHTML = renderReport(JSON.parse(rep)) + `<p class="meta">Calculated by DWSIM in ${(ms / 1000).toFixed(1)} s.</p>`;
+      // Kept with the case, so it can be opened again and compared without running it (D155).
+      app.runs?.record(out, String(label), rep);
       return result;
     } catch (e) { out.innerHTML = err(`Not calculated: ${e.message}`); return null; }
   }
@@ -366,7 +369,9 @@ export function initTools(app) {
         default: return '';
       }
     }).join('');
+    out.dataset.scope = `${kind}:${id}`; // each safety case keeps its own runs (D155)
     out.innerHTML = renderReport(JSON.parse(Safety.report(app.project().flowsheet, kind, id)));
+    app.runs?.strip(out);
     const apply = (action) => {
       const r = JSON.parse(Safety.apply(app.project().flowsheet, ...solveArgs(), kind, id, JSON.stringify(action)));
       if (r.error) { app.toast(r.error); return redrawKeepingFocus($('toolsBody'), redraw); }

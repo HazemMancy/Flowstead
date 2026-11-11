@@ -11,6 +11,8 @@ import { enterToNext } from './forms.js';
 import { withSubflowsheets } from './subflowsheets.js';
 import { installAutomation } from './automation.js';
 import { floating } from './floating.js';
+import { initCharts } from './charts.js';
+import { initRuns } from './runs.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -56,8 +58,12 @@ function load() {
 }
 function persist() {
   try { localStorage.setItem(STORE, JSON.stringify(project)); } catch (e) {
-    // A big solve may not fit the browser's storage: keep the flowsheet at least.
-    try { localStorage.setItem(STORE, JSON.stringify({ ...project, solve: null })); } catch (e2) {}
+    // A big solve may not fit the browser's storage: keep the flowsheet and the saved runs, else the flowsheet at least.
+    try { localStorage.setItem(STORE, JSON.stringify({ ...project, solve: null })); } catch (e2) {
+      try { localStorage.setItem(STORE, JSON.stringify({ ...project, solve: null, runs: (project.runs ?? []).slice(-20) })); } catch (e3) {
+        try { localStorage.setItem(STORE, JSON.stringify({ ...project, solve: null, runs: [] })); } catch (e4) {}
+      }
+    }
   }
 }
 function applyProject() {
@@ -863,9 +869,9 @@ function refresh() {
 
 // ---------- files and examples ----------
 $('projectName').addEventListener('change', () => { project.name = $('projectName').value.trim() || 'Untitled'; persist(); });
-function replace(name, flowsheet) {
+function replace(name, flowsheet, runs = []) {
   if (project.flowsheet !== core.newFlowsheet(PACKAGE)) { undo.push(project.flowsheet); redo.length = 0; }
-  project = { name, flowsheet, solve: null };
+  project = { name, flowsheet, solve: null, runs };
   if (core.enthalpyBasis(flowsheet) === 'dwsim' && hasEnergySpecs(flowsheet) && !JSON.parse(flowsheet).enthalpyBasis) toast('This case types an enthalpy or an entropy, so it keeps DWSIM’s basis. Change it in Basis if it was written on HYSYS’s.');
   select(null);
   applyProject(); persist();
@@ -874,7 +880,10 @@ function replace(name, flowsheet) {
 // A new case keeps the solver mode you chose (Hold or Active).
 $('newBtn').addEventListener('click', () => replace('Untitled', core.setSolverActive(core.newFlowsheet(PACKAGE), solverActive())));
 $('saveBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(JSON.parse(project.flowsheet), null, 2)], { type: 'application/json' });
+  // The saved runs of the tools (D155) travel in the file beside the flowsheet; the app reads the flowsheet and skips them.
+  const file = JSON.parse(project.flowsheet);
+  if (project.runs?.length) file.flowsteadWebRuns = project.runs;
+  const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${project.name.replace(/[\\/:*?"<>|]/g, '_') || 'flowsheet'}.json` });
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -899,9 +908,11 @@ $('openFile').addEventListener('change', async () => {
     // A Flowstead flowsheet, or a benchmark/example file ({name, flowsheet}).
     const sheet = j.flowsheet && typeof j.flowsheet === 'object' ? j.flowsheet : j;
     if (!Array.isArray(sheet.objects)) throw new Error('This is not a Flowstead flowsheet');
+    const runs = Array.isArray(sheet.flowsteadWebRuns) ? sheet.flowsteadWebRuns : [];
+    delete sheet.flowsteadWebRuns;
     const json = JSON.stringify(sheet);
     view.setFlowsheet(json); // decodes it with the app's rules; throws if it is not a valid flowsheet
-    replace(j.name || f.name.replace(/\.json$/i, ''), json);
+    replace(j.name || f.name.replace(/\.json$/i, ''), json, runs);
   } catch (e) { toast(`Not opened: ${errorText(e)}`); view.setFlowsheet(project.flowsheet); }
 });
 let examples = [];
@@ -1210,10 +1221,13 @@ $('unitGrid').addEventListener('change', (e) => {
 });
 
 // ---------- tools (D112) ----------
+// Interactive charts and every tool run kept with the case (D155).
+initCharts();
+const runs = initRuns({ project: () => project, persist: () => persist(), modelHash: () => core.modelHash(project.flowsheet) });
 const tools = initTools({
   $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Data: DataTools.getInstance(), Thermo: ThermoTools.getInstance(), Equip: EquipmentTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
   project: () => project, commit: (json, message) => commit(json, message), toast,
-  ready: () => engine.ready, ensureSaturation: (ids) => ensureSaturation(ids), packages: () => packages,
+  ready: () => engine.ready, ensureSaturation: (ids) => ensureSaturation(ids), packages: () => packages, runs,
   // The check opens what it reports on: on its own flowsheet (a sub-flowsheet's object opens that sub-flowsheet).
   openObject: (id) => { const lv = SubTools.levelOf(project.flowsheet, id); if (lv !== level) goLevel(lv); select(id); },
 });
