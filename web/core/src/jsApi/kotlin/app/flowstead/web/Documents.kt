@@ -37,7 +37,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
 /** What the web's documents say made them (the app writes its own version here). */
-const val WEB_VERSION = "Web 1.21"
+const val WEB_VERSION = "Web 1.22"
 
 @JsExport
 object Documents {

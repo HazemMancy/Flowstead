@@ -1470,7 +1470,8 @@ try {
       if (!(got.tWell > got.tFeed)) problems.push(`WELL at ${got.tWell} K is not warmer than its product`);
     }
     const fields = got.fields ?? '';
-    if (!/temperature/.test(fields) || !/pressure/.test(fields) || /massEnthalpy/.test(fields)) problems.push(`product worksheet fields: ${fields}`);
+    // D154: a product's enthalpy is a target too (met by the feed's temperature).
+    if (!/temperature/.test(fields) || !/pressure/.test(fields) || !/massEnthalpy/.test(fields)) problems.push(`product worksheet fields: ${fields}`);
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} backward specification (wellhead ${(got.tWell - 273.15)?.toFixed?.(2)} °C for 18 °C at 40 bara)`);
     problems.forEach((x) => console.log('     ' + x));
@@ -1701,6 +1702,83 @@ try {
     if (refusals.includes('accepted') || refusals.at(-1) !== 'undone') problems.push(`refusals and undo: ${JSON.stringify(refusals)}`);
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} automation interface (3 benchmarks built through it, ${checks} expected values; K-100 driver ${got.k?.sizing?.lines?.find((l) => /Driver at least/.test(l.label))?.si?.toFixed?.(0)} W; PSV ${got.relief?.result?.orifice}; refusals: ${refusals.slice(0, 3).join(' | ')})`);
+    problems.forEach((x) => console.log('     ' + x));
+    if (problems.length) failed++;
+    await p.close();
+  }
+
+  // ---------- 4w. interactive charts, and every tool run kept with the case (D155) ----------
+  {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+    const errs = [], problems = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    await p.goto(base + 'flowsheet.html');
+    await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await p.selectOption('#examples', '03-two-phase-flash');
+    await p.waitForFunction(() => !document.getElementById('solveBtn').disabled, null, { timeout: 600_000 });
+    await p.click('#solveBtn');
+    await p.waitForFunction(() => /Converged|Status|Not solved/.test(document.getElementById('solveMsgs').textContent), null, { timeout: 120_000 });
+    const openAnalysis = async () => { await p.evaluate(() => document.querySelector('#objects [data-id="feed"]').click()); await p.click('#tabAnalysis'); };
+    await openAnalysis();
+    await p.click('#an_env');
+    await p.waitForFunction(() => document.querySelector('#an_env_out .rp-plot svg') && !document.querySelector('#an_env_out .busy'), null, { timeout: 300_000 });
+
+    // The chart: the values under the pointer, a curve hidden from its legend, a mouse drag zooms, double-click goes back.
+    const plot = p.locator('#an_env_out .rp-plot').first();
+    const area = await plot.locator('.plot-area svg').boundingBox();
+    let tipShown = false;
+    for (let f = 0.2; f <= 0.8 && !tipShown; f += 0.05) {
+      for (const g of [0.3, 0.5, 0.7]) {
+        await p.mouse.move(area.x + area.width * f, area.y + area.height * g);
+        if (await plot.locator('.plot-tip:not([hidden])').count()) { tipShown = true; break; }
+      }
+    }
+    const tip = tipShown ? await plot.locator('.plot-tip').textContent() : '';
+    if (!tipShown || !/Temperature|Pressure/.test(tip)) problems.push(`no value read under the pointer (${tip})`);
+    const paths = async () => plot.locator('.plot-area svg path').count();
+    const before = await paths();
+    await plot.locator('.legend-item').first().click();
+    if ((await plot.locator('.legend-item').first().getAttribute('aria-pressed')) !== 'false' || (await paths()) >= before) problems.push('a legend click did not hide its curve');
+    await plot.locator('.legend-item').first().click();
+    if (!(await plot.locator('[data-plot-reset]').isHidden())) problems.push('Reset zoom shows before any zoom');
+    // Measured again, in view: clicking the legend may have scrolled the page.
+    await plot.locator('.plot-area svg').scrollIntoViewIfNeeded();
+    const box = await plot.locator('.plot-area svg').boundingBox();
+    await p.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5); await p.mouse.down();
+    await p.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, { steps: 5 }); await p.mouse.up();
+    if (await plot.locator('[data-plot-reset]').isHidden()) problems.push('a drag across the plot did not zoom');
+    await plot.locator('.plot-area svg').dblclick();
+    if (!(await plot.locator('[data-plot-reset]').isHidden())) problems.push('double-click did not reset the zoom');
+    const [csv] = await Promise.all([p.waitForEvent('download'), plot.locator('[data-plot-csv]').click()]);
+    const csvText = fs.readFileSync(await csv.path(), 'utf8');
+    if (!/^"Curve",/.test(csvText) || csvText.split('\n').length < 10) problems.push(`CSV: ${csvText.slice(0, 120)}`);
+
+    // The run is kept: listed beside the result, there again after a reload without running, marked when the case changes.
+    if (!/Saved runs \(1\)/.test(await p.textContent('#inspAnalysis'))) problems.push('the run was not listed as saved');
+    await p.reload(); await p.waitForFunction(() => window.flowsheetReady, null, { timeout: 60_000 });
+    await openAnalysis();
+    await p.waitForFunction(() => /Saved run of/.test(document.getElementById('an_env_out')?.textContent ?? ''), null, { timeout: 30_000 }).catch(() => {});
+    const reopened = await p.textContent('#an_env_out');
+    if (!/Saved run of/.test(reopened) || !/Critical point/.test(reopened)) problems.push(`after a reload the envelope was not there without running it: ${reopened.slice(0, 160)}`);
+    if (!(await p.$('#an_env_out .rp-plot svg'))) problems.push('the saved run has no chart');
+    await p.click('#tabDesign');
+    const t = p.locator('#inspForm input[data-spec="temperature"]'); await t.fill('30'); await t.press('Enter');
+    await p.click('#tabAnalysis');
+    await p.waitForFunction(() => /changed since/.test(document.querySelector('#inspAnalysis .runs')?.textContent ?? ''), null, { timeout: 30_000 }).catch(() => {});
+    if (!/changed since/.test(await p.textContent('#inspAnalysis .runs').catch(() => ''))) problems.push('the saved run was not marked when the flowsheet changed');
+    // And it travels in the saved file.
+    const [file] = await Promise.all([p.waitForEvent('download'), p.click('#saveBtn')]);
+    const saved = JSON.parse(fs.readFileSync(await file.path(), 'utf8'));
+    if (!(saved.flowsteadWebRuns?.length >= 1)) problems.push('the saved file does not carry the runs');
+    // Opened again, with a run that is not well formed added (a file is anyone's): the good one is back, the other left out.
+    const n = saved.flowsteadWebRuns.length;
+    saved.flowsteadWebRuns.push({ id: 'bad', scope: saved.flowsteadWebRuns[0].scope, report: '{not json', at: 0 }, 'junk');
+    await p.setInputFiles('#openFile', { name: 'd155.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(saved)) });
+    await p.waitForFunction(() => /Saved runs/.test(document.querySelector('#inspAnalysis .runs')?.textContent ?? '') || !document.querySelector('#inspAnalysis .runs'), null, { timeout: 30_000 }).catch(() => {});
+    const kept = await p.evaluate(() => JSON.parse(localStorage.getItem('flowstead.web.project'))?.runs?.length ?? -1);
+    if (kept !== n) problems.push(`opening the file kept ${kept} runs of ${n} good ones`);
+    if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
+    console.log(`${problems.length ? 'FAIL' : 'ok  '} interactive charts and saved runs (D155)`);
     problems.forEach((x) => console.log('     ' + x));
     if (problems.length) failed++;
     await p.close();

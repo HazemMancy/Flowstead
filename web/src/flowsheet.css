@@ -294,3 +294,27 @@
 .fs-selhead{display:flex;align-items:center;gap:.15rem}
 #selInto{max-width:11rem}
 @media (pointer:coarse){.fs-float-grip,.fs-float-min{min-width:2.6rem;min-height:2.6rem}}
+/* Interactive charts (D155) */
+.rp-plot figcaption{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
+.plot-tools{display:inline-flex;gap:.3rem}
+.plot-area{position:relative;touch-action:pan-y;cursor:crosshair;user-select:none;-webkit-user-select:none}
+.plot-area svg{display:block;width:100%;height:auto}
+.plot-area .cross{stroke:var(--muted);stroke-dasharray:3 3}
+.plot-area .zoom-box{fill:var(--primary);fill-opacity:.12;stroke:var(--primary);stroke-opacity:.5}
+.plot-tip{position:absolute;z-index:3;pointer-events:none;background:var(--bg-card);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:.3rem .5rem;font-size:.72rem;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:.3rem;max-width:16rem}
+.plot-tip[hidden],.plot-tools [hidden]{display:none}
+.legend .legend-item{display:inline-flex;align-items:center;gap:0;background:none;border:none;padding:.1rem .2rem;font:inherit;font-size:.74rem;color:var(--muted);cursor:pointer;border-radius:4px}
+.legend .legend-item:hover{background:var(--bg-input)}
+.legend .legend-item[aria-pressed="false"]{opacity:.45;text-decoration:line-through}
+/* Saved runs (D155) */
+.runs{margin:.5rem 0;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .5rem;font-size:.78rem}
+.runs summary{cursor:pointer;font-weight:600}
+.runs ul{list-style:none;display:flex;flex-direction:column;gap:.2rem;margin:.4rem 0 0;max-height:14rem;overflow:auto}
+.runs li{display:flex;align-items:center;gap:.4rem}
+.runs li span{flex:1;min-width:0;color:var(--muted)}
+.runs li .chip-check{margin:0}
+.runs .btn.current{border-color:var(--primary);color:var(--primary)}
+.runs .warn{color:var(--warn);font-weight:500}
+.runs-compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:.8rem}
+.runs-col{border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .6rem;min-width:0}
+.runs-col h4{margin:0 0 .3rem;font-size:.8rem}

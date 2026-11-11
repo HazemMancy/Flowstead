@@ -44,4 +44,17 @@ class EnthalpyBasesTest {
         val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), f)
         assertTrue("enthalpyBasis" !in json && "saturationFor" !in json, json)
     }
+
+    @Test
+    fun typingTheFirstEnthalpyIntoACaseKeepsTheBasisItWasTypedOn() {
+        // A new case is on HYSYS's basis; the enthalpy the user types is read on it, not on DWSIM's.
+        val typed = FlowsheetEditing.setSpec(fs(tp), "s", SpecKey.MASS_ENTHALPY, Spec(-4.6e6, "J/kg"))
+        assertEquals(EnthalpyBases.FORMATION, typed.enthalpyBasis)
+        assertEquals(EnthalpyBases.FORMATION, EnthalpyBases.effective(typed))
+        // A case saved with an enthalpy before the basis existed stays on DWSIM's; a choice made is never overwritten.
+        assertNull(FlowsheetEditing.setSpec(fs(ph), "s", SpecKey.TEMPERATURE, Spec(300.0, "K")).enthalpyBasis)
+        assertEquals(EnthalpyBases.DWSIM, FlowsheetEditing.setSpec(fs(tp, EnthalpyBases.DWSIM), "s", SpecKey.MASS_ENTHALPY, Spec(1.0, "J/kg")).enthalpyBasis)
+        // Other edits leave it unwritten.
+        assertNull(FlowsheetEditing.setSpec(fs(tp), "s", SpecKey.TEMPERATURE, Spec(310.0, "K")).enthalpyBasis)
+    }
 }

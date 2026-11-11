@@ -39,23 +39,73 @@ internal static class FormationBasis
         var mw = c.Molar_Weight;
         var hf = c.IG_Enthalpy_of_Formation_25C * mw; // kJ/kg × kg/kmol = J/mol
         double? s = null;
-        if (Elements(c.Formula) is { } atoms && double.IsFinite(c.IG_Entropy_of_Formation_25C))
-            s = c.IG_Entropy_of_Formation_25C * mw + atoms.Sum(a => a.Value * ElementS[a.Key]) + AtmosphereShift;
+        // The atoms: DWSIM's element counts (what its Gibbs reactor balances), else the formula. ChemSep writes structural
+        // formulas (CH3(CH2)4CH3, HOCH2CH2OH), so a formula's groups are multiplied out.
+        var atoms = ElementsOf(c) ?? Elements(c.Formula);
+        if (atoms is not null && double.IsFinite(c.IG_Entropy_of_Formation_25C))
+        {
+            var s0 = c.IG_Entropy_of_Formation_25C * mw + atoms.Sum(a => a.Value * ElementS[a.Key]) + AtmosphereShift;
+            // An ideal gas at 25 °C has 126 J/(mol·K) (helium) or more; anything else is a constant gone wrong: no entropy shown.
+            if (s0 >= 100 && s0 < 5000) s = s0;
+        }
         return new Compound(double.IsFinite(hf) ? hf : 0.0, s, mw);
     }
 
-    /// <summary>Atom counts of a formula like CH4, H2O or the hypothetical "C6.50H14.40"; null if an element has no tabulated entropy.</summary>
+    /// <summary>DWSIM's element counts of a compound; null if it has none or one without a tabulated entropy.</summary>
+    internal static Dictionary<string, double>? ElementsOf(ICompoundConstantProperties c)
+    {
+        if (c.Elements is not { Count: > 0 } list) return null;
+        var atoms = new Dictionary<string, double>();
+        foreach (var k in list.Keys)
+        {
+            var e = k?.ToString() ?? "";
+            if (!ElementS.ContainsKey(e)) return null;
+            atoms[e] = atoms.GetValueOrDefault(e) + Convert.ToDouble(list[k], CultureInfo.InvariantCulture);
+        }
+        return atoms;
+    }
+
+    /// <summary>
+    /// Atom counts of a formula: CH4, H2O, the hypothetical "C6.50H14.40", or ChemSep's structural CH3(CH2)4CH3 and
+    /// (C6H5)CH3, groups in brackets multiplied by the number after them. Null if an element has no tabulated entropy or the
+    /// formula has a character it can't read.
+    /// </summary>
     internal static Dictionary<string, double>? Elements(string? formula)
     {
         if (string.IsNullOrWhiteSpace(formula)) return null;
-        var atoms = new Dictionary<string, double>();
-        foreach (Match m in Regex.Matches(formula, @"([A-Z][a-z]?)(\d+(?:\.\d+)?)?"))
+        var stack = new Stack<Dictionary<string, double>>();
+        stack.Push([]);
+        var i = 0;
+        double Number()
         {
-            if (!ElementS.ContainsKey(m.Groups[1].Value)) return null;
-            var n = m.Groups[2].Success ? double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) : 1.0;
-            atoms[m.Groups[1].Value] = atoms.GetValueOrDefault(m.Groups[1].Value) + n;
+            var m = Regex.Match(formula[i..], @"^\d+(?:\.\d+)?");
+            if (!m.Success) return 1.0;
+            i += m.Length;
+            return double.Parse(m.Value, CultureInfo.InvariantCulture);
         }
-        return atoms.Count == 0 ? null : atoms;
+        while (i < formula.Length)
+        {
+            var ch = formula[i];
+            if (ch is '(' or '[') { stack.Push([]); i++; }
+            else if (ch is ')' or ']')
+            {
+                if (stack.Count < 2) return null;
+                i++;
+                var group = stack.Pop();
+                var k = Number();
+                foreach (var (e, n) in group) stack.Peek()[e] = stack.Peek().GetValueOrDefault(e) + n * k;
+            }
+            else if (char.IsUpper(ch))
+            {
+                var e = i + 1 < formula.Length && char.IsLower(formula[i + 1]) ? formula.Substring(i, 2) : ch.ToString();
+                i += e.Length;
+                if (!ElementS.ContainsKey(e)) return null;
+                stack.Peek()[e] = stack.Peek().GetValueOrDefault(e) + Number();
+            }
+            else if (ch is '-' or '=' or '#' or ' ') i++; // bonds in a structural formula
+            else return null;
+        }
+        return stack.Count == 1 && stack.Peek().Count > 0 ? stack.Peek() : null;
     }
 
     /// <summary>Whether the property package's enthalpy has the ideal-gas reference this shift is for (cubic equations and Lee–Kesler); activity models and steam tables have their own.</summary>
