@@ -125,9 +125,10 @@ public sealed class PackedColumnTests(EngineFixture engine, ITestOutputHelper ou
         Assert.Equal(0.70, trays.Max(i => Flood(i, p["packingRequiredDiameter"])), 0.002);
         Assert.Equal(trays.Max(i => Gradient(i, d)), p["packingMaxPressureGradient"], p["packingMaxPressureGradient"] * 0.002);
 
-        // Kister's rule (Seader and Henley eq. 6-116): HETP (ft) = 1.5 d_p (in); 25 mm rings: 1.5 ft = 0.4572 m,
-        // but not less than the diameter (or 1 ft) below 2 ft (eq. 6-118).
-        var hetp = d < 0.6096 ? Math.Max(0.4572, Math.Max(d, 0.3048)) : 0.4572;
+        // Kister's rule (Seader and Henley eq. 6-116): HETP (ft) = 1.5 d_p (in), which is HETP = 18 d_p in any one unit
+        // (12 in per ft × 1.5). The catalogue's ring is 25 mm, so 18 × 0.025 m = 0.450 m (a 1-in ring, 25.4 mm, would be
+        // 0.4572 m); but not less than the diameter (or 1 ft) below 2 ft (eq. 6-118).
+        var hetp = d < 0.6096 ? Math.Max(0.45, Math.Max(d, 0.3048)) : 0.45;
         Assert.Equal(hetp, p["packingHetp"], 1e-9);
         Assert.Equal(20 * hetp, p["packingHeight"], 1e-9);
         Assert.Equal(trays.Sum(i => Gradient(i, d)) * hetp, p["packingPressureDrop"], p["packingPressureDrop"] * 0.002);

@@ -68,7 +68,7 @@ public static class PackedColumns
     /// Rule-of-thumb HETP, m (Kister; Seader and Henley 2nd ed. eqs. 6-116 to 6-118): random packings HETP (ft) =
     /// 1.5 d_p (in), i.e. 18 nominal sizes; structured packings HETP (ft) = 100/a (ft²/ft³) + 4/12; not less than the
     /// column diameter (or 1 ft) below 2 ft. DWSIM 10.2.15's RuleOfThumbHETP takes 1.5 d_p with d_p in metres for random
-    /// packings, 12 times too short (37.5 mm for 25 mm rings instead of 0.457 m), so Flowstead uses its own.
+    /// packings, 12 times too short (37.5 mm for 25 mm rings instead of 0.450 m), so Flowstead uses its own.
     /// </summary>
     public static double Hetp(PackingData p, double diameter)
     {
