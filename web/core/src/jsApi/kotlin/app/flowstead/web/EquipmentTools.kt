@@ -185,7 +185,20 @@ object EquipmentTools {
                 }
                 if (o.type in setOf(ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander)) fields += pctField("margin", "Driver margin over shaft power", i.margin?.let { it }, if (o.type == ObjectType.Pump) "API 610: 125 / 115 / 110 %" else "API 617: 110 %")
                 if (o.type == ObjectType.Tank) { fields += field("residenceTime", "Residence time", i.residenceTime, Quantity.Time, "10 min"); fields += pctField("fillFraction", "Filled to", i.fillFraction, "85 %") }
+                val packing = if (o.type in app.flowstead.core.model.EquipmentSizing.COLUMNS) app.flowstead.core.model.Packings.of(o) else null
                 if (o.type in app.flowstead.core.model.EquipmentSizing.COLUMNS) {
+                    // Trays or a packed bed (D152): a packing is rated by the engine, so choosing one asks for a solve.
+                    val P = app.flowstead.core.model.Packings
+                    fields += choice(P.PACKING, "Internals", packing ?: "", listOf("" to "Sieve trays") +
+                        P.RANDOM.map { it to "Random: $it" } + P.STRUCTURED.map { it to "Structured: $it" } +
+                        listOfNotNull(packing?.takeIf { it !in P.ALL }?.let { it to it }))
+                }
+                if (packing != null) {
+                    val P = app.flowstead.core.model.Packings
+                    fields += pctField(P.FLOOD, "Design flood", P.number(o, P.FLOOD), "70 %")
+                    fields += field(P.DIAMETER, "Diameter", P.number(o, P.DIAMETER), Quantity.Length, "sized for the flood")
+                    fields += field(P.HEIGHT, "Bed height", P.number(o, P.HEIGHT), Quantity.Length, "stages × HETP")
+                } else if (o.type in app.flowstead.core.model.EquipmentSizing.COLUMNS) {
                     fields += field("traySpacing", "Tray spacing", i.traySpacing, Quantity.Length, "610 mm")
                     fields += pctField("floodFraction", "Design flood", i.floodFraction, "80 %")
                     fields += pctField("downcomerFraction", "Downcomer area", i.downcomerFraction, "12 %")
@@ -270,6 +283,17 @@ object EquipmentTools {
                 FlowsheetEditing.setSizingCriteria(f, all.with(svc, n))
             }
             in app.flowstead.core.model.EquipmentSizing.TYPES -> {
+                // A packed column's basis lives in its refs, sent to the engine that rates the bed (D152).
+                val P = app.flowstead.core.model.Packings
+                if (o.type in app.flowstead.core.model.EquipmentSizing.COLUMNS && key in setOf(P.PACKING, P.FLOOD, P.DIAMETER, P.HEIGHT)) {
+                    val value = when (key) {
+                        P.PACKING -> text?.takeIf { it.isNotBlank() }?.also { if (it !in P.ALL) throw EditRejected("'$it' is not in DWSIM's packing catalogue") }
+                        P.FLOOD -> frac()?.also { if (it <= 0 || it >= 1) throw EditRejected("Between 0 and 100 %") }?.let(P::text)
+                        else -> q(Quantity.Length)?.also { if (it <= 0) throw EditRejected("Must be positive") }?.let(P::text)
+                    }
+                    // Back to trays keeps the bed's numbers on the column for when a packing is chosen again.
+                    return@edit FlowsheetEditing.setRef(f, o.id, key, value)
+                }
                 val i = o.equipmentSizing ?: app.flowstead.core.model.EquipmentSizingInput()
                 val n = when (key) {
                     "service" -> i.copy(service = text?.takeIf { it.isNotEmpty() })

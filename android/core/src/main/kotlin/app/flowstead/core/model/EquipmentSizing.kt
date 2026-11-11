@@ -249,6 +249,8 @@ object EquipmentSizing {
                 )
             }
             in COLUMNS -> {
+                // A packed column (D152): the engine rated the bed; trays otherwise.
+                if (Packings.of(o) != null) return Packings.size(results, o)
                 val profile = results.profiles(o.id) ?: return null
                 val ts = input.traySpacing ?: ColumnSizing.DEFAULT_TRAY_SPACING
                 val ff = input.floodFraction ?: ColumnSizing.DEFAULT_FLOOD

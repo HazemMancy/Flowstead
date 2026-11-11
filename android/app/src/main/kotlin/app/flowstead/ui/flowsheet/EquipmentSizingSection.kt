@@ -23,6 +23,7 @@ import app.flowstead.core.model.EquipmentSizing
 import app.flowstead.core.model.EquipmentSizingInput
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.ObjectType
+import app.flowstead.core.model.Packings
 import app.flowstead.core.model.ResultView
 import app.flowstead.core.model.SimObject
 import app.flowstead.core.model.Spec
@@ -41,13 +42,13 @@ internal fun EquipmentSizingSection(fs: Flowsheet, obj: SimObject, results: Resu
     HorizontalDivider()
     val machine = obj.type in setOf(ObjectType.Pump, ObjectType.Compressor, ObjectType.Expander)
     val column = obj.type in EquipmentSizing.COLUMNS
-    Text(if (machine) "Driver sizing" else if (column) "Tray sizing" else "Equipment sizing", style = MaterialTheme.typography.titleSmall)
+    Text(if (machine) "Driver sizing" else if (column) "Column sizing" else "Equipment sizing", style = MaterialTheme.typography.titleSmall)
     val input = obj.equipmentSizing
     if (input == null) {
         Calculated(
             when {
                 machine -> "The driver from the solved power: API 610 / 617 margin and the next standard IEC motor."
-                column -> "Tray column diameter and height from each tray's solved vapour and liquid traffic (Fair's flooding correlation, as HYSYS's tray sizing)."
+                column -> "Column diameter and height from each stage's solved vapour and liquid traffic: sieve trays (Fair's flooding correlation, as HYSYS's tray sizing) or a packed bed rated by DWSIM's packing hydraulics."
                 obj.type == ObjectType.Tank -> "The tank volume and dimensions from the liquid flow and a residence time."
                 else -> "The heat-transfer area from the solved duty and temperatures, with U from the data library or your own."
             },
@@ -64,30 +65,23 @@ internal fun EquipmentSizingSection(fs: Flowsheet, obj: SimObject, results: Resu
         }
         column -> {
             val length = unitSet.unitFor(Quantity.Length)
-            QuantityField("Tray spacing", input.traySpacing?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_ts", hint = "610 mm (24 in)") {
-                save(input.copy(traySpacing = it?.si?.takeIf { v -> v > 0.2 && v < 1.5 }))
+            // Trays or a packed bed (D152). The packing basis sits in the column's refs: the engine rates the bed.
+            val packing = Packings.of(obj)
+            Choice("Internals", packing ?: "Sieve trays", listOf("" to "Sieve trays") +
+                Packings.RANDOM.map { it to "Random: $it" } + Packings.STRUCTURED.map { it to "Structured: $it" }, testTag = "choice_packing") { picked ->
+                actions.setRef(obj.id, Packings.PACKING, picked.ifBlank { null })
             }
-            PlainNumber("Design flood", input.floodFraction?.let { it * 100 }, "${key}_ff", "%", hint = "80") {
-                save(input.copy(floodFraction = it?.takeIf { v -> v > 30 && v <= 100 }?.div(100)))
-            }
-            PlainNumber("Downcomer area", input.downcomerFraction?.let { it * 100 }, "${key}_dc", "% of tower", hint = "12") {
-                save(input.copy(downcomerFraction = it?.takeIf { v -> v >= 5 && v <= 40 }?.div(100)))
-            }
-            PlainNumber("Tray efficiency", input.trayEfficiency?.let { it * 100 }, "${key}_eff", "%", hint = "70") {
-                save(input.copy(trayEfficiency = it?.takeIf { v -> v > 10 && v <= 100 }?.div(100)))
-            }
-            PlainNumber("System (foaming) factor", input.systemFactor, "${key}_sf", hint = "1.0 non-foaming") {
-                save(input.copy(systemFactor = it?.takeIf { v -> v > 0.3 && v <= 1.0 }))
-            }
-            QuantityField("Weir height", input.weirHeight?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_hw", hint = "50 mm") {
-                save(input.copy(weirHeight = it?.si?.takeIf { v -> v > 0.015 && v < 0.15 }))
-            }
-            QuantityField("Hole diameter", input.holeDiameter?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_dh", hint = "5 mm") {
-                save(input.copy(holeDiameter = it?.si?.takeIf { v -> v > 0.001 && v < 0.025 }))
-            }
-            PlainNumber("Hole area, % of the active area", input.holeFraction?.let { it * 100 }, "${key}_ah", "%", hint = "10") {
-                save(input.copy(holeFraction = it?.takeIf { v -> v >= 4 && v <= 20 }?.div(100)))
-            }
+            if (packing != null) {
+                PlainNumber("Design flood", Packings.number(obj, Packings.FLOOD)?.let { it * 100 }, "${key}_pf", "%", hint = "70") {
+                    actions.setRef(obj.id, Packings.FLOOD, it?.takeIf { v -> v > 20 && v < 100 }?.div(100)?.let(Packings::text))
+                }
+                QuantityField("Diameter", Packings.number(obj, Packings.DIAMETER)?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_pd", hint = "sized for the flood") {
+                    actions.setRef(obj.id, Packings.DIAMETER, it?.si?.takeIf { v -> v > 0 }?.let(Packings::text))
+                }
+                QuantityField("Bed height", Packings.number(obj, Packings.HEIGHT)?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_ph", hint = "stages × HETP") {
+                    actions.setRef(obj.id, Packings.HEIGHT, it?.si?.takeIf { v -> v > 0 }?.let(Packings::text))
+                }
+            } else TrayFields(input, key, length, ctx) { save(it) }
         }
         obj.type == ObjectType.Tank -> {
             val time = unitSet.unitFor(Quantity.Time)
@@ -146,4 +140,33 @@ internal fun EquipmentSizingSection(fs: Flowsheet, obj: SimObject, results: Resu
         (r.notes + r.warnings).forEach { Calculated(it) }
     }
     TextButton(onClick = { actions.setEquipmentSizing(obj.id, null) }) { Text("Remove sizing") }
+}
+
+/** The sieve-tray basis of a tray column (D65, D106). */
+@Composable
+private fun TrayFields(input: EquipmentSizingInput, key: String, length: app.flowstead.core.units.EngUnit, ctx: UnitContext, save: (EquipmentSizingInput) -> Unit) {
+    QuantityField("Tray spacing", input.traySpacing?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_ts", hint = "610 mm (24 in)") {
+        save(input.copy(traySpacing = it?.si?.takeIf { v -> v > 0.2 && v < 1.5 }))
+    }
+    PlainNumber("Design flood", input.floodFraction?.let { it * 100 }, "${key}_ff", "%", hint = "80") {
+        save(input.copy(floodFraction = it?.takeIf { v -> v > 30 && v <= 100 }?.div(100)))
+    }
+    PlainNumber("Downcomer area", input.downcomerFraction?.let { it * 100 }, "${key}_dc", "% of tower", hint = "12") {
+        save(input.copy(downcomerFraction = it?.takeIf { v -> v >= 5 && v <= 40 }?.div(100)))
+    }
+    PlainNumber("Tray efficiency", input.trayEfficiency?.let { it * 100 }, "${key}_eff", "%", hint = "70") {
+        save(input.copy(trayEfficiency = it?.takeIf { v -> v > 10 && v <= 100 }?.div(100)))
+    }
+    PlainNumber("System (foaming) factor", input.systemFactor, "${key}_sf", hint = "1.0 non-foaming") {
+        save(input.copy(systemFactor = it?.takeIf { v -> v > 0.3 && v <= 1.0 }))
+    }
+    QuantityField("Weir height", input.weirHeight?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_hw", hint = "50 mm") {
+        save(input.copy(weirHeight = it?.si?.takeIf { v -> v > 0.015 && v < 0.15 }))
+    }
+    QuantityField("Hole diameter", input.holeDiameter?.let { Spec(it, length.id) }, Quantity.Length, length, ctx, "${key}_dh", hint = "5 mm") {
+        save(input.copy(holeDiameter = it?.si?.takeIf { v -> v > 0.001 && v < 0.025 }))
+    }
+    PlainNumber("Hole area, % of the active area", input.holeFraction?.let { it * 100 }, "${key}_ah", "%", hint = "10") {
+        save(input.copy(holeFraction = it?.takeIf { v -> v >= 4 && v <= 20 }?.div(100)))
+    }
 }
