@@ -56,6 +56,21 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val interactionParameters: List<BinaryParameter> = emptyList(),
+    /**
+     * Enthalpy and entropy basis (D122, D153): null for automatic ([EnthalpyBases.effective]: HYSYS's, unless the flowsheet
+     * types an enthalpy or entropy, which keeps DWSIM's), [EnthalpyBases.FORMATION] or [EnthalpyBases.DWSIM]. It changes
+     * the results, so it is part of the model. Written only when set.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val enthalpyBasis: String? = null,
+    /**
+     * A solve request's streams that get their bubble and dew points (the engine's SaturationFor, D121, D153): null for all,
+     * empty for none. Set only on the copy sent to the engine, never saved; not part of the model.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val saturationFor: List<String>? = null,
     /** Line-sizing limits by service. Not part of the solved model: excluded from [modelHash]. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)

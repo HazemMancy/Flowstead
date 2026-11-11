@@ -131,6 +131,10 @@ data class FluidUi(
     val volumeShift: String? = null,
     /** Null: DWSIM's vapour viscosity; [VapourViscosityMethods.LGE]: Lee–Gonzalez–Eakin. */
     val vapourViscosity: String? = null,
+    /** The enthalpy and entropy basis in force (D153): [EnthalpyBases.FORMATION] (HYSYS's) or [EnthalpyBases.DWSIM]. */
+    val enthalpyBasis: String = app.flowstead.core.model.EnthalpyBases.FORMATION,
+    /** Whether a stream types an enthalpy or entropy (then the automatic basis is DWSIM's). */
+    val typesEnergy: Boolean = false,
     val compounds: List<String> = emptyList(),
     val hypotheticals: List<Hypothetical> = emptyList(),
     val blackOils: List<app.flowstead.core.model.BlackOil> = emptyList(),
@@ -203,6 +207,8 @@ class FluidPackageViewModel @Inject constructor(
             liquidDensity = p?.flowsheet?.liquidDensity,
             volumeShift = p?.flowsheet?.volumeShift,
             vapourViscosity = p?.flowsheet?.vapourViscosity,
+            enthalpyBasis = p?.flowsheet?.let { app.flowstead.core.model.EnthalpyBases.effective(it) } ?: app.flowstead.core.model.EnthalpyBases.FORMATION,
+            typesEnergy = p?.flowsheet?.let { app.flowstead.core.model.EnthalpyBases.typesEnergy(it) } ?: false,
             compounds = p?.flowsheet?.compounds.orEmpty(),
             hypotheticals = p?.flowsheet?.hypotheticals.orEmpty(),
             blackOils = p?.flowsheet?.blackOils.orEmpty(),
@@ -240,6 +246,12 @@ class FluidPackageViewModel @Inject constructor(
     fun setPackage(name: String) = viewModelScope.launch {
         val p = project().first() ?: return@launch
         save(p.flowsheet.copy(propertyPackage = name))
+    }
+
+    /** HYSYS's or DWSIM's enthalpy and entropy basis (D153); results go out of date, as they change. */
+    fun setEnthalpyBasis(basis: String) = viewModelScope.launch {
+        val p = projects.observeProject(projectId).first() ?: return@launch
+        projects.saveFlowsheet(projectId, p.flowsheet.copy(enthalpyBasis = basis))
     }
 
     fun setLiquidDensity(method: String?) = viewModelScope.launch {
@@ -478,6 +490,7 @@ fun FluidPackageScreen(onBack: () -> Unit, viewModel: FluidPackageViewModel = hi
         onNewHypothetical = { viewModel.clearEstimate(); creating = true },
         onEditHypothetical = { viewModel.clearEstimate(); editing = it },
         onLiquidDensity = viewModel::setLiquidDensity,
+        onEnthalpyBasis = viewModel::setEnthalpyBasis,
         onVolumeShift = viewModel::setVolumeShift,
         onVapourViscosity = viewModel::setVapourViscosity,
         onKij = { viewModel.loadKij(); kijOpen = true },
@@ -549,6 +562,7 @@ fun FluidPackageContent(
     onNewHypothetical: () -> Unit = {},
     onEditHypothetical: (Hypothetical) -> Unit = {},
     onLiquidDensity: (String?) -> Unit = {},
+    onEnthalpyBasis: (String) -> Unit = {},
     onVolumeShift: (String?) -> Unit = {},
     onVapourViscosity: (String?) -> Unit = {},
     onKij: () -> Unit = {},
@@ -591,6 +605,32 @@ fun FluidPackageContent(
             item {
                 Text(
                     "Binary interaction parameters come from DWSIM's databanks for the chosen package. Pairs without data use zero. Check them for polar or non-ideal systems.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item { HorizontalDivider() }
+            item { Text("Enthalpy and entropy", style = MaterialTheme.typography.titleMedium) }
+            items(ENTHALPY_BASIS_OPTIONS, key = { "eb_${it.method}" }) { o ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .selectable(selected = ui.enthalpyBasis == o.method, role = Role.RadioButton) { o.method?.let(onEnthalpyBasis) }
+                        .testTag("enthalpy_basis_${o.method}"),
+                ) {
+                    RadioButton(selected = ui.enthalpyBasis == o.method, onClick = null)
+                    Column(Modifier.padding(start = 12.dp)) {
+                        Text(o.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(o.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            item {
+                Text(
+                    "Applies to Peng-Robinson, SRK and Lee-Kesler; steam tables and activity models keep their own reference. Differences such as duties are the same on either basis." +
+                        if (ui.typesEnergy) " A stream here types an enthalpy or entropy, which is read on the basis chosen." else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -801,6 +841,17 @@ fun FluidPackageContent(
 }
 
 private data class DensityOption(val method: String?, val label: String, val detail: String)
+
+private val ENTHALPY_BASIS_OPTIONS = listOf(
+    DensityOption(
+        app.flowstead.core.model.EnthalpyBases.FORMATION, "As HYSYS: heats of formation",
+        "Each compound's ideal-gas heat of formation and absolute entropy are included, so absolute values compare with HYSYS.",
+    ),
+    DensityOption(
+        app.flowstead.core.model.EnthalpyBases.DWSIM, "DWSIM's reference",
+        "Zero enthalpy for an ideal gas at 25 °C. What Flowstead showed before 3.6.",
+    ),
+)
 
 private val LIQUID_DENSITY_OPTIONS = listOf(
     DensityOption(
