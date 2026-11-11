@@ -38,11 +38,17 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         if (!(g.Diameter > 0 && g.Length > 0)) throw new InvalidDataException("Give the vessel's diameter and length");
         if (req.Supply is { } supply) return Pressurize(supply);
         if (!(req.InitialPressure > req.BackPressure)) throw new InvalidDataException("The vessel must start above the back pressure");
-        var target = req.TargetPressure ?? Patm + Math.Min(690e3, 0.5 * (req.InitialPressure - Patm));
+        if (req.DesignPressure is { } dp && !(dp > req.BackPressure)) throw new InvalidDataException("The design pressure must be above the back pressure");
+        if (req.DesignPressure is { } dp2 && req.InitialPressure > dp2 * 1.0001)
+            _warnings.Add($"The vessel starts at {(req.InitialPressure - Patm) / 1e5:0.##} barg, above its design pressure ({(dp2 - Patm) / 1e5:0.##} barg).");
+        var (target, basis) = Target(req);
+        if (target <= req.BackPressure) _warnings.Add($"The target ({(target - Patm) / 1e5:0.##} barg) is not above the back pressure: the vessel cannot reach it.");
+        if (req.TargetPressure is null && req.DesignPressure is null)
+            _warnings.Add("No design pressure given: the target is half the starting gauge pressure. API 521 takes half the design pressure (or 6.9 barg, if lower); give it for that basis.");
         if (req.OrificeDiameter is { } d && d > 0)
         {
             var given = Blowdown(d, target);
-            return given with { OrificeSized = false, Warnings = [.. _warnings.Distinct(), .. given.Warnings] };
+            return given with { OrificeSized = false, TargetBasis = basis, Warnings = [.. _warnings.Distinct(), .. given.Warnings] };
         }
 
         // Size the orifice: blowdown time goes roughly as 1/area, so each run (stopped at the target) scales the area by
@@ -58,7 +64,7 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         var final = Blowdown(diameter, target);
         if (final.TimeToTarget is not { } reached || reached > req.TargetTime * 1.0001)
             _warnings.Add("The orifice could not be sized to reach the target in time; see the curve.");
-        return final with { OrificeSized = true, Warnings = [.. _warnings.Distinct(), .. final.Warnings] };
+        return final with { OrificeSized = true, TargetBasis = basis, Warnings = [.. _warnings.Distinct(), .. final.Warnings] };
     }
 
     // ------------------------------------------------------------------ pressurization
@@ -76,6 +82,7 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
     private DepressuringResult Pressurize(PressurizationSupply sup)
     {
         if (!(sup.Pressure > req.InitialPressure)) throw new InvalidDataException("The supply pressure must be above the pipeline's starting pressure");
+        if (sup.Vessel is not null) return FromVessel(sup);
         if (!(sup.Opening is > 0 and <= 1)) throw new InvalidDataException("The valve opening must be between 0 and 100 %");
         var target = req.TargetPressure ?? req.InitialPressure + 0.95 * (sup.Pressure - req.InitialPressure);
         if (!(target > req.InitialPressure && target < sup.Pressure)) throw new InvalidDataException("The target pressure must lie between the starting and the supply pressures");
@@ -105,6 +112,244 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
             diameter *= Math.Sqrt(Math.Clamp(ratio, 0.2, 5) / 0.97);
         }
         return Done(Blowdown(diameter, target), true);
+    }
+
+    // ------------------------------------------------------------------ pressurization from a fixed volume (D149)
+
+    /// <summary>One side of an equalisation: its vapour and liquid zones, its walls, its geometry and pressure.</summary>
+    private sealed class Inventory
+    {
+        public required VesselGeometry G;
+        public double Volume, Surface, Thickness, Dx, P, Ambient;
+        public double? FixedH;
+        public Zone Vap = new(), Liq = new();
+        public Wall Dry = null!, Wet = null!;
+        public double? PPrev;
+        public double DtPrev;
+        public double Mass => Vap.M + Liq.M;
+        /// <summary>What leaves when it empties: its vapour while it has any.</summary>
+        public Zone Outlet => !Vap.Empty ? Vap : Liq;
+        /// <summary>What takes gas in: its vapour, or the liquid when it has no vapour (the gas then flashes out of it).</summary>
+        public Zone Inlet => Vap.Empty && !Liq.Empty ? Liq : Vap;
+        public double GasT => Vap.Empty ? Liq.T : Vap.T;
+    }
+
+    /// <summary>A vessel or pipe full of [composition] at T, P, in its vapour and liquid zones (a level keeps the liquid to it), as a blowdown starts.</summary>
+    private Inventory Open(Dictionary<string, double> composition, double t0, double p0, VesselGeometry g, double? wall, double designGauge, double? fixedH, double ambient)
+    {
+        var inv = new Inventory { G = g, Volume = ReliefMath.Volume(g), Surface = ReliefMath.Surface(g), P = p0, FixedH = fixedH, Ambient = ambient };
+        inv.Thickness = wall ?? Math.Max(0.006, designGauge * g.Diameter / 2 / (AllowableStress - 0.6 * designGauge));
+        inv.Dx = inv.Thickness / (Nodes - 1);
+        var first = Flash(Normalise(composition), T: t0, P: p0) ?? throw new InvalidDataException("DWSIM could not flash the contents");
+        var m0 = inv.Volume / SpecificVolume(first);
+        foreach (var (key, zone) in new[] { ("vapour", inv.Vap), ("liquid1", inv.Liq) })
+        {
+            if (first.Phases!.GetValueOrDefault(key) is not { } ph) continue;
+            zone.M = m0 * ph.Properties["massFlow"] / first.Properties["massFlow"];
+            var mw = ph.Properties["molecularWeight"] / 1000;
+            zone.Moles = ph.Composition.ToDictionary(c => c.Key, c => c.Value * zone.M / mw);
+            zone.H = zone.M * ph.Properties["massEnthalpy"];
+            zone.Volume = zone.M / ph.Properties["density"];
+            zone.T = t0;
+            zone.Flash = Flash(Fractions(zone.Moles), T: t0, P: p0);
+        }
+        var holdup = g.LiquidLevel > 0 && !inv.Liq.Empty && !inv.Vap.Empty ? Math.Min(ReliefMath.VolumeBelow(g, g.LiquidLevel), 0.95 * inv.Volume) : (double?)null;
+        var total0 = inv.Vap.Volume + inv.Liq.Volume;
+        foreach (var (zone, v) in new[] { (inv.Vap, holdup is { } hl ? inv.Volume - hl : 0), (inv.Liq, holdup ?? 0) })
+        {
+            if (zone.Empty) continue;
+            var scale = holdup is null ? inv.Volume / total0 : v / zone.Volume;
+            foreach (var k in zone.Moles.Keys.ToList()) zone.Moles[k] *= scale;
+            (zone.M, zone.H, zone.Volume) = (zone.M * scale, zone.H * scale, zone.Volume * scale);
+        }
+        inv.Dry = new Wall(t0);
+        inv.Wet = new Wall(t0);
+        SetAreas(inv.Dry, inv.Wet, inv.Liq.Empty ? 0 : inv.Liq.Volume, inv.Surface, g);
+        return inv;
+    }
+
+    /// <summary>
+    /// Flow from the source into the system filled (kg/s): IEC 60534 through a control valve, nozzle flow through an
+    /// orifice (choked or not), both from the source's own state as it falls, against the filled side's pressure.
+    /// </summary>
+    private double Transfer(Inventory src, double pDown, double area)
+    {
+        var sup = _supply!;
+        var ps = src.P;
+        if (!(pDown < ps)) return 0;
+        const double PaPerPsi = 6894.757;
+        var z = src.Outlet;
+        var f = z.Flash!;
+        var rho = 1 / SpecificVolume(f);
+        if (ReferenceEquals(z, src.Vap))
+        {
+            var k = f.Phases?.GetValueOrDefault("vapour")?.Properties.GetValueOrDefault("heatCapacityRatio", 1.3) ?? 1.3;
+            if (sup.Cv is { } cv && cv > 0)
+            {
+                var fk = k / 1.4;
+                var x = Math.Min((ps - pDown) / ps, fk * sup.ValveXt);
+                var y = 1 - x / (3 * fk * sup.ValveXt);
+                return cv * sup.Opening * 63.3 * y * Math.Sqrt(x * (ps / PaPerPsi) * rho * 0.0624280) / 7936.64;
+            }
+            var r = pDown / ps;
+            var crit = Math.Pow(2 / (k + 1), k / (k - 1));
+            return r <= crit
+                ? req.DischargeCoefficient * area * Math.Sqrt(k * rho * ps * Math.Pow(2 / (k + 1), (k + 1) / (k - 1)))
+                : req.DischargeCoefficient * area * Math.Sqrt(2 * rho * ps * k / (k - 1) * (Math.Pow(r, 2 / k) - Math.Pow(r, (k + 1) / k)));
+        }
+        if (sup.Cv is { } cvl && cvl > 0)
+            return cvl * sup.Opening * Math.Sqrt((ps - pDown) / PaPerPsi / (rho / 999.0)) * 6.30902e-5 * rho;
+        return req.DischargeCoefficient * area * Math.Sqrt(2 * rho * (ps - pDown));
+    }
+
+    /// <summary>Heat from an inventory's walls into its zones over dt (none when its coefficient is fixed at 0).</summary>
+    private void WallHeat(Inventory inv, double dt)
+    {
+        var hDry = inv.Vap.Empty || inv.Dry.Area <= 0 ? 0 : Coefficient(inv.Vap, inv.Dry.T[0], inv.P, wetted: false, inv.FixedH);
+        var hWet = inv.Liq.Empty || inv.Wet.Area <= 0 ? 0 : Coefficient(inv.Liq, inv.Wet.T[0], inv.P, wetted: true, inv.FixedH);
+        var qDry = Conduct(inv.Dry, dt, inv.Dx, hDry, inv.Vap.T, req.OutsideCoefficient, inv.Ambient, 0);
+        var qWet = Conduct(inv.Wet, dt, inv.Dx, hWet, inv.Liq.T, req.OutsideCoefficient, inv.Ambient, 0);
+        if (!inv.Vap.Empty) inv.Vap.H += qDry;
+        if (!inv.Liq.Empty) inv.Liq.H += qWet;
+    }
+
+    /// <summary>Its new pressure after mass and heat moved: DWSIM's flashes fill its volume; then rain-out and boil-off.</summary>
+    private bool Resettle(Inventory inv, double dt, bool rising)
+    {
+        var guess = inv.PPrev is { } pp && inv.DtPrev > 0 ? inv.P + (inv.P - pp) * dt / inv.DtPrev : inv.P * (rising ? 1.01 : 0.99);
+        var pNew = Settle(inv.Vap, inv.Liq, inv.Volume, inv.P, rising ? Math.Clamp(guess, inv.P, 2 * inv.P) : Math.Clamp(guess, 0.5 * inv.P, inv.P));
+        if (pNew is not { } p) return false;
+        (inv.PPrev, inv.DtPrev, inv.P) = (inv.P, dt, p);
+        Move(inv.Vap, inv.Liq, "liquid1", p);
+        Move(inv.Liq, inv.Vap, "vapour", p);
+        SetAreas(inv.Dry, inv.Wet, inv.Liq.Empty ? 0 : inv.Liq.Volume, inv.Surface, inv.G);
+        return true;
+    }
+
+    /// <summary>
+    /// Pressurization from a fixed volume (D149): a vessel or pipe of gas (the supply) empties into the system filled
+    /// through the valve or orifice until both pressures equalise. Two inventories, each with its vapour and liquid zones
+    /// and its conducting wall (the source's adiabatic if asked), stepped together: what leaves the source's vapour
+    /// enters the filled side with the same enthalpy (the valve is isenthalpic). The orifice can be sized to reach the
+    /// target in the target time.
+    /// </summary>
+    private DepressuringResult FromVessel(PressurizationSupply sup)
+    {
+        _supply = sup;
+        var target = req.TargetPressure;
+        if (target is { } tp && !(tp > req.InitialPressure && tp < sup.Pressure)) throw new InvalidDataException("The target pressure must lie between the starting pressure and the source's");
+        if (!(sup.Opening is > 0 and <= 1)) throw new InvalidDataException("The valve opening must be between 0 and 100 %");
+        if (sup.Cv is > 0) return Equalise(sup, 0, target) with { OrificeSized = false, Cv = sup.Cv * sup.Opening };
+        if (sup.OrificeDiameter is { } d && d > 0) return Equalise(sup, d, target) with { OrificeSized = false };
+        if (target is null) throw new InvalidDataException("Give the target pressure to size the orifice (or the orifice, or a valve's Cv)");
+        var diameter = 0.025;
+        for (var i = 0; i < 4; i++)
+        {
+            var run = Equalise(sup, diameter, target, stopAtTarget: true);
+            if (run.TimeToTarget is null && run.EqualisingPressure is { } pe && pe < target) return Equalise(sup, diameter, target) with { OrificeSized = false };
+            var ratio = (run.TimeToTarget ?? req.Duration * 2) / req.TargetTime;
+            if (run.TimeToTarget is not null && ratio is > 0.92 and <= 1.0) break;
+            diameter *= Math.Sqrt(Math.Clamp(ratio, 0.2, 5) / 0.97);
+        }
+        return Equalise(sup, diameter, target) with { OrificeSized = true };
+    }
+
+    private DepressuringResult Equalise(PressurizationSupply sup, double diameter, double? target, bool stopAtTarget = false)
+    {
+        _betas.Clear();
+        _warnings.RemoveAll(w => w.StartsWith("DWSIM's flashes did not settle"));
+        var orifice = Math.PI * diameter * diameter / 4;
+        var designT = req.DesignPressure is { } dp ? Math.Max(dp, sup.Pressure) - Patm : 1.1 * (sup.Pressure - Patm);
+        var src = Open(sup.Composition, sup.Temperature, sup.Pressure, sup.Vessel!, sup.WallThickness, 1.1 * (sup.Pressure - Patm), sup.HeatTransferCoefficient,
+            req.AmbientTemperature ?? sup.Temperature);
+        // What is filled starts holding the gas the source sends (its vapour), not the source's whole contents: a
+        // separator's liquid would otherwise start condensed in a line at atmospheric pressure.
+        var sent = src.Vap.Empty ? req.Composition : Fractions(src.Vap.Moles);
+        var tgt = Open(sent, req.InitialTemperature, req.InitialPressure, req.Vessel, req.WallThickness, designT, req.HeatTransferCoefficient,
+            req.AmbientTemperature ?? req.InitialTemperature);
+        var gap0 = src.P - tgt.P;
+        double t = 0;
+        double? reached = null, equalised = null, pEq = null;
+        List<double> time = [0], pr = [tgt.P], tv = [tgt.GasT], tw = [tgt.Dry.T[0]], flow = [], inv = [tgt.Mass], lf = [tgt.Liq.Empty ? 0 : tgt.Liq.Volume / tgt.Volume];
+        List<double?> tl = [tgt.Liq.Empty ? null : tgt.Liq.T], tww = [tgt.Wet.Area > 0 ? tgt.Wet.T[0] : null];
+        List<double> sp = [src.P], st = [src.GasT];
+        double minWall = Math.Min(tgt.Dry.T[0], tgt.Wet.T[0]), srcWall = Math.Min(src.Dry.T[0], src.Wet.T[0]), moved = 0, coldestIn = double.MaxValue;
+        while (t < req.Duration)
+        {
+            var gap = src.P - tgt.P;
+            if (gap <= 1e-3 * gap0) { equalised = t; pEq = 0.5 * (src.P + tgt.P); break; }
+            var w = Transfer(src, tgt.P, orifice);
+            if (flow.Count == 0) flow.Add(w);
+            if (!(w > 0)) break;
+            // Each step moves at most 4 % of the smaller inventory and a fifth of what would equalise the two (the ideal-gas
+            // estimate gap / (Ps/Ms + Pt/Mt)), so the pressures close without crossing.
+            var toEqualise = gap / (src.P / src.Mass + tgt.P / tgt.Mass);
+            var dm = Math.Min(Math.Min(0.04 * Math.Min(src.Mass, tgt.Mass), 0.2 * toEqualise), 0.5 * src.Outlet.M);
+            // The floor is small so the limit on dm, not the clock, decides the step: no step carries the pressures past each other.
+            var dt = Math.Clamp(dm / w, 1e-3, 60);
+            if (t + dt > req.Duration) dt = req.Duration - t;
+            dm = Math.Min(w * dt, 0.5 * src.Outlet.M);
+
+            WallHeat(src, dt);
+            WallHeat(tgt, dt);
+            // What leaves the source zone, its composition and specific enthalpy, enters the filled side.
+            var outZ = src.Outlet;
+            var h = outZ.H / outZ.M;
+            var x = Fractions(outZ.Moles);
+            var mw = outZ.Flash!.Properties["massFlow"] / outZ.Flash.Properties["molarFlow"]; // kg/mol
+            foreach (var k in outZ.Moles.Keys.ToList()) outZ.Moles[k] = Math.Max(0, outZ.Moles[k] - dm / mw * x.GetValueOrDefault(k));
+            outZ.Volume *= 1 - dm / outZ.M;
+            outZ.M -= dm;
+            outZ.H -= dm * h;
+            var into = tgt.Inlet;
+            foreach (var (k, xk) in x) into.Moles[k] = into.Moles.GetValueOrDefault(k) + dm / mw * xk;
+            into.M += dm;
+            into.H += dm * h;
+            moved += dm;
+            // The coldest gas through the valve: the source's leaving gas let down to the filled side's pressure.
+            if (Flash(x, P: tgt.P, H: h)?.Properties.GetValueOrDefault("temperature") is { } tIn && tIn > 0) coldestIn = Math.Min(coldestIn, tIn);
+            if (!Resettle(src, dt, rising: false) || !Resettle(tgt, dt, rising: true))
+            {
+                _warnings.Add($"DWSIM's flashes did not settle at {t + dt:0} s; the pressurization stops there.");
+                break;
+            }
+            t += dt;
+            time.Add(t); pr.Add(tgt.P); tv.Add(tgt.GasT); tl.Add(tgt.Liq.Empty ? null : tgt.Liq.T); tw.Add(tgt.Dry.T[0]); tww.Add(tgt.Wet.Area > 0 ? tgt.Wet.T[0] : null);
+            inv.Add(tgt.Mass); lf.Add(tgt.Liq.Empty ? 0 : tgt.Liq.Volume / tgt.Volume); sp.Add(src.P); st.Add(src.GasT);
+            flow.Add(Transfer(src, tgt.P, orifice));
+            if (tgt.Dry.Area > 0) minWall = Math.Min(minWall, tgt.Dry.T[0]);
+            if (tgt.Wet.Area > 0) minWall = Math.Min(minWall, tgt.Wet.T[0]);
+            if (src.Dry.Area > 0) srcWall = Math.Min(srcWall, src.Dry.T[0]);
+            if (src.Wet.Area > 0) srcWall = Math.Min(srcWall, src.Wet.T[0]);
+            if (reached is null && target is { } tg && tgt.P >= tg) reached = t;
+            if (stopAtTarget && reached is not null) break;
+        }
+
+        var warnings = new List<string>();
+        if (equalised is null && !(stopAtTarget && reached is not null))
+            warnings.Add($"The two sides have not equalised in {req.Duration / 3600:0.#} h ({(src.P - Patm) / 1e5:0.##} and {(tgt.P - Patm) / 1e5:0.##} barg): run longer, or open the valve further.");
+        if (target is { } tg2 && reached is null && pEq is { } pe2 && pe2 < tg2)
+            warnings.Add($"The target ({(tg2 - Patm) / 1e5:0.##} barg) is above the pressure the two sides equalise at ({(pe2 - Patm) / 1e5:0.##} barg): this source cannot reach it.");
+        else if (target is { } tg3 && reached is null)
+            warnings.Add($"The target pressure ({(tg3 - Patm) / 1e5:0.##} barg) is not reached in {req.Duration / 60:0} min.");
+        else if (reached is { } rr && rr > req.TargetTime)
+            warnings.Add($"The target is reached after {rr / 60:0.#} min, later than {req.TargetTime / 60:0} min: open the valve further or enlarge it.");
+        if (srcWall < 244.15) warnings.Add($"The source's inner wall reaches {srcWall - 273.15:0.#} °C as it empties: below −29 °C, check its minimum design metal temperature.");
+        if (minWall < 244.15) warnings.Add($"The filled side's inner wall reaches {minWall - 273.15:0.#} °C: below −29 °C, check its minimum design metal temperature.");
+        if (coldestIn < 244.15) warnings.Add($"Gas leaves the valve at {coldestIn - 273.15:0.#} °C (let down from the source): below −29 °C, check the minimum design metal temperature downstream of the valve.");
+        if (sup.HeatTransferCoefficient is 0) warnings.Add("The source is adiabatic (no heat from its wall): the coldest source, and the lowest pressure it equalises at.");
+        return new DepressuringResult
+        {
+            OrificeDiameter = diameter, TargetPressure = target ?? pEq ?? 0, TimeToTarget = reached ?? (target is null ? equalised : null),
+            MinimumTemperature = tv.Min(), MaximumTemperature = tv.Max(), MinimumWallTemperature = minWall,
+            MinimumInletTemperature = coldestIn < double.MaxValue ? coldestIn : null,
+            WallThickness = tgt.Thickness, PeakFlow = flow.Count > 0 ? flow.Max() : 0,
+            Time = time, Pressure = pr, Temperature = tv, LiquidTemperature = tl, WallTemperature = tw, WettedWallTemperature = tww,
+            MassFlow = flow, Inventory = inv, LiquidVolumeFraction = lf,
+            SourcePressure = sp, SourceTemperature = st, SourceMinimumTemperature = st.Min(), SourceMinimumWallTemperature = srcWall,
+            EqualisingPressure = pEq, TimeToEqualise = equalised, MassTransferred = moved,
+            Warnings = [.. _warnings.Distinct(), .. warnings],
+        };
     }
 
     /// <summary>Flow from the supply into the pipeline at pressure <paramref name="p"/> (kg/s).</summary>
@@ -155,18 +400,34 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         public double Area;
     }
 
+    /// <summary>
+    /// The pressure a blowdown aims at, Pa abs, and why (API 521 §5.20.1): the one given, else the lower of 690 kPa gauge
+    /// and half the design gauge pressure (half the starting gauge pressure when the design pressure is not given).
+    /// </summary>
+    public static (double Pressure, string Basis) Target(DepressuringRequest req)
+    {
+        if (req.TargetPressure is { } t) return (t, "given");
+        var basis = req.DesignPressure ?? req.InitialPressure;
+        var half = 0.5 * (basis - Patm);
+        return half < 690e3
+            ? (Patm + half, req.DesignPressure is null ? "half the starting pressure" : "half the design pressure")
+            : (Patm + 690e3, "6.9 barg");
+    }
+
     private DepressuringResult Blowdown(double diameter, double target, bool stopAtTarget = false)
     {
         var g = req.Vessel;
         var volume = ReliefMath.Volume(g);
         var surface = ReliefMath.Surface(g);
         var orifice = Math.PI * diameter * diameter / 4;
-        var gauge = Math.Max(req.InitialPressure, req.Supply?.Pressure ?? 0) - Patm;
-        var thickness = req.WallThickness ?? Math.Max(0.006, 1.1 * gauge * g.Diameter / 2 / (AllowableStress - 0.6 * 1.1 * gauge));
+        // ASME VIII-1 UG-27(c)(1), t = P·R/(S·E − 0.6·P), at the design pressure when given, else 1.1 × the highest working pressure.
+        var design = (req.DesignPressure is { } dp ? Math.Max(dp, req.Supply?.Pressure ?? 0) - Patm
+            : 1.1 * (Math.Max(req.InitialPressure, req.Supply?.Pressure ?? 0) - Patm));
+        var thickness = req.WallThickness ?? Math.Max(0.006, design * g.Diameter / 2 / (AllowableStress - 0.6 * design));
         var dx = thickness / (Nodes - 1);
         var ambient = req.AmbientTemperature ?? req.InitialTemperature;
         var fixedH = req.HeatTransferCoefficient;
-        _beta = null;
+        _betas.Clear();
 
         // Initial state: the vessel full of the contents at P0, T0, split into its vapour and liquid zones.
         var z0 = Normalise(req.Composition);
@@ -471,18 +732,17 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
         return h;
     }
 
-    private double? _beta;
+    private readonly Dictionary<Zone, double> _betas = [];
 
-    /// <summary>Liquid thermal expansion −(1/ρ) dρ/dT from DWSIM, once per blowdown (compressed, so it stays liquid).</summary>
+    /// <summary>Liquid thermal expansion −(1/ρ) dρ/dT from DWSIM, once per zone and run (compressed, so it stays liquid).</summary>
     private double LiquidExpansion(Zone z, double p)
     {
-        if (_beta is { } b) return b;
+        if (_betas.TryGetValue(z, out var b)) return b;
         var x = Fractions(z.Moles);
         var a = Flash(x, T: z.T - 0.5, P: p * 1.5);
         var c = Flash(x, T: z.T + 0.5, P: p * 1.5);
         var beta = a is null || c is null ? double.NaN : (SpecificVolume(c) - SpecificVolume(a)) / SpecificVolume(a);
-        _beta = double.IsFinite(beta) && beta > 0 ? beta : 1e-3;
-        return _beta.Value;
+        return _betas[z] = double.IsFinite(beta) && beta > 0 ? beta : 1e-3;
     }
 
     /// <summary>Kay's pseudo-critical pressure of the zone (DWSIM's critical pressures), or null if unknown.</summary>
@@ -534,10 +794,11 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
     }
 
     /// <summary>Splits the surface between wetted and dry by the liquid level; wall that changes side brings its temperatures.</summary>
-    private void SetAreas(Wall dry, Wall wet, double liquidVolume, double surface)
+    private void SetAreas(Wall dry, Wall wet, double liquidVolume, double surface, VesselGeometry? geometry = null)
     {
-        var level = Level(liquidVolume);
-        var wetArea = level <= 0 ? 0 : Math.Min(surface, ReliefMath.WettedArea(req.Vessel with { LiquidLevel = level, Elevation = -100 }));
+        var g = geometry ?? req.Vessel;
+        var level = Level(liquidVolume, g);
+        var wetArea = level <= 0 ? 0 : Math.Min(surface, ReliefMath.WettedArea(g with { LiquidLevel = level, Elevation = -100 }));
         var dryArea = surface - wetArea;
         if (wetArea < wet.Area && dryArea > 0)
         {
@@ -553,38 +814,21 @@ public sealed class DepressuringCalc(DepressuringRequest req, Func<Flowsheet, So
     }
 
     /// <summary>Liquid height for a liquid volume: bisection on the vessel's volume up to a level (2:1 heads).</summary>
-    private double Level(double liquidVolume)
+    private double Level(double liquidVolume, VesselGeometry? geometry = null)
     {
         if (liquidVolume <= 0) return 0;
-        double lo = 0, hi = req.Vessel.Lying ? req.Vessel.Diameter : req.Vessel.Length + req.Vessel.Diameter / 2;
+        var g = geometry ?? req.Vessel;
+        double lo = 0, hi = g.Lying ? g.Diameter : g.Length + g.Diameter / 2;
         for (var i = 0; i < 50; i++)
         {
             var m = 0.5 * (lo + hi);
-            if (VolumeTo(m) < liquidVolume) lo = m; else hi = m;
+            if (ReliefMath.VolumeBelow(g, m) < liquidVolume) lo = m; else hi = m;
         }
         return 0.5 * (lo + hi);
     }
 
     /// <summary>The vessel's volume below a height h from its bottom (m³).</summary>
-    private double VolumeTo(double h)
-    {
-        var g = req.Vessel;
-        var r = g.Diameter / 2;
-        if (g.Lying)
-        {
-            var hh = Math.Clamp(h, 0, g.Diameter);
-            var segment = r * r * Math.Acos((r - hh) / r) - (r - hh) * Math.Sqrt(Math.Max(0, 2 * r * hh - hh * hh));
-            // 2:1 heads: the same fraction of their volume as a sphere filled to hh would have.
-            var heads = g.HeadFactor * 2 * Math.PI * Math.Pow(g.Diameter, 3) / 24 * hh * hh * (3 * r - hh) / (4 * r * r * r);
-            return segment * g.Length + heads;
-        }
-        var headDepth = g.Diameter / 4;
-        var headVolume = Math.PI * Math.Pow(g.Diameter, 3) / 24;
-        double Head(double y) => headVolume * Math.Pow(y / headDepth, 2) * (3 - 2 * y / headDepth); // bottom head filled to y
-        if (h <= headDepth) return Head(Math.Max(h, 0));
-        var top = h - headDepth - g.Length;
-        return headVolume + Math.PI * r * r * Math.Min(h - headDepth, g.Length) + (top > 0 ? headVolume - Head(Math.Max(headDepth - top, 0)) : 0);
-    }
+    private double VolumeTo(double h) => ReliefMath.VolumeBelow(req.Vessel, h);
 
     // ------------------------------------------------------------------ helpers
 

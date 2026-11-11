@@ -27,6 +27,7 @@ import app.flowstead.core.api.PvtResult
 import app.flowstead.core.api.SeparatorStage
 import app.flowstead.core.api.SolveResult
 import app.flowstead.core.format.ValueFormat
+import kotlinx.serialization.json.contentOrNull
 import app.flowstead.core.api.OptimiseRequest
 import app.flowstead.core.api.OptimiseResult
 import app.flowstead.core.api.OptimiserTarget
@@ -165,6 +166,16 @@ object Tools {
                     put("temperatureUnit", t.id)
                 }
             }
+            if (tool == "linesizing") {
+                // Line sizing (D148): the schedules and sizes of ASME B36.10M/B36.19M, and the units of its inputs.
+                putJsonArray("schedules") { app.flowstead.core.model.StreamLineSizing.SCHEDULES.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }
+                putJsonArray("sizes") { app.flowstead.core.model.PipeSizes.ALL.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.nps)) } }
+                put("lengthUnit", displayUnits.unitFor(Quantity.Length).id)
+                put("smallUnit", Units.byIdOrNull("mm")?.id ?: displayUnits.unitFor(Quantity.Length).id)
+                // Named only once the stream has a solved vapour fraction (before that the service is not known).
+                r?.let { lineView(f, it, solvedHash) }?.takeIf { v -> !v.stale && v.value(objectId, "vapourFraction") is app.flowstead.core.model.DisplayValue.Calculated }
+                    ?.let { v -> put("service", app.flowstead.core.model.StreamLineSizing.service(f, v, objectId, null).label) }
+            }
             putJsonArray("inhibitors") { HydrateInhibitors.ALL.forEach { addJsonObject { put("id", it); put("label", HydrateInhibitors.label(it)) } } }
             putJsonArray("experiments") {
                 listOf(PvtExperiments.SATURATION, PvtExperiments.CCE, PvtExperiments.CVD, PvtExperiments.DL, PvtExperiments.SEPARATOR)
@@ -206,9 +217,37 @@ object Tools {
             }
             // As FlowsheetViewModel.petroleumProperties (D99).
             "petroleum" -> call("petroleumProperties", enc(PetroleumPropertiesRequest.serializer(), PetroleumPropertiesRequest(f, composition(f, r, solvedHash, objectId))))
+            // Line sizing of the stream (D148): its fluid through a test pipe of each size, in one solve.
+            "linesizing" -> {
+                val view = r?.let { lineView(f, it, solvedHash) } ?: throw EditRejected("Solve the flowsheet first: the line is sized on the stream's solved state")
+                app.flowstead.core.model.StreamLineSizing.problem(f, view, objectId)?.let { throw EditRejected(it) }
+                val input = lineInput(p, ctx)
+                if (app.flowstead.core.model.StreamLineSizing.candidates(input).isEmpty()) throw EditRejected(if (input.design) "No size has that schedule" else "Choose a size and schedule, or give the inside diameter")
+                val only = p["only"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
+                call("solve", enc(Flowsheet.serializer(), app.flowstead.core.model.StreamLineSizing.flowsheet(f, view, objectId, input, only)))
+            }
             else -> err("Unknown tool")
         }
     } catch (e: IllegalArgumentException) { err(e.message ?: "Not possible") }
+
+    private fun lineView(f: Flowsheet, r: SolveResult, solvedHash: String) =
+        app.flowstead.core.model.ResultView(app.flowstead.core.model.StoredSolve(r, solvedHash, 0), f.modelHash())
+
+    /** The page's line sizing inputs: {design, schedule, nps, insideDiameter, roughness, totalLength: {value, unit}, service}. */
+    private fun lineInput(p: JsonObject, ctx: UnitContext) = app.flowstead.core.model.StreamLineSizing.Input(
+        design = p["design"]?.jsonPrimitive?.booleanOrNull ?: true,
+        schedule = p["schedule"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: "40",
+        nps = p["nps"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() },
+        insideDiameter = siOf(p["insideDiameter"], ctx)?.also { if (it <= 0) throw EditRejected("The inside diameter must be positive") },
+        roughness = siOf(p["roughness"], ctx)?.also { if (it < 0) throw EditRejected("Roughness can't be negative") } ?: app.flowstead.core.model.StreamLineSizing.DEFAULT_ROUGHNESS,
+        totalLength = siOf(p["totalLength"], ctx)?.also { if (it <= 0) throw EditRejected("The length must be positive") },
+        service = when (p["service"]?.jsonPrimitive?.contentOrNull) {
+            "gas" -> app.flowstead.core.model.LineService.Gas
+            "liquid" -> app.flowstead.core.model.LineService.Liquid
+            "two_phase" -> app.flowstead.core.model.LineService.TwoPhase
+            else -> null
+        },
+    )
 
     /** The report of the engine's [resultJson] for [tool], as the app's sheet shows it. */
     fun report(tool: String, flowsheetJson: String, solveJson: String?, solvedHash: String, objectId: String, paramsJson: String, resultJson: String): String {
@@ -219,8 +258,77 @@ object Tools {
             "envelope" -> envelope(rep, FlowsheetJson.decodeFromString(PhaseEnvelope.serializer(), resultJson), f, r, solvedHash, objectId, params(paramsJson))
             "pvt" -> pvt(rep, FlowsheetJson.decodeFromString(PvtResult.serializer(), resultJson))
             "petroleum" -> petroleum(rep, FlowsheetJson.decodeFromString(PetroleumPropertiesResult.serializer(), resultJson))
+            "linesizing" -> r?.let { lineSizing(rep, f, lineView(f, it, solvedHash), objectId, lineInput(params(paramsJson), UnitContext(f.atmosphericPressurePa)), FlowsheetJson.decodeFromString(SolveResult.serializer(), resultJson)) }
         }
         return rep.json()
+    }
+
+    /** The test pipes a line sizing answer did not reach (the engine stops at the first that fails): solve them again, each alone. */
+    fun lineUnsolved(flowsheetJson: String, paramsJson: String, resultJson: String): String = buildJsonArray {
+        val f = fs(flowsheetJson)
+        app.flowstead.core.model.StreamLineSizing.unsolved(lineInput(params(paramsJson), UnitContext(f.atmosphericPressurePa)), FlowsheetJson.decodeFromString(SolveResult.serializer(), resultJson))
+            .forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) }
+    }.toString()
+
+    /** Two line sizing answers as one. */
+    fun lineMerge(aJson: String, bJson: String): String = FlowsheetJson.encodeToString(SolveResult.serializer(),
+        app.flowstead.core.model.StreamLineSizing.merge(FlowsheetJson.decodeFromString(SolveResult.serializer(), aJson), FlowsheetJson.decodeFromString(SolveResult.serializer(), bJson)))
+
+    /**
+     * Line sizing's rows in SI (D148), for the automation interface: {service, criteriaSet, recommended, rows: [{size, nps,
+     * schedule, insideDiameter_m, error, gradient_Pa_m, frictionGradient_Pa_m, velocity_m_s, momentumFlux_kg_m_s2, mach,
+     * totalDrop_Pa, passes, failed: [labels]}]}.
+     */
+    fun lineRows(flowsheetJson: String, solveJson: String?, solvedHash: String, objectId: String, paramsJson: String, resultJson: String): String {
+        val f = fs(flowsheetJson)
+        val r = solve(solveJson) ?: return err("Solve the flowsheet first")
+        val o = app.flowstead.core.model.StreamLineSizing.outcome(f, lineView(f, r, solvedHash), objectId, lineInput(params(paramsJson), UnitContext(f.atmosphericPressurePa)),
+            FlowsheetJson.decodeFromString(SolveResult.serializer(), resultJson))
+        fun JsonObjectBuilderNum(b: kotlinx.serialization.json.JsonObjectBuilder, k: String, v: Double?) { if (v != null) b.put(k, v) }
+        return buildJsonObject {
+            put("service", o.service.label); put("criteriaSet", o.criteriaSet); put("recommended", o.recommended?.candidate?.label)
+            putJsonArray("rows") {
+                o.rows.forEach { row ->
+                    addJsonObject {
+                        put("size", row.candidate.label); put("nps", row.candidate.nps); put("schedule", row.candidate.schedule)
+                        put("insideDiameter_m", row.candidate.insideDiameter); row.error?.let { put("error", it) }
+                        JsonObjectBuilderNum(this, "gradient_Pa_m", row.gradient); JsonObjectBuilderNum(this, "frictionGradient_Pa_m", row.frictionGradient)
+                        JsonObjectBuilderNum(this, "velocity_m_s", row.velocity); JsonObjectBuilderNum(this, "momentumFlux_kg_m_s2", row.momentumFlux)
+                        JsonObjectBuilderNum(this, "mach", row.mach); JsonObjectBuilderNum(this, "totalDrop_Pa", row.totalDrop); row.totalError?.let { put("totalError", it) }
+                        put("passes", row.passes)
+                        putJsonArray("failed") { row.checks.filter { !it.passes }.forEach { add(kotlinx.serialization.json.JsonPrimitive(it.label)) } }
+                    }
+                }
+            }
+        }.toString()
+    }
+
+    /** The line sizing table (D148): every size tried, the engine's numbers, the criteria's verdict, the smallest that passes. */
+    private fun lineSizing(rep: Report, f: Flowsheet, view: app.flowstead.core.model.ResultView, id: String, input: app.flowstead.core.model.StreamLineSizing.Input, solved: SolveResult) {
+        val o = app.flowstead.core.model.StreamLineSizing.outcome(f, view, id, input, solved)
+        val c = rep.ctx
+        fun u(q: Quantity) = displayUnits.unitFor(q)
+        fun n(v: Double?, q: Quantity) = v?.let { ValueFormat.number(u(q).fromSi(it, c), u(q).decimals) } ?: "—"
+        val total = input.totalLength
+        rep.heading(when {
+            o.recommended != null -> "${if (input.design) "Smallest size that meets the criteria" else "Meets the criteria"}: ${o.recommended.candidate.label}" + (o.recommended.candidate.schedule?.let { ", schedule $it" } ?: "")
+            !o.criteriaSet -> "Line sizing: ${o.service.label.lowercase()} service"
+            input.design -> "No size in schedule ${input.schedule} meets the criteria"
+            else -> "Does not meet the criteria"
+        })
+        val head = listOf("Size", "ID, mm", "ΔP, ${u(Quantity.PressureGradient).symbol}", "Velocity, ${u(Quantity.Velocity).symbol}", "ρv², ${u(Quantity.MomentumFlux).symbol}", "Mach") +
+            (if (total != null) listOf("ΔP over ${rep.withUnit(total, Quantity.Length)}, ${u(Quantity.PressureDifference).symbol}") else emptyList()) +
+            (if (o.criteriaSet) listOf("Criteria") else emptyList())
+        rep.table(head, o.rows.map { row ->
+            val base = listOf(row.candidate.label + if (row === o.recommended) " ✓" else "", ValueFormat.number(row.candidate.insideDiameter * 1000, 1))
+            if (row.error != null) base + listOf(row.error) + List(head.size - 3) { "" }
+            else base + listOf(n(row.gradient, Quantity.PressureGradient), n(row.velocity, Quantity.Velocity), n(row.momentumFlux, Quantity.MomentumFlux), row.mach?.let { ValueFormat.number(it, 3) } ?: "—") +
+                (if (total != null) listOf(row.totalError ?: n(row.totalDrop, Quantity.PressureDifference)) else emptyList()) +
+                (if (o.criteriaSet) listOf(if (row.passes) "pass" else row.checks.filter { !it.passes }.joinToString("; ") { it.label }.ifEmpty { "—" }) else emptyList())
+        })
+        if (!o.criteriaSet) rep.note("No criteria set for ${o.service.label.lowercase()} lines: give the project's limits above for a verdict and a recommended size.", "warn")
+        rep.note("From the stream's solved state (${o.service.label.lowercase()} service): DWSIM's ΔP through a horizontal, adiabatic test pipe of each size, ${ValueFormat.number(app.flowstead.core.model.StreamLineSizing.TEST_LENGTH, 0)} m long for the gradient (its average over those metres: near choking, a gas's gradient climbs steeply along the pipe) and the highest velocity and ρv²" +
+            (if (total != null) ", and one of the whole length for its ΔP (worked out along it)" else "") + "; roughness ${ValueFormat.number(input.roughness * 1000, 4)} mm. No fittings or elevation: add a pipe segment for those.")
     }
 
     private fun envelope(rep: Report, env: PhaseEnvelope, f: Flowsheet, r: SolveResult?, solvedHash: String, id: String, p: JsonObject) {

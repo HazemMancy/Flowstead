@@ -11,7 +11,7 @@ Flowstead is an Android app (and a browser version, for iPhone, iPad and desktop
 flowsheets on a phone: flashes, separators, compressor and cooler trains, valve
 letdowns, pipelines, recycle loops, columns and reactors, in steady state and,
 since 2.0, through time with PID control. Every calculation runs
-on the open-source **DWSIM** 10.2.12 engine, built from its source and embedded in
+on the open-source **DWSIM** 10.2.15 engine, built from its source and embedded in
 the app (offline) or on a server you host. Flowstead never shows a number the engine did not return.
 
 **[What Flowstead adds to DWSIM, what works like HYSYS, and where it still differs →](docs/features/flowstead-features.md)**
@@ -53,7 +53,7 @@ docs/          plan, decisions, status, reports
 ## Quick start (engine spike)
 
 ```bash
-engine/scripts/fetch-dwsim.sh            # builds DWSIM 10.2.12 from its pinned source (.NET 10 SDK)
+engine/scripts/fetch-dwsim.sh            # builds DWSIM 10.2.15 from its pinned source (.NET 10 SDK)
 dotnet run --project engine/src/Flowstead.Engine.Spike -c Release
 ```
 

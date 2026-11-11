@@ -50,7 +50,7 @@ public sealed class ApiTests(EngineFixture engine, ITestOutputHelper output)
     {
         var h = await EngineFixture.Json<EngineHealth>(await engine.Authed().GetAsync("/health"));
         Assert.Equal("ok", h.Status);
-        Assert.Equal("10.2.12", h.DwsimVersion);
+        Assert.Equal("10.2.15", h.DwsimVersion);
     }
 
     [Fact]

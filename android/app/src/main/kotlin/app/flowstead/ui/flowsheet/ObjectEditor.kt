@@ -36,7 +36,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.Slider
@@ -44,7 +43,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -101,6 +99,7 @@ import app.flowstead.core.model.Specification
 import app.flowstead.core.model.StreamCopy
 import app.flowstead.core.model.CompositionBasis
 import app.flowstead.core.model.displayName
+import app.flowstead.core.model.modelHash
 import app.flowstead.core.model.isFeed
 import app.flowstead.core.model.obj
 import app.flowstead.core.model.streamAt
@@ -160,6 +159,8 @@ interface EditorActions {
     fun setCompositionBasis(basis: CompositionBasis) = Unit
     /** Asks the engine for the molecular weights and liquid densities a mass or volume basis needs. */
     fun loadCompoundBasis() = Unit
+    /** Line sizing of a stream (D148): the engine's answer comes back through [onResult]. */
+    fun streamLineSizing(streamId: String, input: app.flowstead.core.model.StreamLineSizing.Input, onResult: (LineSizingUi) -> Unit) = Unit
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -181,8 +182,10 @@ fun ObjectEditorSheet(
     compoundBasis: CompoundBasisUi? = null,
     /** Why the solver leaves this object out (D83), or null when it is ready. */
     notReady: String? = null,
+    modifier: Modifier = Modifier,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    // Over the flowsheet, not blocking it (D146): tap another object and its editor replaces this one.
+    FloatingSheet(title = "${obj.tag} · ${obj.type.displayName()}", onDismiss = onDismiss, modifier = modifier, testTag = "editor_sheet") {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -198,7 +201,9 @@ fun ObjectEditorSheet(
             HorizontalDivider()
             when (obj.type) {
                 ObjectType.MaterialStream ->
-                    if (fs.isFeed(obj)) FeedStreamEditor(fs, obj, results, unitSet, ctx, actions, compositionBasis, compoundBasis) else {
+                    if (fs.isFeed(obj)) FeedStreamEditor(fs, obj, results, unitSet, ctx, actions, compositionBasis, compoundBasis)
+                    else if (app.flowstead.core.model.Backward.canTake(fs, obj)) ProductStreamEditor(fs, obj, unitSet, ctx, actions, compositionBasis, compoundBasis)
+                    else {
                         Calculated("This stream is calculated from the unit it comes from.")
                         DuplicateButton(obj, actions, "Duplicate as a feed (its solved T, P, flow and composition)")
                     }
@@ -774,6 +779,7 @@ private fun ResultsSection(
     UnitMessages(results, obj.id)
     if (stream) {
         StreamResults(fs, obj.id, results, unitSet, ctx)
+        LineSizingSection(obj, results, fs.modelHash(), unitSet, ctx, actions)
         EnvelopeSection(obj, results, envelope, unitSet, ctx, actions)
         PetroleumSection(obj, petroleum, unitSet, ctx, actions)
         return
@@ -894,6 +900,28 @@ private fun FeedStreamEditor(
     CompositionEditor(fs, obj, actions, basis, basisData)
     DuplicateButton(obj, actions, "Duplicate stream (all its data)")
 }
+
+/**
+ * A product of a valve, heater, cooler, pump, compressor, expander or pipe (D151): calculated, or given what it must be,
+ * and its feed upstream found, as HYSYS solves backward.
+ */
+@Composable
+private fun ProductStreamEditor(
+    fs: Flowsheet, obj: SimObject, unitSet: UnitSet, ctx: UnitContext, actions: EditorActions,
+    basis: CompositionBasis, basisData: CompoundBasisUi?,
+) {
+    Calculated(PRODUCT_NOTE)
+    SectionLabel("What it must be (optional)")
+    for (key in app.flowstead.core.model.Backward.STATE) SpecField(obj, key, unitSet, ctx, actions, optionalHint = "calculated if empty")
+    for (key in app.flowstead.core.model.Backward.FLOW) SpecField(obj, key, unitSet, ctx, actions, optionalHint = "from its feed if empty")
+    SectionLabel("Composition (optional)")
+    CompositionEditor(fs, obj, actions, basis, basisData)
+    DuplicateButton(obj, actions, "Duplicate as a feed (its solved T, P, flow and composition)")
+}
+
+internal const val PRODUCT_NOTE = "Calculated from the unit it comes from. Or give what it must be: its temperature, pressure or vapour " +
+    "fraction, its flow, its composition. Flowstead then finds what its feed upstream lacks, as HYSYS solves backward " +
+    "(through valves, heaters, coolers, pumps, compressors, expanders and pipes)."
 
 @Composable
 private fun DuplicateButton(obj: SimObject, actions: EditorActions, label: String) {
@@ -1257,6 +1285,8 @@ fun ObjectQuickActions(
     onTable: (() -> Unit)? = null,
     hasTable: Boolean = false,
     onDuplicate: (() -> Unit)? = null,
+    /** Puts the unit in a new sub-flowsheet (D133). */
+    onGroup: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -1267,6 +1297,7 @@ fun ObjectQuickActions(
                     "Edit" to onEdit,
                     onDuplicate?.let { "Duplicate (all its data)" to it },
                     onTable?.let { (if (hasTable) "Edit table on flowsheet…" else "Show table on flowsheet…") to it },
+                    onGroup?.let { "Put in a new sub-flowsheet" to it },
                     "Disconnect all" to onDisconnect,
                     "Delete" to onDelete,
                 ).forEach { (label, action) ->

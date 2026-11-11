@@ -53,10 +53,27 @@ data class PressurizationCase(
     val opening: Double = 1.0,
     val valveXt: Double = 0.72,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
-    /** Null: 95 % of the way to the supply pressure. */
+    /** Null: 95 % of the way to the supply pressure (a header); to where the two sides equalise (a fixed volume). */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val targetPressure: Double? = null,
     val targetTime: Double = 3600.0,
     val duration: Double = 4 * 3600.0,
+    /**
+     * Where the gas comes from (D149): [PressurizationSources.HEADER], a supply at constant pressure (the stream
+     * [supplyId]); or [PressurizationSources.VESSEL], a fixed volume, the vessel, tank or pipe [sourceId] (its size
+     * [sourceVessel] for a vessel, a pipe's own), its contents from the solve, emptying until the pressures equalise.
+     */
+    val source: String = PressurizationSources.HEADER,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val sourceId: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val sourceVessel: VesselGeometry? = null,
+    /** The source's starting pressure, Pa abs; null: its pressure in the solve. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val sourcePressure: Double? = null,
+    /** No heat from the source's wall: the coldest source (wall heat is the default). */
+    val sourceAdiabatic: Boolean = false,
+    /** A vessel or tank filled instead of pipes (D149): the object [fillId] (its size [fillVessel]); null: the pipes and sections. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val fillId: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val fillVessel: VesselGeometry? = null,
+    /** [PressurizationValves.FLOWSHEET]: the control valve (its rated or required Cv, its xT) or orifice plate (its bore) on the flowsheet. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val valveId: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val result: DepressuringResult? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val resultHash: String? = null,
 )
@@ -65,6 +82,13 @@ object PressurizationValves {
     const val SIZE = "size"
     const val ORIFICE = "orifice"
     const val CV = "cv"
+    /** A control valve or restriction orifice already on the flowsheet (D149). */
+    const val FLOWSHEET = "flowsheet"
+}
+
+object PressurizationSources {
+    const val HEADER = "header"
+    const val VESSEL = "vessel"
 }
 
 /**
@@ -100,6 +124,11 @@ data class DepressuringCase(
     val backPressure: Double = 101325.0,
     /** Null: Flowstead sizes the orifice to the 15-minute target. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
+    /**
+     * The vessel's design pressure, Pa abs (D142). API 521 §5.20.1 aims a blowdown at the lower of 6.9 barg and half of
+     * it; null: half the starting gauge pressure, with a warning. It also sets the ASME wall thickness, unless given.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val designPressure: Double? = null,
     val withFire: Boolean = false,
     /** Null: Flowstead's correlations (natural convection, nucleate boiling); 0: adiabatic. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val heatTransferCoefficient: Double? = null,
@@ -162,32 +191,86 @@ object Safety {
         return if (x.isEmpty()) null else Contents(x, t, p, null)
     }
 
+    /** A vessel's or pipe's volume, m³: the shell and, for a vessel, two 2:1 heads (the engine's ReliefMath.Volume). */
+    fun volume(g: VesselGeometry): Double = kotlin.math.PI * g.diameter * g.diameter / 4 * g.length + (if (g.pipe) 0.0 else 2 * kotlin.math.PI * g.diameter * g.diameter * g.diameter / 24)
+
+    /** A vessel, tank or pipe's volume and wall: a pipe its own (its size), a vessel the dimensions given. */
+    private fun volumeOf(fs: Flowsheet, id: String?, given: VesselGeometry?): Pair<VesselGeometry, Double?>? {
+        val o = fs.objects.firstOrNull { it.id == id } ?: return null
+        return pipeGeometry(o) ?: given?.let { it to null }
+    }
+
+    /** What is filled: a vessel or tank when [PressurizationCase.fillId] is set, else the pipes and sections as one network. */
+    fun filled(fs: Flowsheet, c: PressurizationCase): Pair<VesselGeometry, Double?>? =
+        if (c.fillId != null) volumeOf(fs, c.fillId, c.fillVessel) else network(sections(fs, c))
+
+    /** The source's state: a header's stream, or a fixed volume's contents from the solve (its pressure the one given, if any). */
+    fun sourceState(fs: Flowsheet, results: ResultView, c: PressurizationCase): Contents? =
+        if (c.source == PressurizationSources.VESSEL) contents(fs, results, c.sourceId)?.let { it.copy(pressure = c.sourcePressure ?: it.pressure) }
+        else streamState(fs, results, c.supplyId)
+
+    /** A control valve's Cv (its rated one, else the one the solve required) and xT, or an orifice plate's bore, on the flowsheet (D149). */
+    data class FlowsheetValve(val tag: String, val cv: Double? = null, val xt: Double = 0.72, val orificeDiameter: Double? = null, val ratedCv: Boolean = false)
+
+    fun flowsheetValve(fs: Flowsheet, results: ResultView, id: String?): FlowsheetValve? {
+        val o = fs.objects.firstOrNull { it.id == id } ?: return null
+        return when (o.type) {
+            ObjectType.Valve -> {
+                val rated = o.specs[SpecKey.RATED_CV]?.si?.takeIf { it > 0 }
+                val required = (results.value(o.id, "requiredCv") as? DisplayValue.Calculated)?.si?.takeIf { it > 0 && !results.stale }
+                FlowsheetValve(o.tag, cv = rated ?: required ?: return null, xt = o.specs[SpecKey.VALVE_XT]?.si ?: 0.72, ratedCv = rated != null)
+            }
+            ObjectType.OrificePlate -> FlowsheetValve(o.tag, orificeDiameter = o.specs[SpecKey.ORIFICE_DIAMETER]?.si?.takeIf { it > 0 } ?: return null)
+            else -> null
+        }
+    }
+
+    /** What may be a pressurization's valve on the flowsheet: its control valves and orifice plates. */
+    fun valveChoices(fs: Flowsheet): List<SimObject> = fs.objects.filter { it.type == ObjectType.Valve || it.type == ObjectType.OrificePlate }
+
     fun pressurizationProblem(fs: Flowsheet, results: ResultView, c: PressurizationCase): String? {
-        val supply = streamState(fs, results, c.supplyId)
+        val vessel = c.source == PressurizationSources.VESSEL
+        val supply = sourceState(fs, results, c)
+        val fv = flowsheetValve(fs, results, c.valveId)
         return when {
-            c.supplyId == null -> "Choose the supply stream"
-            sections(fs, c).isEmpty() -> "Choose the pipe segments to fill or add pipe sections (inside diameter and length)"
-            results.stale || supply == null -> "Solve the flowsheet first: the supply's state comes from the solve"
-            supply.pressure <= c.initialPressure -> "The supply must be above the pipeline's starting pressure"
+            !vessel && c.supplyId == null -> "Choose the supply stream"
+            vessel && (c.sourceId == null || fs.objects.none { it.id == c.sourceId && it.type in PROTECTABLE }) -> "Choose the source vessel, tank or pipe"
+            vessel && volumeOf(fs, c.sourceId, c.sourceVessel) == null -> "Give the source vessel's dimensions (a pipe needs its inside diameter and length)"
+            vessel && (c.sourceId in c.pipeIds || c.sourceId == c.fillId) -> "The source cannot be what it fills"
+            c.fillId != null && filled(fs, c) == null -> "Give the dimensions of the vessel filled"
+            c.fillId == null && sections(fs, c).isEmpty() -> "Choose the pipe segments to fill or add pipe sections (inside diameter and length), or a vessel"
+            results.stale || supply == null -> "Solve the flowsheet first: the ${if (vessel) "source's contents come" else "supply's state comes"} from the solve"
+            supply.pressure <= c.initialPressure -> "The ${if (vessel) "source" else "supply"} must be above the starting pressure of what it fills"
             c.valve == PressurizationValves.CV && !((c.cv ?: 0.0) > 0) -> "Give the control valve's Cv"
             c.valve == PressurizationValves.ORIFICE && !((c.orificeDiameter ?: 0.0) > 0) -> "Give the orifice diameter"
+            c.valve == PressurizationValves.FLOWSHEET && c.valveId == null -> "Choose the control valve or restriction orifice on the flowsheet"
+            c.valve == PressurizationValves.FLOWSHEET && fv == null ->
+                "${fs.objects.firstOrNull { it.id == c.valveId }?.tag ?: "That valve"} has no ${if (fs.objects.firstOrNull { it.id == c.valveId }?.type == ObjectType.OrificePlate) "orifice diameter" else "Cv: give its rated Cv, or solve the flowsheet for the Cv it needs"}"
+            vessel && c.valve == PressurizationValves.SIZE && c.targetPressure == null -> "Give the target pressure to size the orifice (or choose a valve or orifice)"
             c.targetPressure != null && !(c.targetPressure > c.initialPressure && c.targetPressure < supply.pressure) ->
-                "The target must lie between the starting and the supply pressures"
+                "The target must lie between the starting pressure and the ${if (vessel) "source's" else "supply's"}"
             else -> null
         }
     }
 
     fun pressurizationRequest(fs: Flowsheet, results: ResultView, c: PressurizationCase): DepressuringRequest {
-        val supply = streamState(fs, results, c.supplyId) ?: error("No supply")
-        val (geometry, wall) = network(sections(fs, c)) ?: error("No pipes")
+        val vessel = c.source == PressurizationSources.VESSEL
+        val supply = sourceState(fs, results, c) ?: error("No supply")
+        val (geometry, wall) = filled(fs, c) ?: error("Nothing to fill")
+        val fv = if (c.valve == PressurizationValves.FLOWSHEET) flowsheetValve(fs, results, c.valveId) else null
+        val source = if (vessel) volumeOf(fs, c.sourceId, c.sourceVessel) else null
         return DepressuringRequest(
-            flowsheet = fs, composition = supply.composition, initialPressure = c.initialPressure,
+            flowsheet = SubflowsheetSolve.forObject(fs, if (vessel) c.sourceId else c.supplyId), composition = supply.composition, initialPressure = c.initialPressure,
             initialTemperature = c.initialTemperature ?: supply.temperature, vessel = geometry, wallThickness = wall,
             targetPressure = c.targetPressure, targetTime = c.targetTime, duration = c.duration,
             supply = PressurizationSupply(
                 supply.composition, supply.pressure, supply.temperature,
-                cv = c.cv.takeIf { c.valve == PressurizationValves.CV }, opening = c.opening, valveXt = c.valveXt,
-                orificeDiameter = c.orificeDiameter.takeIf { c.valve == PressurizationValves.ORIFICE },
+                cv = fv?.cv ?: c.cv.takeIf { c.valve == PressurizationValves.CV },
+                // A required Cv from the solve is the valve as it runs: fully its Cv. A rated one takes the opening.
+                opening = if (fv != null && fv.cv != null && !fv.ratedCv) 1.0 else c.opening,
+                valveXt = fv?.xt ?: c.valveXt,
+                orificeDiameter = fv?.orificeDiameter ?: c.orificeDiameter.takeIf { c.valve == PressurizationValves.ORIFICE },
+                vessel = source?.first, wallThickness = source?.second, heatTransferCoefficient = if (vessel && c.sourceAdiabatic) 0.0 else null,
             ),
         )
     }
@@ -195,16 +278,37 @@ object Safety {
     /** The vessel's contents in normal operation: its first inlet stream's solved state and composition. */
     data class Contents(val composition: Map<String, Double>, val temperature: Double, val pressure: Double, val massFlow: Double?)
 
+    /**
+     * With one feed, its state and composition. With several, the vessel holds their mixture: the molar-flow-weighted
+     * composition, every feed's mass flow (a blocked outlet relieves them all, API 521 §4.4.2), and the vessel's own
+     * temperature and pressure, read from its first outlet stream (the engine's flash of the mixed feed).
+     */
     fun contents(fs: Flowsheet, results: ResultView, protectedId: String?): Contents? {
         val id = protectedId ?: return null
-        val feed = fs.connections.filter { it.toObject == id }.map { it.fromObject }
-            .firstOrNull { s -> fs.objects.any { it.id == s && it.type == ObjectType.MaterialStream } } ?: id.takeIf { fs.objects.any { o -> o.id == id && o.type == ObjectType.MaterialStream } }
-            ?: return null
-        val t = (results.value(feed, "temperature") as? DisplayValue.Calculated)?.si ?: return null
-        val p = (results.value(feed, "pressure") as? DisplayValue.Calculated)?.si ?: return null
-        val x = fs.compounds.associateWith { c -> (results.composition(feed, Phases.OVERALL, c) as? DisplayValue.Calculated)?.si ?: 0.0 }.filterValues { it > 0 }
+        fun calc(obj: String, key: String) = (results.value(obj, key) as? DisplayValue.Calculated)?.si
+        fun isStream(s: String) = fs.objects.any { it.id == s && it.type == ObjectType.MaterialStream }
+        fun composition(s: String) = fs.compounds.associateWith { c -> (results.composition(s, Phases.OVERALL, c) as? DisplayValue.Calculated)?.si ?: 0.0 }
+        val feeds = fs.connections.filter { it.toObject == id }.map { it.fromObject }.filter(::isStream).distinct()
+            .ifEmpty { listOfNotNull(id.takeIf(::isStream)) }
+        if (feeds.isEmpty()) return null
+        if (feeds.size == 1) {
+            val feed = feeds.single()
+            val t = calc(feed, "temperature") ?: return null
+            val p = calc(feed, "pressure") ?: return null
+            val x = composition(feed).filterValues { it > 0 }
+            if (x.isEmpty()) return null
+            return Contents(x, t, p, calc(feed, "massFlow"))
+        }
+        val flows = feeds.map { calc(it, "molarFlow") ?: return null }
+        val total = flows.sum()
+        if (!(total > 0)) return null
+        val x = fs.compounds.associateWith { c -> feeds.indices.sumOf { i -> flows[i] * (composition(feeds[i])[c] ?: 0.0) } / total }.filterValues { it > 0 }
         if (x.isEmpty()) return null
-        val w = (results.value(feed, "massFlow") as? DisplayValue.Calculated)?.si
+        val outlet = fs.connections.filter { it.fromObject == id }.map { it.toObject }.firstOrNull(::isStream)
+        val state = outlet?.takeIf { calc(it, "temperature") != null && calc(it, "pressure") != null } ?: feeds.first()
+        val t = calc(state, "temperature") ?: return null
+        val p = calc(state, "pressure") ?: return null
+        val w = feeds.map { calc(it, "massFlow") }.takeIf { m -> m.all { it != null } }?.sumOf { it!! }
         return Contents(x, t, p, w)
     }
 
@@ -281,14 +385,25 @@ object Safety {
         c.protectedId == null || fs.objects.none { it.id == c.protectedId } -> "Choose the vessel or pipe"
         geometry(fs, c.protectedId, c.vessel) == null -> "Give the vessel's dimensions (a pipe needs its inside diameter and length)"
         results.stale || contents(fs, results, c.protectedId) == null -> "Solve the flowsheet first: the vessel's contents come from the solve"
+        c.designPressure != null && c.designPressure <= c.backPressure -> "The design pressure must be above the back pressure"
         else -> null
+    }
+
+    /** Why the target is what it is, for the result (the engine's basis in words; API 521 §5.20.1). */
+    fun targetBasisText(basis: String?): String? = when (basis) {
+        "given" -> "as given"
+        "6.9 barg" -> "6.9 barg, the lower of the two (API 521)"
+        "half the design pressure" -> "half the design gauge pressure, the lower of the two (API 521)"
+        "half the starting pressure" -> "half the starting gauge pressure: give the design pressure for API 521's basis"
+        null -> null
+        else -> basis
     }
 
     fun depressuringRequest(fs: Flowsheet, results: ResultView, c: DepressuringCase): DepressuringRequest {
         val contents = contents(fs, results, c.protectedId) ?: error("No contents")
         return DepressuringRequest(
-            flowsheet = fs, composition = contents.composition, initialPressure = contents.pressure, initialTemperature = contents.temperature,
-            vessel = geometry(fs, c.protectedId, c.vessel)!!, backPressure = c.backPressure, orificeDiameter = c.orificeDiameter,
+            flowsheet = SubflowsheetSolve.forObject(fs, c.protectedId), composition = contents.composition, initialPressure = contents.pressure, initialTemperature = contents.temperature,
+            vessel = geometry(fs, c.protectedId, c.vessel)!!, backPressure = c.backPressure, orificeDiameter = c.orificeDiameter, designPressure = c.designPressure,
             wallThickness = fs.objects.firstOrNull { it.id == c.protectedId }?.let { pipeGeometry(it)?.second },
             fire = if (c.withFire) ReliefScenario(ReliefScenarioKinds.FIRE) else null, heatTransferCoefficient = c.heatTransferCoefficient,
             ambientTemperature = c.ambientTemperature,
@@ -301,10 +416,16 @@ object Safety {
         if (t.size < 2) return emptyList()
         fun ok(y: List<Double>) = y.size == t.size
         return listOfNotNull(
-            Plot("Pressure", "Time", Quantity.Time, "Pressure", Quantity.Pressure, listOf(PlotSeries(if (filling) "Pipeline" else "Vessel", t, r.pressure)),
-                markers = listOfNotNull(r.timeToTarget?.let { PlotMarker("Target", it, r.targetPressure) })).takeIf { ok(r.pressure) },
+            Plot("Pressure", "Time", Quantity.Time, "Pressure", Quantity.Pressure, listOfNotNull(
+                PlotSeries(if (filling) "Filled" else "Vessel", t, r.pressure),
+                r.sourcePressure?.takeIf { ok(it) }?.let { PlotSeries("Source", t, it) },
+            ), markers = listOfNotNull(
+                r.timeToTarget?.let { PlotMarker("Target", it, r.targetPressure) }.takeIf { r.equalisingPressure == null || r.timeToTarget != r.timeToEqualise },
+                r.timeToEqualise?.let { te -> r.equalisingPressure?.let { PlotMarker("Equalised", te, it) } },
+            )).takeIf { ok(r.pressure) },
             Plot("Temperature", "Time", Quantity.Time, "Temperature", Quantity.Temperature, listOfNotNull(
-                PlotSeries("Vapour", t, r.temperature).takeIf { ok(r.temperature) },
+                PlotSeries(if (r.sourceTemperature != null) "Filled, gas" else "Vapour", t, r.temperature).takeIf { ok(r.temperature) },
+                r.sourceTemperature?.takeIf { ok(it) }?.let { PlotSeries("Source, gas", t, it) },
                 partial("Liquid", t, r.liquidTemperature, dashed = false),
                 PlotSeries("Dry wall", t, r.wallTemperature, dashed = true).takeIf { ok(r.wallTemperature) },
                 partial("Wetted wall", t, r.wettedWallTemperature, dashed = true),

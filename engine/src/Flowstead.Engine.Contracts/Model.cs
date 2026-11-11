@@ -205,6 +205,8 @@ public sealed record PipeSection
     public double? Roughness { get; init; }
     /// <summary>Straight run: calculation increments (default 10).</summary>
     public int? Increments { get; init; }
+    /// <summary>The <see cref="PipeFittings.UserK"/> fitting: its resistance coefficient on the velocity head (D145).</summary>
+    public double? K { get; init; }
 }
 
 /// <summary>
@@ -245,17 +247,35 @@ public static class PipeFittings
         ["exit_borda"] = new(25, "Exit, Borda", 1, false),
         ["exit_normal"] = new(26, "Exit, normal", 1, false),
         ["threaded_elbow_90"] = new(28, "Threaded elbow 90°", 30, true),
+        // D145: a fitting whose K the user gives (Flowstead's DWSIM patch, dwsim-pipe-user-k.patch, reads it from the name).
+        [UserK] = new(29, "Fitting", double.NaN, false),
     };
+
+    public const string UserK = "user_k";
 
     /// <summary>DWSIM's section type for a fitting: the name ends with the index in brackets, which is what DWSIM reads.</summary>
     public static string DwsimType(string id) => $"{All[id].Name} [{All[id].DwsimIndex}]";
+
+    /// <summary>A section's DWSIM type: a user K fitting carries its K in the name ("Fitting K=0.85 [29]").</summary>
+    public static string DwsimType(PipeSection x) => x.Fitting == UserK
+        ? $"{All[UserK].Name} K={x.K!.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)} [{All[UserK].DwsimIndex}]"
+        : DwsimType(x.Fitting!);
 
     /// <summary>The Flowstead id of a DWSIM fitting section type, or null.</summary>
     public static string? FromDwsim(string type)
     {
         var open = type.LastIndexOf('[');
         if (open < 0 || !type.EndsWith(']') || !int.TryParse(type[(open + 1)..^1], out var index)) return null;
+        if (index == All[UserK].DwsimIndex && KOf(type) is null) return null;
         return All.FirstOrDefault(kv => kv.Value.DwsimIndex == index).Key;
+    }
+
+    /// <summary>The K of a user K fitting's DWSIM type, or null.</summary>
+    public static double? KOf(string type)
+    {
+        var at = type.LastIndexOf("K=", StringComparison.Ordinal);
+        var open = type.LastIndexOf('[');
+        return at >= 0 && open > at && double.TryParse(type[(at + 2)..open].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var k) ? k : null;
     }
 }
 
@@ -280,6 +300,17 @@ public sealed record PerformanceCurve
     public string? Fit { get; init; }
     /// <summary>Polynomial order; null: the smaller of 3 and points − 1.</summary>
     public int? Order { get; init; }
+    /// <summary>
+    /// Compressors (D144): the path the head and efficiency are drawn on, "polytropic" (as most vendors' curves and
+    /// HYSYS's default) or null / "adiabatic" (isentropic). The machine then runs on that path.
+    /// </summary>
+    public string? Path { get; init; }
+}
+
+public static class CurvePaths
+{
+    public const string Adiabatic = "adiabatic";
+    public const string Polytropic = "polytropic";
 }
 
 public static class CurveFits
@@ -292,8 +323,8 @@ public static class CurveFits
 public sealed record SpeedLine(double Speed, List<CurvePoint> Points);
 
 /// <param name="Flow">Actual volumetric flow at the inlet, m³/s.</param>
-/// <param name="Head">Head, m (compressors: adiabatic head).</param>
-/// <param name="Efficiency">Adiabatic efficiency as a fraction (0–1), or null.</param>
+/// <param name="Head">Head, m (compressors: adiabatic or polytropic head, by the curve's path).</param>
+/// <param name="Efficiency">Efficiency as a fraction (0–1), or null (compressors: of the curve's path).</param>
 /// <param name="Npshr">Pumps: NPSH required, m, or null.</param>
 public sealed record CurvePoint(double Flow, double Head, double? Efficiency = null, double? Npshr = null);
 
@@ -459,6 +490,12 @@ public static class ChoiceKeys
 {
     /// <summary>Pipe: two-phase correlation beggs_brill (default), lockhart_martinelli, petalas_aziz. The app also keeps "nps", "schedule" and "service" in a pipe's refs; the engine ignores them.</summary>
     public const string PipeCorrelation = "correlation";
+    /// <summary>Column (D152): a packing of DWSIM's catalogue, by its display name; the trays are rated as a packed bed of it.</summary>
+    public const string Packing = "packing";
+    /// <summary>Column (D152): the design fraction of flood (0.70 if absent), the diameter (sized if absent) and the bed height (HETP x stages if absent), SI, as invariant text.</summary>
+    public const string PackingFlood = "packingFlood";
+    public const string PackingDiameter = "packingDiameter";
+    public const string PackingHeight = "packingHeight";
     /// <summary>Orifice plate: flange (default), corner, radius.</summary>
     public const string OrificeTaps = "taps";
     /// <summary>Columns with a condenser: total (default) or partial.</summary>

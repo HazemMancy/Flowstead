@@ -4,6 +4,7 @@
  */
 package app.flowstead.core.help
 
+import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.DataLibrary
 import app.flowstead.core.model.Flowsheet
 import app.flowstead.core.model.FlowsheetJson
@@ -81,7 +82,7 @@ object Help {
                 "## Mist eliminators (Souders–Brown K, vertical flow, near atmospheric)\n" +
                     MistEliminator.entries.joinToString("\n") { "- ${it.label}: K ${it.k} m/s" + if (it.padThickness > 0) ", element ${it.padThickness} m" else "" } +
                     "\n## K pressure factor (GPSA)\n" + listOf(0.0, 300.0, 600.0, 900.0, 1500.0).joinToString("\n") {
-                        "- $it psig: × ${"%.2f".format(SeparatorSizing.pressureFactor(it * 6894.757 + 101325.0))}"
+                        "- $it psig: × ${ValueFormat.number(SeparatorSizing.pressureFactor(it * 6894.757 + 101325.0), 2)}"
                     } +
                     "\n## Inlet devices (largest inlet momentum ρv²)\n" + InletDevice.entries.joinToString("\n") { "- ${it.label}: ${it.maxMomentum.toInt()} Pa" } +
                     "\n## Outlets\n- Gas outlet: ρv² ≤ ${SeparatorSizing.GAS_OUTLET_MOMENTUM.toInt()} Pa\n- Liquid outlets: ≤ ${SeparatorSizing.LIQUID_OUTLET_VELOCITY} m/s" +
@@ -97,8 +98,8 @@ object Help {
                 listOf("FL", "xT", "valve", "Cv")),
             HelpTopic("lib_pipes", LIBRARY, "Pipe sizes (ASME B36.10M / B36.19M)",
                 "Inside diameters, mm, for the common schedules.\n" + PipeSizes.ALL.joinToString("\n") { s ->
-                    "- NPS ${s.nps} (DN ${s.dn}, OD ${"%.1f".format(s.outsideDiameterM * 1000)}): " +
-                        s.schedules.joinToString(", ") { "${it.label} ${"%.1f".format(s.insideDiameterM(it) * 1000)}" }
+                    "- NPS ${s.nps} (DN ${s.dn}, OD ${ValueFormat.number(s.outsideDiameterM * 1000, 1)}): " +
+                        s.schedules.joinToString(", ") { "${it.label} ${ValueFormat.number(s.insideDiameterM(it) * 1000, 1)}" }
                 },
                 listOf("pipe", "schedule", "NPS", "DN", "inside diameter")),
             HelpTopic("lib_utilities", LIBRARY, "Utility temperatures",

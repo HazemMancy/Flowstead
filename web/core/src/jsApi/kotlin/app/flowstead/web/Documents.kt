@@ -37,16 +37,16 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
 /** What the web's documents say made them (the app writes its own version here). */
-const val WEB_VERSION = "Web 1.7"
+const val WEB_VERSION = "Web 1.18"
 
 @JsExport
 object Documents {
     private fun fs(json: String): Flowsheet = FlowsheetJson.decodeFromString(Flowsheet.serializer(), json)
     private fun solve(json: String?, hash: String, at: Double): StoredSolve? =
-        json?.takeIf { it.isNotBlank() && it != "null" }?.let { StoredSolve(FlowsheetJson.decodeFromString(SolveResult.serializer(), it), hash, at.toLong()) }
+        json?.takeIf { it.isNotBlank() && it != "null" }?.let { StoredSolve(majorOnly(FlowsheetJson.decodeFromString(SolveResult.serializer(), it)), hash, at.toLong()) }
 
-    /** "Flowstead Web 1.4 · DWSIM 10.2.12", as the app's footers. */
-    private fun footer(s: StoredSolve?) = "Flowstead $WEB_VERSION" + (s?.result?.let { " · DWSIM ${it.dwsimVersion}" } ?: "")
+    /** "Flowstead Web 1.10.2 · DWSIM 10": the engine by its major version only (owner's choice, D129). */
+    private fun footer(s: StoredSolve?) = "Flowstead $WEB_VERSION" + (s?.result?.let { " · DWSIM ${it.dwsimVersion.substringBefore('.')}" } ?: "")
 
     private fun sheets(kind: String, projectName: String, f: Flowsheet, s: StoredSolve?, today: String, ids: List<String>, forPrint: Boolean): List<DataSheet> = when (kind) {
         "hmb" -> HeatMaterialBalance.build(projectName, f, s, displayUnits, today, WEB_VERSION, if (forPrint) HeatMaterialBalance.STREAMS_PER_PDF_SHEET else Int.MAX_VALUE)
@@ -141,3 +141,6 @@ object Documents {
 private object FlowsteadJsonInfo {
     fun of(f: Flowsheet): JsonObject = FlowsheetJson.encodeToJsonElement(DocumentInfo.serializer(), f.documentInfo ?: DocumentInfo()).jsonObject
 }
+
+/** The engine in documents by its major version, "DWSIM 10" (owner's choice, D129); the stored solve keeps the full one. */
+internal fun majorOnly(r: SolveResult): SolveResult = r.copy(dwsimVersion = r.dwsimVersion.substringBefore('.'))

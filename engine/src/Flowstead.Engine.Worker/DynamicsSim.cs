@@ -695,10 +695,9 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
             var e = Error();
             var integral = _integral + (Ti > 0 ? e * dt / Ti : 0);
             var op = _bias + Kc * (e + integral + Td * (e - _lastE) / dt);
-            // Anti-windup: no integration further into a limit.
+            // Anti-windup (conditional integration): no integration further into a limit.
             if (op is > 100 or < 0) op = Math.Clamp(op, 0, 100);
             else _integral = integral;
-            if (!(op is >= 100 or <= 0)) _integral = integral;
             _lastE = e;
             Op = op;
             _write(op);
@@ -714,11 +713,12 @@ public sealed class DynamicsSim(DynamicsRequest req, SolveResult steady, Flasher
                 case DynamicKeys.DerivativeTime: Td = value; break;
                 case DynamicKeys.Mode:
                     var auto = value >= 0.5;
-                    // Bumpless back to automatic: the output carries on from where it is.
-                    if (auto && !_auto) { _bias = Op; _integral = 0; _lastE = Error(); }
+                    // Bumpless back to automatic: the output carries on from where it is (the bias takes off the
+                    // proportional term, so the first step does not jump by Kc·e).
+                    if (auto && !_auto) { Pv = _pv(); _lastE = Error(); _bias = Op - Kc * _lastE; _integral = 0; }
                     _auto = auto;
                     break;
-                case "output": Op = Math.Clamp(value, 0, 100); _write(Op); if (_auto) { _bias = Op; _integral = 0; } break;
+                case "output": Op = Math.Clamp(value, 0, 100); _write(Op); if (_auto) { Pv = _pv(); _lastE = Error(); _bias = Op - Kc * _lastE; _integral = 0; } break;
             }
         }
     }

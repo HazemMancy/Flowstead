@@ -155,8 +155,13 @@ public sealed record DepressuringRequest
     public double BackPressure { get; init; } = 101325;
     public double? OrificeDiameter { get; init; }
     public double DischargeCoefficient { get; init; } = 0.84;
-    /// <summary>Pressure to reach, Pa abs; default the lower of 6.9 barg and half the initial gauge pressure (API 521).</summary>
+    /// <summary>
+    /// Pressure to reach, Pa abs. Default (API 521 §5.20.1): the lower of 690 kPa gauge and half the design gauge pressure,
+    /// or half the starting gauge pressure when no <see cref="DesignPressure"/> is given (D142).
+    /// </summary>
     public double? TargetPressure { get; init; }
+    /// <summary>The vessel's design pressure, Pa abs: the basis of the default target and of the default wall thickness (D142).</summary>
+    public double? DesignPressure { get; init; }
     public double TargetTime { get; init; } = 900;
     public double Duration { get; init; } = 1800;
     public ReliefScenario? Fire { get; init; }
@@ -193,6 +198,16 @@ public sealed record PressurizationSupply
     public double Opening { get; init; } = 1;
     public double ValveXt { get; init; } = 0.72;
     public double? OrificeDiameter { get; init; }
+    /// <summary>
+    /// A fixed volume instead of a header (D149): the supply is a vessel or pipe of this geometry, at <see cref="Pressure"/>
+    /// and <see cref="Temperature"/> with <see cref="Composition"/> in it, emptying into the system being filled until the
+    /// two pressures equalise. Its wall conducts (as a blowdown's) unless <see cref="HeatTransferCoefficient"/> is 0.
+    /// </summary>
+    public VesselGeometry? Vessel { get; init; }
+    /// <summary>The source's wall, m (null: ASME VIII-1 at 1.1 × its starting pressure).</summary>
+    public double? WallThickness { get; init; }
+    /// <summary>The source's inside film coefficient, W/m²·K: null the correlations, 0 adiabatic (the coldest source).</summary>
+    public double? HeatTransferCoefficient { get; init; }
 }
 
 public sealed record DepressuringResult
@@ -200,6 +215,8 @@ public sealed record DepressuringResult
     public double OrificeDiameter { get; init; }
     public bool OrificeSized { get; init; }
     public double TargetPressure { get; init; }
+    /// <summary>What set the target: "given", "6.9 barg", "half the design pressure" or "half the starting pressure" (D142).</summary>
+    public string? TargetBasis { get; init; }
     public double? TimeToTarget { get; init; }
     /// <summary>Lowest vapour and liquid temperatures, and the lowest inner-surface metal temperature anywhere.</summary>
     public double MinimumTemperature { get; init; }
@@ -224,6 +241,16 @@ public sealed record DepressuringResult
     public List<double> MassFlow { get; init; } = [];
     public List<double> Inventory { get; init; } = [];
     public List<double> LiquidVolumeFraction { get; init; } = [];
+    /// <summary>Pressurization from a fixed volume (D149): the source's pressure and gas temperature against time.</summary>
+    public List<double>? SourcePressure { get; init; }
+    public List<double>? SourceTemperature { get; init; }
+    /// <summary>The source's coldest gas and inner wall, and the pressure both sides settle at and when (within 0.1 % of the first difference).</summary>
+    public double? SourceMinimumTemperature { get; init; }
+    public double? SourceMinimumWallTemperature { get; init; }
+    public double? EqualisingPressure { get; init; }
+    public double? TimeToEqualise { get; init; }
+    /// <summary>Mass moved from the source into the system filled, kg.</summary>
+    public double? MassTransferred { get; init; }
     public List<string> Warnings { get; init; } = [];
 }
 
@@ -299,6 +326,28 @@ public static class ReliefMath
 
     /// <summary>Internal volume: the shell plus two 2:1 ellipsoidal heads (π D³/24 each; none for a pipe).</summary>
     public static double Volume(VesselGeometry g) => Math.PI * g.Diameter * g.Diameter / 4 * g.Length + g.HeadFactor * 2 * Math.PI * Math.Pow(g.Diameter, 3) / 24;
+
+    /// <summary>
+    /// The volume below a height <paramref name="h"/> from the vessel's bottom (m³). Lying: the shell's circular segment
+    /// times its length, and the heads filled to the same fraction as a sphere filled to h. Standing: a 2:1 head of depth
+    /// a = D/4 filled to y from its pole holds π R² (y²/a − y³/(3a²)), that is (y/a)² (3 − y/a)/2 of its π D³/24.
+    /// </summary>
+    public static double VolumeBelow(VesselGeometry g, double h)
+    {
+        var r = g.Diameter / 2;
+        var headVolume = g.HeadFactor * Math.PI * Math.Pow(g.Diameter, 3) / 24;
+        if (g.Lying)
+        {
+            var hh = Math.Clamp(h, 0, g.Diameter);
+            var segment = r * r * Math.Acos((r - hh) / r) - (r - hh) * Math.Sqrt(Math.Max(0, 2 * r * hh - hh * hh));
+            return segment * g.Length + 2 * headVolume * hh * hh * (3 * r - hh) / (4 * r * r * r);
+        }
+        var headDepth = g.Diameter / 4;
+        double Head(double y) { var x = Math.Clamp(y / headDepth, 0, 1); return headVolume * x * x * (3 - x) / 2; }
+        if (h <= headDepth) return Head(Math.Max(h, 0));
+        var top = h - headDepth - g.Length;
+        return headVolume + Math.PI * r * r * Math.Min(h - headDepth, g.Length) + (top > 0 ? headVolume - Head(Math.Max(headDepth - top, 0)) : 0);
+    }
 
     /// <summary>Inside wall surface: the shell plus the heads (none for a pipe).</summary>
     public static double Surface(VesselGeometry g) => Math.PI * g.Diameter * g.Length + g.HeadFactor * 2 * 1.084 * g.Diameter * g.Diameter;

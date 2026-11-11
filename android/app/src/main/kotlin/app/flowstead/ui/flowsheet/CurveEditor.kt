@@ -46,6 +46,7 @@ import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.model.CurvePoint
 import androidx.compose.material3.FilterChip
 import app.flowstead.core.model.CurveFits
+import app.flowstead.core.model.CurvePaths
 import app.flowstead.core.model.DisplayValue
 import app.flowstead.core.model.ObjectType
 import app.flowstead.core.model.PerformanceCurve
@@ -72,14 +73,14 @@ internal fun CurveSection(obj: SimObject, results: ResultView, unitSet: UnitSet,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .toggleable(value = on, role = Role.Switch) { actions.setCurve(obj.id, if (it) PerformanceCurve() else null) }
+            .toggleable(value = on, role = Role.Switch) { actions.setCurve(obj.id, if (it) PerformanceCurve.newFor(obj.type) else null) }
             .testTag("curve_toggle"),
     ) {
         Column(Modifier.weight(1f)) {
             Text("Run on a performance curve", style = MaterialTheme.typography.bodyLarge)
             Text(
                 if (obj.type == ObjectType.Pump) "Head, efficiency and NPSH required against actual inlet flow; the outlet pressure follows."
-                else "Adiabatic head and efficiency against actual inlet flow; the lowest flow is the surge limit.",
+                else "${if (obj.curve?.polytropic == true) "Polytropic" else "Adiabatic"} head and efficiency against actual inlet flow; the lowest flow is the surge limit.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -93,6 +94,13 @@ internal fun CurveSection(obj: SimObject, results: ResultView, unitSet: UnitSet,
 
     Specification.curveProblem(obj)?.let {
         Text(it, color = MaterialTheme.valueColors.underSpecifiedText, style = MaterialTheme.typography.bodySmall)
+    }
+    if (!pump) {
+        // The path the vendor drew the curve on (D144): the machine then runs on it, with that efficiency.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilterChip(selected = curve.polytropic, onClick = { save(curve.copy(path = CurvePaths.POLYTROPIC)) }, label = { Text("Polytropic") }, modifier = Modifier.testTag("curve_polytropic"))
+            FilterChip(selected = !curve.polytropic, onClick = { save(curve.copy(path = null)) }, label = { Text("Adiabatic") }, modifier = Modifier.testTag("curve_adiabatic"))
+        }
     }
     PointRows(curve.points, pump, flowUnit, headUnit, ctx, "curve") { save(curve.copy(points = it)) }
     // How the points are joined: straight lines, or a least-squares polynomial as HYSYS fits its curves.
@@ -144,7 +152,7 @@ internal fun CurveSection(obj: SimObject, results: ResultView, unitSet: UnitSet,
 
     if (curve.points.size >= 2 && Specification.curveProblem(obj) == null) {
         val q = (results.value(obj.id, "inletVolumeFlow") as? DisplayValue.Calculated)?.si
-        val h = (results.value(obj.id, if (pump) "head" else "adiabaticHead") as? DisplayValue.Calculated)?.si
+        val h = (results.value(obj.id, if (pump) "head" else curve.headKey) as? DisplayValue.Calculated)?.si
         CurveChart(curve, q, h, flowUnit, headUnit, ctx)
     }
 }

@@ -35,7 +35,7 @@ internal object HelpTopics {
         HelpTopic(
             "start", START, "Welcome to Flowstead",
             """
-            Flowstead is a steady-state process simulator and engineering workbench. Every number it shows is computed by DWSIM 10.2.12's thermodynamics, on the phone or on your own engine server; Flowstead never invents a value.
+            Flowstead is a steady-state process simulator and engineering workbench. Every number it shows is computed by DWSIM 10's thermodynamics, on the phone or on your own engine server; Flowstead never invents a value.
             ## Where things are
             - **Projects**: each project is one flowsheet with its fluid package, results and studies.
             - **Fluid package**: components, property package, hypotheticals and binary interaction parameters.
@@ -201,7 +201,7 @@ internal object HelpTopics {
             "Give the outlet pressure or the rise, and the efficiency, or run it on a vendor curve. Results: power, head, NPSH available (and required on a curve). **Driver**: API 610 margin and the next IEC motor.",
             listOf("D46", "D48", "D62")),
         unit(ObjectType.Compressor, "Compressor",
-            "Adiabatic: give the outlet pressure, rise or ratio and the efficiency, or run it on a vendor curve (with speed). Results: power, head, discharge temperature, surge margin. **Driver**: API 617 margin and the next IEC motor.",
+            "Adiabatic: give the outlet pressure, rise or ratio and the efficiency, or run it on a vendor curve (with speed), drawn on the polytropic path (a new curve's default) or the adiabatic one. Results: power, head, discharge temperature, surge margin. **Driver**: API 617 margin and the next IEC motor.",
             listOf("D48", "D62")),
         unit(ObjectType.Expander, "Expander", "Adiabatic expansion: give the outlet pressure, drop or ratio and the efficiency. Results: power recovered.", listOf("D62")),
         unit(ObjectType.Separator, "Separator",
@@ -215,7 +215,7 @@ internal object HelpTopics {
         unit(ObjectType.Splitter, "Tee (splitter)", "Splits a stream in the fractions you give; outlets keep the inlet's state and composition."),
         unit(ObjectType.ComponentSplitter, "Component splitter", "Sends a fraction of each component overhead and the rest to the bottoms, both at the feed's T and P.", listOf("D26")),
         unit(ObjectType.PipeSegment, "Pipe segment",
-            "Pressure drop and heat transfer along a line: length, inside diameter (or NPS and schedule), roughness, elevation, and optionally U and ambient temperature. **Sections and fittings**: several runs, each with its own length, rise and size, with elbows, valves, tees, entrances and exits between them (Crane L/D or K, as DWSIM applies them). Beggs & Brill (default), Lockhart & Martinelli or Petalas & Aziz for two-phase flow. **Line sizing**: velocities, ρv², gradients, Mach and erosional velocity against your criteria.",
+            "Pressure drop and heat transfer along a line: length, inside diameter (or NPS and schedule), roughness, elevation, and optionally U and ambient temperature. **Sections and fittings**: several runs, each with its own length, rise and size, with elbows, valves, tees, entrances and exits between them (Crane L/D or K, as DWSIM applies them, or a fitting by the K you give, applied the same way). Beggs & Brill (default), Lockhart & Martinelli or Petalas & Aziz for two-phase flow. **Line sizing**: velocities, ρv², gradients, Mach and erosional velocity against your criteria.",
             listOf("D30", "D32", "D98")),
         unit(ObjectType.OrificePlate, "Orifice plate", "ISO 5167 orifice meter: give the bore and the pipe; the outlet is at the permanent (recovered) pressure.", listOf("D26")),
         unit(ObjectType.ReliefValve, "Relief valve (PSV)",
@@ -263,10 +263,10 @@ internal object HelpTopics {
             """.trimIndent(),
             listOf("PSV", "relief", "API 520", "API 521", "API 526", "orifice letter", "fire", "blocked outlet"), listOf("D54", "D55", "D56", "D60")),
         HelpTopic("blowdown", SAFETY, "Depressuring (blowdown)",
-            "API 521 depressuring of a vessel or pipe through a restriction orifice: two non-equilibrium zones (vapour and liquid) and a wall conducting through its thickness, with fire or not. Pressure, fluid and wall temperatures and flow against time; the orifice can be sized to reach the lower of 6.9 barg and half the starting gauge pressure within 15 minutes. The minimum wall temperature is the one to compare with the MDMT.",
+            "API 521 depressuring of a vessel or pipe through a restriction orifice: two non-equilibrium zones (vapour and liquid) and a wall conducting through its thickness, with fire or not. Pressure, fluid and wall temperatures and flow against time; the orifice can be sized to reach the lower of 6.9 barg and half the design gauge pressure within 15 minutes (half the starting pressure if no design pressure is given), and the design pressure sets the wall thickness. The minimum wall temperature is the one to compare with the MDMT.",
             listOf("depressuring", "blowdown", "MDMT", "orifice", "API 521"), listOf("D57", "D59")),
         HelpTopic("pressurization", SAFETY, "Pipeline pressurization",
-            "As HYSYS's pipeline pressurization template: the time to fill a pipe or a network of pipes from a supply stream through a control valve (Cv and opening) or an orifice, or the orifice that does it in a target time. Also the coldest gas the valve lets in (Joule–Thomson) and the hottest gas from compression.",
+            "As HYSYS's pipeline pressurization template: the time to fill a pipe, a network of pipes or a vessel from a supply stream (a header at constant pressure) or from a vessel or pipe of fixed volume that empties until the two sides equalise, through a control valve (Cv and opening), an orifice, a valve or orifice plate on the flowsheet, or the orifice that does it in a target time. Also the equalising pressure and when it is reached, the coldest gas the valve lets in (Joule–Thomson), the hottest gas from compression, and a fixed-volume source's coldest gas and wall (its wall gives heat unless it is set adiabatic).",
             listOf("pressurization", "pressurisation", "pipeline", "fill", "Cv"), listOf("D59")),
         // Sizing
         HelpTopic("sep_sizing", SIZING, "Separator sizing and internals",
@@ -283,7 +283,7 @@ internal object HelpTopics {
             """
             = A = Q / (U · F · LMTD)
             = LMTD = (ΔT1 − ΔT2) / ln(ΔT1/ΔT2)
-            F for 1-2 shells in series (Bowman, Mueller & Nagle), with the fewest shells that keep F ≥ 0.75. U from the data library by service, with the area over the whole range.
+            F for 1-2 shells in series (Bowman, Mueller & Nagle), with the fewest shells that keep F ≥ 0.75. An air cooler is crossflow: F for both fluids unmixed in the number of tube passes you give (1 if not), the passes counter-cross, worked out exactly by integration. U from the data library by service, with the area over the whole range.
             Drivers: shaft power × the API 610 (pumps) or API 617 (compressors) margin, then the next IEC 60072 motor. Tanks: volume from a residence time.
             ## Tray columns
             = F_LV = (L/V) · √(ρV/ρL)  (mass flows)

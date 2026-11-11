@@ -92,6 +92,24 @@ object CanvasGeometry {
     }
 
     /**
+     * The dashed line between a sub-flowsheet block and a stream outside it that crosses its edge (D147), drawn as a
+     * connection is: horizontal and vertical runs only. A stream going in leaves from its arrow's head and meets the
+     * block's left edge; one coming out leaves the block's right edge and meets the stream's tail. The block is met
+     * level with the stream where its edge allows, so a stream beside the block is one straight run.
+     */
+    fun blockLinkRoute(stream: SimObject, streamAt: Offset, block: Rect, intoBlock: Boolean): List<Offset> {
+        val right = Offset(1f, 0f)
+        fun onEdge(x: Float, y: Float) = Offset(x, y.coerceIn(block.top + 8f, block.bottom - 8f))
+        return if (intoBlock) {
+            val a = streamOutlet(stream, streamAt)
+            route(a, right, onEdge(block.left, a.y), right)
+        } else {
+            val b = streamInlet(stream, streamAt)
+            route(onEdge(block.right, b.y), right, b, right)
+        }
+    }
+
+    /**
      * A signal line (a controller to what it measures or moves, a Set to its source and target; D84): horizontal and
      * vertical runs only, like a stream. It leaves [from] square to the side facing [to] and meets [to]'s edge square
      * on the side facing back (a valve is met from above or below, where its actuator sits), with the same stubs and

@@ -36,6 +36,10 @@ data class Flowsheet(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val blackOils: List<BlackOil> = emptyList(),
+    /** Sub-flowsheets, as HYSYS's (D132, D133); objects inside one name it as their [SimObject.parent]. Written only when there are some. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val subflowsheets: List<Subflowsheet> = emptyList(),
     /** Liquid density method: null for the engine default, [LiquidDensityMethods.COSTALD] or [LiquidDensityMethods.EOS]. Written only when set. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -155,6 +159,10 @@ data class SimObject(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val equipmentSizing: EquipmentSizingInput? = null,
+    /** The sub-flowsheet the object is in (D132, D133); null on the main flowsheet. Written only when set. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val parent: String? = null,
 )
 
 /**
@@ -178,13 +186,31 @@ data class PerformanceCurve(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val fit: String? = null,
     /** Polynomial order; null: the smaller of 3 and points − 1. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val order: Int? = null,
+    /**
+     * Compressors (D144): the path the head and efficiency are drawn on, [CurvePaths.POLYTROPIC] or null (adiabatic, as
+     * every curve before D144). New compressor curves start polytropic, as most vendors' and HYSYS's do.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val path: String? = null,
 ) {
     /** A variable-speed machine whose speed the engine finds from the pressure given. */
     val solvesSpeed: Boolean get() = (speed ?: 0.0) > 0 && operatingSpeed == null
+    val polytropic: Boolean get() = path == CurvePaths.POLYTROPIC
+    /** The result key of the head this curve is drawn in (a compressor's). */
+    val headKey: String get() = if (polytropic) "polytropicHead" else "adiabaticHead"
+
+    companion object {
+        /** A new curve for a machine of [type]: a compressor's on the polytropic path. */
+        fun newFor(type: ObjectType) = PerformanceCurve(path = if (type == ObjectType.Compressor) CurvePaths.POLYTROPIC else null)
+    }
 }
 
 object CurveFits {
     const val POLYNOMIAL = "polynomial"
+}
+
+object CurvePaths {
+    const val ADIABATIC = "adiabatic"
+    const val POLYTROPIC = "polytropic"
 }
 
 /** One straight run ([fitting] null) or a fitting of a pipe segment (D98). Lengths in m. Same shape as the engine's. */
@@ -199,23 +225,28 @@ data class PipeSegmentSection(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val outerDiameter: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val roughness: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val increments: Int? = null,
+    /** The [PipeFittings.USER_K] fitting: its resistance coefficient on the velocity head (D145). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val k: Double? = null,
 ) {
     val isFitting: Boolean get() = fitting != null
 }
 
 /**
- * DWSIM's pipe fittings (D98), as the engine's PipeFittings: [value] is an equivalent length L/D or, when not
- * [lOverD], a resistance coefficient K on the velocity head.
+ * DWSIM's 28 pipe fittings (Pipe.vb Kfit), with DWSIM's own values: the engine sends the fitting's index and DWSIM
+ * applies the value, so these are descriptions. Labels say what each value is in Crane TP-410 terms (DWSIM's
+ * "normal" entrance, K 0.78, is Crane's inward-projecting one; its "Borda", K 0.25, a rounded one; its "normal 90°
+ * curve", L/D 14, a long-radius welded elbow), so the right one is picked; a flush square-edged entrance (Crane K 0.5)
+ * has no DWSIM fitting: the nearest are 0.78 (conservative) and 0.25.
  */
 object PipeFittings {
     data class Kind(val id: String, val name: String, val value: Double, val lOverD: Boolean)
 
     val ALL: List<Kind> = listOf(
-        Kind("elbow_90", "Standard elbow 90°", 14.0, true),
-        Kind("elbow_45", "Standard elbow 45°", 16.0, true),
+        Kind("elbow_90", "Elbow 90°, long radius (welded, r/d 1.5)", 14.0, true),
+        Kind("elbow_45", "Elbow 45°, standard", 16.0, true),
         Kind("return_bend", "Return bend 180°", 50.0, true),
         Kind("mitre_elbow_90", "Mitre elbow 90°", 60.0, true),
-        Kind("threaded_elbow_90", "Threaded elbow 90°", 30.0, true),
+        Kind("threaded_elbow_90", "Elbow 90°, standard (threaded)", 30.0, true),
         Kind("tee_run", "Tee, flow through run", 20.0, true),
         Kind("tee_branch", "Tee, flow through branch", 60.0, true),
         Kind("gate_valve", "Gate valve (open)", 8.0, true),
@@ -227,10 +258,10 @@ object PipeFittings {
         Kind("lift_check_valve", "Lift check valve", 600.0, true),
         Kind("stop_check_valve", "Stop-check valve (globe)", 400.0, true),
         Kind("foot_valve", "Foot valve (poppet disc)", 420.0, true),
-        Kind("entrance_normal", "Entrance, normal", 0.78, false),
-        Kind("entrance_borda", "Entrance, Borda", 0.25, false),
-        Kind("exit_normal", "Exit, normal", 1.0, false),
-        Kind("exit_borda", "Exit, Borda", 1.0, false),
+        Kind("entrance_normal", "Entrance, inward-projecting (Borda)", 0.78, false),
+        Kind("entrance_borda", "Entrance, rounded", 0.25, false),
+        Kind("exit_normal", "Exit, square-edged", 1.0, false),
+        Kind("exit_borda", "Exit, projecting", 1.0, false),
         Kind("contraction_3_4", "Sudden contraction d/D = 3/4", 1.11, false),
         Kind("contraction_1_2", "Sudden contraction d/D = 1/2", 9.6, false),
         Kind("contraction_1_4", "Sudden contraction d/D = 1/4", 96.0, false),
@@ -239,12 +270,23 @@ object PipeFittings {
         Kind("expansion_1_4", "Sudden expansion d/D = 1/4", 225.0, false),
         Kind("reducer_4_3", "Reducer 4:3", 0.65, false),
         Kind("reducer_2_1", "Reducer 2:1", 5.67, false),
+        // D145: any fitting by its K (a vendor's valve, a strainer, a nozzle): DWSIM applies it as its own K fittings,
+        // K·ρ·v²/2 on the two-phase mixture (Flowstead's patch to DWSIM's pipe, engine/patches/dwsim-pipe-user-k.patch).
+        Kind(USER_K, "Other fitting (valve, strainer, nozzle)", Double.NaN, false),
     )
     private val byId = ALL.associateBy { it.id }
     fun get(id: String?): Kind? = id?.let { byId[it] }
 
-    /** "L/D 340" or "K 5.67". */
-    fun describe(k: Kind): String = if (k.lOverD) "L/D ${fmt(k.value)}" else "K ${fmt(k.value)}"
+    const val USER_K = "user_k"
+
+    /** "L/D 340" or "K 5.67" ("K you give" for the user's fitting). */
+    fun describe(k: Kind): String = if (k.id == USER_K) "K you give" else if (k.lOverD) "L/D ${fmt(k.value)}" else "K ${fmt(k.value)}"
+
+    /** A section's fitting described with its own value: "K 0.85" for the user's fitting. */
+    fun describe(s: PipeSegmentSection): String? = get(s.fitting)?.let { k -> if (k.id == USER_K) s.k?.let { "K ${fmt(it)}" } ?: "K not given" else describe(k) }
+
+    /** The K a fitting section applies (null for an L/D fitting or a straight run). */
+    fun kOf(s: PipeSegmentSection): Double? = get(s.fitting)?.takeIf { !it.lOverD }?.let { if (it.id == USER_K) s.k else it.value }
     private fun fmt(v: Double) = if (v == kotlin.math.floor(v)) v.toLong().toString() else v.toString()
 }
 

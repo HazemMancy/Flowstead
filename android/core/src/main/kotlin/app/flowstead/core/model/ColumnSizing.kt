@@ -69,7 +69,8 @@ object ColumnSizing {
         val trays = (first..last).mapNotNull { i ->
             val wv = v[i] * mv[i] / 1000 // kg/s
             val wl = l[i] * ml[i] / 1000
-            if (wv <= 0) return@mapNotNull null
+            // No vapour, or a stage near the critical point (no density difference): nothing to size there.
+            if (wv <= 0 || rl[i] <= rv[i]) return@mapNotNull null
             val flv = (wl / wv) * sqrt(rv[i] / rl[i])
             val c = csbFlood(flv, traySpacing) * (st[i] * 1000 / 20).pow(0.2) * systemFactor
             val uf = c * sqrt((rl[i] - rv[i]) / rv[i])

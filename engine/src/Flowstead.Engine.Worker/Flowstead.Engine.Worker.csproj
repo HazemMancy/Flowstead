@@ -20,6 +20,7 @@
     <Reference Include="$(DwsimBin)/DWSIM.ReactionFinder.Logic.dll" Private="false" />
     <Reference Include="$(DwsimBin)/DWSIM.GlobalSettings.dll" Private="false" />
     <Reference Include="$(DwsimBin)/DWSIM.SharedClasses.dll" Private="false" />
+    <Reference Include="$(DwsimBin)/DWSIM.SharedClassesCSharp.dll" Private="false" />
     <Reference Include="$(DwsimBin)/DWSIM.FlowsheetBase.dll" Private="false" />
     <Reference Include="$(DwsimBin)/DWSIM.FlowsheetSolver.dll" Private="false" />
     <Reference Include="$(DwsimBin)/CapeOpen.dll" Private="false" />

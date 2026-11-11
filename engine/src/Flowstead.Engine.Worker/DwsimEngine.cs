@@ -146,8 +146,13 @@ public sealed partial class DwsimEngine
         var sw = Stopwatch.StartNew();
         // Sets first, so the validator sees the specifications DWSIM will get.
         model = SetSolver.Apply(model.WithoutDrawings());
+        // Backward specifications (D151): a product's targets become Adjusts on its feed upstream; DWSIM sees a forward flowsheet.
+        var back = BackSolver.Prepare(model);
+        model = back.Model;
         var messages = Validator.Validate(model, _automation.AvailableCompounds.Keys, MvpPackages.Select(p => p.Name)
             .Concat(_automation.AvailablePropertyPackages.Keys));
+        foreach (var (id, why) in back.Problems)
+            messages.Add(new SolverMessage(MessageLevel.Error, $"{model.Objects.First(o => o.Id == id).Tag}: {why}", id));
         if (messages.Any(m => m.Level == MessageLevel.Error))
         {
             return Result(SolveStatus.Invalid, messages, [], sw);
@@ -156,16 +161,24 @@ public sealed partial class DwsimEngine
         // Adjusts and controllers (D84): DWSIM never sees them; each iteration is a full solve of the rest. Controllers
         // that act in dynamics only (D86) are left out of the steady state.
         var loops = model.Objects.Where(o => o.Type.IsLoop() && DynamicLoops.InSteadyState(o)).ToList();
+        loops.AddRange(back.Loops);
         if (loops.Count == 0) return CurveSolver.Solve(model with { Objects = model.Objects.Where(o => !o.Type.IsLoop()).ToList() }, m => SolveCore(m, [.. messages], sw));
 
         var withoutLoops = model with { Objects = model.Objects.Where(o => !o.Type.IsLoop()).ToList() };
         var outcome = LoopSolver.Solve(withoutLoops, loops, m => CurveSolver.Solve(m, mm => SolveCore(mm, [], Stopwatch.StartNew())));
         var objects = new Dictionary<string, ObjectResult>(outcome.Result.Objects);
-        foreach (var (id, r) in outcome.Loops) objects[id] = r;
+        foreach (var (id, r) in outcome.Loops.Where(l => !back.LoopProduct.ContainsKey(l.Key))) objects[id] = r;
         var all = messages.Concat(outcome.Result.Messages).ToList();
         foreach (var (id, r) in outcome.Loops.Where(l => l.Value.Status == ObjectStatus.Error))
         {
-            all.Add(new SolverMessage(MessageLevel.Error, r.Error!, id));
+            // A backward specification's Adjust is the product's: its failure is said there.
+            if (back.LoopProduct.TryGetValue(id, out var product))
+            {
+                var tag = model.Objects.First(o => o.Id == product).Tag;
+                all.Add(new SolverMessage(MessageLevel.Error, $"{tag}: its specification could not be met from the feed upstream ({r.Error})", product));
+                if (objects.TryGetValue(product, out var pr)) objects[product] = pr with { Status = ObjectStatus.Error, Error = $"Specification not met: {r.Error}" };
+            }
+            else all.Add(new SolverMessage(MessageLevel.Error, r.Error!, id));
         }
         var ok = outcome.Result.Status == SolveStatus.Converged && outcome.Loops.Values.All(r => r.Status == ObjectStatus.Solved);
         return outcome.Result with
@@ -258,6 +271,7 @@ public sealed partial class DwsimEngine
         UnitChecks.AddNpsh(model, results, objects);
         UnitChecks.AddZoneAnalysis(model, results, objects);
         Columns.Verify(model, results);
+        PackedColumns.Rate(model, results, messages);
         Reactors.Verify(model, results);
         UnitChecks.Apply(model, results, messages);
         foreach (var (id, r) in results.Where(r => r.Value.Status == ObjectStatus.Error))
@@ -364,7 +378,10 @@ public sealed partial class DwsimEngine
             });
             try
             {
-                errors.AddRange(Task.Run(() => DWSIM.FlowsheetSolver.FlowsheetSolver.SolveFlowsheet(fs, DWSIM.GlobalSettings.Settings.SolverMode, null, frompgrid: true)).GetAwaiter().GetResult() ?? []);
+                // The browser has one thread and cannot block on a task ("Cannot wait on monitors on this runtime"):
+                // there DWSIM's solver runs inline (dwsim-browser.patch), so it is called directly.
+                List<Exception> Run() => DWSIM.FlowsheetSolver.FlowsheetSolver.SolveFlowsheet(fs, DWSIM.GlobalSettings.Settings.SolverMode, null, frompgrid: true);
+                errors.AddRange((OperatingSystem.IsBrowser() ? Run() : Task.Run(Run).GetAwaiter().GetResult()) ?? []);
             }
             finally
             {
@@ -453,6 +470,8 @@ public sealed partial class DwsimEngine
                 "DWSIM's default method, so desktop DWSIM's liquid densities, liquid volumes and two-phase pipe ΔP can differ for mixtures.");
         if (model.VapourViscosity == VapourViscosityMethods.LeeGonzalezEakin)
             warnings.Add("Vapour viscosity: Lee–Gonzalez–Eakin is a Flowstead option; desktop DWSIM uses its own method, so gas viscosities can differ.");
+        foreach (var o in plain.Objects.Where(o => o.PipeSections?.Any(x => x.Fitting == PipeFittings.UserK) == true))
+            warnings.Add($"{o.Tag}: fittings with a K you gave are Flowstead's (a patch to DWSIM's pipe); desktop DWSIM reads them as no loss, so its pressure drop is lower.");
         var (fs, map) = Build(plain, forExport: true);
         var solveErrors = _automation.CalculateFlowsheet4(fs) ?? [];
         var status = solveErrors.Count == 0 ? SolveStatus.Converged : SolveStatus.Failed;
@@ -990,8 +1009,17 @@ public sealed partial class DwsimEngine
                 }
                 break;
             case Compressor comp:
-                comp.ProcessPath = Compressor.ProcessPathType.Adiabatic;
-                comp.AdiabaticEfficiency = (V(SpecKeys.Efficiency) ?? 0.75) * 100.0;
+                // On a polytropic curve (D144) the efficiency is the polytropic one, and DWSIM follows that path.
+                if (Curves.IsPolytropic(o))
+                {
+                    comp.ProcessPath = Compressor.ProcessPathType.Polytropic;
+                    comp.PolytropicEfficiency = (V(SpecKeys.Efficiency) ?? 0.75) * 100.0;
+                }
+                else
+                {
+                    comp.ProcessPath = Compressor.ProcessPathType.Adiabatic;
+                    comp.AdiabaticEfficiency = (V(SpecKeys.Efficiency) ?? 0.75) * 100.0;
+                }
                 if (V(SpecKeys.OutletPressure) is { } cp)
                 {
                     comp.CalcMode = Compressor.CalculationMode.OutletPressure;
@@ -1056,7 +1084,7 @@ public sealed partial class DwsimEngine
                     var d = x.InnerDiameter ?? di;
                     var fitting = x.Fitting is { } f;
                     pipe.Profile.Sections.Add(i + 1, new DWSIM.UnitOperations.UnitOperations.Auxiliary.Pipe.PipeSection(
-                        i + 1, fitting ? PipeFittings.DwsimType(x.Fitting!) : "Straight Tube Section", x.Count,
+                        i + 1, fitting ? PipeFittings.DwsimType(x) : "Straight Tube Section", x.Count,
                         fitting ? 1 : x.Increments ?? 10, "User", fitting ? 0.0 : x.Length!.Value, fitting ? 0.0 : x.ElevationChange ?? 0.0,
                         (x.OuterDiameter ?? (x.InnerDiameter is null ? od : null) ?? d * 1.15) / 0.0254, d / 0.0254) // DWSIM inches; OD only sets the heat-transfer area
                     {
@@ -1271,6 +1299,19 @@ public sealed partial class DwsimEngine
         };
     }
 
+    /// <summary>
+    /// A compressor's head, m, for the efficiency (%) of its path: η·Δh/g, with Δh the work it puts into each kg (DWSIM
+    /// sets Δh = (H₂ₛ − H₁)/ηₛ from its pressure–entropy flash, so the adiabatic head is the isentropic enthalpy rise).
+    /// DWSIM 10.2.15's own AdiabaticHead is its n-method polytropic head (times Hp/Hs), and its PolytropicHead that again
+    /// times Hp/Hs, both on g = 9.8; neither is the head the curve is drawn in (D144).
+    /// </summary>
+    private static double? Head(Compressor k, double efficiencyPercent)
+    {
+        var inlet = k.GraphicObject.InputConnectors.FirstOrDefault(c => c.IsAttached)?.AttachedConnector.AttachedFrom.Name;
+        var w = (inlet is not null && k.FlowSheet.SimulationObjects.TryGetValue(inlet, out var so) ? so as MaterialStream : null)?.Phases[0].Properties.massflow;
+        return w is > 0 ? efficiencyPercent / 100.0 * k.DeltaQ * 1000.0 / w.Value / 9.80665 : null;
+    }
+
     private static ObjectResult Extract(SimObject o, ISimulationObject so, bool saturationPoints = true, bool formation = false)
     {
         var error = so.ErrorMessage;
@@ -1317,8 +1358,9 @@ public sealed partial class DwsimEngine
                 Status = ObjectStatus.Solved,
                 Properties = Props(("power", k.DeltaQ * 1000.0), ("pressureRise", k.DeltaP), ("outletPressure", k.POut),
                     ("outletTemperature", k.OutletTemperature), ("temperatureChange", k.DeltaT),
-                    ("pressureRatio", k.POut / (k.POut - k.DeltaP)), ("adiabaticHead", k.AdiabaticHead),
-                    ("polytropicHead", k.PolytropicHead), ("efficiency", k.AdiabaticEfficiency / 100.0)),
+                    ("pressureRatio", k.POut / (k.POut - k.DeltaP)), ("adiabaticHead", Head(k, k.AdiabaticEfficiency)),
+                    ("polytropicHead", Head(k, k.PolytropicEfficiency)), ("efficiency", k.AdiabaticEfficiency / 100.0),
+                    ("polytropicEfficiency", k.PolytropicEfficiency / 100.0)),
             },
             Expander x => new ObjectResult
             {

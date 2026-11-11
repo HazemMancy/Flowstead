@@ -3,6 +3,8 @@
 // Every number shown here is one the engine (DWSIM) returned, converted for display (CLAUDE.md).
 import { startEngine } from './engine.js';
 import { unitsOf, toSi, format, unit, DISPLAY } from './units.js';
+// The engine is shown by its major version only, "DWSIM 10" (owner's choice, D129); the full version stays in the engine's results.
+const major = (v) => String(v ?? '').split('.')[0];
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -76,7 +78,7 @@ const engine = startEngine((s) => {
     if (s.total) $('statusBar').style.width = `${Math.round((100 * s.loaded) / Math.max(s.total, 1))}%`;
   } else if (s.type === 'ready') {
     $('status').classList.add('ready');
-    $('statusText').textContent = `DWSIM ${s.dwsimVersion} is running in your browser (ready in ${(s.ms / 1000).toFixed(1)} s).`;
+    $('statusText').textContent = `DWSIM ${major(s.dwsimVersion)} is running in your browser (ready in ${(s.ms / 1000).toFixed(1)} s).`;
     $('statusBar').style.width = '100%';
   } else if (s.type === 'failed') {
     $('status').classList.add('failed');
@@ -205,7 +207,7 @@ function renderResult(res, ms) {
     <div class="table-wrap" tabindex="0" role="region" aria-label="Phase properties"><table class="props"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
     <h3>Composition (mole %)</h3>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Phase compositions"><table class="props"><thead>${head.replace('Property', 'Component')}</thead><tbody>${compRows}</tbody></table></div>
-    <p class="meta">${esc($('pkg').value)} · status ${esc(res.status)} · solved by DWSIM ${esc(res.dwsimVersion || '')} in ${(ms / 1000).toFixed(2)} s on this device. Enthalpy and entropy use DWSIM’s reference state: compare differences, not absolute values, with HYSYS.</p>`;
+    <p class="meta">${esc($('pkg').value)} · status ${esc(res.status)} · solved by DWSIM ${esc(major(res.dwsimVersion))} in ${(ms / 1000).toFixed(2)} s on this device. Enthalpy and entropy use DWSIM’s reference state: compare differences, not absolute values, with HYSYS.</p>`;
 }
 
 $('inputs').addEventListener('submit', async (e) => {

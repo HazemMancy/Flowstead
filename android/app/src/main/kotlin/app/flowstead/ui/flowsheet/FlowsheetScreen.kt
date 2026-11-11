@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,7 +20,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -58,6 +63,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import kotlin.math.roundToInt
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -90,6 +96,7 @@ import app.flowstead.ui.theme.valueColors
 fun FlowsheetScreen(
     onBack: () -> Unit,
     onOpenFluid: () -> Unit,
+    onOpenBlockFluid: (String) -> Unit = {},
     onOpenResults: () -> Unit,
     onOpenLog: () -> Unit,
     onOpenHelp: (String?) -> Unit = {},
@@ -203,14 +210,14 @@ fun FlowsheetScreen(
             FlowsheetUiState.NotFound -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("This project no longer exists.")
             }
-            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, onOpenResults, onOpenLog, onOpenHelp, Modifier.padding(padding))
+            is FlowsheetUiState.Ready -> Editor(s.ui, viewModel, onOpenResults, onOpenLog, onOpenHelp, onOpenBlockFluid, Modifier.padding(padding))
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () -> Unit, onOpenLog: () -> Unit, onOpenHelp: (String?) -> Unit, modifier: Modifier) {
+private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () -> Unit, onOpenLog: () -> Unit, onOpenHelp: (String?) -> Unit, onOpenBlockFluid: (String) -> Unit, modifier: Modifier) {
     val density = LocalDensity.current.density
     var viewport by remember { mutableStateOf(Viewport()) }
     var canvasRect by remember { mutableStateOf(Rect.Zero) }
@@ -233,9 +240,9 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
     val canvasActions = remember(vm) {
         object : CanvasActions {
             override fun tap(hit: Hit) = when (hit) {
-                is Hit.OnObject -> vm.openEditor(hit.objectId)
-                is Hit.OnPort -> vm.openEditor(hit.objectId)
-                Hit.Empty -> vm.select(null)
+                is Hit.OnObject -> vm.tapObject(hit.objectId)
+                is Hit.OnPort -> vm.tapObject(hit.objectId)
+                Hit.Empty -> vm.tapObject(null)
             }
             override fun longPress(objectId: String) {
                 vm.select(objectId)
@@ -250,7 +257,21 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 vm.select(objectId)
                 tableFor = objectId
             }
+            override fun tapBlock(id: String) = vm.tapBlock(id)
+            override fun openBlock(id: String) = vm.openLevel(id)
+            override fun moveBlock(id: String, x: Double, y: Double) = vm.moveBlock(id, x, y)
+            override fun dropOnBlock(streamId: String, blockId: String) = vm.dropOnBlock(streamId, blockId)
+            override fun moveMany(ids: List<String>, dx: Double, dy: Double) = vm.moveMany(ids, dx, dy)
+            override fun dropManyOnBlock(ids: List<String>, blockId: String) = vm.moveIntoBlock(ids, blockId)
         }
+    }
+    // The flowsheet shown (D133): the main one or a sub-flowsheet's; each opens centred on what it holds.
+    val levelFs = remember(ui.flowsheet, ui.level) { app.flowstead.core.model.Subflowsheets.levelView(ui.flowsheet, ui.level) }
+    LaunchedEffect(ui.level) {
+        if (!centred || canvasRect.width == 0f) return@LaunchedEffect
+        val pts = levelFs.objects.map { Offset(it.x.toFloat(), it.y.toFloat()) } + ui.blocks.map { Offset(it.x.toFloat(), it.y.toFloat()) }
+        val c = if (pts.isEmpty()) Offset.Zero else Offset(pts.map { it.x }.average().toFloat(), pts.map { it.y }.average().toFloat())
+        viewport = Viewport(offset = Offset(canvasRect.width / 2, canvasRect.height / 2) - c * density, zoom = viewport.zoom)
     }
     val safetyActions = remember(vm) {
         object : SafetyActions {
@@ -295,12 +316,17 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
             override fun copyStreamData(targetId: String, items: List<app.flowstead.core.model.StreamCopy.Item>) = vm.copyStreamData(targetId, items)
             override fun setCompositionBasis(basis: app.flowstead.core.model.CompositionBasis) = vm.setCompositionBasis(basis)
             override fun loadCompoundBasis() = vm.loadCompoundBasis()
+            override fun streamLineSizing(streamId: String, input: app.flowstead.core.model.StreamLineSizing.Input, onResult: (LineSizingUi) -> Unit) =
+                vm.streamLineSizing(streamId, input, onResult)
         }
     }
 
     fun worldAtRoot(root: Offset) = viewport.toWorld(root - canvasRect.topLeft, density)
 
-    Column(modifier.fillMaxSize()) {
+    // The sheets float over the flowsheet, above the palette (D146): a Box over the editor's column.
+    var paletteHeight by remember { mutableStateOf(0) }
+    Box(modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .weight(1f)
@@ -308,7 +334,10 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 .onGloballyPositioned { canvasRect = Rect(it.positionInRoot(), it.size.toSize()) },
         ) {
             FlowsheetCanvas(
-                flowsheet = ui.flowsheet,
+                flowsheet = levelFs,
+                blocks = ui.blocks,
+                selectedBlock = ui.selectedBlock,
+                streamNotes = ui.streamNotes,
                 status = ui.status,
                 notReady = ui.notReady,
                 selectedId = ui.selectedId,
@@ -318,8 +347,17 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 actions = canvasActions,
                 modifier = Modifier.fillMaxSize(),
                 unitSet = ui.unitSet,
+                multiSelected = ui.multiSelected,
             )
-            if (ui.flowsheet.objects.isEmpty()) {
+            Column(Modifier.align(Alignment.TopStart).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                LevelBar(ui, onLevel = vm::openLevel, onAddBlock = {
+                    val c = viewport.toWorld(Offset(canvasRect.width / 2, canvasRect.height / 2), density)
+                    vm.addBlock(((c.x / 24).roundToInt() * 24).toDouble(), ((c.y / 24).roundToInt() * 24 - 120).toDouble())
+                }, onSelecting = vm::setSelecting, modifier = Modifier)
+                if (ui.selecting) SelectionBar(ui, onMoveInto = { vm.moveIntoBlock(ui.multiSelected, it) }, onGroup = vm::groupSelected,
+                    onDelete = vm::deleteSelected, onClear = vm::clearSelection)
+            }
+            if (levelFs.objects.isEmpty() && ui.blocks.isEmpty()) {
                 Text(
                     "Tap or long-press-drag an item from the palette below.\nStart with a material stream for your feed.",
                     textAlign = TextAlign.Center,
@@ -347,9 +385,10 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                     vm.add(type, w.x.toDouble(), w.y.toDouble())
                 }
             },
-            modifier = Modifier.navigationBarsPadding(),
+            modifier = Modifier.navigationBarsPadding().onGloballyPositioned { paletteHeight = it.size.height },
         )
     }
+    val overCanvas = Modifier.padding(bottom = with(LocalDensity.current) { paletteHeight.toDp() })
 
     ui.editingId?.let { id ->
         ui.flowsheet.obj(id)?.let { obj ->
@@ -369,6 +408,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 safetyRunning = ui.safetyRunning,
                 compositionBasis = ui.compositionBasis,
                 compoundBasis = ui.compoundBasis,
+                modifier = overCanvas,
             )
         }
     }
@@ -489,8 +529,13 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 onTable = if (PropertyTables.available(ui.flowsheet, obj).isEmpty()) null else ({ tableFor = id }),
                 hasTable = ui.flowsheet.tables.any { it.objectId == id },
                 onDuplicate = if (obj.type == app.flowstead.core.model.ObjectType.MaterialStream) ({ vm.duplicateStream(id); Unit }) else null,
+                onGroup = if (obj.type.isStream) null else ({ vm.groupObject(id) }),
             )
         }
+    }
+
+    ui.selectedBlock?.let { id ->
+        SubflowsheetSheet(ui.flowsheet, id, ui.results, ui.unitSet, vm, onOpenFluid = onOpenBlockFluid, onDismiss = vm::closeBlock, modifier = overCanvas)
     }
 
     tableFor?.let { id ->
@@ -533,6 +578,7 @@ private fun Editor(ui: FlowsheetUi, vm: FlowsheetViewModel, onOpenResults: () ->
                 }
             }
         }
+    }
     }
 }
 
@@ -609,6 +655,73 @@ private fun SolveBar(ui: FlowsheetUi, onSolve: () -> Unit, onSolverActive: (Bool
             ) {
                 if (solving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Solve", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+/**
+ * Where you are among sub-flowsheets (D133), as a breadcrumb (Main › SUB-1), and a button to add a block here. A block
+ * opens with a second tap or a long press; streams go in and out from its sheet or by dragging one onto it.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun LevelBar(ui: FlowsheetUi, onLevel: (String?) -> Unit, onAddBlock: () -> Unit, onSelecting: (Boolean) -> Unit, modifier: Modifier) {
+    androidx.compose.material3.Surface(
+        modifier = modifier, shape = MaterialTheme.shapes.small, tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+            val crumbs = listOf<Pair<String?, String>>(null to "Main") + ui.path.map { it.id to it.tag }
+            crumbs.forEachIndexed { i, (id, tag) ->
+                if (i > 0) Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (i == crumbs.lastIndex) Text(tag, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 8.dp))
+                else androidx.compose.material3.TextButton(onClick = { onLevel(id) }) { Text(tag) }
+            }
+            androidx.compose.material3.TextButton(onClick = onAddBlock, modifier = Modifier.testTag("add_block")) { Text("+ Sub-flowsheet") }
+            // The Select tool (D139): taps then build a selection to move, group, delete or drag into a block together.
+            androidx.compose.material3.FilterChip(
+                selected = ui.selecting, onClick = { onSelecting(!ui.selecting) }, label = { Text(if (ui.selecting) "Selecting" else "Select") },
+                modifier = Modifier.padding(end = 4.dp).testTag("select_tool"),
+            )
+        }
+    }
+}
+
+/** What to do with the objects selected together (D139); dragging any of them onto a block also moves them all into it. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SelectionBar(ui: FlowsheetUi, onMoveInto: (String) -> Unit, onGroup: () -> Unit, onDelete: () -> Unit, onClear: () -> Unit) {
+    val n = ui.multiSelected.size
+    var menu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Dragged by its handle anywhere over the flowsheet, so it never hides what is behind it (D146).
+    var offset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
+    androidx.compose.material3.Surface(
+        shape = MaterialTheme.shapes.small, tonalElevation = 2.dp, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        modifier = Modifier.offset { androidx.compose.ui.unit.IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) },
+    ) {
+        androidx.compose.foundation.layout.FlowRow(verticalArrangement = Arrangement.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
+            Icon(
+                Icons.Filled.DragIndicator, contentDescription = "Drag to move the selection bar",
+                modifier = Modifier
+                    .align(Alignment.CenterVertically)
+                    .size(40.dp)
+                    .pointerInput(Unit) { detectDragGestures { change, drag -> change.consume(); offset += drag } }
+                    .padding(8.dp)
+                    .testTag("selection_bar_handle"),
+            )
+            Text(if (n == 0) "Tap objects to select them" else "$n selected", style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.align(Alignment.CenterVertically).padding(end = 4.dp))
+            if (n > 0) {
+                Box {
+                    androidx.compose.material3.TextButton(onClick = { menu = true }, enabled = ui.blocks.isNotEmpty(), modifier = Modifier.testTag("move_into")) { Text("Move into…") }
+                    androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        ui.blocks.forEach { b -> androidx.compose.material3.DropdownMenuItem(text = { Text(b.tag) }, onClick = { menu = false; onMoveInto(b.id) }) }
+                    }
+                }
+                androidx.compose.material3.TextButton(onClick = onGroup) { Text("Sub-flowsheet") }
+                androidx.compose.material3.TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                androidx.compose.material3.TextButton(onClick = onClear) { Text("Clear") }
             }
         }
     }

@@ -59,6 +59,11 @@ data class PressurizationSupply(
     val opening: Double = 1.0,
     val valveXt: Double = 0.72,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
+    /** A fixed volume instead of a header (D149): the source vessel or pipe, which empties until the pressures equalise. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val vessel: VesselGeometry? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val wallThickness: Double? = null,
+    /** The source's inside film coefficient: null the correlations (wall heat), 0 adiabatic. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val heatTransferCoefficient: Double? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -162,6 +167,8 @@ data class DepressuringRequest(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val orificeDiameter: Double? = null,
     val dischargeCoefficient: Double = 0.84,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val targetPressure: Double? = null,
+    /** The vessel's design pressure, Pa abs: API 521's target basis and the ASME wall's pressure (D142). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val designPressure: Double? = null,
     val targetTime: Double = 900.0,
     val duration: Double = 1800.0,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val fire: ReliefScenario? = null,
@@ -180,6 +187,8 @@ data class DepressuringResult(
     val orificeDiameter: Double = 0.0,
     val orificeSized: Boolean = false,
     val targetPressure: Double = 0.0,
+    /** What set the target: "given", "6.9 barg", "half the design pressure" or "half the starting pressure" (D142). */
+    val targetBasis: String? = null,
     val timeToTarget: Double? = null,
     val minimumTemperature: Double = 0.0,
     val minimumLiquidTemperature: Double? = null,
@@ -202,5 +211,13 @@ data class DepressuringResult(
     val massFlow: List<Double> = emptyList(),
     val inventory: List<Double> = emptyList(),
     val liquidVolumeFraction: List<Double> = emptyList(),
+    /** Pressurization from a fixed volume (D149): the source's pressure and gas temperature, its coldest gas and wall, where and when the two sides equalise, the mass moved. */
+    val sourcePressure: List<Double>? = null,
+    val sourceTemperature: List<Double>? = null,
+    val sourceMinimumTemperature: Double? = null,
+    val sourceMinimumWallTemperature: Double? = null,
+    val equalisingPressure: Double? = null,
+    val timeToEqualise: Double? = null,
+    val massTransferred: Double? = null,
     val warnings: List<String> = emptyList(),
 )

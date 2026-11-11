@@ -1,0 +1,17 @@
+diff --git a/engine/DWSIM.UnitOperations/UnitOperations/Pipe.vb b/engine/DWSIM.UnitOperations/UnitOperations/Pipe.vb
+index e103162..7628792 100644
+--- a/engine/DWSIM.UnitOperations/UnitOperations/Pipe.vb
++++ b/engine/DWSIM.UnitOperations/UnitOperations/Pipe.vb
+@@ -2245,6 +2245,12 @@ Namespace UnitOperations
+                 tmp(0) = 30
+                 tmp(1) = 1
+             End If
++            'Flowstead (D145): a resistance coefficient the user gives, "<name> K=<value> [29]", on the velocity head.
++            If name = 29 Then
++                Dim kAt As Integer = name2.LastIndexOf("K=")
++                tmp(0) = Double.Parse(name2.Substring(kAt + 2, name2.LastIndexOf("[") - kAt - 2).Trim(), Globalization.CultureInfo.InvariantCulture)
++                tmp(1) = 0
++            End If
+ 
+             Kfit = tmp
+ 

@@ -76,8 +76,27 @@ import kotlin.math.roundToInt
 
 private enum class Outcome { Up, Drag, Multi }
 
+/**
+ * A sub-flowsheet block on the flowsheet shown (D133): [links] are the streams here matched to it, each with whether
+ * it goes into the block ([BlockLink.feed]).
+ */
+data class BlockView(val id: String, val tag: String, val x: Double, val y: Double, val packageLabel: String?, val links: List<BlockLink>) {
+    val rect: Rect get() = Rect(Offset(x.toFloat() - BLOCK_W / 2, y.toFloat() - BLOCK_H / 2), Size(BLOCK_W, BLOCK_H))
+    companion object { const val BLOCK_W = 128f; const val BLOCK_H = 80f }
+}
+data class BlockLink(val outerId: String, val feed: Boolean)
+
 /** What the canvas reports back; the screen turns these into ViewModel edits. */
 interface CanvasActions {
+    /** A sub-flowsheet block was tapped (select it), opened (a long press), moved, or had a stream dropped on it. */
+    fun tapBlock(id: String) {}
+    fun openBlock(id: String) {}
+    fun moveBlock(id: String, x: Double, y: Double) {}
+    /** A unit or stream let go over a block: a stream with a free end becomes one of its streams in or out, else it moves in. */
+    fun dropOnBlock(streamId: String, blockId: String) {}
+    /** Several selected objects (D139) moved together by ([dx], [dy]), or let go over a block (they move into it). */
+    fun moveMany(ids: List<String>, dx: Double, dy: Double) {}
+    fun dropManyOnBlock(ids: List<String>, blockId: String) {}
     fun tap(hit: Hit)
     fun longPress(objectId: String)
     fun move(objectId: String, x: Double, y: Double)
@@ -103,6 +122,13 @@ fun FlowsheetCanvas(
     unitSet: UnitSet = UnitSet.SI,
     /** Objects the solver leaves out, with why (D83): their badge is red. */
     notReady: Map<String, String> = emptyMap(),
+    /** Sub-flowsheet blocks on the flowsheet shown (D133), and the selected one. */
+    blocks: List<BlockView> = emptyList(),
+    selectedBlock: String? = null,
+    /** Inside a sub-flowsheet: each boundary stream's partner outside ("from 2", "to COOLED"). */
+    streamNotes: Map<String, String> = emptyMap(),
+    /** Objects selected together with the Select tool (D139): outlined, and dragged as one. */
+    multiSelected: Set<String> = emptySet(),
 ) {
     val density = LocalDensity.current.density
     val colors = MaterialTheme.colorScheme
@@ -130,10 +156,17 @@ fun FlowsheetCanvas(
     var dragging by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     var wire by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
     var draggingTable by remember { mutableStateOf<Pair<String, Offset>?>(null) }
+    var draggingBlock by remember { mutableStateOf<Pair<String, Offset>?>(null) }
+    // Several selected objects dragged together: how far; and the block a drag would drop into (outlined).
+    var groupDelta by remember { mutableStateOf<Offset?>(null) }
+    var dropBlock by remember { mutableStateOf<String?>(null) }
+    val bl by rememberUpdatedState(blocks)
+    val sel by rememberUpdatedState(multiSelected)
     // Where each property table was last drawn (screen), for hit-testing; written while drawing.
     val tableBoxes = remember { mutableMapOf<String, Rect>() }
 
-    fun positionOf(o: SimObject): Offset = dragging?.takeIf { it.first == o.id }?.second ?: CanvasGeometry.center(o)
+    fun positionOf(o: SimObject): Offset = dragging?.takeIf { it.first == o.id }?.second
+        ?: groupDelta?.takeIf { o.id in multiSelected }?.let { CanvasGeometry.center(o) + it } ?: CanvasGeometry.center(o)
 
     Box(modifier) {
         Canvas(
@@ -147,6 +180,7 @@ fun FlowsheetCanvas(
                         val startWorld = startVp.toWorld(down.position, density)
                         val hit = hitTest(fs, startWorld, startVp.zoom)
                         val tableHit = tableBoxes.entries.lastOrNull { it.value.contains(down.position) }?.key
+                        val blockHit = if (hit == Hit.Empty && tableHit == null) bl.lastOrNull { it.rect.contains(startWorld) } else null
 
                         val outcome: Outcome? = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                             var travelled = Offset.Zero
@@ -168,7 +202,8 @@ fun FlowsheetCanvas(
 
                         when (outcome) {
                             null -> { // long press
-                                val id = if (tableHit != null) null else when (hit) {
+                                blockHit?.let { act.openBlock(it.id) }
+                                val id = if (tableHit != null || blockHit != null) null else when (hit) {
                                     is Hit.OnObject -> hit.objectId
                                     is Hit.OnPort -> hit.objectId
                                     Hit.Empty -> null
@@ -179,8 +214,22 @@ fun FlowsheetCanvas(
                                     ev.changes.forEach { it.consume() }
                                 } while (ev.changes.any { it.pressed })
                             }
-                            Outcome.Up -> if (tableHit != null) act.editTable(tableHit) else act.tap(hit)
-                            Outcome.Drag -> if (tableHit != null) {
+                            Outcome.Up -> if (tableHit != null) act.editTable(tableHit) else if (blockHit != null) act.tapBlock(blockHit.id) else act.tap(hit)
+                            Outcome.Drag -> if (blockHit != null) {
+                                val from = Offset(blockHit.x.toFloat(), blockHit.y.toFloat())
+                                while (true) {
+                                    val ev = awaitPointerEvent()
+                                    val change = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) break
+                                    change.consume()
+                                    draggingBlock = blockHit.id to (from + (vp.toWorld(change.position, density) - startWorld))
+                                }
+                                draggingBlock?.let { (id, at) ->
+                                    val g = 24f
+                                    act.moveBlock(id, ((at.x / g).roundToInt() * g).toDouble(), ((at.y / g).roundToInt() * g).toDouble())
+                                }
+                                draggingBlock = null
+                            } else if (tableHit != null) {
                                 val table = fs.tables.firstOrNull { it.objectId == tableHit }
                                 val from = Offset(table?.dx?.toFloat() ?: 0f, table?.dy?.toFloat() ?: 0f)
                                 while (true) {
@@ -202,6 +251,9 @@ fun FlowsheetCanvas(
                                 val portStart = port?.let { p ->
                                     fs.objects.firstOrNull { it.id == p.objectId }?.let { CanvasGeometry.portPosition(it, p.port) }
                                 }
+                                // A selected object of several drags them all (D139).
+                                val together = obj != null && obj.id in sel && sel.size > 1
+                                val group = if (together) sel.toList() else emptyList()
                                 var last = down.position
                                 while (true) {
                                     val ev = awaitPointerEvent()
@@ -210,14 +262,27 @@ fun FlowsheetCanvas(
                                     change.consume()
                                     val world = vp.toWorld(change.position, density)
                                     when {
+                                        together -> groupDelta = world - startWorld
                                         obj != null -> dragging = obj.id to (CanvasGeometry.center(obj) + (world - startWorld))
                                         portStart != null -> wire = portStart to world
                                         else -> onVp(vp.copy(offset = vp.offset + (change.position - last)))
                                     }
+                                    if (obj != null) dropBlock = bl.lastOrNull { it.rect.contains(world) }?.id
                                     last = change.position
                                 }
                                 val releaseWorld = vp.toWorld(last, density)
+                                val over = if (obj != null && (dragging != null || groupDelta != null)) bl.lastOrNull { it.rect.contains(releaseWorld) } else null
                                 when {
+                                    // Let go over a sub-flowsheet: what was dragged goes into it (a stream with a free end
+                                    // becomes one of its streams in or out instead, D133).
+                                    together && over != null -> act.dropManyOnBlock(group, over.id)
+                                    together -> groupDelta?.let { d ->
+                                        // The grabbed object goes on the grid and the rest move by as much, keeping their layout.
+                                        val c = CanvasGeometry.center(obj!!)
+                                        val snapped = CanvasGeometry.snap(fs, obj, c + d)
+                                        act.moveMany(group, (snapped.x - c.x).toDouble(), (snapped.y - c.y).toDouble())
+                                    }
+                                    obj != null && over != null -> act.dropOnBlock(obj.id, over.id)
                                     obj != null -> dragging?.let { (id, at) ->
                                         // Dropped on the grid and lined up with what it connects to, so its lines run straight.
                                         val snapped = CanvasGeometry.snap(fs, obj, at)
@@ -226,6 +291,8 @@ fun FlowsheetCanvas(
                                     port != null -> act.wire(port.objectId, port.port, hitTest(fs, releaseWorld, vp.zoom), releaseWorld)
                                 }
                                 dragging = null
+                                groupDelta = null
+                                dropBlock = null
                                 wire = null
                             }
                             Outcome.Multi -> {
@@ -288,7 +355,7 @@ fun FlowsheetCanvas(
                     for (o in fs.objects) {
                         val at = positionOf(o)
                         val s = CanvasGeometry.size(o.type)
-                        if (o.id == selectedId) {
+                        if (o.id == selectedId || o.id in multiSelected) {
                             val b = CanvasGeometry.bounds(o, at).inflate(6f)
                             drawRoundRect(colors.secondary, b.topLeft, b.size, CornerRadius(10f), style = Stroke(2.5f))
                         }
@@ -327,6 +394,30 @@ fun FlowsheetCanvas(
                             val b = CanvasGeometry.bounds(o, at)
                             drawCircle(badge, 4.5f, Offset(b.left - 7f, b.top - 7f))
                         }
+                    }
+
+                    // Sub-flowsheet blocks (D133), over the streams, with a dashed line from each matched stream to the block.
+                    for (b in blocks) {
+                        val c = draggingBlock?.takeIf { it.first == b.id }?.second ?: Offset(b.x.toFloat(), b.y.toFloat())
+                        val r = Rect(Offset(c.x - BlockView.BLOCK_W / 2, c.y - BlockView.BLOCK_H / 2), Size(BlockView.BLOCK_W, BlockView.BLOCK_H))
+                        for (l in b.links) {
+                            val o = fs.objects.firstOrNull { it.id == l.outerId } ?: continue
+                            // Square to the stream's head or tail and to the block's edge, as a connection is drawn (D147).
+                            val pts = CanvasGeometry.blockLinkRoute(o, positionOf(o), r, intoBlock = l.feed)
+                            val col = streamColor(o, palette, results, twoPhase)
+                            drawPath(
+                                Path().apply { moveTo(pts[0].x, pts[0].y); pts.drop(1).forEach { lineTo(it.x, it.y) } }, col,
+                                style = Stroke(width = 2f, cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))),
+                            )
+                            drawCircle(col, 3.5f, if (l.feed) pts.last() else pts.first())
+                        }
+                        drawRoundRect(palette.fill, r.topLeft, r.size, CornerRadius(8f))
+                        drawRoundRect(if (b.id == selectedBlock) colors.secondary else if (b.packageLabel != null) colors.tertiary else palette.stroke,
+                            r.topLeft, r.size, CornerRadius(8f), style = Stroke(if (b.id == selectedBlock) 3f else 2f))
+                        // The drop target while objects are dragged over it (D139).
+                        if (b.id == dropBlock) drawRoundRect(colors.secondary, r.topLeft - Offset(4f, 4f), Size(r.width + 8f, r.height + 8f), CornerRadius(10f), style = Stroke(3f))
+                        drawRoundRect(palette.stroke, Offset(r.left + 5f, r.top + 5f), Size(r.width - 10f, r.height - 10f), CornerRadius(5f),
+                            style = Stroke(0.8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 3f))))
                     }
 
                     // Adjust, controller and Set references: dashed (signal) lines to the objects they read and write.
@@ -384,6 +475,22 @@ fun FlowsheetCanvas(
                 drawText(layout, topLeft = Offset(anchor.x - layout.size.width / 2f, anchor.y))
             }
 
+            for (b in blocks) {
+                val c = viewport.toScreen(draggingBlock?.takeIf { it.first == b.id }?.second ?: Offset(b.x.toFloat(), b.y.toFloat()), density)
+                val name = textMeasurer.measure(b.tag, style.copy(fontWeight = FontWeight.Bold, color = colors.onSurface, fontSize = (13f * viewport.zoom).coerceIn(9f, 18f).sp))
+                val pkg = b.packageLabel?.let { textMeasurer.measure(it, style.copy(color = colors.tertiary, fontSize = (10f * viewport.zoom).coerceIn(7f, 13f).sp)) }
+                val h = name.size.height + (pkg?.size?.height ?: 0)
+                drawText(name, topLeft = Offset(c.x - name.size.width / 2f, c.y - h / 2f))
+                pkg?.let { drawText(it, topLeft = Offset(c.x - it.size.width / 2f, c.y - h / 2f + name.size.height)) }
+            }
+            for ((id, note) in streamNotes) {
+                val o = fs.objects.firstOrNull { it.id == id } ?: continue
+                val b = CanvasGeometry.bounds(o, positionOf(o))
+                val anchor = viewport.toScreen(Offset(b.center.x, b.bottom + 4f), density)
+                val layout = textMeasurer.measure(note, style.copy(color = colors.tertiary))
+                drawText(layout, topLeft = Offset(anchor.x - layout.size.width / 2f, anchor.y + fontSize * density * 1.4f))
+            }
+
             // Property tables, also in screen space; they scale with the zoom and stay put when their object moves.
             tableBoxes.clear()
             val tableSize = (9f * viewport.zoom).coerceIn(6f, 14f)
@@ -422,6 +529,19 @@ fun FlowsheetCanvas(
             }
         }
 
+        for (b in blocks) {
+            val topLeft = viewport.toScreen(b.rect.topLeft, density)
+            Box(
+                Modifier
+                    .offset { IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()) }
+                    .size((BlockView.BLOCK_W * viewport.zoom).coerceAtLeast(48f).dp, (BlockView.BLOCK_H * viewport.zoom).coerceAtLeast(48f).dp)
+                    .clearAndSetSemantics {
+                        contentDescription = "Sub-flowsheet ${b.tag}" + (b.packageLabel?.let { " on $it" } ?: "")
+                        onClick(label = "Select") { actions.tapBlock(b.id); true }
+                        onLongClick(label = "Open") { actions.openBlock(b.id); true }
+                    },
+            )
+        }
         // Accessibility: one invisible node per object, placed over its icon, so TalkBack can
         // reach, read and act on everything drawn on the canvas.
         for (o in flowsheet.objects) {

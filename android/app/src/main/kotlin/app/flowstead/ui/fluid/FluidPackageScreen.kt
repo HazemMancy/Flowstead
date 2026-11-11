@@ -74,6 +74,7 @@ import app.flowstead.core.api.OfflineCatalogue
 import app.flowstead.core.compounds.Compound
 import app.flowstead.core.compounds.CompoundCatalogue
 import app.flowstead.core.format.ValueFormat
+import app.flowstead.core.model.Subflowsheets
 import app.flowstead.core.model.EditRejected
 import app.flowstead.core.model.FlowsheetEditing
 import app.flowstead.core.model.Hypothetical
@@ -97,6 +98,7 @@ import app.flowstead.ui.theme.valueColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -166,6 +168,24 @@ class FluidPackageViewModel @Inject constructor(
     private val http: io.ktor.client.HttpClient,
 ) : ViewModel() {
     private val projectId = savedState.toRoute<FluidRoute>().projectId
+    /** A sub-flowsheet with its own fluid package (D133): this screen then edits that package, not the case's. */
+    private val blockId = savedState.toRoute<FluidRoute>().blockId
+
+    /** The project as this screen edits it: for a block, the case with the block's package in the case's fields. */
+    private fun project(): Flow<app.flowstead.data.Project?> = projects.observeProject(projectId).let { flow ->
+        if (blockId == null) flow
+        else flow.map { p -> p?.let { it.copy(flowsheet = Subflowsheets.withFluid(it.flowsheet, Subflowsheets.fluidAt(it.flowsheet, blockId))) } }
+    }
+
+    /** Saves [next] (the flowsheet this screen edits): for a block, only its fluid fields go back into the block. */
+    private suspend fun save(next: app.flowstead.core.model.Flowsheet) {
+        if (blockId == null) { projects.saveFlowsheet(projectId, next); return }
+        val p = projects.observeProject(projectId).first() ?: return
+        // What isn't the fluid (reactions found here, say) is the case's; the case's own package and its streams stay
+        // as they are (a component taken off the block's package is not taken out of streams outside it).
+        val case = Subflowsheets.withFluid(next, Subflowsheets.fluidOf(p.flowsheet)).copy(objects = p.flowsheet.objects, connections = p.flowsheet.connections, subflowsheets = p.flowsheet.subflowsheets)
+        projects.saveFlowsheet(projectId, Subflowsheets.setFluid(case, blockId, Subflowsheets.fluidOf(next)))
+    }
     private val search = MutableStateFlow(Search("", CompoundCatalogue.COMMON))
     private val packages = MutableStateFlow(OfflineCatalogue.propertyPackages)
     private val _messages = Channel<String>(Channel.BUFFERED)
@@ -176,7 +196,7 @@ class FluidPackageViewModel @Inject constructor(
         c to c.search(s.query, s.family, limit = 300)
     }
 
-    val state: StateFlow<FluidUi> = combine(projects.observeProject(projectId), search, results, packages, settings.settings) { p, s, (cat, hits), pk, st ->
+    val state: StateFlow<FluidUi> = combine(project(), search, results, packages, settings.settings) { p, s, (cat, hits), pk, st ->
         FluidUi(
             loaded = p != null,
             propertyPackage = p?.flowsheet?.propertyPackage,
@@ -218,23 +238,23 @@ class FluidPackageViewModel @Inject constructor(
     }
 
     fun setPackage(name: String) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
-        projects.saveFlowsheet(projectId, p.flowsheet.copy(propertyPackage = name))
+        val p = project().first() ?: return@launch
+        save(p.flowsheet.copy(propertyPackage = name))
     }
 
     fun setLiquidDensity(method: String?) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
-        projects.saveFlowsheet(projectId, p.flowsheet.copy(liquidDensity = method))
+        val p = project().first() ?: return@launch
+        save(p.flowsheet.copy(liquidDensity = method))
     }
 
     fun setVolumeShift(method: String?) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
-        projects.saveFlowsheet(projectId, p.flowsheet.copy(volumeShift = method))
+        val p = project().first() ?: return@launch
+        save(p.flowsheet.copy(volumeShift = method))
     }
 
     fun setVapourViscosity(method: String?) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
-        projects.saveFlowsheet(projectId, p.flowsheet.copy(vapourViscosity = method))
+        val p = project().first() ?: return@launch
+        save(p.flowsheet.copy(vapourViscosity = method))
     }
 
     /** The package's kij table from the engine (D58), loaded when the kij sheet opens. */
@@ -242,7 +262,7 @@ class FluidPackageViewModel @Inject constructor(
     val kij: StateFlow<KijState> = _kij
 
     fun loadKij() = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         val url = settings.settings.first().engineTarget
         if (url.isBlank()) { _kij.value = KijState.Failed("Choose an engine in Settings to read the interaction parameters"); return@launch }
         _kij.value = KijState.Working
@@ -254,21 +274,21 @@ class FluidPackageViewModel @Inject constructor(
 
     /** Sets (or with null resets) one pair's kij, then re-reads the table. */
     fun setKij(a: String, b: String, kij: Double?) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         val next = try { FlowsheetEditing.setInteractionParameter(p.flowsheet, a, b, kij) } catch (e: EditRejected) { _messages.send(e.message ?: "Not allowed"); return@launch }
-        projects.saveFlowsheet(projectId, next)
+        save(next)
         (_kij.value as? KijState.Loaded)?.let { s ->
             _kij.value = KijState.Loaded(s.pairs.map { if ((it.a == a && it.b == b) || (it.a == b && it.b == a)) it.copy(kij = kij ?: it.databank ?: 0.0, user = kij != null) else it })
         }
     }
 
     fun add(name: String) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         if (name in p.flowsheet.compounds) {
             _messages.send("$name is already in the list")
             return@launch
         }
-        projects.saveFlowsheet(projectId, FlowsheetEditing.setCompounds(p.flowsheet, p.flowsheet.compounds + name))
+        save(FlowsheetEditing.setCompounds(p.flowsheet, p.flowsheet.compounds + name))
     }
 
     private val _estimate = MutableStateFlow<EstimateState>(EstimateState.Idle)
@@ -291,9 +311,9 @@ class FluidPackageViewModel @Inject constructor(
     }
 
     fun saveHypothetical(h: Hypothetical, onSaved: () -> Unit) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         try {
-            projects.saveFlowsheet(projectId, FlowsheetEditing.upsertHypothetical(p.flowsheet, h))
+            save(FlowsheetEditing.upsertHypothetical(p.flowsheet, h))
             onSaved()
         } catch (e: EditRejected) {
             _messages.send(e.message ?: "Not saved")
@@ -303,10 +323,10 @@ class FluidPackageViewModel @Inject constructor(
     fun deleteHypothetical(name: String) = remove(name)
 
     fun saveBlackOil(b: app.flowstead.core.model.BlackOil, onSaved: () -> Unit) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         try {
             val withOil = FlowsheetEditing.upsertBlackOil(p.flowsheet, b)
-            projects.saveFlowsheet(projectId, if (withOil.propertyPackage == null) withOil.copy(propertyPackage = app.flowstead.core.model.BlackOil.PACKAGE) else withOil)
+            save(if (withOil.propertyPackage == null) withOil.copy(propertyPackage = app.flowstead.core.model.BlackOil.PACKAGE) else withOil)
             onSaved()
         } catch (e: EditRejected) {
             _messages.send(e.message ?: "Not saved")
@@ -322,7 +342,7 @@ class FluidPackageViewModel @Inject constructor(
 
     /** Runs one tool with the project's fluid: [call] gets the engine address, key and the flowsheet. */
     fun runThermo(call: suspend (url: String, key: String?, fs: app.flowstead.core.model.Flowsheet) -> EngineResult<Any>) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         val url = settings.settings.first().engineTarget
         if (url.isBlank()) { _thermo.value = ThermoState.Failed("Choose an engine in Settings first"); return@launch }
         if (p.flowsheet.propertyPackage == null) { _thermo.value = ThermoState.Failed("Choose a property package first"); return@launch }
@@ -345,7 +365,7 @@ class FluidPackageViewModel @Inject constructor(
     fun clearData() { _data.value = ThermoState.Idle }
 
     fun runData(call: suspend (url: String, key: String?, fs: app.flowstead.core.model.Flowsheet) -> EngineResult<Any>) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         val url = settings.settings.first().engineTarget
         if (url.isBlank()) { _data.value = ThermoState.Failed("Choose an engine in Settings first"); return@launch }
         _data.value = ThermoState.Working
@@ -373,17 +393,17 @@ class FluidPackageViewModel @Inject constructor(
     }
 
     fun saveBinaryParameter(parameter: app.flowstead.core.model.BinaryParameter) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         try {
-            projects.saveFlowsheet(projectId, FlowsheetEditing.upsertBinaryParameter(p.flowsheet, parameter))
+            save(FlowsheetEditing.upsertBinaryParameter(p.flowsheet, parameter))
             _messages.send("Saved: the fluid now uses the fitted parameters for ${parameter.a}–${parameter.b}")
         } catch (e: EditRejected) { _messages.send(e.message ?: "Not saved") }
     }
 
     fun addReaction(reaction: app.flowstead.core.model.Reaction) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         try {
-            projects.saveFlowsheet(projectId, FlowsheetEditing.addSuggestedReaction(p.flowsheet, reaction))
+            save(FlowsheetEditing.addSuggestedReaction(p.flowsheet, reaction))
             _messages.send("${reaction.name} added; choose it in a ${reaction.type.label.lowercase()} reactor")
         } catch (e: EditRejected) { _messages.send(e.message ?: "Not added") }
     }
@@ -397,7 +417,7 @@ class FluidPackageViewModel @Inject constructor(
 
     /** Cuts the assay with the flowsheet's package; [request]'s flowsheet is replaced by the project's. */
     fun characterise(request: app.flowstead.core.api.AssayRequest) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         val url = settings.settings.first().engineTarget
         if (url.isBlank()) { _assay.value = AssayState.Failed("Choose an engine in Settings to characterise assays"); return@launch }
         if (p.flowsheet.propertyPackage == null) { _assay.value = AssayState.Failed("Choose a property package first"); return@launch }
@@ -410,13 +430,13 @@ class FluidPackageViewModel @Inject constructor(
 
     /** Puts the pseudo-components in the fluid and makes a stream of the assay's composition. */
     fun applyAssay(result: app.flowstead.core.api.AssayResult, onDone: () -> Unit) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         val objs = p.flowsheet.objects
         val x = (objs.maxOfOrNull { it.x } ?: 0.0) + 160.0
         val y = objs.minOfOrNull { it.y } ?: 160.0
         try {
             val (fs, stream) = FlowsheetEditing.addAssay(p.flowsheet, result, x, y)
-            projects.saveFlowsheet(projectId, fs)
+            save(fs)
             _messages.send("${result.hypotheticals.size} pseudo-components added; stream ${stream.tag} has the assay's composition: give its temperature, pressure and flow")
             clearAssay()
             onDone()
@@ -426,9 +446,9 @@ class FluidPackageViewModel @Inject constructor(
     }
 
     fun remove(name: String) = viewModelScope.launch {
-        val p = projects.observeProject(projectId).first() ?: return@launch
+        val p = project().first() ?: return@launch
         val used = p.flowsheet.objects.count { name in it.composition }
-        projects.saveFlowsheet(projectId, FlowsheetEditing.setCompounds(p.flowsheet, p.flowsheet.compounds - name))
+        save(FlowsheetEditing.setCompounds(p.flowsheet, p.flowsheet.compounds - name))
         if (used > 0) _messages.send("Removed $name from $used stream composition(s); check that they still add up to 1")
     }
 }

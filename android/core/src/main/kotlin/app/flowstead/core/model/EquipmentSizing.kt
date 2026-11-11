@@ -4,6 +4,7 @@
  */
 package app.flowstead.core.model
 
+import app.flowstead.core.format.ValueFormat
 import app.flowstead.core.units.Quantity
 import kotlinx.serialization.Serializable
 import kotlin.math.PI
@@ -99,6 +100,8 @@ data class EquipmentSizingInput(
     /** Heater, cooler or air cooler: the utility's (or air's) inlet and outlet temperatures; equal for condensing steam. */
     val utilityIn: Double? = null,
     val utilityOut: Double? = null,
+    /** Air cooler: tube passes, for the crossflow F (D143); null is 1, the lowest F. */
+    val tubePasses: Int? = null,
     /** Driver margin over the shaft power, as a factor; null is API 610 / 617's. */
     val margin: Double? = null,
     /** Tank: working liquid residence time, and the fraction of the volume the working liquid fills. */
@@ -218,7 +221,7 @@ object EquipmentSizing {
                 val motor = DataLibrary.motor(rated)
                 val lines = mutableListOf(
                     SizingLine(if (o.type == ObjectType.Expander) "Shaft power delivered" else "Shaft power", w, Quantity.Power),
-                    SizingLine("Margin", text = "${"%.0f".format(margin * 100)} %" + if (input.margin == null) (if (o.type == ObjectType.Pump) " (API 610)" else " (API 617)") else ""),
+                    SizingLine("Margin", text = "${ValueFormat.number(margin * 100, 0)} %" + if (input.margin == null) (if (o.type == ObjectType.Pump) " (API 610)" else " (API 617)") else ""),
                     SizingLine(if (o.type == ObjectType.Expander) "Generator at least" else "Driver at least", rated, Quantity.Power),
                 )
                 lines += if (motor != null) SizingLine(if (o.type == ObjectType.Expander) "Standard generator (IEC 60072)" else "Standard motor (IEC 60072)", motor, Quantity.Power)
@@ -241,11 +244,13 @@ object EquipmentSizing {
                         SizingLine("Diameter (H = 1.5 D)", d, Quantity.Length),
                         SizingLine("Height", 1.5 * d, Quantity.Length),
                     ),
-                    notes = listOf("Residence time ${"%.0f".format(time / 60)} min, filled to ${"%.0f".format(fill * 100)} %" +
+                    notes = listOf("Residence time ${ValueFormat.number(time / 60, 0)} min, filled to ${ValueFormat.number(fill * 100, 0)} %" +
                         if (input.residenceTime == null || input.fillFraction == null) " (data library: 10 min, 85 %)." else "."),
                 )
             }
             in COLUMNS -> {
+                // A packed column (D152): the engine rated the bed; trays otherwise.
+                if (Packings.of(o) != null) return Packings.size(results, o)
                 val profile = results.profiles(o.id) ?: return null
                 val ts = input.traySpacing ?: ColumnSizing.DEFAULT_TRAY_SPACING
                 val ff = input.floodFraction ?: ColumnSizing.DEFAULT_FLOOD
@@ -282,11 +287,11 @@ object EquipmentSizing {
                         SizingLine("Height (tangent to tangent)", r.height, Quantity.Length),
                     ) + extra },
                     notes = listOf(
-                        "Fair's flooding correlation at ${"%.0f".format(ff * 100)} % of flood, ${"%.0f".format(ts * 1000)} mm tray spacing, " +
-                            "${"%.0f".format(dc * 100)} % downcomer area, ${"%.0f".format(eff * 100)} % tray efficiency; " +
+                        "Fair's flooding correlation at ${ValueFormat.number(ff * 100, 0)} % of flood, ${ValueFormat.number(ts * 1000, 0)} mm tray spacing, " +
+                            "${ValueFormat.number(dc * 100, 0)} % downcomer area, ${ValueFormat.number(eff * 100, 0)} % tray efficiency; " +
                             "${ColumnSizing.TOP_SPACE} m above the top tray and ${ColumnSizing.BOTTOM_SPACE} m below the bottom one.",
-                        "Internals: sieve trays at the rounded diameter, ${"%.0f".format(layout.weirHeight * 1000)} mm weir, " +
-                            "${"%.1f".format(layout.holeDiameter * 1000)} mm holes over ${"%.0f".format(layout.holeFraction * 100)} % of the active area " +
+                        "Internals: sieve trays at the rounded diameter, ${ValueFormat.number(layout.weirHeight * 1000, 0)} mm weir, " +
+                            "${ValueFormat.number(layout.holeDiameter * 1000, 1)} mm holes over ${ValueFormat.number(layout.holeFraction * 100, 0)} % of the active area " +
                             "(Sinnott §11.13: Francis weir, dry plate with C0 0.84, residual head, downcomer backup).",
                     ),
                     warnings = r.warnings + h?.warnings.orEmpty(),
@@ -296,7 +301,7 @@ object EquipmentSizing {
         }
     }
 
-    private fun fmtC(k: Double) = "%.0f".format(k - 273.15)
+    private fun fmtC(k: Double) = ValueFormat.number(k - 273.15, 0)
 
     private fun exchanger(
         q: Double, hotIn: Double, hotOut: Double, coldIn: Double, coldOut: Double, input: EquipmentSizingInput,
@@ -314,12 +319,24 @@ object EquipmentSizing {
         lines += SizingLine("LMTD (counter-current)", lm, Quantity.TemperatureDifference)
         // Isothermal on one side (condensing steam): any arrangement is true counter-current.
         val isothermal = abs(hotIn - hotOut) < 0.01 || abs(coldIn - coldOut) < 0.01
-        val shellsF = if (isothermal) 1 to 1.0 else shells(hotIn, hotOut, coldIn, coldOut)
-        if (shellsF == null) {
-            warnings += "No arrangement of up to 6 shells in series gets F to 0.75: a true counter-current exchanger is needed."
+        val shellsF = if (type == ObjectType.AirCooler) {
+            // Crossflow, both unmixed, in counter-cross passes (D143). The process is the hot side.
+            val passes = input.tubePasses ?: 1
+            val f = if (isothermal) 1.0 else CrossflowF.f(hotIn, hotOut, coldIn, coldOut, passes)
+            if (f == null) warnings += "No crossflow bundle of $passes tube pass${if (passes > 1) "es" else ""} does this duty against this air: more passes, or more air (a lower air outlet temperature)."
+            else {
+                lines += SizingLine("F (crossflow, $passes tube pass${if (passes > 1) "es" else ""})", f, Quantity.Ratio)
+                if (f < 0.8) warnings += "F is below 0.8: more tube passes, or more air, would use the area better."
+            }
+            f?.let { passes to it }
         } else {
-            lines += SizingLine("F (1-2 shells in series)", shellsF.second, Quantity.Ratio)
-            if (type == ObjectType.HeatExchanger) lines += SizingLine("Shells in series", shellsF.first.toDouble(), Quantity.Count)
+            val sf = if (isothermal) 1 to 1.0 else shells(hotIn, hotOut, coldIn, coldOut)
+            if (sf == null) warnings += "No arrangement of up to 6 shells in series gets F to 0.75: a true counter-current exchanger is needed."
+            else {
+                lines += SizingLine("F (1-2 shells in series)", sf.second, Quantity.Ratio)
+                if (type == ObjectType.HeatExchanger) lines += SizingLine("Shells in series", sf.first.toDouble(), Quantity.Count)
+            }
+            sf
         }
         if (u == null) {
             warnings += "Choose a service or give U."
@@ -328,10 +345,10 @@ object EquipmentSizing {
         lines += SizingLine("U" + if (input.u == null) " (${service?.label}, typical)" else "", u, Quantity.HeatTransferCoefficient)
         val f = shellsF?.second ?: 1.0
         val area = q / (u * f * lm)
-        lines += SizingLine(if (type == ObjectType.AirCooler) "Bare-tube area" else "Heat-transfer area", area, null, text = "%.1f m²".format(area))
+        lines += SizingLine(if (type == ObjectType.AirCooler) "Bare-tube area" else "Heat-transfer area", area, null, text = "${ValueFormat.number(area, 1)} m²")
         if (input.u == null && service != null) {
             lines += SizingLine("Area over the service's U range", null, null,
-                text = "%.1f – %.1f m²".format(q / (service.high * f * lm), q / (service.low * f * lm)))
+                text = "${ValueFormat.number(q / (service.high * f * lm), 1)} – ${ValueFormat.number(q / (service.low * f * lm), 1)} m²")
         }
         if (type == ObjectType.HeatExchanger && shellsF != null && area / shellsF.first > 1000) {
             warnings += "Over 1000 m² a shell: split into parallel shells."

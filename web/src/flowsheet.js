@@ -8,16 +8,20 @@ import { startEngine } from './engine.js';
 import { initTools } from './tools.js';
 import { initDocuments, importDwsim } from './documents.js';
 import { enterToNext } from './forms.js';
+import { withSubflowsheets } from './subflowsheets.js';
+import { installAutomation } from './automation.js';
+import { floating } from './floating.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STORE = 'flowstead.web.project';
 const PACKAGE = 'Peng-Robinson (PR)';
 
-const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids } = await import('./core/flowstead-core.mjs');
+const { FlowsteadCore, FlowsheetView, Worksheets, Tools, SafetyForms, Documents, Fluids, DynamicsTools, SheetTools, DataTools, ThermoTools, EquipmentTools, Automation, SubTools: SubToolsObject } = await import('./core/flowstead-core.mjs');
 const fluids = Fluids.getInstance();
 const core = FlowsteadCore.getInstance();
 const sheets = Worksheets.getInstance();
+const SubTools = SubToolsObject.getInstance();
 const view = new FlowsheetView();
 const types = JSON.parse(core.objectTypes());
 const typeById = new Map(types.map((t) => [t.id, t]));
@@ -57,6 +61,8 @@ function applyProject() {
 /** Commits an edit: the new flowsheet JSON goes on the page, the old one on the undo stack. */
 function commit(next, message) {
   if (!next || next === project.flowsheet) return;
+  // Inside a sub-flowsheet, whatever the edit made (a stream wired to empty canvas, a pasted copy) belongs to it (D133).
+  if (level) next = SubTools.adopt(project.flowsheet, next, level);
   undo.push(project.flowsheet); if (undo.length > 100) undo.shift();
   redo.length = 0;
   project.flowsheet = next;
@@ -114,6 +120,17 @@ new ResizeObserver(resize).observe(canvas);
 const pointers = new Map();
 let gesture = null; // {id, x0, y0, mode: null|'move'|'wire'|'pan'|'table'|'pinch', lastX, lastY}
 const SLOP = 6;
+// A finger moves a little during a tap and covers more than a mouse pointer: a wider allowance and a wider reach.
+const slopOf = (g) => (g?.touch ? 14 : SLOP);
+function hitAt(x, y, touch) {
+  const h = JSON.parse(view.hit(x, y));
+  if (!touch || h.kind !== 'empty') return h;
+  for (const r of [10, 18, 26]) for (let a = 0; a < 8; a++) {
+    const t = JSON.parse(view.hit(x + r * Math.cos(a * Math.PI / 4), y + r * Math.sin(a * Math.PI / 4)));
+    if (t.kind === 'object' || t.kind === 'block') return t;
+  }
+  return h;
+}
 const local = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -122,11 +139,11 @@ canvas.addEventListener('pointerdown', (e) => {
   const [x, y] = local(e);
   pointers.set(e.pointerId, { x, y });
   if (pointers.size === 2) {
-    if (gesture?.mode && gesture.mode !== 'pan') view.cancelDrag();
+    if (gesture?.mode && gesture.mode !== 'pan') { view.cancelDrag(); draw(); }
     const [a, b] = [...pointers.values()];
     gesture = { mode: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
     draw();
-  } else if (pointers.size === 1) gesture = { id: e.pointerId, x0: x, y0: y, lastX: x, lastY: y, mode: null };
+  } else if (pointers.size === 1) gesture = { id: e.pointerId, x0: x, y0: y, lastX: x, lastY: y, mode: null, multi: e.shiftKey || e.ctrlKey || e.metaKey, touch: e.pointerType !== 'mouse' };
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!pointers.has(e.pointerId)) return;
@@ -144,10 +161,13 @@ canvas.addEventListener('pointermove', (e) => {
   }
   if (e.pointerId !== gesture.id) return;
   if (!gesture.mode) {
-    if (Math.hypot(x - gesture.x0, y - gesture.y0) < SLOP) return;
-    gesture.mode = view.beginDrag(gesture.x0, gesture.y0);
+    if (Math.hypot(x - gesture.x0, y - gesture.y0) < slopOf(gesture)) return;
+    // On empty canvas, Shift (or the Select tool) draws a selection box (D124); otherwise the drag pans.
+    if ((gesture.multi || selectMode) && hitAt(gesture.x0, gesture.y0, gesture.touch).kind === 'empty') { gesture.mode = 'box'; view.beginBox(gesture.x0, gesture.y0); }
+    else gesture.mode = view.beginDrag(gesture.x0, gesture.y0);
   }
-  if (gesture.mode === 'pan') view.pan(x - gesture.lastX, y - gesture.lastY);
+  if (gesture.mode === 'box') view.boxTo(x, y);
+  else if (gesture.mode === 'pan') view.pan(x - gesture.lastX, y - gesture.lastY);
   else view.dragTo(x, y);
   gesture.lastX = x; gesture.lastY = y;
   draw();
@@ -161,10 +181,14 @@ function endPointer(e, cancelled) {
   if (e.pointerId !== gesture.id) return;
   const g = gesture; gesture = null;
   if (cancelled) { view.cancelDrag(); return draw(); }
-  if (!g.mode) return tap(x, y);
+  if (!g.mode) return tap(x, y, g.multi || selectMode, g.touch);
   if (g.mode === 'pan') return;
+  if (g.mode === 'box') { view.endBox(g.multi || selectMode); return selectionChanged(); }
+  const many = g.mode === 'move' && view.selectionCount > 1;
+  const into = g.mode === 'move' ? view.dropTarget : '';
   const r = view.endDrag(x, y);
-  if (!applyEdit(r, g.mode === 'wire' ? 'Connected' : g.mode === 'move' ? 'Moved' : null)) draw();
+  const message = g.mode === 'wire' ? 'Connected' : g.mode === 'move' ? (into ? `Moved ${many ? `${view.selectionCount} objects` : 'it'} into ${into}` : many ? `Moved ${view.selectionCount} objects` : 'Moved') : null;
+  if (applyEdit(r, message)) { if (into) select(null); } else draw();
 }
 canvas.addEventListener('pointerup', (e) => endPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => endPointer(e, true));
@@ -176,18 +200,31 @@ canvas.addEventListener('wheel', (e) => {
   draw();
 }, { passive: false });
 
-function tap(x, y) {
-  const h = JSON.parse(view.hit(x, y));
+function tap(x, y, multi, touch = false) {
+  const h = hitAt(x, y, touch);
+  if (h.kind === 'block' && !multi) {
+    // A second tap on the same block within a moment opens it (works with a mouse, a pen or a finger).
+    const now = Date.now();
+    if (lastBlockTap.id === h.id && now - lastBlockTap.at < 450) { lastBlockTap.id = null; return goLevel(h.id); }
+    lastBlockTap.id = h.id; lastBlockTap.at = now;
+    view.selectedId = null; blockSel = h.id; return selectionChanged();
+  }
+  blockSel = null;
+  if (multi && h.kind !== 'empty' && h.kind !== 'table') { view.toggleSelected(h.id); return selectionChanged(); }
+  if (multi) return; // a Shift-click on empty canvas keeps the selection
   select(h.kind === 'empty' ? null : h.id);
 }
 
 // ---------- keyboard ----------
 canvas.addEventListener('keydown', (e) => {
-  const id = view.selectedId;
-  if ((e.key === 'Delete' || e.key === 'Backspace') && id) { e.preventDefault(); return removeSelected(); }
-  if (e.key === 'Escape') return select(null);
+  const id = view.selectedId, n = view.selectionCount;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && blockSel && !n) { e.preventDefault(); return deleteBlock(blockSel); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && n) { e.preventDefault(); return removeSelected(); }
+  if (e.key === 'Enter' && blockSel) { e.preventDefault(); return goLevel(blockSel); }
+  if (e.key === 'Escape') { if (!n && !blockSel && level) return goLevel(SubTools.levelOf(project.flowsheet, level)); blockSel = null; return select(null); }
   const d = { ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12] }[e.key];
-  if (d && id) {
+  if (d && n > 1) { e.preventDefault(); applyEdit(view.moveSelected(d[0], d[1]), `Moved ${n} objects`); }
+  else if (d && id) {
     e.preventDefault();
     const o = objects().find((x) => x.id === id);
     tryEdit(() => core.move(project.flowsheet, id, o.x + d[0], o.y + d[1]), `Moved ${o.tag}`);
@@ -196,8 +233,16 @@ canvas.addEventListener('keydown', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('input, select, textarea')) return;
   const mod = e.ctrlKey || e.metaKey;
-  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? step(redo, undo) : step(undo, redo); }
-  else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); step(redo, undo); }
+  // Ctrl+C, V, D and A act on the flowsheet only, so text on the page still copies as usual.
+  const onFlowsheet = document.activeElement === canvas || document.activeElement === document.body || $('selBar').contains(document.activeElement);
+  const k = e.key.toLowerCase();
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? step(redo, undo) : step(undo, redo); }
+  else if (mod && k === 'y') { e.preventDefault(); step(redo, undo); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'c' && view.selectionCount && !String(window.getSelection?.() ?? '')) { e.preventDefault(); copySelection(); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'v' && clipboard()) { e.preventDefault(); pasteClip(); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'd' && blockSel && !view.selectionCount) { e.preventDefault(); duplicateBlock(blockSel); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'd' && view.selectionCount) { e.preventDefault(); duplicateSelection(); }
+  else if (mod && onFlowsheet && !e.shiftKey && !e.altKey && k === 'a' && objects().length) { e.preventDefault(); view.selectAll(); selectionChanged(); }
 });
 
 // ---------- palette (FlowsteadCore.objectTypes: the app's types, groups and symbols) ----------
@@ -225,6 +270,21 @@ function paintTiles() {
     core.drawSymbol(g, b.dataset.type, w, h, dark());
   }
 }
+// The palette folds away on a small screen (Web 1.13), remembered in this browser.
+const PAL_KEY = 'flowstead.web.paletteCollapsed';
+function setPalette(collapsed) {
+  document.querySelector('.fs-palette').classList.toggle('collapsed', collapsed);
+  $('palToggle').setAttribute('aria-expanded', String(!collapsed));
+  $('palToggle').setAttribute('aria-label', collapsed ? 'Show the palette' : 'Hide the palette');
+  try { localStorage.setItem(PAL_KEY, collapsed ? '1' : ''); } catch (e) {}
+  requestAnimationFrame(resize);
+}
+$('palToggle').addEventListener('click', () => setPalette(!document.querySelector('.fs-palette').classList.contains('collapsed')));
+try { if (localStorage.getItem(PAL_KEY)) setPalette(true); } catch (e) {}
+// Zoom buttons on the canvas, about its centre.
+$('zoomIn').addEventListener('click', () => { view.zoomAround(cssW / 2, cssH / 2, 1.25); draw(); });
+$('zoomOut').addEventListener('click', () => { view.zoomAround(cssW / 2, cssH / 2, 0.8); draw(); });
+$('zoomFit').addEventListener('click', () => { view.fit(cssW, cssH); draw(); });
 $('groups').addEventListener('click', (e) => {
   const b = e.target.closest('[data-group]'); if (!b) return;
   group = b.dataset.group || null; renderGroups(); renderPalette();
@@ -272,7 +332,9 @@ $('items').addEventListener('keydown', (e) => {
 function addAt(typeId, x, y) {
   try {
     const r = JSON.parse(core.add(project.flowsheet, typeId, x, y));
-    commit(JSON.stringify(r.flowsheet), `Added ${typeById.get(typeId).label}`);
+    // On the flowsheet shown: inside a sub-flowsheet the new object is one of its own (D132).
+    const placed = level ? JSON.parse(SubTools.place(JSON.stringify(r.flowsheet), r.id, level)).flowsheet : r.flowsheet;
+    commit(JSON.stringify(placed), `Added ${typeById.get(typeId).label}`);
     select(r.id);
   } catch (e) { toast(errorText(e)); }
 }
@@ -281,14 +343,33 @@ function addAt(typeId, x, y) {
 const objects = () => JSON.parse(project.flowsheet).objects ?? [];
 function select(id) {
   view.selectedId = id;
+  if (id) blockSel = null;
+  selectionChanged();
+}
+/** After the selection changes: one object opens its worksheet, several show the selection bar (D124). */
+function selectionChanged() {
+  renderBlock();
   renderInspector();
+  renderSelection();
   draw();
+}
+function renderSelection() {
+  const n = view.selectionCount;
+  $('selBar').hidden = selectMode ? n < 1 : n < 2;
+  $('selCount').textContent = `${n} selected`;
+  // Move into a sub-flowsheet on this flowsheet (the same as dragging the selection onto it).
+  const blocks = JSON.parse(SubTools.blocks(project.flowsheet, view.currentLevel ?? ''));
+  $('selInto').hidden = !n || !blocks.length;
+  $('selInto').innerHTML = `<option value="">Move into…</option>${blocks.map((b) => `<option value="${esc(b.id)}">${esc(b.tag)}</option>`).join('')}`;
+  $('copySelBtn').disabled = !n;
+  $('pasteBtn').disabled = !clipboard();
 }
 // The worksheet (D111): Worksheets.form builds it with the app's fields per type; changes go back through
 // Worksheets.apply, which uses the app's FlowsheetEditing. Only what the page itself must remember lives here.
 const ui = { tab: 'design', chosen: {}, basis: {}, units: {} };
 function renderInspector() {
-  const id = view.selectedId;
+  // With the Select tool on, taps build a selection: the worksheet stays shut so it can't cover the next tap (a phone).
+  const id = selectMode ? null : view.selectedId;
   const o = id && objects().find((x) => x.id === id);
   $('inspector').hidden = !o;
   if (!o) return;
@@ -300,7 +381,8 @@ function renderInspector() {
   $('tableBtn').textContent = view.hasTable(id) ? 'Edit table' : 'Show table';
   $('tableBtn').hidden = !JSON.parse(view.tableOptions(id)).keys.length;
   $('copyBtn').hidden = !isStream || !JSON.parse(view.copySources(id)).length;
-  $('dupBtn').hidden = !isStream;
+  $('dupBtn').hidden = false;
+  $('dupBtn').textContent = 'Duplicate'; $('dupBtn').title = 'A copy beside it, with all its data (Ctrl+D)';
   if (isStream) {
     const feed = view.isFeed(id);
     $('dupBtn').textContent = feed ? 'Duplicate' : 'Duplicate as a feed';
@@ -311,6 +393,9 @@ function renderInspector() {
   $('inspector').classList.toggle('wide', ui.tab === 'analysis');
   $('tabDesign').setAttribute('aria-selected', ui.tab === 'design'); $('tabResults').setAttribute('aria-selected', ui.tab === 'results'); $('tabAnalysis').setAttribute('aria-selected', ui.tab === 'analysis');
   $('inspForm').hidden = ui.tab !== 'design'; $('inspResults').hidden = ui.tab !== 'results'; $('inspAnalysis').hidden = ui.tab !== 'analysis';
+  $('inspEquip').hidden = ui.tab !== 'design';
+  // A pump's or compressor's curve, a pipe's sections (D136): kept while it has the keyboard, redrawn otherwise.
+  if (ui.tab === 'design' && (!$('inspEquip').contains(document.activeElement) || $('inspEquip').dataset.id !== id)) tools.equipmentSection($('inspEquip'), id);
   if (ui.tab === 'analysis') {
     const hash = core.modelHash(project.flowsheet);
     if ($('inspAnalysis').dataset.id !== id) { $('inspAnalysis').dataset.id = id; tools.streamAnalysis($('inspAnalysis'), id); }
@@ -559,30 +644,212 @@ $('copyApply').addEventListener('click', () => {
 for (const b of ['copyCancel', 'copyClose']) $(b).addEventListener('click', () => $('copyDlg').close());
 $('dupBtn').addEventListener('click', () => {
   const id = view.selectedId; if (!id) return;
+  if (objects().find((x) => x.id === id)?.type !== 'material_stream') return duplicateSelection();
   const r = JSON.parse(view.duplicate(id));
   if (r.error) return toast(r.error);
   commit(JSON.stringify(r.flowsheet), 'Duplicated the stream');
   select(r.id);
 });
 function removeSelected() {
-  const id = view.selectedId; if (!id) return;
-  const tag = objects().find((x) => x.id === id)?.tag;
-  tryEdit(() => core.delete(project.flowsheet, id), `Deleted ${tag}`);
+  const n = view.selectionCount; if (!n) return;
+  if (n > 1) applyEdit(view.deleteSelected(), `Deleted ${n} objects`);
+  else {
+    const id = view.selectedId, tag = objects().find((x) => x.id === id)?.tag;
+    tryEdit(() => core.delete(project.flowsheet, id), `Deleted ${tag}`);
+  }
   select(null);
   canvas.focus();
 }
 
+// ---------- copy and paste of several objects (D124) ----------
+// The clip is the app's objects and connections as JSON, kept in this browser (so it pastes into another project or
+// tab here too). A paste on the same flowsheet goes two grid squares down and right, one step more each time.
+const CLIP_KEY = 'flowstead.web.clipboard';
+let clipMemory = null, pasteStep = 0;
+function clipboard() {
+  try { return localStorage.getItem(CLIP_KEY) ?? clipMemory; } catch (e) { return clipMemory; }
+}
+function copySelection() {
+  const r = view.copySelection();
+  const j = JSON.parse(r);
+  if (j.error) return toast(j.error);
+  clipMemory = r; pasteStep = 0;
+  try { localStorage.setItem(CLIP_KEY, r); } catch (e) {}
+  const n = j.objects.length;
+  announce(`Copied ${n} object${n === 1 ? '' : 's'}`);
+  renderSelection();
+  return r;
+}
+function pasteClip(clip = clipboard()) {
+  if (!clip) return;
+  pasteStep += 1;
+  const r = JSON.parse(view.paste(clip, cssW / 2, cssH / 2, pasteStep));
+  if (r.error) return toast(r.error);
+  commit(JSON.stringify(r.flowsheet), `Pasted ${r.ids.length} object${r.ids.length === 1 ? '' : 's'}`);
+  view.setSelectedIds(JSON.stringify(r.ids));
+  selectionChanged();
+  if (r.notes.length) toast(`Pasted ${r.ids.length}. Check:\n${r.notes.map((x) => `• ${x}`).join('\n')}`, { info: true, ms: 9000 });
+}
+/** Copy and paste in one step, leaving the clipboard as it was. */
+function duplicateSelection() {
+  const r = JSON.parse(view.copySelection());
+  if (r.error) return toast(r.error);
+  const keep = pasteStep; pasteStep = 0;
+  pasteClip(JSON.stringify(r));
+  pasteStep = keep;
+}
+let selectMode = false;
+$('selectBtn').addEventListener('click', () => {
+  selectMode = !selectMode;
+  $('selectBtn').setAttribute('aria-pressed', selectMode);
+  selectionChanged();
+  announce(selectMode ? 'Select: drag to draw a box, tap to add or take out an object' : 'Select off: a drag pans');
+});
+$('copySelBtn').addEventListener('click', copySelection);
+$('pasteBtn').addEventListener('click', () => pasteClip());
+$('selCopy').addEventListener('click', copySelection);
+$('selDup').addEventListener('click', duplicateSelection);
+$('selInto').addEventListener('change', (e) => {
+  const id = e.target.value; if (!id) return;
+  const tag = JSON.parse(SubTools.info(project.flowsheet, id)).tag, n = view.selectionCount;
+  if (subEdit(SubTools.moveInto(project.flowsheet, view.selectedIds(), id), `Moved ${n} object${n === 1 ? '' : 's'} into ${tag}`)) select(null);
+  else renderSelection();
+});
+$('selDelete').addEventListener('click', removeSelected);
+
+// ---------- sub-flowsheets (D132): blocks that hold a flowsheet, as HYSYS's ----------
+let level = '', blockSel = null;
+const levelObjects = () => objects().filter((o) => (o.parent ?? '') === level);
+function goLevel(id) {
+  view.setLevel(id ?? '');
+  level = view.currentLevel; blockSel = null;
+  select(null); renderLevel();
+  view.fit(cssW, cssH); refresh();
+  announce(level ? `Opened ${JSON.parse(SubTools.path(project.flowsheet, level)).at(-1)?.tag}` : 'Main flowsheet');
+}
+function renderLevel() {
+  const path = JSON.parse(SubTools.path(project.flowsheet, level));
+  $('levelBar').hidden = !level && !SubTools.has(project.flowsheet);
+  const crumbs = [{ id: '', tag: 'Main' }, ...path];
+  $('levelBar').innerHTML = crumbs.map((c, i) => i === crumbs.length - 1
+    ? `<span aria-current="page">${esc(c.tag)}</span>` : `<button type="button" data-level="${esc(c.id)}">${esc(c.tag)}</button><span class="sep" aria-hidden="true">›</span>`).join('')
+    + (level ? '' : '<small style="opacity:.7;margin-left:.4rem">Tap a block twice to open it</small>');
+}
+$('levelBar').addEventListener('click', (e) => { const b = e.target.closest('[data-level]'); if (b) goLevel(b.dataset.level); });
+const lastBlockTap = { id: null, at: 0 };
+/** A copy of a sub-flowsheet with everything inside it, beside it; it is selected, and the notes are shown. */
+function duplicateBlock(id) {
+  const tag = JSON.parse(SubTools.info(project.flowsheet, id)).tag;
+  const r = subEdit(SubTools.duplicate(project.flowsheet, id), `Duplicated ${tag}`);
+  if (!r) return;
+  blockSel = r.id; view.selectedId = null; selectionChanged();
+  if (r.notes.length) toast(r.notes.join(' · '));
+}
+function subEdit(json, message) {
+  const r = JSON.parse(json);
+  if (r.error) { toast(r.error); return null; }
+  commit(JSON.stringify(r.flowsheet), message);
+  return r;
+}
+function addBlock() {
+  const n = view.selectionCount;
+  if (n) {
+    const ids = JSON.parse(view.selectedIds());
+    const os = objects().filter((o) => ids.includes(o.id));
+    const x = os.reduce((a, o) => a + o.x, 0) / os.length, y = os.reduce((a, o) => a + o.y, 0) / os.length;
+    const r = subEdit(SubTools.group(project.flowsheet, JSON.stringify(ids), Math.round(x / 12) * 12, Math.round(y / 12) * 12), `Put ${n} object${n === 1 ? '' : 's'} in a sub-flowsheet`);
+    if (r) { view.selectedId = null; blockSel = r.id; selectionChanged(); }
+    return;
+  }
+  const [fx, fy] = JSON.parse(view.freeSpot(view.worldX(cssW / 2), view.worldY(cssH / 2)));
+  const r = subEdit(SubTools.add(project.flowsheet, level, fx, fy), 'Added a sub-flowsheet');
+  if (r) { blockSel = r.id; selectionChanged(); }
+}
+$('subBtn').addEventListener('click', addBlock);
+$('selGroup').addEventListener('click', addBlock);
+function deleteBlock(id) {
+  const tag = JSON.parse(SubTools.info(project.flowsheet, id))?.tag;
+  if (subEdit(SubTools.delete(project.flowsheet, id), `Deleted ${tag} and what was in it (Undo brings it back)`)) { blockSel = null; selectionChanged(); }
+}
+/** A block's inspector: its name, its fluid package, its boundary streams matched to the parent's, and their values. */
+function renderBlock() {
+  const b = blockSel && JSON.parse(SubTools.info(project.flowsheet, blockSel));
+  $('blockInsp').hidden = !b;
+  if (!b) return;
+  if (!$('inspector').hidden) $('inspector').hidden = true;
+  const keep = document.activeElement?.id;
+  const stale = view.stale || !project.solve;
+  const vals = (id) => {
+    if (stale) return '';
+    const rows = JSON.parse(view.summary(id)).filter((r) => /^(Temperature|Pressure|Mass flow)$/.test(r.label) && r.value !== '—');
+    return rows.map((r) => `${esc(r.value)} ${esc(r.unit)}`).join(' · ');
+  };
+  const port = (p) => `<tr><td>${esc(p.innerTag)}</td><td>${p.feed ? 'In' : 'Out'}</td>
+    <td><select data-link="${esc(p.inner)}" aria-label="${esc(p.innerTag)} is matched to"><option value="">Not matched</option>${p.outer && !p.candidates.some((c) => c.id === p.outer) ? `<option value="${esc(p.outer)}" selected>${esc(p.outerTag)}</option>` : ''}${
+      p.candidates.map((c) => `<option value="${esc(c.id)}"${c.id === p.outer ? ' selected' : ''}>${esc(c.tag)}</option>`).join('')}</select></td>
+    <td>${b.differs && !p.energy ? `<select data-basis="${esc(p.inner)}" aria-label="Transfer basis of ${esc(p.innerTag)}"><option value="tp"${p.basis !== 'pvf' ? ' selected' : ''}>T–P</option><option value="pvf"${p.basis === 'pvf' ? ' selected' : ''}>P–VF</option></select>` : '—'}</td>
+    <td>${vals(p.inner)}</td><td><button type="button" class="icon-btn" data-unlink="${esc(p.inner)}" aria-label="Take ${esc(p.innerTag)} out of the block" title="Take it out of the block">✕</button></td></tr>`;
+  const adder = (list, kind, label) => `<div class="field" style="flex:1;min-width:10rem"><label for="blockAdd${kind}">${label}</label><select id="blockAdd${kind}" data-add="${kind}"${list.length ? '' : ' disabled'}>
+    <option value="">${list.length ? 'Choose a stream…' : 'No free stream here'}</option>${list.map((c) => `<option value="${esc(c.id)}">${esc(c.tag)}</option>`).join('')}</select></div>`;
+  $('blockInsp').innerHTML = `<div class="fs-insp-head"><h2 id="blockTitle">Sub-flowsheet</h2><button type="button" class="icon-btn" id="blockClose" aria-label="Close">✕</button></div>
+    <div class="field"><label for="blockTag">Name</label><input id="blockTag" value="${esc(b.tag)}" autocomplete="off"></div>
+    <div class="fs-row" style="display:flex;gap:.35rem;flex-wrap:wrap;margin:.4rem 0">
+      <button type="button" class="btn btn-sm btn-primary" id="blockOpen">Open</button>
+      <button type="button" class="btn btn-sm" id="blockDup" title="Copy it with everything inside, beside it (Ctrl+D)">Duplicate</button>
+      <button type="button" class="btn btn-sm" id="blockUngroup" title="Put its contents back on this flowsheet">Ungroup</button>
+      <button type="button" class="btn btn-sm" id="blockDelete">Delete</button></div>
+    <div class="field"><label for="blockFluid">Fluid package</label><select id="blockFluid">
+      <option value="parent"${b.own ? '' : ' selected'}>The parent’s (${esc(b.parentPackage || '—')})</option>
+      <option value="own"${b.own ? ' selected' : ''}>Its own${b.own ? `: ${esc(b.package || '—')}` : ''}</option></select></div>
+    ${b.own ? `<p class="fs-note">${esc(b.package || 'No package')} · ${b.compounds.length} component${b.compounds.length === 1 ? '' : 's'} <button type="button" class="btn btn-sm" id="blockBasis">Edit its basis</button></p>
+      <p class="fs-note">Solved on its own package: each boundary stream crosses as a feed defined by the engine’s result on the other side, by its transfer basis (T–P: temperature and pressure; P–VF: pressure and vapour fraction), with its molar flow and composition, as HYSYS’s.</p>` : '<p class="fs-note">On the parent’s package it solves with the parent as one flowsheet: the same numbers as without the block.</p>'}
+    <h3 style="font-size:.85rem;margin:.6rem 0 .2rem">Streams in and out</h3>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">${adder(b.canIn, 'In', 'Add a stream in')}${adder(b.canOut, 'Out', 'Add a stream out')}</div>
+    <p class="fs-note">Or drag a stream onto the block. Inside, each one is a stream to join to the equipment there. Drag a unit, or a selection, onto the block to move it inside.</p>
+    ${b.ports.length ? `<table class="fs-ports"><thead><tr><th>Inside</th><th></th><th>Matched to</th><th>Transfer</th><th>Values</th><th></th></tr></thead><tbody>${b.ports.map(port).join('')}</tbody></table>`
+      : ''}`;
+  if (keep && $(keep)) $(keep).focus();
+}
+$('blockInsp').addEventListener('click', (e) => {
+  const id = e.target.id;
+  if (id === 'blockClose') { blockSel = null; return selectionChanged(); }
+  if (id === 'blockOpen') return goLevel(blockSel);
+  if (id === 'blockDelete') return deleteBlock(blockSel);
+  if (id === 'blockDup') return duplicateBlock(blockSel);
+  if (id === 'blockUngroup') { const tag = JSON.parse(SubTools.info(project.flowsheet, blockSel)).tag; if (subEdit(SubTools.ungroup(project.flowsheet, blockSel), `Ungrouped ${tag}`)) { blockSel = null; selectionChanged(); } return; }
+  if (id === 'blockBasis') return openBasis(blockSel);
+  const un = e.target.closest('[data-unlink]')?.dataset.unlink;
+  if (un) return subEdit(SubTools.disconnect(project.flowsheet, blockSel, un), 'Took the stream out of the block');
+});
+$('blockInsp').addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.id === 'blockTag') return subEdit(SubTools.rename(project.flowsheet, blockSel, t.value), `Renamed to ${t.value.trim()}`);
+  if (t.id === 'blockFluid') {
+    const own = t.value === 'own';
+    if (subEdit(SubTools.setOwnFluid(project.flowsheet, blockSel, own), own ? 'Own fluid package: a copy of the parent’s to edit' : 'Uses the parent’s fluid package') && own) openBasis(blockSel);
+    return;
+  }
+  if (t.dataset.add && t.value) return subEdit(SubTools.connect(project.flowsheet, blockSel, t.value, t.dataset.add === 'In'), `${t.selectedOptions[0].textContent} ${t.dataset.add === 'In' ? 'goes into' : 'comes out of'} the block`);
+  if (t.dataset.link !== undefined) return subEdit(SubTools.link(project.flowsheet, blockSel, t.dataset.link, t.value), t.value ? 'Matched the boundary stream' : 'Unmatched the boundary stream');
+  if (t.dataset.basis !== undefined) return subEdit(SubTools.setBasis(project.flowsheet, blockSel, t.dataset.basis, t.value), `Transfer basis ${t.value === 'pvf' ? 'P–VF' : 'T–P'}`);
+});
+$('selClear').addEventListener('click', () => select(null));
+window.addEventListener('storage', (e) => { if (e.key === CLIP_KEY) renderSelection(); });
+
 // The objects as a list for screen readers and keyboards: each one selects its object.
 function renderObjectList() {
-  $('objects').innerHTML = objects().map((o) => `<li><button type="button" data-id="${esc(o.id)}">${esc(view.describe(o.id))}</button></li>`).join('');
+  $('objects').innerHTML = levelObjects().map((o) => `<li><button type="button" data-id="${esc(o.id)}">${esc(view.describe(o.id))}</button></li>`).join('');
 }
 $('objects').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (b) { select(b.dataset.id); canvas.focus(); } });
 
 function refresh() {
   syncMode();
-  $('empty').hidden = objects().length > 0;
+  if (typeof tools !== 'undefined') tools.renderWatch();
+  level = view.currentLevel;
+  $('empty').hidden = levelObjects().length > 0 || JSON.parse(SubTools.blocks(project.flowsheet, level)).length > 0;
+  renderLevel(); renderBlock();
   $('undoBtn').disabled = !undo.length; $('redoBtn').disabled = !redo.length;
-  renderInspector(); renderObjectList(); draw();
+  renderInspector(); renderSelection(); renderObjectList(); draw();
 }
 
 // ---------- files and examples ----------
@@ -646,11 +913,21 @@ $('examples').addEventListener('change', async () => {
 
 // ---------- basis: property package and components (Worksheets.basis, setPropertyPackage, add/removeCompound) ----------
 let packages = null;
-function openBasis() { renderBasis(); $('basisDlg').showModal(); $('compSearch').focus(); }
-$('basisBtn').addEventListener('click', openBasis);
+function openBasis(blockId = null) { basisTarget = blockId; renderBasis(); $('basisDlg').showModal(); $('compSearch').focus(); }
+$('basisBtn').addEventListener('click', () => openBasis(null));
+// A sub-flowsheet with its own fluid package (D132) is edited in the same dialog: on a view of the case with the
+// block's package in the case's fields, written back into the block.
+let basisTarget = null;
+const basisGet = () => (basisTarget ? SubTools.fluidView(project.flowsheet, basisTarget) : project.flowsheet);
+function basisCommit(next, message) {
+  if (!basisTarget) return commit(next, message);
+  const r = JSON.parse(SubTools.setFluidFrom(project.flowsheet, basisTarget, next));
+  if (r.error) return toast(r.error);
+  commit(JSON.stringify(r.flowsheet), message);
+}
 $('basisClose').addEventListener('click', () => $('basisDlg').close());
 function renderBasis() {
-  const b = JSON.parse(sheets.basis(project.flowsheet));
+  const b = JSON.parse(sheets.basis(basisGet()));
   const opt = (p) => `<option value="${esc(p.name)}"${p.name === b.propertyPackage ? ' selected' : ''}>${esc(p.name)}</option>`;
   if (packages) {
     const checked = packages.filter((p) => p.mvp), other = packages.filter((p) => !p.mvp);
@@ -668,8 +945,15 @@ function renderBasis() {
     ? (project.basis === 'dwsim' ? 'DWSIM’s reference: enthalpy and entropy are zero for an ideal gas at 25 °C. Differences (duties) are the same on either basis.'
       : 'As HYSYS: each compound’s ideal-gas heat of formation and absolute entropy are included, so absolute values compare with HYSYS. Differences (duties) are the same on either basis.')
     : 'This property package has its own reference for enthalpy and entropy: the choice applies to Peng-Robinson, SRK and Lee-Kesler.';
-  tools.hypotheticalSection($('hypos'), renderBasis);
-  tools.blackOilSection($('blackOils'), renderBasis);
+  const blockTag = basisTarget && JSON.parse(SubTools.info(project.flowsheet, basisTarget))?.tag;
+  $('basisTitle').textContent = blockTag ? `Basis of ${blockTag} (its own fluid package)` : 'Basis';
+  for (const id of ['hypos', 'blackOils', 'thermoTools', 'dataTools']) $(id).hidden = !!basisTarget;
+  if (!basisTarget) {
+    tools.hypotheticalSection($('hypos'), renderBasis);
+    tools.blackOilSection($('blackOils'), renderBasis);
+    tools.thermoSection($('thermoTools'));
+    tools.dataToolsSection($('dataTools'), renderBasis);
+  }
   $('compCount').textContent = `(${b.compounds.length})`;
   $('compList').innerHTML = b.compounds.length ? b.compounds.map((c) => `<li><span>${esc(c)}${b.hypotheticals.includes(c) ? ' <small>Hypo</small>' : b.blackOils.includes(c) ? ' <small>Black oil</small>' : ''}</span>${b.usedBy[c] ? `<small>in ${b.usedBy[c]} stream${b.usedBy[c] > 1 ? 's' : ''}</small>` : ''}<button type="button" class="btn btn-sm" data-remove="${esc(c)}" aria-label="Remove ${esc(c)}">Remove</button></li>`).join('')
     : '<li class="empty">No components yet: search below.</li>';
@@ -678,16 +962,16 @@ $('basisSel').addEventListener('change', () => {
   project.basis = $('basisSel').value;
   project.solve = null; view.setSolve(null, '', 0); satAsked.clear(); // results on the other basis are not these results
   persist(); refresh(); renderBasis();
-  if (hasEnergySpecs(project.flowsheet)) toast('Typed enthalpy and entropy values are now read on the other basis.');
+  if (hasEnergySpecs(basisGet())) toast('Typed enthalpy and entropy values are now read on the other basis.');
   queueSolve(0, true);
 });
-$('pkgSel').addEventListener('change', () => { const r = JSON.parse(sheets.setPropertyPackage(project.flowsheet, $('pkgSel').value)); if (r.flowsheet) commit(JSON.stringify(r.flowsheet), `Package ${$('pkgSel').value}`); renderBasis(); });
+$('pkgSel').addEventListener('change', () => { const r = JSON.parse(sheets.setPropertyPackage(basisGet(), $('pkgSel').value)); if (r.flowsheet) basisCommit(JSON.stringify(r.flowsheet), `Package ${$('pkgSel').value}`); renderBasis(); });
 $('compList').addEventListener('click', (e) => {
   const name = e.target.closest('[data-remove]')?.dataset.remove; if (!name) return;
-  const used = JSON.parse(sheets.basis(project.flowsheet)).usedBy[name];
-  const r = JSON.parse(sheets.removeCompound(project.flowsheet, name));
+  const used = JSON.parse(sheets.basis(basisGet())).usedBy[name];
+  const r = JSON.parse(sheets.removeCompound(basisGet(), name));
   if (r.error) return toast(r.error);
-  commit(JSON.stringify(r.flowsheet), `Removed ${name}`);
+  basisCommit(JSON.stringify(r.flowsheet), `Removed ${name}`);
   if (used) toast(`Removed ${name} from ${used} stream composition(s); check that they still add up to 1`);
   renderBasis(); renderInspectorForce();
 });
@@ -701,7 +985,7 @@ $('compSearch').addEventListener('input', () => {
     try {
       const { result } = await engine.call('searchCompounds', { query: q, limit: 12 });
       if (seq !== searchSeq) return;
-      const have = new Set(JSON.parse(sheets.basis(project.flowsheet)).compounds);
+      const have = new Set(JSON.parse(sheets.basis(basisGet())).compounds);
       $('compResults').innerHTML = result.length
         ? result.map((c) => `<li><button type="button" data-add="${esc(c.name)}"${have.has(c.name) ? ' disabled' : ''}><span>${esc(c.name)}${have.has(c.name) ? ' (added)' : ''}</span><small>${esc(c.formula || '')} · ${c.molecularWeight ? core.formatNumber(c.molecularWeight, 2) : '—'} kg/kmol</small></button></li>`).join('')
         : '<li class="empty" style="padding:.4rem .6rem">No match in DWSIM’s databases.</li>';
@@ -718,9 +1002,9 @@ const COMMON = [
 ];
 $('compPick').innerHTML = '<option value="">Choose a component…</option>' + COMMON.map(([g, names]) => `<optgroup label="${esc(g)}">${names.map((n) => `<option>${esc(n)}</option>`).join('')}</optgroup>`).join('');
 function addCompound(name) {
-  const r = JSON.parse(sheets.addCompound(project.flowsheet, name));
+  const r = JSON.parse(sheets.addCompound(basisGet(), name));
   if (r.error) return toast(r.error);
-  commit(JSON.stringify(r.flowsheet), `Added ${name}`);
+  basisCommit(JSON.stringify(r.flowsheet), `Added ${name}`);
   renderBasis(); renderInspectorForce();
 }
 $('compPick').addEventListener('change', async () => {
@@ -743,7 +1027,7 @@ async function browseLoad(reset) {
     await engine.ready;
     const { result } = await engine.call('searchCompounds', { query: browse.query, limit: 100, offset: browse.offset });
     if (seq !== browse.seq) return;
-    const have = new Set(JSON.parse(sheets.basis(project.flowsheet)).compounds);
+    const have = new Set(JSON.parse(sheets.basis(basisGet())).compounds);
     $('browseList').insertAdjacentHTML('beforeend', result.map((c) => `<li><button type="button" data-add="${esc(c.name)}"${have.has(c.name) ? ' disabled' : ''}><span>${esc(c.name)}${have.has(c.name) ? ' (added)' : ''}</span><small>${esc(c.formula || '')} · ${c.molecularWeight ? core.formatNumber(c.molecularWeight, 2) : '—'} kg/kmol</small></button></li>`).join(''));
     browse.offset += result.length;
     $('browseMore').hidden = result.length < 100;
@@ -761,24 +1045,24 @@ $('browseList').addEventListener('click', (e) => {
 });
 $('compResults').addEventListener('click', (e) => {
   const name = e.target.closest('[data-add]')?.dataset.add; if (!name) return;
-  const r = JSON.parse(sheets.addCompound(project.flowsheet, name));
+  const r = JSON.parse(sheets.addCompound(basisGet(), name));
   if (r.error) return toast(r.error);
-  commit(JSON.stringify(r.flowsheet), `Added ${name}`);
+  basisCommit(JSON.stringify(r.flowsheet), `Added ${name}`);
   $('compSearch').value = ''; $('compResults').innerHTML = ''; $('compSearch').focus();
   renderBasis(); renderInspectorForce();
 });
 
 // ---------- solve ----------
 let engineState = 'loading', busy = false;
-const engine = startEngine((s) => {
+const engine = withSubflowsheets(startEngine((s) => {
   if (s.type === 'status') setStatus('loading', s.total ? `Engine ${Math.round((100 * s.loaded) / Math.max(s.total, 1))} %` : s.text);
   else if (s.type === 'ready') {
-    engineState = 'ready'; setStatus('ready', `DWSIM ${s.dwsimVersion} ready`); queueSolve(0);
+    engineState = 'ready'; setStatus('ready', `DWSIM ${String(s.dwsimVersion ?? '').split('.')[0]} ready`); queueSolve(0);
     engine.call('propertyPackages', null).then(({ result }) => { packages = result; if ($('basisDlg').open) renderBasis(); }).catch(() => {});
   }
   else if (s.type === 'failed') { engineState = 'failed'; setStatus('failed', 'Engine failed to start'); toast(s.error); }
   $('solveBtn').disabled = engineState !== 'ready' || busy;
-});
+}), SubTools);
 engine.ready.catch(() => {});
 $('solveBtn').disabled = true;
 function setStatus(kind, text) {
@@ -826,9 +1110,11 @@ async function solve(auto) {
     return showSolve('warning', [`Nothing is ready to solve yet: ${prep.problems[0] ?? 'complete a feed stream'}`]);
   }
   busy = true; $('solveBtn').disabled = true; setStatus('loading', auto ? 'Solving (active)…' : 'Solving…');
+  const solving = project; // another case opened meanwhile must not get this one's results
   try {
     // Bubble and dew points are four flashes a stream, most of a solve's time; they are asked for the streams you open (D119).
     const { result, ms } = await engine.call('solve', { ...prep.solvable, saturationFor: [], enthalpyBasis: enthalpyBasis() });
+    if (project !== solving) return;
     project.solve = { result, modelHash: prep.modelHash, at: Date.now() };
     view.setSolve(JSON.stringify(result), prep.modelHash, project.solve.at);
     persist(); refresh();
@@ -843,6 +1129,7 @@ async function solve(auto) {
     setStatus('ready', auto ? `Active · ${head}` : head);
     const t = tableStreams(); if (t.length) ensureSaturation(t);
   } catch (e) {
+    if (project !== solving) return;
     showSolve('error', [`Not solved: ${e.message}`]);
     setStatus('failed', 'Not solved');
   } finally {
@@ -916,9 +1203,11 @@ $('unitGrid').addEventListener('change', (e) => {
 
 // ---------- tools (D112) ----------
 const tools = initTools({
-  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Fluids: fluids, engine, enthalpyBasis,
+  $, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Data: DataTools.getInstance(), Thermo: ThermoTools.getInstance(), Equip: EquipmentTools.getInstance(), Fluids: fluids, engine, enthalpyBasis,
   project: () => project, commit: (json, message) => commit(json, message), toast,
-  ready: () => engine.ready,
+  ready: () => engine.ready, ensureSaturation: (ids) => ensureSaturation(ids), packages: () => packages,
+  // The check opens what it reports on: on its own flowsheet (a sub-flowsheet's object opens that sub-flowsheet).
+  openObject: (id) => { const lv = SubTools.levelOf(project.flowsheet, id); if (lv !== level) goLevel(lv); select(id); },
 });
 $('toolsBtn').addEventListener('click', () => tools.openTools());
 const documents = initDocuments({
@@ -937,11 +1226,11 @@ $('themeBtn').addEventListener('click', () => {
   paintTiles(); draw();
 });
 let toastTimer = 0;
-function toast(text) {
+function toast(text, { info = false, ms = 5000 } = {}) {
   let t = document.querySelector('.fs-toast');
   if (!t) { t = Object.assign(document.createElement('div'), { className: 'fs-toast', role: 'alert' }); document.body.appendChild(t); }
-  t.textContent = text; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
+  t.textContent = text; t.hidden = false; t.classList.toggle('info', info);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 function announce(text) { $('announce').textContent = text; }
 
@@ -950,5 +1239,24 @@ renderGroups(); renderPalette();
 load();
 resize();
 view.fit(cssW, cssH); draw();
-window.flowsteadFlowsheet = { core, view, get project() { return project; } }; // for the browser tests
+// Panels over the flowsheet move and minimise (D146), so they never hide what is behind them.
+const panels = {
+  selBar: floating($('selBar'), { head: '.fs-selhead' }),
+  inspector: floating($('inspector'), { head: '.fs-insp-head', keep: '.fs-insp-top' }),
+  blockInsp: floating($('blockInsp'), { head: '.fs-insp-head' }),
+  solvePanel: floating($('solvePanel'), { head: '.fs-insp-head' }),
+};
+window.flowsteadFlowsheet = { core, view, tools, engine, SubTools, Equip: EquipmentTools.getInstance(), Thermo: ThermoTools.getInstance(), panels, get project() { return project; } }; // for the browser tests
+// The automation interface (D140): window.flowstead.api, for an agent in the browser or a script (docs/automation.md).
+window.flowstead = {
+  api: installAutomation({
+    A: Automation.getInstance(), core, sheets, view, engine, SubTools, Tools: Tools.getInstance(), Safety: SafetyForms.getInstance(),
+    Thermo: ThermoTools.getInstance(), Dyn: DynamicsTools.getInstance(), Sheet: SheetTools.getInstance(), Docs: Documents.getInstance(),
+    project: () => project, commit: (json, message) => commit(json, message), replace: (name, f) => replace(name, f),
+    solve: () => solve(false), busy: () => busy, ready: () => engine.ready, enthalpyBasis, ensureSaturation: (ids) => ensureSaturation(ids),
+    goLevel: (id) => goLevel(id), undo: () => step(undo, redo), redo: () => step(redo, undo),
+    basis: () => project.basis ?? 'hysys',
+    setBasis: (b) => { if (b === (project.basis ?? 'hysys')) return; $('basisSel').value = b; $('basisSel').dispatchEvent(new Event('change')); },
+  }),
+};
 window.flowsheetReady = true;

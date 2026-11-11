@@ -36,6 +36,27 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
     }
 
     [Fact]
+    public void VolumeBelowALevelCountsTheHeadsByTheirShape()
+    {
+        // Standing vessel, D 2 m, 6 m shell: a 2:1 head is 0.5 m deep and holds π D³/24.
+        var g = new VesselGeometry(2, 6);
+        double head = Math.PI * 8 / 24, a = 0.5, r = 1;
+        // Bottom head filled to y from its pole, by integrating its cross-section π R² (2y/a − y²/a²): π R² (y²/a − y³/(3a²)).
+        foreach (var y in new[] { 0.1, 0.25, 0.4, 0.5 })
+            Assert.Equal(Math.PI * r * r * (y * y / a - y * y * y / (3 * a * a)), ReliefMath.VolumeBelow(g, y), 12);
+        Assert.Equal(0.3125 * head, ReliefMath.VolumeBelow(g, 0.25), 12);
+        // Into the shell, and to the top: the whole vessel.
+        Assert.Equal(head + Math.PI * 2.0, ReliefMath.VolumeBelow(g, 2.5), 12);
+        Assert.Equal(ReliefMath.Volume(g), ReliefMath.VolumeBelow(g, 7), 12);
+        // The top head mirrors the bottom one.
+        Assert.Equal(ReliefMath.Volume(g) - ReliefMath.VolumeBelow(g, 0.2), ReliefMath.VolumeBelow(g, 7 - 0.2), 12);
+        // Lying: half full is half the vessel; full is all of it.
+        var h = new VesselGeometry(2, 6, Horizontal: true);
+        Assert.Equal(ReliefMath.Volume(h) / 2, ReliefMath.VolumeBelow(h, 1), 12);
+        Assert.Equal(ReliefMath.Volume(h), ReliefMath.VolumeBelow(h, 2), 12);
+    }
+
+    [Fact]
     public void StandardConstants()
     {
         // API 520-1: C = 356 (US units) at k = 1.4, i.e. 0.0270 in SI.
@@ -320,8 +341,43 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         for (var i = 1; i < r.Time.Count; i++) released += 0.5 * (r.MassFlow[i] + r.MassFlow[i - 1]) * (r.Time[i] - r.Time[i - 1]);
         var lost = r.Inventory[0] - r.Inventory[^1];
         Assert.Equal(lost, released, lost * 0.03);
-        // API 521 target: the lower of 6.9 barg and half of the starting gauge pressure.
+        // API 521 target: the lower of 6.9 barg and half of the starting gauge pressure (no design pressure given).
         Assert.Equal(101325 + 690e3, r.TargetPressure, 1e-6);
+        Assert.Equal("6.9 barg", r.TargetBasis);
+        Assert.Contains(r.Warnings, w => w.Contains("No design pressure given"));
+    }
+
+    [Fact]
+    public async Task TheBlowdownTargetAndWallFollowTheDesignPressure()
+    {
+        // API 521 §5.20.1: the lower of 690 kPa gauge and 50 % of the design gauge pressure. ASME VIII-1 UG-27(c)(1):
+        // t = P·R/(S·E − 0.6·P) at the design pressure, S 138 MPa, E 1, R 0.75 m (the 1.5 m vessel), 6 mm at least.
+        async Task<DepressuringResult> Run(double designBarg, double startBarg)
+        {
+            var req = new DepressuringRequest
+            {
+                Flowsheet = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane"] }, Composition = Methane,
+                InitialPressure = 101325 + startBarg * 1e5, InitialTemperature = 300, Vessel = new VesselGeometry(1.5, 4),
+                OrificeDiameter = 0.02, DesignPressure = 101325 + designBarg * 1e5, Duration = 30,
+            };
+            var res = await engine.Authed().PostAsJsonAsync("/depressuring", req, Json.Options);
+            Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+            var r = await EngineFixture.Json<DepressuringResult>(res);
+            output.WriteLine($"design {designBarg} barg: target {(r.TargetPressure - 101325) / 1e5:0.###} barg ({r.TargetBasis}), wall {r.WallThickness * 1000:0.###} mm | " + string.Join(" | ", r.Warnings));
+            return r;
+        }
+        // Design 12 barg: half is 6 barg, below 6.9. Wall 12e5·0.75/(138e6 − 0.72e6) = 6.556 mm. Starting at 70 barg is above it.
+        var low = await Run(12, 70);
+        Assert.Equal(101325 + 6e5, low.TargetPressure, 1e-6);
+        Assert.Equal("half the design pressure", low.TargetBasis);
+        Assert.Equal(12e5 * 0.75 / (138e6 - 0.6 * 12e5), low.WallThickness, 1e-9);
+        Assert.Contains(low.Warnings, w => w.Contains("above its design pressure"));
+        // Design 100 barg, starting at 50: 6.9 barg, though half the start (25 barg) would also give it. Wall 56.818 mm.
+        var high = await Run(100, 50);
+        Assert.Equal(101325 + 690e3, high.TargetPressure, 1e-6);
+        Assert.Equal("6.9 barg", high.TargetBasis);
+        Assert.Equal(100e5 * 0.75 / (138e6 - 0.6 * 100e5), high.WallThickness, 1e-9);
+        Assert.DoesNotContain(high.Warnings, w => w.Contains("design pressure"));
     }
 
     [Fact]
@@ -388,6 +444,91 @@ public sealed class SafetyTests(EngineFixture engine, ITestOutputHelper output)
         Assert.InRange(r.TimeToTarget!.Value, 0.9 * 900, 900);
         Assert.DoesNotContain(r.Warnings, w => w.Contains("did not settle"));
         Assert.True(r.MinimumWallTemperature >= Math.Min(r.MinimumTemperature, r.MinimumLiquidTemperature ?? double.MaxValue) - 0.5);
+    }
+
+    // ------------------------------------------------------------------ pressurization from a fixed volume (D149)
+
+    private async Task<DepressuringResult> Equalise(double? hTarget, double? hSource, double? target = null)
+    {
+        // Two equal vessels (1 m × 3 m, 2:1 heads) of nitrogen at 300 K: the source at 10 bara, the other at 1 atm; a 10 mm orifice.
+        var n2 = new Dictionary<string, double> { ["Nitrogen"] = 1.0 };
+        var req = new DepressuringRequest
+        {
+            Flowsheet = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Nitrogen"] }, Composition = n2,
+            InitialPressure = 101325, InitialTemperature = 300, Vessel = new VesselGeometry(1.0, 3.0), HeatTransferCoefficient = hTarget,
+            TargetPressure = target, Duration = 4 * 3600,
+            Supply = new PressurizationSupply
+            {
+                Composition = n2, Pressure = 10e5, Temperature = 300, OrificeDiameter = 0.01,
+                Vessel = new VesselGeometry(1.0, 3.0), HeatTransferCoefficient = hSource,
+            },
+        };
+        var res = await engine.Authed(15).PostAsJsonAsync("/depressuring", req, Json.Options);
+        Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+        var r = await EngineFixture.Json<DepressuringResult>(res);
+        output.WriteLine($"equalised at {r.EqualisingPressure / 1e5:0.####} bar after {r.TimeToEqualise:0} s; moved {r.MassTransferred:0.###} kg; source min {r.SourceMinimumTemperature - 273.15:0.#} °C wall {r.SourceMinimumWallTemperature - 273.15:0.#} °C; filled max {r.MaximumTemperature - 273.15:0.#} °C; {r.Time.Count} steps | " + string.Join(" | ", r.Warnings));
+        return r;
+    }
+
+    [Fact]
+    public async Task TwoAdiabaticVesselsEqualiseAtTheIdealGasPressure()
+    {
+        // Ideal gas, no heat: the internal energy (P V /(γ − 1)) is kept, so where the pressures meet
+        // P_eq = (Ps·Vs + Pt·Vt)/(Vs + Vt), whatever the temperatures: (10 + 1.01325)/2 = 5.5066 bara for equal volumes.
+        var r = await Equalise(0, 0);
+        var expected = (10e5 + 101325) / 2;
+        Assert.NotNull(r.EqualisingPressure);
+        Assert.Equal(expected, r.EqualisingPressure!.Value, expected * 0.01);
+        Assert.NotNull(r.TimeToEqualise);
+        // The source falls and the filled side rises throughout; the source is colder than it started, the other hotter.
+        Assert.True(r.SourcePressure!.Zip(r.SourcePressure!.Skip(1)).All(p => p.Second <= p.First + 1));
+        Assert.True(r.Pressure.Zip(r.Pressure.Skip(1)).All(p => p.Second >= p.First - 1));
+        Assert.True(r.SourceMinimumTemperature < 300 - 20);
+        Assert.True(r.MaximumTemperature > 300 + 20);
+        // Mass: what left the source is what the other holds more (each vessel's own volume from its flashes).
+        Assert.Equal(r.Inventory[^1] - r.Inventory[0], r.MassTransferred!.Value, r.MassTransferred.Value * 0.005);
+    }
+
+    [Fact]
+    public async Task WithWallHeatTheVesselsStillEqualiseAndATargetAboveItIsSaidToBeOutOfReach()
+    {
+        // With the walls giving and taking heat, the net heat Q shifts P_eq by (γ − 1)·Q/(Vs + Vt): close to the ideal-gas value.
+        var r = await Equalise(null, null);
+        var ideal = (10e5 + 101325) / 2;
+        Assert.InRange(r.EqualisingPressure!.Value, 0.95 * ideal, 1.05 * ideal);
+        // The source's wall is warmer than its gas: heat flows in, so it is less cold than when adiabatic.
+        var adiabatic = await Equalise(null, 0);
+        Assert.True(r.SourceMinimumTemperature > adiabatic.SourceMinimumTemperature);
+        Assert.Contains(adiabatic.Warnings, w => w.Contains("The source is adiabatic"));
+        // A target above where they equalise cannot be reached, and the result says so.
+        var high = await Equalise(null, null, target: 7e5);
+        Assert.Null(high.TimeToTarget);
+        Assert.Contains(high.Warnings, w => w.Contains("above the pressure the two sides equalise at"));
+        // One below it is reached before they equalise.
+        var low = await Equalise(null, null, target: 4e5);
+        Assert.True(low.TimeToTarget < low.TimeToEqualise);
+    }
+
+    [Fact]
+    public async Task ASeparatorSourceSendsItsGasAndWhatItFillsStartsDry()
+    {
+        // A two-phase source (methane–propane at 20 bara, 0.5 m of liquid in a 1 m × 3 m vessel): what is filled starts
+        // with the source's vapour at 1 atm, so it holds no liquid to begin with; the gas off the top equalises the two.
+        var mix = new Dictionary<string, double> { ["Methane"] = 0.5, ["Propane"] = 0.5 };
+        var req = new DepressuringRequest
+        {
+            Flowsheet = new Flowsheet { PropertyPackage = "Peng-Robinson (PR)", Compounds = ["Methane", "Propane"] }, Composition = mix,
+            InitialPressure = 101325, InitialTemperature = 300, Vessel = new VesselGeometry(1.0, 3.0), Duration = 4 * 3600,
+            Supply = new PressurizationSupply { Composition = mix, Pressure = 20e5, Temperature = 300, OrificeDiameter = 0.01, Vessel = new VesselGeometry(1.0, 3.0, LiquidLevel: 0.5) },
+        };
+        var res = await engine.Authed(15).PostAsJsonAsync("/depressuring", req, Json.Options);
+        Assert.True(res.IsSuccessStatusCode, await res.Content.ReadAsStringAsync());
+        var r = await EngineFixture.Json<DepressuringResult>(res);
+        output.WriteLine($"equalised at {r.EqualisingPressure / 1e5:0.###} bar after {r.TimeToEqualise:0} s; filled LF {r.LiquidVolumeFraction[0]:0.####}; {r.Time.Count} steps | " + string.Join(" | ", r.Warnings));
+        Assert.Equal(0, r.LiquidVolumeFraction[0]);
+        Assert.NotNull(r.EqualisingPressure);
+        Assert.InRange(r.EqualisingPressure!.Value, 101325, 20e5);
+        Assert.Equal(r.Inventory[^1] - r.Inventory[0], r.MassTransferred!.Value, r.MassTransferred.Value * 0.01);
     }
 
     private async Task<DepressuringResult> Pressurize(PressurizationSupply supply, double? target = null, double targetTime = 3600)

@@ -72,7 +72,9 @@ data class CheckItem(val level: CheckLevel, val objectId: String?, val text: Str
  * (streams that go nowhere, units with an open port, duplicate tags, reactions and components nothing uses).
  */
 object FlowsheetCheck {
-    fun run(fs: Flowsheet, results: ResultView): List<CheckItem> = buildList {
+    // With sub-flowsheets the case is checked flattened (D136): a stream matched across a block is one stream.
+    fun run(case: Flowsheet, results: ResultView): List<CheckItem> = buildList {
+        val fs = Subflowsheets.flatten(case)
         if (fs.propertyPackage == null) add(CheckItem(CheckLevel.Error, null, "No fluid package chosen."))
         if (fs.compounds.isEmpty()) add(CheckItem(CheckLevel.Error, null, "No components in the fluid."))
         for ((id, text) in Specification.problems(fs)) add(CheckItem(CheckLevel.Error, id, text))

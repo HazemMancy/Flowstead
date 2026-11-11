@@ -3,7 +3,7 @@
 Flowstead in the browser, for anyone who can't install the Android app (iPhone, iPad, desktop):
 **https://hazemmancy.github.io/Flowstead/**. Part of the portfolio at https://hazemmancy.github.io/.
 
-The engine is the one the app and the server run: DWSIM 10.2.12 built from the pinned source with every patch in
+The engine is the one the app and the server run: DWSIM 10 (10.2.15) built from the pinned source with every patch in
 `engine/patches`, plus Flowstead's engine code, compiled to WebAssembly. It runs in a Web Worker on the visitor's
 device. There is no server, and nothing the user types leaves the browser. See `docs/DECISIONS.md` D108.
 
@@ -34,6 +34,161 @@ engine/scripts/build-web.sh            # builds DWSIM if needed, then web/dist
 In the repository's settings, **Pages → Build and deployment → Source** must be **GitHub Actions**.
 
 ## Release notes
+
+**Web 1.20**
+- **Solve backward, as HYSYS (D151):** a product of a valve, heater, cooler, air cooler, pump, compressor, expander or
+  pipe takes *What it must be* (temperature, pressure, vapour fraction, flow, composition) in its worksheet, and the
+  feed upstream is found: the wellhead temperature that gives 18 °C after the choke, the feed temperature a heater's
+  duty brings to 80 °C. A line that can't be solved says why.
+- **Packed columns (D152):** a column's Design tab has *Internals*: sieve trays, or one of 149 random and structured
+  packings from DWSIM's catalogue. The engine rates the bed with DWSIM's own packing correlations (Robbins and
+  Kister–Gill, Billet–Schultes, Rocha–Bravo–Fair): the diameter for 70 % of flood (or yours), the HETP and bed height,
+  the pressure drop over the bed and the highest flood.
+
+**Web 1.19**
+- **Water with dissolved gas (D150):** a three-phase separator's water now holds the gases Henry's law gives (CO₂,
+  methane, ethane, nitrogen…), taken from the gas it leaves, so every compound balances across the separator. The
+  water outlet of a wet gas used to carry far too much ethane and no CO₂.
+
+**Web 1.18**
+- **Pressurization from a vessel or pipe (D149):** besides a header at constant pressure, the gas can come from a fixed
+  volume (a vessel, tank or pipe on the flowsheet, its contents from the solve) that empties until the two sides
+  equalise: the equalising pressure and when it is reached, the time to a target (or that the target is above the
+  equalising pressure and out of reach), and the source's coldest gas and wall. Wall heat by default; an adiabatic
+  source for the coldest case. A vessel can be what is filled, and the valve or orifice can be one on the flowsheet
+  (its rated or required Cv and xT, or its bore).
+- **Line sizing of a stream (D148), as HYSYS's stream analysis:** in a stream's Analysis tab, size a line from the
+  stream's own solved state, with no pipe segment. Design tries every size of a schedule (40, STD, XS, 80 …) against
+  the project's criteria and marks the smallest that passes; rating takes one size or an inside diameter. ΔP per
+  length (e.g. bar/km), velocity, ρv² and the Mach number, and the total ΔP over the length you give, all from DWSIM.
+- **Lines to a sub-flowsheet drawn square (D147):** a stream going into a block leaves from its arrow's head, one
+  coming out meets the stream's tail, in horizontal and vertical runs as every connection is; they ran at an angle
+  from the stream's middle.
+
+**Web 1.17**
+- **Panels you can move and minimise (D146):** drag the selection bar, a worksheet, a sub-flowsheet's panel or the
+  solve panel by its title bar (or the ⠿ grip) anywhere over the flowsheet, and minimise it to its title bar with —
+  (▢ opens it again), so nothing behind it is out of reach. Double-click or double-tap the grip to put it back. On a
+  phone, drag a worksheet's title bar down to lower it, or right down to leave only its title bar. Mouse, pen and
+  finger alike.
+
+**Web 1.16**
+- **Sizing in the Design tab (D141):** a separator's, an exchanger's, a machine's, a tank's, a column's and a line's
+  sizing, as in the app, with its basis (K, hold-up and surge times, mist pad, inlet device, U, utility temperatures,
+  margin, tray spacing, flood, line criteria) typed in your units next to it.
+- **Blowdown to API 521's target on the design pressure (D142):** give the vessel's design pressure and the orifice is
+  sized to the lower of 6.9 barg and half of it in 15 minutes; the design pressure also sets the wall thickness. The
+  result says which basis set the target.
+- **Air coolers on a crossflow F (D143):** both fluids unmixed in the tube passes you give, worked out exactly; it
+  was the shell-and-tube F before.
+- **Polytropic compressor curves (D144):** choose the path a vendor's curve is drawn on; new curves are polytropic.
+  Compressor heads are now the true isentropic and polytropic work (DWSIM's own figures were a few per cent off), so a
+  compressor on an adiabatic curve settles a little higher than before.
+- **A fitting by its K (D145):** any valve, strainer or nozzle with the K its vendor gives, applied by DWSIM as its own
+  K fittings.
+
+**Web 1.15**
+- **Automation interface (D140):** `window.flowstead.api` lets an agent in the browser, or a script, build, read,
+  change, solve, size and judge a case through the page's own code: every edit is yours (on the canvas, undoable),
+  every number the engine's. Reference: docs/automation.md. A Claude skill that uses it is in
+  skills/flowstead-automation.
+- Separator, equipment and line sizing on the web, through the interface (the app's methods).
+
+**Web 1.14**
+- **Into a sub-flowsheet by drag and drop (D139):** drag an object, or a selection, onto a block (outlined as you
+  drag over it) and it goes inside, with a mouse, a pen or a finger; or choose Move into… on the selection bar. The
+  streams joining it to the rest cross the block's edge, matched, and the case solves to the same numbers.
+- **Duplicate a sub-flowsheet** from its panel (or Ctrl+D): a copy with everything inside, beside it.
+- **Review fixes (D138):** relief and depressuring of a vessel with several feeds take them all; a standing vessel's
+  bottom-head volume; a horizontal separator's mist-pad area; the oil–water level's name; near-critical tray sizing;
+  pipe fittings named for what their values are (Crane TP-410); a controller back in automatic carries on without a
+  jump; operating speed and UA shown with their units.
+- **The app's remaining tools, now on the web:** a pump's or compressor's **performance curve** (points, polynomial
+  fit, variable speed with curves at other speeds, the operating point on the chart), a pipe's **sections and
+  fittings** (Crane L/D or K), **reactors** with their **reactions** (conversion, equilibrium, kinetic, catalytic),
+  **McCabe–Thiele** for a binary column, the flowsheet **check**, and the **watch panel** over the flowsheet.
+- Sub-flowsheets on several fluid packages are solved by the app's own code (one implementation for app and web).
+- **Fixed:** after a change to a unit's specification, a re-solve could stop with "Cannot wait on monitors on this
+  runtime" and leave the streams after that unit at the previous solve's values (case studies, the optimiser, Adjusts,
+  controllers and pump or compressor curves all re-solve this way). It now recalculates them, as the app does.
+
+**Web 1.13**
+- **Comfortable on every screen, with a finger or a mouse.** On a phone the toolbar is two lines (the name, Hold or
+  Active, Solve; then one strip of every other button that scrolls sideways), so the flowsheet keeps most of the
+  screen. The palette folds away with ▾. On a phone on its side, the palette is a narrow column and the toolbar one line.
+- A worksheet or a block's panel slides up from the bottom, full width; dialogs (Basis, Tools, Units…) take the whole
+  screen on a phone.
+- Zoom buttons (−, +, fit) on the flowsheet, for a mouse without a wheel, a pen, or a finger.
+- On touch screens, buttons a finger can hit and fields with 16 px text, so the phone doesn't zoom in on them.
+
+**Web 1.12.1**
+- **Streams in and out of a sub-flowsheet** as HYSYS's Connections: in the block's panel, add a stream in or out from
+  the free streams around it, or drag a stream onto the block; the stream inside is made for you.
+- New blocks go where there is room, drawn over the streams.
+- **Touch**: with Select on, each finger tap adds an object to the selection (the worksheet no longer opens over the
+  flowsheet), and a finger reaches small symbols.
+- The same sub-flowsheet code as the Android app (3.4.0).
+
+**Web 1.12**
+- **Sub-flowsheets**, as in HYSYS. A sub-flowsheet is a block on the flowsheet. Double-click it (or Open) to see the
+  flowsheet inside; the bar at the bottom leads back. "Sub-flowsheet" adds an empty block, or puts the objects you
+  selected in one.
+- Streams enter and leave a block as in HYSYS: inside, a stream with one open end is a boundary stream, matched in the
+  block's table to a stream of the parent flowsheet.
+- Each block uses the parent's fluid package or its own: any package, with its own components (Edit its basis). On the
+  parent's package the case solves as one flowsheet, with the same numbers as without the block. On its own package,
+  each boundary stream crosses as a feed defined by the engine's result on the other side, by temperature and pressure
+  or by pressure and vapour fraction (the transfer basis), with its flow and composition.
+
+**Web 1.11.1**
+- The engine is **DWSIM 10.2.15** (was 10.2.12), as in app 3.3.0. Gases dissolved in water now follow the IAPWS G7-04
+  Henry's constants: air dissolved in a receiver's condensate is within 1.2 % of G7-04 (was up to 3.8 % off). Other
+  results move by less than 0.1 %.
+- Document footers name the current web version again (they still said 1.10.2).
+
+**Web 1.11**
+- **Thermodynamics tools** (Basis), as in the Android app: a **binary diagram** (T–x–y or P–x–y, with the liquid–liquid
+  region), a **ternary** with tie lines, the mixture's true **critical point**, one composition **compared** across up to
+  eight property packages, and a **property chart** along temperature or pressure. All DWSIM's own calculations.
+
+**Web 1.10.2**
+- **Tab** moves to the next field in the Tools forms (Safety, Dynamics…) and keeps what you typed; forms that redraw
+  after a change keep your place.
+- **Spreadsheet**: a cell that imports a bubble or dew point now gets it from the engine instead of showing #ERR.
+- The engine is shown as **DWSIM 10**; documents carry the current Flowstead Web version.
+
+**Web 1.10.1**
+- The title bar of every window (Units, Basis, Export, Tools…) no longer covers the first line of text under it.
+- Dynamics: a separator's starting level and a valve's starting opening are typed in %.
+
+**Web 1.10**
+- **Spreadsheet** (Tools → Spreadsheet), as in HYSYS and the Android app: numbers, text and formulas (=A1*2,
+  =sum(A1:A5), sqrt, ln…); =[K-100.power] brings in a solved result in its display unit (pick it from the menu). Export a
+  cell to a specification and **Apply** it to the flowsheet.
+- **Scenarios** (Tools → Scenarios): save the case, change it, save again, and compare the results side by side;
+  **Restore** puts a scenario's specifications back.
+- **Compound and data tools** (Basis): a component from its structure (SMILES, Joback groups, or a name looked up on
+  PubChem), interaction parameters fitted to your measured VLE data, and DWSIM's reaction finder.
+
+**Web 1.9**
+- **Dynamics** (Tools → Dynamics), as in the Android app: give each separator its volume (and height), each valve its
+  Cv, each controller its tuning, add events (a feed's pressure, a valve's opening, a setpoint…) and **Run**. The trends
+  show each controller's measurement against its setpoint and its output, the separators' pressure, level and
+  temperature, the valves and the duties. The setup is saved with the case; example 20 is ready to run.
+- **PID tuning** (Tools → PID tuning): a step test on a controller in the dynamic run fits a first-order-plus-dead-time
+  model and gives SIMC, IMC, Ziegler–Nichols and Cohen–Coon settings; **Use** puts one into the controller's tuning.
+
+**Web 1.8**
+- **Select several objects**: Shift (or Ctrl) and a click adds or removes one; Shift and a drag on empty canvas draws a
+  box; Ctrl+A selects everything. On a phone or tablet, press **Select** first, then drag a box or tap objects.
+- Several selected move together (drag one, or the arrow keys) and Delete removes them all.
+- **Copy** (Ctrl+C) and **Paste** (Ctrl+V), in the toolbar too: the copies keep every specification and the streams
+  between them, get the next free tags (K-101, E-101…) and land beside the originals; they paste into another project
+  in this browser as well. **Duplicate** (Ctrl+D, or a unit's own Duplicate button) does both at once.
+- A copied stream whose source unit was not copied becomes a feed at its solved temperature, pressure, flow and
+  composition. An Adjust or Set whose target was not copied must be pointed again. A note after the paste says which.
+- A reactor brings the reactions it uses into another project.
+- Results are not copied: solve to see the copies' numbers.
 
 **Web 1.7**
 - **Faster solves**: bubble and dew points are no longer calculated at every solve (they were most of its time). A stream's

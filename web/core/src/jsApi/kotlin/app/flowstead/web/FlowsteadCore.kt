@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import app.flowstead.core.export.Csv
 import app.flowstead.core.help.AutoLayout
 import app.flowstead.core.model.Readiness
+import app.flowstead.core.model.Subflowsheets
 import app.flowstead.core.model.displayName
 import app.flowstead.ui.flowsheet.drawNozzles
 import app.flowstead.ui.flowsheet.drawUnitIcon
@@ -94,15 +95,19 @@ object FlowsteadCore {
      * app stores it with the result.
      */
     fun prepareSolve(flowsheetJson: String): String {
-        val f = fs(flowsheetJson)
-        val r = Readiness.of(f)
+        val whole = fs(flowsheetJson)
+        // With sub-flowsheets (D132, D133) the checks run on the case flattened (Readiness does); the engine later gets
+        // the ready part of the case as it is, which the page's engine client flattens or solves by package.
+        val f = Subflowsheets.flatten(whole)
+        val r = Readiness.of(whole)
+        val solvable = r.solvable
         return buildJsonObject {
             putJsonArray("blocking") { Specification.blocking(f).forEach { add(JsonPrimitive(it.second)) } }
             putJsonArray("problems") { Specification.problems(f).forEach { add(JsonPrimitive(it.second)) } }
             put("notReady", JsonObject(r.notReady.mapValues { JsonPrimitive(it.value) }))
             put("anyReady", r.anyReady)
-            put("solvable", FlowsheetJson.parseToJsonElement(out(r.solvable)))
-            put("modelHash", f.modelHash())
+            put("solvable", FlowsheetJson.parseToJsonElement(out(solvable)))
+            put("modelHash", whole.modelHash())
         }.toString()
     }
 
@@ -225,7 +230,7 @@ object FlowsteadCore {
     // [solvedModelHash] is the model hash taken when the solve ran (as the app's StoredSolve keeps it), not the current
     // one: if the flowsheet changed since, the workbook says its results are out of date.
     private fun sheets(projectName: String, flowsheetJson: String, solveResultJson: String, solvedModelHash: String, solvedAtMillis: Double) =
-        ResultsWorkbook.build(projectName, fs(flowsheetJson), StoredSolve(FlowsheetJson.decodeFromString(SolveResult.serializer(), solveResultJson),
+        ResultsWorkbook.build(projectName, fs(flowsheetJson), StoredSolve(majorOnly(FlowsheetJson.decodeFromString(SolveResult.serializer(), solveResultJson)),
             solvedModelHash, solvedAtMillis.toLong()), UnitSet.SI.with(Quantity.Temperature, Units.C).with(Quantity.Pressure, Units.bara))
 
     /** Results workbook (.xlsx bytes) for a stored solve, SI with °C and bara, as the app exports it. */

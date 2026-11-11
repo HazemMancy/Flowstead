@@ -213,7 +213,7 @@ object DataSheets {
                 obj.pipeSections?.forEachIndexed { i, x ->
                     val kind = app.flowstead.core.model.PipeFittings.get(x.fitting)
                     if (kind != null) {
-                        add(DataSheet.Line("Section ${i + 1}: ${kind.name} (${app.flowstead.core.model.PipeFittings.describe(kind)})", "", listOf("× ${x.count}")))
+                        add(DataSheet.Line("Section ${i + 1}: ${kind.name} (${app.flowstead.core.model.PipeFittings.describe(x)})", "", listOf("× ${x.count}")))
                     } else {
                         val u = unit(Quantity.Length)
                         add(DataSheet.Line("Section ${i + 1}: straight run" + (if (x.count > 1) " × ${x.count}" else ""), symbol(u), listOf(x.length?.let { num(it, u) } ?: "—")))

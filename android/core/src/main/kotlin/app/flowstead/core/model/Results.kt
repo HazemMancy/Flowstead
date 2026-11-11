@@ -63,7 +63,7 @@ object ResultKeys {
             "condenserDuty", "reboilerDuty",
         )
         ObjectType.Pump -> listOf("power", "pressureRise", "head", "temperatureChange", "efficiency", "npshAvailable", "npshRequired", "feedBubblePressure", "inletVolumeFlow")
-        ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency", "inletVolumeFlow", "surgeMargin")
+        ObjectType.Compressor -> listOf("power", "outletTemperature", "pressureRatio", "adiabaticHead", "efficiency", "polytropicHead", "polytropicEfficiency", "inletVolumeFlow", "surgeMargin")
         ObjectType.Expander -> listOf("power", "outletTemperature", "pressureDrop", "efficiency")
         ObjectType.HeatExchanger -> listOf("duty", "lmtd", "minimumApproach", "pinchLocation", "pinchHotTemperature", "pinchColdTemperature", "hotOutletTemperature", "coldOutletTemperature", "hotPressureDrop", "coldPressureDrop")
         ObjectType.PipeSegment -> listOf("pressureDrop", "frictionPressureDrop", "staticPressureDrop") + PIPE_HYDRAULICS +
@@ -104,7 +104,7 @@ object ResultKeys {
         "pressure", "outletPressure" -> Quantity.Pressure
         "pressureDrop", "pressureRise", "hotPressureDrop", "coldPressureDrop",
         "frictionPressureDrop", "staticPressureDrop", "orificePressureDrop" -> Quantity.PressureDifference
-        "vapourFraction", "phaseMoleFraction", "efficiency" -> Quantity.Fraction
+        "vapourFraction", "phaseMoleFraction", "efficiency", "polytropicEfficiency" -> Quantity.Fraction
         "compressibilityFactor", "pressureRatio", "beta", "refluxRatio", "minimumRefluxRatio",
         "minimumStages", "actualStages", "optimalFeedStage" -> Quantity.Ratio
         "iterations" -> Quantity.Count
@@ -114,6 +114,9 @@ object ResultKeys {
         "adiabaticHead", "polytropicHead", "head", "curveHead", "npshRequired" -> Quantity.Length
         "inletVolumeFlow" -> Quantity.VolumeFlow
         "surgeMargin" -> Quantity.Fraction
+        // No unit to convert: shown as the engine gives them, the unit in the label (rpm; W/K).
+        "operatingSpeed", "ua" -> Quantity.Ratio
+        "curveIterations" -> Quantity.Count
         "molarFlow" -> Quantity.MolarFlow
         "massFlow" -> Quantity.MassFlow
         "volumeFlow", "liquidVolumeFlow" -> Quantity.VolumeFlow
@@ -177,6 +180,8 @@ object ResultKeys {
         "pressureRatio" -> "Pressure ratio"
         "efficiency" -> "Adiabatic efficiency"
         "adiabaticHead" -> "Adiabatic head"
+        "polytropicHead" -> "Polytropic head"
+        "polytropicEfficiency" -> "Polytropic efficiency"
         "lmtd" -> "LMTD"
         "minimumApproach" -> "Minimum approach (zone analysis)"
         "pinchLocation" -> "Pinch at (fraction of the duty from the hot inlet)"
@@ -188,6 +193,9 @@ object ResultKeys {
         "curveHead" -> "Head on the curve at this flow"
         "inletVolumeFlow" -> "Actual inlet flow"
         "surgeMargin" -> "Surge margin (flow above the surge limit)"
+        "operatingSpeed" -> "Operating speed, rpm"
+        "ua" -> "UA, W/K"
+        "curveIterations" -> "Solves to settle on the curve"
         "requiredCv" -> "Required Cv (US, IEC 60534)"
         "requiredKv" -> "Required Kv (metric)"
         "valveOpening" -> "Opening (linear trim)"
@@ -367,7 +375,8 @@ private fun Flowsheet.solvedPart() = copy(
 )
 
 private fun hashOf(solved: Flowsheet, positions: Boolean): String {
-    val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) })
+    // Where a sub-flowsheet block sits changes no result either (D132).
+    val fs = if (positions) solved else solved.copy(objects = solved.objects.map { it.copy(x = 0.0, y = 0.0) }, subflowsheets = solved.subflowsheets.map { it.copy(x = 0.0, y = 0.0) })
     val json = FlowsheetJson.encodeToString(Flowsheet.serializer(), fs)
     return java.security.MessageDigest.getInstance("SHA-256").digest(json.toByteArray()).joinToString("") { "%02x".format(it) }
 }

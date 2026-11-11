@@ -245,11 +245,12 @@ object Specification {
     /** Degrees of freedom for [o], counting values that Sets give it. */
     fun status(fs: Flowsheet, o: SimObject): SpecStatus {
         val applied = withSets(fs)
-        return statusOf(applied, applied.obj(o.id) ?: o)
+        return statusOf(applied, applied.obj(o.id) ?: o, withSetsOnly(fs))
     }
 
-    private fun statusOf(fs: Flowsheet, o: SimObject): SpecStatus = when (o.type) {
-        ObjectType.MaterialStream -> if (fs.isFeed(o)) feedStream(fs, o) else SpecStatus.Complete
+    /** [given]: the flowsheet before backward specifications fill feeds in (a product's own plan is judged on it). */
+    private fun statusOf(fs: Flowsheet, o: SimObject, given: Flowsheet = fs): SpecStatus = when (o.type) {
+        ObjectType.MaterialStream -> if (fs.isFeed(o)) feedStream(fs, o) else backward(given, given.obj(o.id) ?: o)
         ObjectType.EnergyStream -> SpecStatus.Complete
         ObjectType.Adjust, ObjectType.Controller -> adjust(fs, o)
         ObjectType.Set -> set(fs, o)
@@ -325,8 +326,28 @@ object Specification {
         return if (needs.isEmpty()) SpecStatus.Complete else SpecStatus.UnderSpecified(needs)
     }
 
-    /** Objects whose specs a Set drives: their status must count the Set's value as given. */
-    fun withSets(fs: Flowsheet): Flowsheet {
+    /**
+     * A product stream with backward specifications (D151): complete when they can be met by its feed upstream;
+     * otherwise why not. A product without them is calculated, so complete.
+     */
+    private fun backward(fs: Flowsheet, o: SimObject): SpecStatus {
+        val plan = Backward.plan(fs, o) ?: return SpecStatus.Complete
+        plan.problem?.let { return SpecStatus.Invalid(it) }
+        o.specs[SpecKey.TEMPERATURE]?.let { if (it.si <= 0) return SpecStatus.Invalid("Temperature must be above absolute zero") }
+        o.specs[SpecKey.PRESSURE]?.let { if (it.si <= 0) return SpecStatus.Invalid("Pressure must be above zero absolute") }
+        o.specs[SpecKey.VAPOUR_FRACTION]?.let { if (it.si !in 0.0..1.0) return SpecStatus.Invalid("Vapour fraction must be between 0 and 1") }
+        Backward.FLOW.firstOrNull { it in o.specs }?.let { if (o.specs.getValue(it).si <= 0) return SpecStatus.Invalid("Flow must be positive") }
+        if (o.composition.isNotEmpty()) compositionProblem(fs, o)?.let { return SpecStatus.Invalid(it) }
+        return SpecStatus.Complete
+    }
+
+    /**
+     * Objects whose specs a Set drives, and feeds a product's backward specifications solve for (D151): their status
+     * counts those values as given.
+     */
+    fun withSets(fs: Flowsheet): Flowsheet = Backward.applied(withSetsOnly(fs))
+
+    private fun withSetsOnly(fs: Flowsheet): Flowsheet {
         val sets = fs.objects.filter { it.type == ObjectType.Set && set(fs, it) == SpecStatus.Complete }
         if (sets.isEmpty()) return fs
         val byId = fs.objects.associateBy { it.id }.toMutableMap()
@@ -505,6 +526,10 @@ object Specification {
             x.roughness?.let { if (it < 0) return SpecStatus.Invalid("$what: roughness can't be negative") }
             if (x.fitting != null) {
                 if (PipeFittings.get(x.fitting) == null) return SpecStatus.Invalid("$what: unknown fitting '${x.fitting}'")
+                if (x.fitting == PipeFittings.USER_K) {
+                    if (x.k == null) needs += "section ${i + 1} K"
+                    else if (!(x.k > 0 && x.k < 1e5)) return SpecStatus.Invalid("$what: K must be positive")
+                }
                 return@forEachIndexed
             }
             val len = x.length
@@ -605,9 +630,10 @@ object Specification {
      */
     fun problems(flowsheet: Flowsheet): List<Pair<String?, String>> = buildList {
         val fs = withSets(flowsheet)
+        val given = withSetsOnly(flowsheet)
         addAll(blocking(flowsheet))
         for (o in fs.objects.filter { it.type != ObjectType.ReliefValve }) {
-            when (val st = statusOf(fs, o)) {
+            when (val st = statusOf(fs, o, given)) {
                 SpecStatus.Complete -> Unit
                 is SpecStatus.UnderSpecified -> add(o.id to "${o.tag}: needs ${st.needs.joinToString("; ")}")
                 is SpecStatus.OverSpecified -> add(o.id to "${o.tag}: ${st.problem}")
