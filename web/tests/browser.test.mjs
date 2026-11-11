@@ -1470,7 +1470,8 @@ try {
       if (!(got.tWell > got.tFeed)) problems.push(`WELL at ${got.tWell} K is not warmer than its product`);
     }
     const fields = got.fields ?? '';
-    if (!/temperature/.test(fields) || !/pressure/.test(fields) || /massEnthalpy/.test(fields)) problems.push(`product worksheet fields: ${fields}`);
+    // D154: a product's enthalpy is a target too (met by the feed's temperature).
+    if (!/temperature/.test(fields) || !/pressure/.test(fields) || !/massEnthalpy/.test(fields)) problems.push(`product worksheet fields: ${fields}`);
     if (errs.length) problems.push(`page errors: ${errs.join('; ')}`);
     console.log(`${problems.length ? 'FAIL' : 'ok  '} backward specification (wellhead ${(got.tWell - 273.15)?.toFixed?.(2)} °C for 18 °C at 40 bara)`);
     problems.forEach((x) => console.log('     ' + x));
