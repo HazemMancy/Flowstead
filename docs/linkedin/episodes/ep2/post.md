@@ -1,6 +1,6 @@
 # LinkedIn post — Getting started with Flowstead, episode 2
 
-From the well to the inlet separator, in three and a half minutes. 🎬
+From the well to the inlet separator, in under five minutes. 🎬
 
 Episode 2 of Getting Started with Flowstead takes episode 1's well gas where it really goes, on the real DWSIM engine
 in the browser:
