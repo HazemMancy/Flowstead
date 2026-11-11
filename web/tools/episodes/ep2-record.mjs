@@ -84,6 +84,7 @@ await p.evaluate((mark) => {
   document.body.append(c);
 }, MARK);
 
+const clearHl = () => p.evaluate(() => document.querySelectorAll('.ep-hl').forEach((d) => d.remove()));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let cur = { x: 640, y: 360 };
 async function cursorTo(x, y) {
@@ -105,7 +106,7 @@ async function moveTo(sel) {
 async function pulse() {
   await p.evaluate(([x, y]) => { const d = document.createElement('div'); d.className = 'ep-pulse'; d.style.left = x + 'px'; d.style.top = y + 'px'; document.body.append(d); setTimeout(() => d.remove(), 600); }, [cur.x, cur.y]);
 }
-async function click(sel) { const loc = await moveTo(sel); await pulse(); await loc.click(); await sleep(350); }
+async function click(sel) { await clearHl(); const loc = await moveTo(sel); await pulse(); await loc.click(); await sleep(350); }
 async function type(sel, text) {
   const loc = await moveTo(sel); await pulse(); await loc.click(); await loc.fill('');
   await loc.pressSequentially(String(text), { delay: 75 }); await loc.press('Enter'); await sleep(300);
@@ -146,6 +147,7 @@ async function objectAt(tag) {
 }
 /** Selects [tag] as a user does: the cursor to it on the flowsheet, a click there (the inspector opens). */
 async function select(tag) {
+  await clearHl();
   const o = await objectAt(tag);
   await cursorTo(o.x, o.y); await pulse();
   await p.evaluate((id) => document.querySelector(`#objects [data-id="${id}"]`).click(), o.id);
